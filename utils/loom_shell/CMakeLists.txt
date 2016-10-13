@@ -18,9 +18,49 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required (VERSION 2.8)
-project (amdovx-modules)
 
-#add_subdirectory (vx_ext_cv)
-add_subdirectory (vx_loomsl)
-add_subdirectory (utils)
+cmake_minimum_required (VERSION 2.8)
+project (loom_shell)
+
+set (CMAKE_CXX_STANDARD 11)
+
+find_package(OpenCL QUIET)
+
+include_directories(${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include ${CMAKE_SOURCE_DIR}/amdovx-modules/vx_loomsl)
+
+
+list(APPEND SOURCES
+	loom_shell.cpp
+)
+
+add_executable(loom_shell ${SOURCES})
+
+target_link_libraries(loom_shell vx_loomsl openvx)
+
+if (OpenCL_FOUND)
+	include_directories(${OpenCL_INCLUDE_DIRS})
+	target_link_libraries(loom_shell ${OpenCL_LIBRARIES})
+endif(OpenCL_FOUND)
+
+if( POLICY CMP0054 )
+  cmake_policy( SET CMP0054 OLD )
+endif()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif()
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -19,8 +19,38 @@
 # THE SOFTWARE.
 
 cmake_minimum_required (VERSION 2.8)
-project (amdovx-modules)
+project (vx_loomsl)
 
-#add_subdirectory (vx_ext_cv)
-add_subdirectory (vx_loomsl)
-add_subdirectory (utils)
+set (CMAKE_CXX_STANDARD 11)
+
+find_package(OpenCL QUIET)
+
+include_directories (${OpenCL_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include )
+
+list(APPEND SOURCES
+	kernels/alpha_blend.cpp
+	kernels/color_convert.cpp
+	kernels/initialize_stitch_config.cpp
+	kernels/exp_comp.cpp
+	kernels/exposure_compensation.cpp
+	kernels/kernels.cpp
+	kernels/lens_distortion_remap.cpp
+	kernels/merge.cpp
+	kernels/multiband_blender.cpp
+	kernels/pyramid_scale.cpp
+	kernels/seam_find.cpp
+	kernels/initialize_stitch_remap.cpp
+	kernels/warp.cpp
+	live_stitch_api.cpp
+)
+
+include_directories (. kernels)
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
+
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+endif()

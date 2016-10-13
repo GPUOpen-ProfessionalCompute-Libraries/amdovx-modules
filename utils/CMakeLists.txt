@@ -19,8 +19,6 @@
 # THE SOFTWARE.
 
 cmake_minimum_required (VERSION 2.8)
-project (amdovx-modules)
+project (utils)
 
-#add_subdirectory (vx_ext_cv)
-add_subdirectory (vx_loomsl)
-add_subdirectory (utils)
+add_subdirectory (loom_shell)

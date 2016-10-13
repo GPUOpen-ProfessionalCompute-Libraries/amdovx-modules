@@ -50,7 +50,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>..\..\amdovx-core\x64\Debug;$(AMDOVX_DIR)\x64\Debug;$(OpenCV_DIR)\x64\vc12\staticlib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(TargetDir);..\..\amdovx-core\x64\Debug;$(AMDOVX_DIR)\x64\Debug;$(OpenCV_DIR)\x64\vc12\staticlib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openvx.lib;IlmImfd.lib;ippicvmt.lib;zlibd.lib;libwebpd.lib;libjpegd.lib;libtiffd.lib;libpngd.lib;libjasperd.lib;vfw32.lib;opencv_calib3d300d.lib;opencv_core300d.lib;opencv_features2d300d.lib;opencv_flann300d.lib;opencv_hal300d.lib;opencv_highgui300d.lib;opencv_imgcodecs300d.lib;opencv_imgproc300d.lib;opencv_ml300d.lib;opencv_objdetect300d.lib;opencv_photo300d.lib;opencv_shape300d.lib;opencv_stitching300d.lib;opencv_superres300d.lib;opencv_ts300d.lib;opencv_video300d.lib;opencv_videoio300d.lib;opencv_videostab300d.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib</AdditionalDependencies>
       <ModuleDefinitionFile>
       </ModuleDefinitionFile>
@@ -71,7 +71,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>..\..\amdovx-core\x64\Release;$(AMDOVX_DIR)\x64\Release;$(OpenCV_DIR)\x64\vc12\staticlib</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(TargetDir);..\..\amdovx-core\x64\Release;$(AMDOVX_DIR)\x64\Release;$(OpenCV_DIR)\x64\vc12\staticlib</AdditionalLibraryDirectories>
       <AdditionalDependencies>openvx.lib;IlmImf.lib;ippicvmt.lib;zlib.lib;libwebp.lib;libjpeg.lib;libtiff.lib;libpng.lib;libjasper.lib;vfw32.lib;opencv_calib3d300.lib;opencv_core300.lib;opencv_features2d300.lib;opencv_flann300.lib;opencv_hal300.lib;opencv_highgui300.lib;opencv_imgcodecs300.lib;opencv_imgproc300.lib;opencv_ml300.lib;opencv_objdetect300.lib;opencv_photo300.lib;opencv_shape300.lib;opencv_stitching300.lib;opencv_superres300.lib;opencv_ts300.lib;opencv_video300.lib;opencv_videoio300.lib;opencv_videostab300.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
