@@ -24,9 +24,18 @@ THE SOFTWARE.
 
 #include <stdio.h>
 #include <string>
+#include <map>
 
 #include "live_stitch_api.h"
 #include <CL/cl_ext.h>
+
+#define VERSION          "0.9.3"
+#define SCRIPT_EXTENSION ".lss"
+#if _WIN32
+#define PROGRAM_NAME     "loom_shell.exe"
+#else
+#define PROGRAM_NAME     "loom_shell"
+#endif
 
 #define DEFAULT_VX_CONTEXT_COUNT     4     // default number of OpenVX context count
 #define DEFAULT_CL_CONTEXT_COUNT     4     // default number of OpenCL context count
@@ -57,6 +66,7 @@ private:
 	bool verbose_;
 	int lineNum_;
 	const char * fileName_;
+	int includeLevels_;
 };
 
 class CLoomShellParser : public CCommandLineParser
@@ -64,12 +74,13 @@ class CLoomShellParser : public CCommandLineParser
 public:
 	CLoomShellParser();
 	~CLoomShellParser();
+	void help(bool detailed);
 
 protected:
 	virtual int OnCommand();
 
 private:
-	const char * ParseIndex(const char * s, const char * prefix, vx_uint32& index);
+	const char * ParseIndex(const char * s, const char * prefix, vx_uint32& index, vx_uint32 count);
 	const char * ParseUInt(const char * s, vx_uint32& value);
 	const char * ParseInt(const char * s, vx_int32& value);
 	const char * ParseFloat(const char * s, vx_float32& value);
@@ -77,17 +88,23 @@ private:
 	const char * ParseString(const char * s, char * value, size_t size);
 	const char * ParseSkipPattern(const char * s, const char * pattern);
 	const char * ParseSkip(const char * s, const char * charList);
+	const char * ParseEndOfLine(const char * s);
 	const char * ParseContextWithErrorCheck(const char * s, vx_uint32& index, const char * syntaxError);
+	const char * ParseFormat(const char * s, vx_df_image& format);
+	int ReleaseAllResources();
 
 private:
+	bool decl_ls_disabled, decl_vx_disabled, decl_cl_disabled, decl_buf_disabled;
+	char name_ls[64], name_vx[64], name_cl[64], name_buf[64];
 	vx_uint32 num_context_, num_openvx_context_, num_opencl_context_, num_opencl_buf_;
 	ls_context * context_;
 	vx_context * openvx_context_;
 	cl_context * opencl_context_;
-	cl_command_queue * opencl_cmd_queue_;
+	bool * openvx_context_allocated_;
+	bool * opencl_context_allocated_;
 	cl_mem * opencl_buf_mem_;
-	vx_uint32 * opencl_buf_size_;
-	cl_command_queue * opencl_buf_cmdq_;
+	std::map<std::string, camera_params> camParList;
+	std::map<std::string, rig_params> rigParList;
 	vx_float32 attr_buf_[LIVE_STITCH_ATTR_MAX_COUNT];
 };
 

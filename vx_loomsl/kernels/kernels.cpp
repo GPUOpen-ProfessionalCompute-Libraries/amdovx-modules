@@ -21,26 +21,18 @@ THE SOFTWARE.
 */
 
 #include "kernels.h"
+#include "color_convert.h"
+#include "warp.h"
+#include "seam_find.h"
+#include "exposure_compensation.h"
+#include "multiband_blender.h"
+#include "pyramid_scale.h"
+#include "merge.h"
+#include "alpha_blend.h"
 
 #if _WIN32
 #include <Windows.h>
 #endif
-
-bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueSize)
-{
-#if _WIN32
-	DWORD len = GetEnvironmentVariableA(name, value, (DWORD)valueSize);
-	value[valueSize - 1] = 0;
-	return (len > 0) ? true : false;
-#else
-	const char * v = getenv(name);
-	if (v) {
-		strncpy(value, v, valueSize);
-		value[valueSize - 1] = 0;
-	}
-	return v ? true : false;
-#endif
-}
 
 ////////////////////////////////////////////////////////////////////////////
 //! \brief The module entry point for publishing kernel.
@@ -55,9 +47,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_RGB4_AMD, &desc);
 	// register kernels
 	ERROR_CHECK_STATUS(color_convert_publish(context));
-	ERROR_CHECK_STATUS(lens_distortion_remap_publish(context));
-	ERROR_CHECK_STATUS(initialize_stitch_config_publish(context));
-	ERROR_CHECK_STATUS(initialize_stitch_remap_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
 	ERROR_CHECK_STATUS(exposure_compensation_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
@@ -102,10 +91,7 @@ vx_reference avxGetNodeParamRef(vx_node node, vx_uint32 index)
 }
 
 
-////////////////////////////////////////////////////////////////////////////
-/**
-* \brief Utility function to create nodes
-*/
+//! \brief Utility function to create nodes
 vx_node stitchCreateNode(vx_graph graph, vx_enum kernelEnum, vx_reference params[], vx_uint32 num)
 {
 	vx_status status = VX_SUCCESS;
@@ -176,6 +162,22 @@ vx_node stitchCreateNode(vx_graph graph, const char * kernelName, vx_reference p
 		status = VX_ERROR_NOT_SUPPORTED;
 	}
 	return node;
+}
+
+bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueSize)
+{
+#if _WIN32
+	DWORD len = GetEnvironmentVariableA(name, value, (DWORD)valueSize);
+	value[valueSize - 1] = 0;
+	return (len > 0) ? true : false;
+#else
+	const char * v = getenv(name);
+	if (v) {
+		strncpy(value, v, valueSize);
+		value[valueSize - 1] = 0;
+	}
+	return v ? true : false;
+#endif
 }
 
 /***********************************************************************************************************************************
@@ -264,7 +266,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 /**
 * \brief Function to create Stitch Warp node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_uint32 num_camera_columns)
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns)
 {
 	vx_scalar METHOD = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_ENUM, &method);
 	vx_scalar NUM_CAM = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
@@ -277,7 +279,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 		(vx_reference)WarpRemapEntry,
 		(vx_reference)input,
 		(vx_reference)output,
-		(vx_reference)nullptr,
+		(vx_reference)outputLuma,
 		(vx_reference)s_num_camera_columns,
 	};
 	vx_node node = stitchCreateNode(graph,
@@ -293,12 +295,9 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 /**
 * \brief Function to create Stitch Merge node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_uint8 numBands, vx_array bandWeights, vx_image camera_id_image, vx_image group1_image, vx_image group2_image, vx_image input, vx_image weight_image, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera_id_image, vx_image group1_image, vx_image group2_image, vx_image input, vx_image weight_image, vx_image output)
 {
-	vx_scalar BAND_WEIGHTS = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &numBands);
 	vx_reference params[] = {
-		(vx_reference)BAND_WEIGHTS,
-		(vx_reference)bandWeights,
 		(vx_reference)camera_id_image,
 		(vx_reference)group1_image,
 		(vx_reference)group2_image,
@@ -311,7 +310,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_uint8 numBan
 		params,
 		dimof(params));
 
-	vxReleaseScalar(&BAND_WEIGHTS);
 	return node;
 }
 
@@ -437,41 +435,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 	return node;
 }
 
-/***********************************************************************************************************************************
-Seam Find
-Talk to Radha : TBD
-************************************************************************************************************************************/
-/**
-* \brief Function to create Stitch Warp U8 node
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpU8Node(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image output_u8, vx_uint32 num_camera_columns)
-{
-
-	vx_scalar METHOD = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_ENUM, &method);
-	vx_scalar NUM_CAM = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
-	vx_scalar s_num_camera_columns = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_camera_columns);
-
-	vx_reference params[] = {
-		(vx_reference)METHOD,
-		(vx_reference)NUM_CAM,
-		(vx_reference)ValidPixelEntry,
-		(vx_reference)WarpRemapEntry,
-		(vx_reference)input,
-		(vx_reference)output,
-		(vx_reference)output_u8,
-		(vx_reference)s_num_camera_columns,
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_WARP,
-		params,
-		dimof(params));
-
-	vxReleaseScalar(&METHOD);
-	vxReleaseScalar(&NUM_CAM);
-	vxReleaseScalar(&s_num_camera_columns);
-	return node;
-}
-
 /**
 * \brief Function to create Seam Find CPU node
 */
@@ -585,11 +548,12 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 
 //*\brief Function to create SeamFind Set Weights node - GPU
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx_scalar current_frame, vx_uint32 NumCam, vx_uint32 output_width, vx_uint32 output_height, vx_array seam_weight, vx_array seam_path,
-	vx_array seam_pref, vx_image weight_image)
+	vx_array seam_pref, vx_image weight_image, vx_uint32 flags)
 {
 	vx_scalar NUM_CAM = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &NumCam);
 	vx_scalar OUTPUT_WIDTH = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &output_width);
 	vx_scalar OUTPUT_HEIGHT = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &output_height);
+	vx_scalar FLAGS = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &flags);
 
 	vx_reference params[] = {
 		(vx_reference)current_frame,
@@ -599,7 +563,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx
 		(vx_reference)seam_weight,
 		(vx_reference)seam_path,
 		(vx_reference)seam_pref,
-		(vx_reference)weight_image
+		(vx_reference)weight_image,
+		(vx_reference)FLAGS
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_SEAMFIND_SET_WEIGHTS,
@@ -609,6 +574,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx
 	vxReleaseScalar(&NUM_CAM);
 	vxReleaseScalar(&OUTPUT_WIDTH);
 	vxReleaseScalar(&OUTPUT_HEIGHT);
+	vxReleaseScalar(&FLAGS);
 	return node;
 }
 

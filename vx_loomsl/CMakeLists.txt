@@ -30,7 +30,6 @@ include_directories (${OpenCL_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/amdovx-core/open
 list(APPEND SOURCES
 	kernels/alpha_blend.cpp
 	kernels/color_convert.cpp
-	kernels/initialize_stitch_config.cpp
 	kernels/exp_comp.cpp
 	kernels/exposure_compensation.cpp
 	kernels/kernels.cpp
@@ -39,7 +38,6 @@ list(APPEND SOURCES
 	kernels/multiband_blender.cpp
 	kernels/pyramid_scale.cpp
 	kernels/seam_find.cpp
-	kernels/initialize_stitch_remap.cpp
 	kernels/warp.cpp
 	live_stitch_api.cpp
 )

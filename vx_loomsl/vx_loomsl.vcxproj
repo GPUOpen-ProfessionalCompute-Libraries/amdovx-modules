@@ -73,8 +73,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="kernels\alpha_blend.h" />
+    <ClInclude Include="kernels\color_convert.h" />
+    <ClInclude Include="kernels\exposure_compensation.h" />
     <ClInclude Include="kernels\exp_comp.h" />
     <ClInclude Include="kernels\kernels.h" />
+    <ClInclude Include="kernels\lens_distortion_remap.h" />
+    <ClInclude Include="kernels\merge.h" />
+    <ClInclude Include="kernels\multiband_blender.h" />
+    <ClInclude Include="kernels\pyramid_scale.h" />
+    <ClInclude Include="kernels\seam_find.h" />
+    <ClInclude Include="kernels\warp.h" />
     <ClInclude Include="live_stitch_api.h" />
   </ItemGroup>
   <ItemGroup>
@@ -82,8 +91,6 @@
     <ClCompile Include="kernels\color_convert.cpp" />
     <ClCompile Include="kernels\exposure_compensation.cpp" />
     <ClCompile Include="kernels\exp_comp.cpp" />
-    <ClCompile Include="kernels\initialize_stitch_config.cpp" />
-    <ClCompile Include="kernels\initialize_stitch_remap.cpp" />
     <ClCompile Include="kernels\kernels.cpp" />
     <ClCompile Include="kernels\lens_distortion_remap.cpp" />
     <ClCompile Include="kernels\merge.cpp" />

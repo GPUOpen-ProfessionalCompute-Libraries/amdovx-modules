@@ -21,13 +21,7 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "kernels.h"
-#define _USE_MATH_DEFINES
-#include <math.h>
-#include <stdio.h>
-#include <algorithm>
-#include "exp_comp.h"
-extern bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueSize);
+#include "exposure_compensation.h"
 
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK exposure_comp_calcErrorFn_input_validator(vx_node node, vx_uint32 index)
@@ -898,5 +892,233 @@ vx_status exposure_comp_solvegains_publish(vx_context context)
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
+	return VX_SUCCESS;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Calculate buffer sizes and generate data in buffers for exposure compensation
+//   CalculateLargestExpCompBufferSizes  - useful when reinitialize is enabled
+//   CalculateSmallestExpCompBufferSizes - useful when reinitialize is disabled
+//   GenerateExpCompBuffers              - generate tables
+
+vx_status CalculateLargestExpCompBufferSizes(
+	vx_uint32 numCamera,                    // [in] number of cameras
+	vx_uint32 eqrWidth,                     // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                    // [in] output equirectangular image height
+	vx_size * validTableEntryCount,         // [out] number of entries needed by expComp valid table
+	vx_size * overlapTableEntryCount        // [out] number of entries needed by expComp overlap table
+	)
+{
+	vx_size num128x32blocks = ((eqrWidth + 127) >> 7) * ((eqrHeight + 31) >> 5);
+	*validTableEntryCount = num128x32blocks * numCamera;
+	*overlapTableEntryCount = num128x32blocks * numCamera * (numCamera - 1) / 2;
+	return VX_SUCCESS;
+}
+
+vx_status CalculateSmallestExpCompBufferSizes(
+	vx_uint32 numCamera,                           // [in] number of cameras
+	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
+	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapValid,   // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
+	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
+	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
+	vx_size * validTableEntryCount,                // [out] number of entries needed by expComp valid table
+	vx_size * overlapTableEntryCount               // [out] number of entries needed by expComp overlap table
+	)
+{
+	const vx_rectangle_t * const * overlapRegion = paddedPixelCamMap ? overlapPadded : overlapValid;
+
+	// count validTable entries
+	vx_uint32 validEntryCount = 0;
+	for (vx_uint32 i = 0; i < numCamera; i++) {
+		vx_uint32 camMaskBit = (1 << i);
+		vx_uint32 start_x = overlapValid[i][i].start_x, end_x = overlapValid[i][i].end_x;
+		vx_uint32 start_y = overlapValid[i][i].start_y, end_y = overlapValid[i][i].end_y;
+		if ((start_x < end_x) && (start_y < end_y))	{
+			for (vx_uint32 ys = start_y; ys < end_y; ys += 32) {
+				for (vx_uint32 xs = start_x; xs < end_x; xs += 128) {
+					vx_uint32 xe = (xs + 128) < end_x ? (xs + 128) : end_x;
+					vx_uint32 ye = (ys + 32) < end_y ? (ys + 32) : end_y;
+					// count valid pixels
+					vx_int32 count = 0;
+					for (vx_uint32 y = ys; y < ye; y++) {
+						for (vx_uint32 x = xs; x < xe; x++) {
+							if ((validPixelCamMap[y * eqrWidth + x] & camMaskBit) == camMaskBit) {
+								count = 1;
+								break;
+							}
+						}
+						if (count > 0)
+							break;
+					}
+					if (count > 0) {
+						validEntryCount++;
+					}
+				}
+			}
+		}
+	}
+
+	// count overlapTable entries
+	vx_uint32 overlapEntryCount = 0;
+	for (vx_uint32 i = 1; i < numCamera; i++) {
+		for (vx_uint32 j = 0; j < i; j++) {
+			vx_uint32 overlapMaskBits = (1 << i) | (1 << j);
+			vx_uint32 start_x = overlapRegion[i][j].start_x, end_x = overlapRegion[i][j].end_x;
+			vx_uint32 start_y = overlapRegion[i][j].start_y, end_y = overlapRegion[i][j].end_y;
+			if ((start_x < end_x) && (start_y < end_y))	{
+				for (vx_uint32 ys = start_y; ys < end_y; ys += 32) {
+					for (vx_uint32 xs = start_x; xs < end_x; xs += 128) {
+						vx_uint32 xe = (xs + 128) < end_x ? (xs + 128) : end_x;
+						vx_uint32 ye = (ys + 32) < end_y ? (ys + 32) : end_y;
+						// count valid pixels
+						vx_int32 count = 0;
+						for (vx_uint32 y = ys; y < ye; y++) {
+							for (vx_uint32 x = xs; x < xe; x++) {
+								if ((validPixelCamMap[y * eqrWidth + x] & overlapMaskBits) == overlapMaskBits) {
+									count = 1;
+									break;
+								}
+							}
+							if (count > 0)
+								break;
+						}
+						if (count > 0) {
+							overlapEntryCount++;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// updated output entry counts
+	*validTableEntryCount = validEntryCount;
+	*overlapTableEntryCount = overlapEntryCount;
+
+	return VX_SUCCESS;
+}
+
+vx_status GenerateExpCompBuffers(
+	vx_uint32 numCamera,                           // [in] number of cameras
+	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
+	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapValid,   // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
+	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
+	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
+	vx_size validTableSize,                        // [in] size of valid table, in terms of number of entries
+	vx_size overlapTableSize,                      // [in] size of overlap table, in terms of number of entries
+	StitchExpCompCalcEntry * validTable,           // [out] expComp valid table
+	StitchOverlapPixelEntry * overlapTable,        // [out] expComp overlap table
+	vx_size * validTableEntryCount,                // [out] number of entries needed by expComp valid table
+	vx_size * overlapTableEntryCount,              // [out] number of entries needed by expComp overlap table
+	vx_int32 * overlapPixelCountMatrix             // [out] expComp overlap pixel count matrix: size: [numCamera * numCamera]
+	)
+{
+	const vx_rectangle_t * const * overlapRegion = paddedPixelCamMap ? overlapPadded : overlapValid;
+
+	// generate validTable
+	vx_uint32 validEntryCount = 0;
+	for (vx_uint32 i = 0; i < numCamera; i++) {
+		vx_uint32 camMaskBit = (1 << i);
+		vx_uint32 start_x = overlapValid[i][i].start_x, end_x = overlapValid[i][i].end_x;
+		vx_uint32 start_y = overlapValid[i][i].start_y, end_y = overlapValid[i][i].end_y;
+		if ((start_x < end_x) && (start_y < end_y))	{
+			for (vx_uint32 ys = start_y; ys < end_y; ys += 32) {
+				for (vx_uint32 xs = start_x; xs < end_x; xs += 128) {
+					vx_uint32 xe = (xs + 128) < end_x ? (xs + 128) : end_x;
+					vx_uint32 ye = (ys +  32) < end_y ? (ys +  32) : end_y;
+					// count valid pixels
+					vx_int32 count = 0;
+					for (vx_uint32 y = ys; y < ye; y++) {
+						for (vx_uint32 x = xs; x < xe; x++) {
+							if ((validPixelCamMap[y * eqrWidth + x] & camMaskBit) == camMaskBit) {
+								count = 1;
+								break;
+							}
+						}
+						if (count > 0)
+							break;
+					}
+					if (count > 0) {
+						// add valid entry
+						if (validEntryCount < validTableSize){
+							StitchExpCompCalcEntry validEntry;
+							validEntry.camId = i;
+							validEntry.dstX = (xs >> 3);
+							validEntry.dstY = (ys >> 1);
+							validEntry.start_x = xs & 7;
+							validEntry.start_y = ys & 1;
+							validEntry.end_x = xe - xs - 1;
+							validEntry.end_y = ye - ys - 1;
+							validTable[validEntryCount] = validEntry;
+						}
+						validEntryCount++;
+					}
+				}
+			}
+		}
+	}
+
+	// generate overlapTable and overlapPixelCountMatrix
+	memset(overlapPixelCountMatrix, 0, numCamera * numCamera * sizeof(vx_int32));
+	vx_uint32 overlapEntryCount = 0;
+	for (vx_uint32 i = 1; i < numCamera; i++) {
+		for (vx_uint32 j = 0; j < i; j++) {
+			vx_uint32 overlapMaskBits = (1 << i) | (1 << j);
+			vx_uint32 start_x = overlapRegion[i][j].start_x, end_x = overlapRegion[i][j].end_x;
+			vx_uint32 start_y = overlapRegion[i][j].start_y, end_y = overlapRegion[i][j].end_y;
+			if ((start_x < end_x) && (start_y < end_y))	{
+				for (vx_uint32 ys = start_y; ys < end_y; ys += 32) {
+					for (vx_uint32 xs = start_x; xs < end_x; xs += 128) {
+						vx_uint32 xe = (xs + 128) < end_x ? (xs + 128) : end_x;
+						vx_uint32 ye = (ys +  32) < end_y ? (ys +  32) : end_y;
+						// count valid pixels
+						vx_int32 count = 0;
+						for (vx_uint32 y = ys; y < ye; y++) {
+							for (vx_uint32 x = xs; x < xe; x++) {
+								if ((validPixelCamMap[y * eqrWidth + x] & overlapMaskBits) == overlapMaskBits) {
+									count++;
+								}
+							}
+						}
+						if (count > 0) {
+							overlapPixelCountMatrix[i * numCamera + j] += count;
+							overlapPixelCountMatrix[j * numCamera + i] += count;
+							// add overlapTable entry
+							if (overlapEntryCount < overlapTableSize) {
+								StitchOverlapPixelEntry overlapEntry;
+								overlapEntry.camId0 = i;
+								overlapEntry.start_x = xs;
+								overlapEntry.start_y = ys;
+								overlapEntry.end_x = xe - xs - 1;
+								overlapEntry.end_y = ye - ys - 1;
+								overlapEntry.camId1 = j;
+								overlapEntry.camId2 = 0x1F;
+								overlapEntry.camId3 = 0x1F;
+								overlapEntry.camId4 = 0x1F;
+								overlapTable[overlapEntryCount] = overlapEntry;
+							}
+							overlapEntryCount++;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// check for buffer overflow error condition and updated output entry counts
+	if (validEntryCount > validTableSize || overlapEntryCount > overlapTableSize) {
+		return VX_ERROR_NOT_SUFFICIENT;
+	}
+	*validTableEntryCount = validEntryCount;
+	*overlapTableEntryCount = overlapEntryCount;
+
 	return VX_SUCCESS;
 }

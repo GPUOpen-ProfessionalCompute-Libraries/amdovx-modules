@@ -21,24 +21,23 @@ THE SOFTWARE.
 */
 #define _CRT_SECURE_NO_WARNINGS
 #include "kernels.h"
-#include <vx_ext_amd.h>
+#include "lens_distortion_remap.h"
+#include "warp.h"
+#include "merge.h"
+#include "seam_find.h"
+#include "exposure_compensation.h"
+#include "multiband_blender.h"
 #include <sstream>
 #include <stdarg.h>
+#include <map>
+#include <string>
 
 // Version
-#define LS_VERSION             "0.9"
+#define LS_VERSION             "0.9.3"
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The magic number for validation
 #define LIVE_STITCH_MAGIC      0x600df00d
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The camera configuration.
-typedef struct {
-	unsigned int    num_cam;       // number of cameras
-	unsigned int    width, height; // individual camera width and height
-	camera_params * cam_par;       // camera parameters
-} camera_config;
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The stitching modes
@@ -62,10 +61,25 @@ struct ls_loomio_info {
 };
 
 //////////////////////////////////////////////////////////////////////
+//! \brief The internal table buffer sizes
+struct ls_internal_table_size_info {
+	vx_size warpTableSize;
+	vx_size expCompOverlapTableSize;
+	vx_size expCompValidTableSize;
+	vx_size blendOffsetTableSize;
+	vx_size seamFindValidTableSize;
+	vx_size seamFindWeightTableSize;
+	vx_size seamFindAccumTableSize;
+	vx_size seamFindPrefInfoTableSize;
+	vx_size seamFindPathTableSize;
+};
+
+//////////////////////////////////////////////////////////////////////
 //! \brief The stitch handle
 struct ls_context_t {
 	// magic word and status
 	int  magic;                                 // should be LIVE_STITCH_MAGIC
+	bool feature_enable_reinitialize;           // true if reinitialize feature is enabled
 	bool initialized;                           // true if initialized
 	bool scheduled;                             // true if scheduled
 	bool reinitialize_required;                 // true if reinitialize required
@@ -104,41 +118,41 @@ struct ls_context_t {
 	// global options
 	vx_uint32  EXPO_COMP, SEAM_FIND;			// exposure comp/ seam find flags from environment variable
 	vx_uint32  SEAM_COST_SELECT;				// seam find cost generation flag from environment variable
-	vx_uint32  SEAM_REFRESH;					// seamfind seam refresh flag from environment variable
+	vx_uint32  SEAM_REFRESH, SEAM_FLAGS;		// seamfind seam refresh flag from environment variable
 	vx_uint32  MULTIBAND_BLEND;                 // multiband blend flag from environment variable
 	// global OpenVX objects
 	vx_context context;                         // OpenVX context
-	vx_graph graphStitch, graphInitializeStitch;   // separate graphs for frame-level stitching and Initialize Stitch Config
-	vx_graph graphOverlay;                      // graph for overlay computation
-	// configuration OpenVX objects
-	vx_matrix rig_par_mat, cam_par_mat;         // rig and camera parameters
-	vx_array cam_par_array;						// camera parameters
-	vx_array ovr_par_array;                       // overlay parameters
+	vx_graph graphStitch;                       // OpenVX graph for stitching
+	// internal buffer sizes
+	ls_internal_table_size_info table_sizes;    // internal table sizes
+	vx_image rgb_input, rgb_output;
 	// data objects
 	vx_remap overlay_remap;                     // remap table for overlay
-	vx_remap initialize_stitch_remap;
+	vx_remap camera_remap;                      // remap table for camera (in simple stitch mode)
 	vx_image Img_input, Img_output, Img_overlay;
 	vx_image Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba;
 	vx_node InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode;
 	//Stitch Mode 2
 	vx_array ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array;
-	vx_matrix InitializeStitchConfig_matrix, overlap_matrix, A_matrix;
+	vx_matrix overlap_matrix, A_matrix;
 	vx_image RGBY1, RGBY2, weight_image, cam_id_image, group1_image, group2_image;
-	vx_node InitializeStitchConfigNode, WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
+	vx_node WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
+	vx_node nodeOverlayRemap, nodeOverlayBlend;
 	vx_float32 alpha, beta;                     // needed for expcomp
 	vx_int32 * A_matrix_initial_value;          // needed for expcomp
 	//Stitch SEAMFIND DATA OBJECTS
 	vx_array overlap_rect_array, seamfind_valid_array, seamfind_weight_array, seamfind_accum_array, seamfind_pref_array, seamfind_info_array, seamfind_path_array, seamfind_scene_array;
-	vx_image mask_image, u8_image, sobelx_image, sobely_image, s16_image, sobel_magnitude_image, sobel_phase_image, new_weight_image;
+	vx_image valid_mask_image, warp_luma_image, sobelx_image, sobely_image, sobel_magnitude_s16_image, sobel_magnitude_image, sobel_phase_image, seamfind_weight_image;
 	vx_node SobelNode, MagnitudeNode, PhaseNode, ConvertDepthNode, SeamfindStep1Node, SeamfindStep2Node, SeamfindStep3Node, SeamfindStep4Node, SeamfindStep5Node;
-	vx_scalar input_shift, current_frame, scene_threshold, flag;
+	vx_scalar current_frame, scene_threshold, seam_cost_enable;
 	vx_int32  current_frame_value;
 	vx_uint32 scene_threshold_value, SEAM_FIND_TARGET;
 	//Stitch Multiband DATA objects
 	vx_int32 num_bands;
-	vx_array band_weights_array, blend_offsets;
+	vx_array blend_offsets;
 	vx_image blend_mask_image;
-	StitchMultibandData *pStitchMultiband;
+	StitchMultibandData * pStitchMultiband;
+	vx_size * multibandBlendOffsetIntoBuffer;
 	// LoomIO support
 	vx_uint32 loomioAuxDataLength;
 	vx_scalar cameraMediaConfig, overlayMediaConfig, outputMediaConfig, viewingMediaConfig;
@@ -146,6 +160,21 @@ struct ls_context_t {
 	vx_node nodeLoomIoCamera, nodeLoomIoOverlay, nodeLoomIoOutput, nodeLoomIoViewing;
 	ls_loomio_info loomio_camera, loomio_output, loomio_overlay, loomio_viewing;
 	FILE * loomioAuxDumpFile;
+	// internal buffers for input camera lens models
+	vx_uint32 paddingPixelCount, overlapCount;
+	StitchCoord2dFloat * camSrcMap;
+	vx_float32 * camIndexTmpBuf;
+	vx_uint8 * camIndexBuf;
+	vx_uint32 * validPixelCamMap, * paddedPixelCamMap;
+	vx_rectangle_t * overlapRectBuf;
+	vx_rectangle_t * overlapValid[32], * overlapPadded[32];
+	vx_uint32 validCamOverlapInfo[32], paddedCamOverlapInfo[32];
+	vx_int32 * overlapMatrixBuf;
+	// internal buffers for overlay models
+	StitchCoord2dFloat * overlaySrcMap;
+	vx_uint32 * validPixelOverlayMap;
+	vx_float32 * overlayIndexTmpBuf;
+	vx_uint8 * overlayIndexBuf;
 	// attributes
 	vx_float32 live_stitch_attr[LIVE_STITCH_ATTR_MAX_COUNT];
 };
@@ -194,24 +223,115 @@ static void VX_CALLBACK log_callback(vx_context context, vx_reference ref, vx_st
 		fflush(stdout);
 	}
 }
+//! \brief Dump utilities.
+static vx_status DumpBuffer(const vx_uint8 * buf, vx_size size, const char * fileName)
+{
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpBuffer: unable to create: %s\n", fileName); return VX_FAILURE; }
+	fwrite(buf, size, 1, fp);
+	fclose(fp);
+	printf("OK: DumpBuffer: %d bytes into %s\n", (int)size, fileName);
+	return VX_SUCCESS;
+}
+static vx_status DumpImage(vx_image img, const char * fileName)
+{
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpImage: unable to create: %s\n", fileName); return VX_FAILURE; }
+	vx_rectangle_t rect = { 0, 0, 0, 0 };
+	vx_imagepatch_addressing_t addr;
+	vx_map_id map_id;
+	vx_uint8 * ptr;
+	ERROR_CHECK_STATUS_(vxQueryImage(img, VX_IMAGE_WIDTH, &rect.end_x, sizeof(rect.end_x)));
+	ERROR_CHECK_STATUS_(vxQueryImage(img, VX_IMAGE_HEIGHT, &rect.end_y, sizeof(rect.end_y)));
+	ERROR_CHECK_STATUS_(vxMapImagePatch(img, &rect, 0, &map_id, &addr, (void **)&ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+	for (vx_uint32 y = 0; y < rect.end_y; y++) {
+		fwrite(&ptr[y*addr.stride_y], addr.dim_x * addr.stride_x, 1, fp);
+	}
+	ERROR_CHECK_STATUS_(vxUnmapImagePatch(img, map_id));
+	fclose(fp);
+	vx_df_image format;
+	ERROR_CHECK_STATUS_(vxQueryImage(img, VX_IMAGE_FORMAT, &format, sizeof(format)));
+	printf("OK: Dump: Image %dx%d %4.4s image into %s\n", rect.end_x, rect.end_y, &format, fileName);
+	return VX_SUCCESS;
+}
+static vx_status DumpArray(vx_array arr, const char * fileName)
+{
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpArray: unable to create: %s\n", fileName); return VX_FAILURE; }
+	vx_size numItems, itemSize;
+	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_ITEMSIZE, &itemSize, sizeof(itemSize)));
+	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_NUMITEMS, &numItems, sizeof(numItems)));
+	vx_map_id map_id;
+	vx_uint8 * ptr;
+	vx_size stride;
+	ERROR_CHECK_STATUS_(vxMapArrayRange(arr, 0, numItems, &map_id, &stride, (void **)&ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+	fwrite(ptr, itemSize, numItems, fp);
+	ERROR_CHECK_STATUS_(vxUnmapArrayRange(arr, map_id));
+	fclose(fp);
+	printf("OK: Dump: Array [%d][%d] into %s\n", (int)numItems, (int)itemSize, fileName);
+	return VX_SUCCESS;
+}
+static vx_status DumpMatrix(vx_matrix mat, const char * fileName)
+{
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpMatrix: unable to create: %s\n", fileName); return VX_FAILURE; }
+	vx_size size;
+	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_SIZE, &size, sizeof(size)));
+	vx_uint8 * buf = new vx_uint8[size];
+	ERROR_CHECK_STATUS_(vxCopyMatrix(mat, buf, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+	fwrite(buf, size, 1, fp);
+	delete[] buf;
+	fclose(fp);
+	vx_size rows, columns;
+	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_ROWS, &rows, sizeof(rows)));
+	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_COLUMNS, &columns, sizeof(columns)));
+	printf("OK: Dump: Matrix %dx%d (%d bytes) into %s\n", (int)rows, (int)columns, (int)size, fileName);
+	return VX_SUCCESS;
+}
+static vx_status DumpRemap(vx_remap remap, const char * fileName)
+{
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpRemap: unable to create: %s\n", fileName); return VX_FAILURE; }
+	vx_uint32 dstWidth, dstHeight;
+	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_WIDTH, &dstWidth, sizeof(dstWidth)));
+	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_HEIGHT, &dstHeight, sizeof(dstHeight)));
+	for (vx_uint32 y = 0; y < dstHeight; y++){
+		for (vx_uint32 x = 0; x < dstWidth; x++){
+			vx_float32 src_xy[2];
+			ERROR_CHECK_STATUS_(vxGetRemapPoint(remap, x, y, &src_xy[0], &src_xy[1]));
+			fwrite(src_xy, sizeof(src_xy), 1, fp);
+		}
+	}
+	fclose(fp);
+	printf("OK: Dump: Remap %dx%d into %s\n", dstWidth, dstHeight, fileName);
+	return VX_SUCCESS;
+}
+static vx_status DumpReference(vx_reference ref, const char * fileName)
+{
+	vx_enum type;
+	ERROR_CHECK_STATUS_(vxQueryReference(ref, VX_REF_ATTRIBUTE_TYPE, &type, sizeof(type)));
+	if (type == VX_TYPE_IMAGE) return DumpImage((vx_image)ref, fileName);
+	else if (type == VX_TYPE_ARRAY) return DumpArray((vx_array)ref, fileName);
+	else if (type == VX_TYPE_MATRIX) return DumpMatrix((vx_matrix)ref, fileName);
+	else if (type == VX_TYPE_REMAP) return DumpRemap((vx_remap)ref, fileName);
+	else return VX_ERROR_NOT_SUPPORTED;
+}
 //! \brief Function to set default values to global attributes
 static void ResetLiveStitchGlobalAttributes()
 {
 	// set default settings only once
 	if (!g_live_stitch_attr_initialized) {
 		g_live_stitch_attr_initialized = true;
-		memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));       // initialize all settings to zero
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;                // EXPO COMP TURNED ON  - Default for mode 2
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;               // SEAMFIND TURNED ON - Default for mode 2
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;           // SEAMFIND SEAM SCENE CHANGE TURNED ON - Default for mode 2
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;       // SEAMFIND Cost Generation set to - Default: 1:Optimized Sobel Mag/Phase
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_STAGGER] = 1;        // SEAMFIND Seam Stagger set to - Default: 1
-		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;              // Enable Blend
-		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;     // Use 4-band Blend
-		g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal; // Normal mode
-		g_live_stitch_attr[LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR] = 1.0f;                  // no input scaling
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR] = 1.0f;                 // no output scaling
-		g_live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] = 0.0f;                 // lsReinitialize disabled
+		memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));
+		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_FREQUENCY] = 600;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_QUALITY] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_STAGGER] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR] = 1;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR] = 1;
 		// LoomIO specific attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_AUX_DATA_CAPACITY] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 	}
@@ -240,6 +360,743 @@ static vx_status IsValidContextAndNotInitialized(ls_context stitch)
 {
 	if (!stitch || stitch->magic != LIVE_STITCH_MAGIC) return VX_ERROR_INVALID_REFERENCE;
 	if (stitch->initialized) return VX_ERROR_NOT_SUPPORTED;
+	return VX_SUCCESS;
+}
+static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool& isIntermediateTmpData)
+{
+	struct {
+		vx_reference ref;
+		bool isIntermediateTmpData;
+		const char * fileNameSuffix;
+	} refList[] = {
+		// intermediate tables and data that needs initialization
+		{ (vx_reference)stitch->ValidPixelEntry,       false, "warp-valid.bin" },
+		{ (vx_reference)stitch->WarpRemapEntry,        false, "warp-remap.bin" },
+		{ (vx_reference)stitch->RGBY1,                 false, "warp-rgby.raw" },
+		{ (vx_reference)stitch->cam_id_image,          false, "merge-camid.raw" },
+		{ (vx_reference)stitch->group1_image,          false, "merge-group1.raw" },
+		{ (vx_reference)stitch->group2_image,          false, "merge-group2.raw" },
+		{ (vx_reference)stitch->weight_image,          false, "merge-weight.raw" },
+		{ (vx_reference)stitch->valid_array,           false, "exp-valid.bin" },
+		{ (vx_reference)stitch->OverlapPixelEntry,     false, "exp-overlap.bin" },
+		{ (vx_reference)stitch->overlap_matrix,        false, "exp-count.bin" },
+		{ (vx_reference)stitch->RGBY2,                 false, "exp-rgby.raw" },
+		{ (vx_reference)stitch->valid_mask_image,      false, "valid-mask.raw" },
+		{ (vx_reference)stitch->seamfind_valid_array,  false, "seam-valid.bin" },
+		{ (vx_reference)stitch->seamfind_weight_array, false, "seam-weight.bin" },
+		{ (vx_reference)stitch->seamfind_accum_array,  false, "seam-accum.bin" },
+		{ (vx_reference)stitch->seamfind_pref_array,   false, "seam-pref.bin" },
+		{ (vx_reference)stitch->seamfind_info_array,   false, "seam-info.bin" },
+		{ (vx_reference)stitch->seamfind_path_array,   false, "seam-path.bin" },
+		{ (vx_reference)stitch->seamfind_scene_array,  false, "seam-scene.bin" },
+		{ (vx_reference)stitch->seamfind_weight_image, false, "seam-mask.raw" },
+		{ (vx_reference)stitch->blend_mask_image,      false, "blend-mask.raw" },
+		{ (vx_reference)stitch->blend_offsets,         false, "blend-offsets.bin" },
+		{ (vx_reference)stitch->camera_remap,          false, "remap-input.raw" },
+		{ (vx_reference)stitch->overlay_remap,         false, "remap-overlay.raw" },
+		// intermediate temporary data
+		{ (vx_reference)stitch->rgb_input,             true,  "rgb-input.raw" },
+		{ (vx_reference)stitch->Img_overlay,           true,  "overlay-input.raw" },
+		{ (vx_reference)stitch->rgb_output,            true,  "rgb-output.raw" },
+	};
+	for (vx_size i = 0; i < dimof(refList); i++) {
+		if (refList[i].ref && refList[i].ref == ref) {
+			isIntermediateTmpData = refList[i].isIntermediateTmpData;
+			return refList[i].fileNameSuffix;
+		}
+	}
+	return nullptr;
+}
+static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePrefix, bool dumpIntermediateTmpDataToo)
+{
+	vx_reference refList[] = {
+		// intermediate tables and data that needs initialization
+		(vx_reference)stitch->ValidPixelEntry,
+		(vx_reference)stitch->WarpRemapEntry,
+		(vx_reference)stitch->RGBY1,
+		(vx_reference)stitch->cam_id_image,
+		(vx_reference)stitch->group1_image,
+		(vx_reference)stitch->group2_image,
+		(vx_reference)stitch->weight_image,
+		(vx_reference)stitch->valid_array,
+		(vx_reference)stitch->OverlapPixelEntry,
+		(vx_reference)stitch->overlap_matrix,
+		(vx_reference)stitch->RGBY2,
+		(vx_reference)stitch->valid_mask_image,
+		(vx_reference)stitch->seamfind_valid_array,
+		(vx_reference)stitch->seamfind_weight_array,
+		(vx_reference)stitch->seamfind_accum_array,
+		(vx_reference)stitch->seamfind_pref_array,
+		(vx_reference)stitch->seamfind_info_array,
+		(vx_reference)stitch->seamfind_path_array,
+		(vx_reference)stitch->seamfind_scene_array,
+		(vx_reference)stitch->seamfind_weight_image,
+		(vx_reference)stitch->blend_mask_image,
+		(vx_reference)stitch->blend_offsets,
+		(vx_reference)stitch->camera_remap,
+		(vx_reference)stitch->overlay_remap,
+		// intermediate temporary data
+		(vx_reference)stitch->rgb_input,
+		(vx_reference)stitch->Img_overlay,
+		(vx_reference)stitch->rgb_output,
+	};
+	for (vx_size i = 0; i < dimof(refList); i++) {
+		if (refList[i]) {
+			bool isIntermediateTmpData = false;
+			const char * fileNameSuffix = GetFileNameSuffix(stitch, refList[i], isIntermediateTmpData);
+			if (fileNameSuffix && (!isIntermediateTmpData || dumpIntermediateTmpDataToo)) {
+				char fileName[1024]; sprintf(fileName, "%s-%s", fileNamePrefix, fileNameSuffix);
+				vx_status status = DumpReference(refList[i], fileName);
+				if (status != VX_SUCCESS)
+					return status;
+			}
+		}
+	}
+	if (dumpIntermediateTmpDataToo && stitch->MULTIBAND_BLEND) {
+		for (vx_int32 level = 0; level < stitch->num_bands; level++) {
+			vx_status status;
+			char fileName[1024];
+			sprintf(fileName, "%s-blend-pyr-mask-%d.raw", fileNamePrefix, level);
+			status = DumpImage(stitch->pStitchMultiband[level].WeightPyrImgGaussian, fileName);
+			if (status != VX_SUCCESS)
+				return status;
+			sprintf(fileName, "%s-blend-pyr-gauss-%d.raw", fileNamePrefix, level);
+			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
+			if (status != VX_SUCCESS)
+				return status;
+			sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
+			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
+			if (status != VX_SUCCESS)
+				return status;
+			sprintf(fileName, "%s-blend-pyr-lap-rec-%d.raw", fileNamePrefix, level);
+			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec, fileName);
+			if (status != VX_SUCCESS)
+				return status;
+		}
+	}
+	return VX_SUCCESS;
+}
+static vx_status SyncInternalTables(ls_context stitch)
+{
+	vx_reference refList[] = {
+		(vx_reference)stitch->ValidPixelEntry,
+		(vx_reference)stitch->WarpRemapEntry,
+		(vx_reference)stitch->cam_id_image,
+		(vx_reference)stitch->group1_image,
+		(vx_reference)stitch->group2_image,
+		(vx_reference)stitch->weight_image,
+		(vx_reference)stitch->valid_mask_image,
+		(vx_reference)stitch->valid_array,
+		(vx_reference)stitch->OverlapPixelEntry,
+		(vx_reference)stitch->seamfind_valid_array,
+		(vx_reference)stitch->seamfind_weight_array,
+		(vx_reference)stitch->seamfind_accum_array,
+		(vx_reference)stitch->seamfind_pref_array,
+		(vx_reference)stitch->seamfind_info_array,
+		(vx_reference)stitch->seamfind_path_array,
+		(vx_reference)stitch->seamfind_weight_image,
+		(vx_reference)stitch->seamfind_scene_array,
+		(vx_reference)stitch->blend_mask_image,
+		(vx_reference)stitch->RGBY1,
+		(vx_reference)stitch->RGBY2,
+		(vx_reference)stitch->overlay_remap,
+		(vx_reference)stitch->camera_remap,
+	};
+	for (vx_size i = 0; i < dimof(refList); i++) {
+		if (refList[i]) {
+			vx_status status = vxDirective(refList[i], VX_DIRECTIVE_AMD_COPY_TO_OPENCL);
+			if (status != VX_SUCCESS) {
+				ls_printf("ERROR: SyncInternalTables: vxDirective([%d], VX_DIRECTIVE_AMD_COPY_TO_OPENCL) failed (%d)\n", (int)i, status);
+				return status;
+			}
+		}
+	}
+	return VX_SUCCESS;
+}
+static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
+{
+	stitch->camSrcMap = new StitchCoord2dFloat[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_cameras];
+	stitch->validPixelCamMap = new vx_uint32[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	stitch->camIndexTmpBuf = new vx_float32[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	stitch->camIndexBuf = new vx_uint8[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	if (stitch->stitching_mode == stitching_mode_normal) {
+		if (stitch->EXPO_COMP) {
+			stitch->overlapMatrixBuf = new vx_int32[stitch->num_cameras * stitch->num_cameras];
+		}
+		if (stitch->MULTIBAND_BLEND) {
+			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS] == 0) {
+				stitch->paddingPixelCount = (stitch->num_bands <= 4) ? 64 : 128;
+			}
+			else {
+				stitch->paddingPixelCount = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS];
+			}
+			stitch->paddedPixelCamMap = new vx_uint32[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+		}
+		stitch->overlapRectBuf = new vx_rectangle_t[2 * stitch->num_cameras * stitch->num_cameras];
+		for (vx_uint32 cam = 0; cam < stitch->num_cameras; cam++) {
+			stitch->overlapValid[cam] = stitch->overlapRectBuf + cam * 2 * stitch->num_cameras;
+			stitch->overlapPadded[cam] = stitch->overlapValid[cam] + stitch->num_cameras;
+		}
+	}
+	return VX_SUCCESS;
+}
+static vx_status AllocateLensModelBuffersForOverlay(ls_context stitch)
+{
+	stitch->overlaySrcMap = new StitchCoord2dFloat[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_overlays];
+	stitch->validPixelOverlayMap = new vx_uint32[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	stitch->overlayIndexTmpBuf = new vx_float32[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	stitch->overlayIndexBuf = new vx_uint8[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height];
+	return VX_SUCCESS;
+}
+static vx_status InitializeInternalTablesForRemap(vx_remap remap,
+	vx_uint32 numCamera, vx_uint32 numCameraColumns, vx_uint32 camWidth, vx_uint32 camHeight, vx_uint32 eqrWidth, vx_uint32 eqrHeight,
+	const rig_params * rig_par, const camera_params * cam_par,
+	StitchCoord2dFloat * srcMap, vx_uint32 * validPixelMap, vx_float32 * camIndexTmpBuf, vx_uint8 * camIndexBuf)
+{
+	// compute lens distortion and warp models
+	vx_status status = CalculateLensDistortionAndWarpMaps(numCamera, camWidth, camHeight, eqrWidth, eqrHeight,
+		rig_par, cam_par, validPixelMap, 0, nullptr, srcMap, camIndexTmpBuf, camIndexBuf);
+	if (status != VX_SUCCESS) {
+		vxAddLogEntry((vx_reference)remap, status, "ERROR: InitializeInternalTablesForRemap: CalculateLensDistortionAndWarpMaps() failed (%d)\n", status);
+		return status;
+	}
+
+	{ // initialize remap table
+		vx_uint32 pixelsPerEqrImage = eqrWidth * eqrHeight;
+		vx_uint32 x_offset[256], y_offset[256];
+		for (vx_uint32 camId = 0; camId < numCamera; camId++) {
+			x_offset[camId] = (camId % numCameraColumns) * camWidth;
+			y_offset[camId] = (camId / numCameraColumns) * camHeight;
+		}
+		for (vx_uint32 y = 0, pos = 0; y < eqrHeight; y++) {
+			for (vx_uint32 x = 0; x < eqrWidth; x++, pos++) {
+				vx_float32 x_src = -1, y_src = -1;
+				vx_uint32 camId = camIndexBuf[pos];
+				if (camId < numCamera) {
+					const StitchCoord2dFloat * mapEntry = &srcMap[pos + camId * pixelsPerEqrImage];
+					x_src = mapEntry->x + x_offset[camId];
+					y_src = mapEntry->y + y_offset[camId];
+				}
+				vxSetRemapPoint(remap, x, y, x_src, y_src);
+			}
+		}
+	}
+
+	return VX_SUCCESS;
+}
+static vx_status InitializeInternalTablesForCamera(ls_context stitch)
+{
+	vx_uint32 numCamera = stitch->num_cameras;
+	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
+	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
+	const vx_uint32 * validPixelCamMap = stitch->validPixelCamMap;
+	const vx_uint32 * paddedPixelCamMap = stitch->paddedPixelCamMap;
+	const StitchCoord2dFloat * camSrcMap = stitch->camSrcMap;
+	const vx_rectangle_t * const * overlapValid = stitch->overlapValid;
+	const vx_rectangle_t * const * overlapPadded = stitch->overlapPadded;
+	const vx_uint32 * validCamOverlapInfo = stitch->validCamOverlapInfo;
+	const vx_uint32 * paddedCamOverlapInfo = stitch->paddedCamOverlapInfo;
+	const vx_uint8 * camIndexBuf = stitch->camIndexBuf;
+
+	if (stitch->feature_enable_reinitialize)
+	{
+		// compute lens distortion and warp models
+		vx_status status = CalculateLensDistortionAndWarpMaps(stitch->num_cameras,
+			stitch->camera_rgb_buffer_width / stitch->num_camera_columns,
+			stitch->camera_rgb_buffer_height / stitch->num_camera_rows,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			&stitch->rig_par, stitch->camera_par,
+			stitch->validPixelCamMap, stitch->paddingPixelCount, stitch->paddedPixelCamMap,
+			stitch->camSrcMap, stitch->camIndexTmpBuf, stitch->camIndexBuf);
+		if (status != VX_SUCCESS) {
+			vxAddLogEntry((vx_reference)stitch->context, status, "ERROR: AllocateInternalTablesForCamera: CalculateLensDistortionAndWarpMaps() failed (%d)\n", status);
+			return status;
+		}
+		stitch->overlapCount = CalculateValidOverlapRegions(stitch->num_cameras,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			stitch->validPixelCamMap, stitch->overlapValid, stitch->validCamOverlapInfo,
+			stitch->paddedPixelCamMap, stitch->overlapPadded, stitch->paddedCamOverlapInfo);
+		if (stitch->overlapCount > 6) {
+			vxAddLogEntry((vx_reference)stitch->context, status, "ERROR: AllocateInternalTablesForCamera: number of overlaps (%d) greater than 6 not supported\n", stitch->overlapCount);
+			return VX_ERROR_NOT_SUPPORTED;
+		}
+	}
+
+	{ // initialize warp tables
+		StitchValidPixelEntry validPixelEntry = { 0 }, *validPixelBuf = nullptr;
+		StitchWarpRemapEntry warpRemapEntry = { 0 }, *warpRemapBuf = nullptr;
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->ValidPixelEntry, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->WarpRemapEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->ValidPixelEntry, stitch->table_sizes.warpTableSize, &validPixelEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->WarpRemapEntry, stitch->table_sizes.warpTableSize, &warpRemapEntry, 0));
+		vx_size stride = 0, warpEntryCount = 0; vx_map_id map_id_valid = 0, map_id_warp = 0;
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->ValidPixelEntry, 0, stitch->table_sizes.warpTableSize, &map_id_valid, &stride, (void **)&validPixelBuf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->WarpRemapEntry, 0, stitch->table_sizes.warpTableSize, &map_id_warp, &stride, (void **)&warpRemapBuf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0));
+		vx_status status = GenerateWarpBuffers(numCamera, eqrWidth, eqrHeight,
+			validPixelCamMap, paddedPixelCamMap, camSrcMap,
+			stitch->num_camera_columns, stitch->camera_rgb_buffer_width / stitch->num_camera_columns,
+			stitch->table_sizes.warpTableSize, validPixelBuf, warpRemapBuf, &warpEntryCount);
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->ValidPixelEntry, map_id_valid));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->WarpRemapEntry, map_id_warp));
+		if (status != VX_SUCCESS) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateWarpBuffers() failed (%d)\n", status);
+			return status;
+		}
+		if (!stitch->feature_enable_reinitialize && (warpEntryCount != stitch->table_sizes.warpTableSize)) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateWarpBuffers output doesn't have enough entries (%d) expected (%d)\n", (vx_uint32)warpEntryCount, (vx_uint32)stitch->table_sizes.warpTableSize);
+			return VX_FAILURE;
+		}
+		if (stitch->feature_enable_reinitialize && (warpEntryCount > stitch->table_sizes.warpTableSize)) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateWarpBuffers output has more entries (%d) than (%d)\n", (vx_uint32)warpEntryCount, (vx_uint32)stitch->table_sizes.warpTableSize);
+			return VX_FAILURE;
+		}
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->ValidPixelEntry, warpEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->WarpRemapEntry, warpEntryCount));
+	}
+
+	{ // initialize merge tables
+		vx_rectangle_t rectId = { 0, 0, eqrWidth >> 3, eqrHeight };
+		vx_imagepatch_addressing_t addrId, addrG1, addrG2;
+		vx_map_id map_id_camId, map_id_camG1, map_id_camG2;
+		vx_uint8 * ptr_camId; StitchMergeCamIdEntry * ptr_camG1, *ptr_camG2;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->cam_id_image, &rectId, 0, &map_id_camId, &addrId, (void **)&ptr_camId, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->group1_image, &rectId, 0, &map_id_camG1, &addrG1, (void **)&ptr_camG1, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->group2_image, &rectId, 0, &map_id_camG2, &addrG2, (void **)&ptr_camG2, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		vx_status status = GenerateMergeBuffers(numCamera, eqrWidth, eqrHeight,
+			validPixelCamMap, paddedPixelCamMap,
+			addrId.stride_y, addrG1.stride_y, addrG2.stride_y, ptr_camId, ptr_camG1, ptr_camG2);
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->cam_id_image, map_id_camId));
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->group1_image, map_id_camG1));
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->group2_image, map_id_camG2));
+		if (status != VX_SUCCESS) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateMergeBuffers() failed (%d)\n", status);
+			return status;
+		}
+	}
+
+	{ // initialize weight and valid mask images
+		vx_rectangle_t rectMask = { 0, 0, eqrWidth, eqrHeight * numCamera };
+		vx_imagepatch_addressing_t addrMask;
+		vx_map_id map_id_mask;
+		vx_uint8 * ptr_mask;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->weight_image, &rectMask, 0, &map_id_mask, &addrMask, (void **)&ptr_mask, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		GenerateDefaultMergeMaskImage(numCamera, eqrWidth, eqrHeight, camIndexBuf, addrMask.stride_y, ptr_mask);
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->weight_image, map_id_mask));
+	}
+
+	if (stitch->EXPO_COMP)
+	{ // exposure comp tables
+		StitchExpCompCalcEntry validEntry = { 0 }, *validBuf = nullptr;
+		StitchOverlapPixelEntry overlapEntry = { 0 }, * overlapBuf = nullptr;
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->valid_array, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->OverlapPixelEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->valid_array, stitch->table_sizes.expCompValidTableSize, &validEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->OverlapPixelEntry, stitch->table_sizes.expCompOverlapTableSize, &overlapEntry, 0));
+		vx_size stride = 0, validEntryCount = 0, overlapEntryCount = 0; vx_map_id map_id_valid = 0, map_id_overlap = 0;
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->valid_array, 0, stitch->table_sizes.expCompValidTableSize, &map_id_valid, &stride, (void **)&validBuf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0)); // TBD: use no gap flag
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->OverlapPixelEntry, 0, stitch->table_sizes.expCompOverlapTableSize, &map_id_overlap, &stride, (void **)&overlapBuf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0));
+		vx_status status = GenerateExpCompBuffers(numCamera, eqrWidth, eqrHeight,
+			validPixelCamMap, overlapValid, validCamOverlapInfo,
+			paddedPixelCamMap, overlapPadded, paddedCamOverlapInfo,
+			stitch->table_sizes.expCompValidTableSize,
+			stitch->table_sizes.expCompOverlapTableSize,
+			validBuf, overlapBuf, &validEntryCount, &overlapEntryCount, stitch->overlapMatrixBuf);
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->valid_array, map_id_valid));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->OverlapPixelEntry, map_id_overlap));
+		if (status != VX_SUCCESS) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateExpCompBuffers() failed (%d)\n", status);
+			return status;
+		}
+		if (!stitch->feature_enable_reinitialize && (validEntryCount != stitch->table_sizes.expCompValidTableSize || overlapEntryCount != stitch->table_sizes.expCompOverlapTableSize)) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateExpCompBuffers output doesn't have enough entries (%d,%d) expected (%d,%d)\n",
+				(vx_uint32)validEntryCount, (vx_uint32)overlapEntryCount,
+				(vx_uint32)stitch->table_sizes.expCompValidTableSize, (vx_uint32)stitch->table_sizes.expCompOverlapTableSize);
+			return VX_FAILURE;
+		}
+		if (stitch->feature_enable_reinitialize && (validEntryCount > stitch->table_sizes.expCompValidTableSize || overlapEntryCount > stitch->table_sizes.expCompOverlapTableSize)) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateExpCompBuffers output has more entries (%d,%d) than (%d,%d)\n",
+				(vx_uint32)validEntryCount, (vx_uint32)overlapEntryCount,
+				(vx_uint32)stitch->table_sizes.expCompValidTableSize, (vx_uint32)stitch->table_sizes.expCompOverlapTableSize);
+			return VX_FAILURE;
+		}
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->valid_array, validEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->OverlapPixelEntry, overlapEntryCount));
+		ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->overlap_matrix, stitch->overlapMatrixBuf));
+	}
+
+	if (stitch->SEAM_FIND)
+	{ // seam find tables
+		vx_size seamFindValidEntryCount, seamFindWeightEntryCount, seamFindAccumEntryCount;
+		vx_size seamFindPrefInfoEntryCount, seamFindPathEntryCount, stride;
+		vx_map_id mapIdValid, mapIdWeight, mapIdAccum, mapIdPref, mapIdInfo;
+		StitchSeamFindValidEntry validEntry = { 0 }, * validTable = nullptr;
+		StitchSeamFindWeightEntry weightEntry = { 0 }, * weightTable = nullptr;
+		StitchSeamFindAccumEntry accumEntry = { 0 }, * accumTable = nullptr;
+		StitchSeamFindPreference prefEntry = { 0 }, * prefTable = nullptr;
+		StitchSeamFindInformation infoEntry = { 0 }, * infoTable = nullptr;
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_valid_array, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_weight_array, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_accum_array, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_pref_array, 0));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_info_array, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_valid_array, stitch->table_sizes.seamFindValidTableSize, &validEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_weight_array, stitch->table_sizes.seamFindWeightTableSize, &weightEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_accum_array, stitch->table_sizes.seamFindAccumTableSize, &accumEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_pref_array, stitch->table_sizes.seamFindPrefInfoTableSize, &prefEntry, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_info_array, stitch->table_sizes.seamFindPrefInfoTableSize, &infoEntry, 0));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->seamfind_valid_array, 0, stitch->table_sizes.seamFindValidTableSize, &mapIdValid, &stride, (void **)&validTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->seamfind_weight_array, 0, stitch->table_sizes.seamFindWeightTableSize, &mapIdWeight, &stride, (void **)&weightTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->seamfind_accum_array, 0, stitch->table_sizes.seamFindAccumTableSize, &mapIdAccum, &stride, (void **)&accumTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->seamfind_pref_array, 0, stitch->table_sizes.seamFindPrefInfoTableSize, &mapIdPref, &stride, (void **)&prefTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->seamfind_info_array, 0, stitch->table_sizes.seamFindPrefInfoTableSize, &mapIdInfo, &stride, (void **)&infoTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		vx_status status = GenerateSeamFindBuffers(numCamera, eqrWidth, eqrHeight,
+			validPixelCamMap, overlapValid, validCamOverlapInfo,
+			paddedPixelCamMap, overlapPadded, paddedCamOverlapInfo,
+			stitch->live_stitch_attr,
+			stitch->table_sizes.seamFindValidTableSize,
+			stitch->table_sizes.seamFindWeightTableSize,
+			stitch->table_sizes.seamFindAccumTableSize,
+			stitch->table_sizes.seamFindPrefInfoTableSize,
+			validTable, weightTable, accumTable, prefTable, infoTable,
+			&seamFindValidEntryCount, &seamFindWeightEntryCount,
+			&seamFindAccumEntryCount, &seamFindPrefInfoEntryCount, &seamFindPathEntryCount);
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->seamfind_valid_array, mapIdValid));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->seamfind_weight_array, mapIdWeight));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->seamfind_accum_array, mapIdAccum));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->seamfind_pref_array, mapIdPref));
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->seamfind_info_array, mapIdInfo));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_valid_array, seamFindValidEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_weight_array, seamFindWeightEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_accum_array, seamFindAccumEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_pref_array, seamFindPrefInfoEntryCount));
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_info_array, seamFindPrefInfoEntryCount));
+		if (status != VX_SUCCESS) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateSeamFindBuffers() failed (%d)\n", status);
+			return status;
+		}
+		if (!stitch->feature_enable_reinitialize && (seamFindValidEntryCount != stitch->table_sizes.seamFindValidTableSize ||
+			seamFindWeightEntryCount != stitch->table_sizes.seamFindWeightTableSize || seamFindAccumEntryCount != stitch->table_sizes.seamFindAccumTableSize ||
+			seamFindPrefInfoEntryCount != stitch->table_sizes.seamFindPrefInfoTableSize || seamFindPathEntryCount != stitch->table_sizes.seamFindPathTableSize))
+		{
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateSeamFindBuffers output doesn't have enough entries (%d,%d,%d,%d,%d) expected (%d,%d,%d,%d,%d)\n",
+				(vx_uint32)seamFindValidEntryCount, (vx_uint32)seamFindWeightEntryCount,
+				(vx_uint32)seamFindAccumEntryCount, (vx_uint32)seamFindPrefInfoEntryCount,
+				(vx_uint32)seamFindPathEntryCount,
+				(vx_uint32)stitch->table_sizes.seamFindValidTableSize, (vx_uint32)stitch->table_sizes.seamFindWeightTableSize,
+				(vx_uint32)stitch->table_sizes.seamFindAccumTableSize, (vx_uint32)stitch->table_sizes.seamFindPrefInfoTableSize,
+				(vx_uint32)stitch->table_sizes.seamFindPathTableSize);
+			return VX_FAILURE;
+		}
+		if (stitch->feature_enable_reinitialize && (seamFindValidEntryCount > stitch->table_sizes.seamFindValidTableSize ||
+			seamFindWeightEntryCount > stitch->table_sizes.seamFindWeightTableSize || seamFindAccumEntryCount > stitch->table_sizes.seamFindAccumTableSize ||
+			seamFindPrefInfoEntryCount > stitch->table_sizes.seamFindPrefInfoTableSize || seamFindPathEntryCount > stitch->table_sizes.seamFindPathTableSize))
+		{
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateSeamFindBuffers output has more entries (%d,%d,%d,%d,%d) than (%d,%d,%d,%d,%d)\n",
+				(vx_uint32)seamFindValidEntryCount, (vx_uint32)seamFindWeightEntryCount,
+				(vx_uint32)seamFindAccumEntryCount, (vx_uint32)seamFindPrefInfoEntryCount,
+				(vx_uint32)seamFindPathEntryCount,
+				(vx_uint32)stitch->table_sizes.seamFindValidTableSize, (vx_uint32)stitch->table_sizes.seamFindWeightTableSize,
+				(vx_uint32)stitch->table_sizes.seamFindAccumTableSize, (vx_uint32)stitch->table_sizes.seamFindPrefInfoTableSize,
+				(vx_uint32)stitch->table_sizes.seamFindPathTableSize);
+			return VX_FAILURE;
+		}
+		// reset current frame value and path & scene arrays (if used)
+		stitch->current_frame_value = 0;
+		ERROR_CHECK_STATUS_(vxWriteScalarValue(stitch->current_frame, &stitch->current_frame_value));
+		StitchSeamFindPathEntry pathEntry = { 0 };
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_path_array, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_path_array, seamFindPathEntryCount, &pathEntry, 0));
+		if (stitch->seamfind_scene_array) {
+			StitchSeamFindSceneEntry sceneEntry = { 0 };
+			ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_scene_array, 0));
+			ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_scene_array, seamFindPrefInfoEntryCount, &sceneEntry, 0));
+		}
+		
+		// initialize seamfind mask image
+		vx_rectangle_t rectMask = { 0, 0, eqrWidth, eqrHeight * numCamera };
+		vx_imagepatch_addressing_t addrMask;
+		vx_map_id map_id_mask;
+		vx_uint8 * ptr_mask;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->seamfind_weight_image, &rectMask, 0, &map_id_mask, &addrMask, (void **)&ptr_mask, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		GenerateDefaultMergeMaskImage(numCamera, eqrWidth, eqrHeight, camIndexBuf, addrMask.stride_y, ptr_mask);
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->seamfind_weight_image, map_id_mask));
+	}
+
+	if (stitch->MULTIBAND_BLEND)
+	{ // multiband blend tables
+		vx_size stride;
+		StitchBlendValidEntry blendValidEntry = { 0 }, * blendOffsetTable = nullptr;
+		vx_map_id mapIdValid;
+		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->blend_offsets, 0));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->blend_offsets, stitch->table_sizes.blendOffsetTableSize, &blendValidEntry, 0));
+		ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->blend_offsets, 0, stitch->table_sizes.blendOffsetTableSize, &mapIdValid, &stride, (void **)&blendOffsetTable, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		vx_status status = GenerateBlendBuffers(numCamera, eqrWidth, eqrHeight, stitch->num_bands,
+			validPixelCamMap, paddedPixelCamMap, overlapPadded, paddedCamOverlapInfo,
+			stitch->multibandBlendOffsetIntoBuffer, stitch->table_sizes.blendOffsetTableSize, blendOffsetTable);
+		ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->blend_offsets, mapIdValid));
+		if (status != VX_SUCCESS) {
+			ls_printf("ERROR: InitializeInternalTablesForCamera: GenerateBlendBuffers() failed (%d)\n", status);
+			return status;
+		}
+	}
+
+	if (stitch->valid_mask_image)
+	{ // initialize valid pixel mask
+		vx_rectangle_t rectMask = { 0, 0, eqrWidth, eqrHeight * numCamera };
+		vx_imagepatch_addressing_t addrMask;
+		vx_map_id map_id_mask;
+		vx_uint8 * ptr_mask;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->valid_mask_image, &rectMask, 0, &map_id_mask, &addrMask, (void **)&ptr_mask, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		GenerateValidMaskImage(numCamera, eqrWidth, eqrHeight, validPixelCamMap, addrMask.stride_y, ptr_mask);
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->valid_mask_image, map_id_mask));
+	}
+
+	// initialize blend mask image
+	if (stitch->blend_mask_image) {
+		vx_rectangle_t rectMask = { 0, 0, eqrWidth, eqrHeight * numCamera };
+		vx_imagepatch_addressing_t addrMask;
+		vx_map_id map_id_mask;
+		vx_uint8 * ptr_mask;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->blend_mask_image, &rectMask, 0, &map_id_mask, &addrMask, (void **)&ptr_mask, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		memset(ptr_mask, 255, addrMask.stride_y * addrMask.dim_y);
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->blend_mask_image, map_id_mask));
+	}
+
+	{ // initialize RGBY1 & RGBY2 to invalid pixels and sync to GPU
+		vx_rectangle_t rect = { 0, 0, eqrWidth, eqrHeight * numCamera };
+		vx_imagepatch_addressing_t addr;
+		vx_map_id map_id;
+		vx_uint32 * ptr;
+		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->RGBY1, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+		for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
+			ptr[i] = 0x80000000;
+		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->RGBY1, map_id));
+		if (stitch->RGBY2) {
+			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->RGBY2, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+			for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
+				ptr[i] = 0x80000000;
+			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->RGBY2, map_id));
+		}
+	}
+
+	return VX_SUCCESS;
+}
+static vx_status AllocateInternalTablesForCamera(ls_context stitch)
+{
+	// make sure to allocate internal buffers for initialize atleast once
+	if (!stitch->camSrcMap) {
+		vx_status status = AllocateLensModelBuffersForCamera(stitch);
+		if (status)
+			return status;
+	}
+
+	if (!stitch->feature_enable_reinitialize)
+	{
+		// when re-initialize support is not required, only allocate smallest buffers needed
+		// ------
+		// compute lens distortion and warp models
+		vx_status status = CalculateLensDistortionAndWarpMaps(stitch->num_cameras,
+			stitch->camera_rgb_buffer_width / stitch->num_camera_columns,
+			stitch->camera_rgb_buffer_height / stitch->num_camera_rows,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			&stitch->rig_par, stitch->camera_par,
+			stitch->validPixelCamMap, stitch->paddingPixelCount, stitch->paddedPixelCamMap,
+			stitch->camSrcMap, stitch->camIndexTmpBuf, stitch->camIndexBuf);
+		if (status != VX_SUCCESS) {
+			vxAddLogEntry((vx_reference)stitch->context, status, "ERROR: AllocateInternalTablesForCamera: CalculateLensDistortionAndWarpMaps() failed (%d)\n", status);
+			return status;
+		}
+		stitch->overlapCount = CalculateValidOverlapRegions(stitch->num_cameras,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			stitch->validPixelCamMap, stitch->overlapValid, stitch->validCamOverlapInfo,
+			stitch->paddedPixelCamMap, stitch->overlapPadded, stitch->paddedCamOverlapInfo);
+		if (stitch->overlapCount > 6) {
+			vxAddLogEntry((vx_reference)stitch->context, status, "ERROR: AllocateInternalTablesForCamera: number of overlaps (%d) greater than 6 not supported\n", stitch->overlapCount);
+			return VX_ERROR_NOT_SUPPORTED;
+		}
+		// calculate minimum buffer sizes needed
+		CalculateSmallestWarpBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			stitch->validPixelCamMap, stitch->paddedPixelCamMap, &stitch->table_sizes.warpTableSize);
+		if (stitch->EXPO_COMP) {
+			CalculateSmallestExpCompBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				stitch->validPixelCamMap, stitch->overlapValid, stitch->validCamOverlapInfo,
+				stitch->paddedPixelCamMap, stitch->overlapPadded, stitch->paddedCamOverlapInfo,
+				&stitch->table_sizes.expCompValidTableSize, &stitch->table_sizes.expCompOverlapTableSize);
+		}
+		if (stitch->SEAM_FIND) {
+			CalculateSmallestSeamFindBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				stitch->validPixelCamMap, stitch->overlapValid, stitch->validCamOverlapInfo,
+				stitch->paddedPixelCamMap, stitch->overlapPadded, stitch->paddedCamOverlapInfo, stitch->live_stitch_attr,
+				&stitch->table_sizes.seamFindValidTableSize, &stitch->table_sizes.seamFindWeightTableSize, &stitch->table_sizes.seamFindAccumTableSize,
+				&stitch->table_sizes.seamFindPrefInfoTableSize, &stitch->table_sizes.seamFindPathTableSize);
+		}
+		if (stitch->MULTIBAND_BLEND) {
+			ERROR_CHECK_ALLOC_(stitch->multibandBlendOffsetIntoBuffer = new vx_size[stitch->num_bands]());
+			CalculateSmallestBlendBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, stitch->num_bands,
+				stitch->validPixelCamMap, stitch->paddedPixelCamMap, stitch->overlapPadded, stitch->paddedCamOverlapInfo,
+				stitch->multibandBlendOffsetIntoBuffer, &stitch->table_sizes.blendOffsetTableSize);
+		}
+	}
+	else
+	{
+		// when re-initialize support is required, allocate largest buffers to accomodate changes during reinitialize
+		CalculateLargestWarpBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			&stitch->table_sizes.warpTableSize);
+		if (stitch->EXPO_COMP) {
+			CalculateLargestExpCompBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				&stitch->table_sizes.expCompValidTableSize, &stitch->table_sizes.expCompOverlapTableSize);
+		}
+		if (stitch->SEAM_FIND) {
+			CalculateLargestSeamFindBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				&stitch->table_sizes.seamFindValidTableSize, &stitch->table_sizes.seamFindWeightTableSize, &stitch->table_sizes.seamFindAccumTableSize,
+				&stitch->table_sizes.seamFindPrefInfoTableSize, &stitch->table_sizes.seamFindPathTableSize);
+		}
+		if (stitch->MULTIBAND_BLEND) {
+			ERROR_CHECK_ALLOC_(stitch->multibandBlendOffsetIntoBuffer = new vx_size[stitch->num_bands]());
+			CalculateLargestBlendBufferSizes(stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, stitch->num_bands,
+				stitch->multibandBlendOffsetIntoBuffer, &stitch->table_sizes.blendOffsetTableSize);
+		}
+	}
+
+	// disable features if can't be supported with buffer sizes
+	if (stitch->EXPO_COMP) {
+		if (stitch->table_sizes.expCompValidTableSize == 0 || stitch->table_sizes.expCompOverlapTableSize == 0) {
+			ls_printf("WARNING: AllocateInternalTablesForCamera: ExpComp has been disabled because of not enough overlap\n");
+			stitch->EXPO_COMP = 0;
+		}
+	}
+	if (stitch->SEAM_FIND) {
+		if (stitch->table_sizes.seamFindValidTableSize == 0 || stitch->table_sizes.seamFindWeightTableSize == 0 ||
+			stitch->table_sizes.seamFindAccumTableSize == 0 || stitch->table_sizes.seamFindPrefInfoTableSize == 0 ||
+			stitch->table_sizes.seamFindPathTableSize == 0)
+		{
+			ls_printf("WARNING: AllocateInternalTablesForCamera: SeamFind has been disabled because of not enough overlap\n");
+			stitch->SEAM_FIND = 0;
+		}
+	}
+	if (stitch->MULTIBAND_BLEND) {
+		if (stitch->table_sizes.blendOffsetTableSize == 0)
+		{
+			ls_printf("WARNING: AllocateInternalTablesForCamera: Blend has been disabled because of not enough overlap\n");
+			stitch->MULTIBAND_BLEND = 0;
+		}
+	}
+	if (stitch->table_sizes.warpTableSize == 0) {
+		ls_printf("ERROR: AllocateInternalTablesForCamera: there are no pixels to warp: check parameters\n");
+		return VX_ERROR_INVALID_PARAMETERS;
+	}
+
+	// create data objects needed by warp kernel
+	vx_enum StitchValidPixelEntryType, StitchWarpRemapEntryType;
+	ERROR_CHECK_TYPE_(StitchValidPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchValidPixelEntry)));
+	ERROR_CHECK_TYPE_(StitchWarpRemapEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchWarpRemapEntry)));
+	ERROR_CHECK_OBJECT_(stitch->ValidPixelEntry = vxCreateArray(stitch->context, StitchValidPixelEntryType, stitch->table_sizes.warpTableSize));
+	ERROR_CHECK_OBJECT_(stitch->WarpRemapEntry = vxCreateArray(stitch->context, StitchWarpRemapEntryType, stitch->table_sizes.warpTableSize));
+	ERROR_CHECK_OBJECT_(stitch->RGBY1 = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGBX));
+	// create data objects needed by merge kernel
+	ERROR_CHECK_OBJECT_(stitch->weight_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+	ERROR_CHECK_OBJECT_(stitch->cam_id_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U8));
+	ERROR_CHECK_OBJECT_(stitch->group1_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U16));
+	ERROR_CHECK_OBJECT_(stitch->group2_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U16));
+	// create data objects needed by exposure comp kernel
+	if (stitch->EXPO_COMP) {
+		vx_enum StitchOverlapPixelEntryType, StitchExpCompCalcEntryType;
+		ERROR_CHECK_TYPE_(StitchOverlapPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchOverlapPixelEntry)));
+		ERROR_CHECK_TYPE_(StitchExpCompCalcEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchExpCompCalcEntry)));
+		ERROR_CHECK_OBJECT_(stitch->valid_array = vxCreateArray(stitch->context, StitchExpCompCalcEntryType, stitch->table_sizes.expCompValidTableSize));
+		ERROR_CHECK_OBJECT_(stitch->OverlapPixelEntry = vxCreateArray(stitch->context, StitchOverlapPixelEntryType, stitch->table_sizes.expCompOverlapTableSize));
+		ERROR_CHECK_OBJECT_(stitch->overlap_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
+		ERROR_CHECK_OBJECT_(stitch->RGBY2 = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGBX));
+		ERROR_CHECK_OBJECT_(stitch->A_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
+		ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras));
+		ERROR_CHECK_ALLOC_(stitch->A_matrix_initial_value = new vx_int32[stitch->num_cameras * stitch->num_cameras]());
+		ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->A_matrix, stitch->A_matrix_initial_value));
+		stitch->alpha = 0.01f;
+		stitch->beta = 100.0f;
+	}
+	// create data objects needed by seamfind kernel
+	if (stitch->SEAM_FIND) {
+		vx_enum StitchSeamFindValidEntryType, StitchSeamFindWeightEntryType;
+		vx_enum StitchSeamFindAccumEntryType, StitchSeamFindPreferenceType;
+		vx_enum StitchSeamFindInformationType, StitchSeamFindPathEntryType;
+		ERROR_CHECK_TYPE_(StitchSeamFindValidEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindValidEntry)));
+		ERROR_CHECK_TYPE_(StitchSeamFindWeightEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindWeightEntry)));
+		ERROR_CHECK_TYPE_(StitchSeamFindAccumEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindAccumEntry)));
+		ERROR_CHECK_TYPE_(StitchSeamFindPreferenceType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindPreference)));
+		ERROR_CHECK_TYPE_(StitchSeamFindInformationType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindInformation)));
+		ERROR_CHECK_TYPE_(StitchSeamFindPathEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindPathEntry)));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_valid_array = vxCreateArray(stitch->context, StitchSeamFindValidEntryType, stitch->table_sizes.seamFindValidTableSize));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_weight_array = vxCreateArray(stitch->context, StitchSeamFindWeightEntryType, stitch->table_sizes.seamFindWeightTableSize));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_accum_array = vxCreateArray(stitch->context, StitchSeamFindAccumEntryType, stitch->table_sizes.seamFindAccumTableSize));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_pref_array = vxCreateArray(stitch->context, StitchSeamFindPreferenceType, stitch->table_sizes.seamFindPrefInfoTableSize));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_info_array = vxCreateArray(stitch->context, StitchSeamFindInformationType, stitch->table_sizes.seamFindPrefInfoTableSize));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_path_array = vxCreateArray(stitch->context, StitchSeamFindPathEntryType, stitch->table_sizes.seamFindPathTableSize));
+		ERROR_CHECK_OBJECT_(stitch->warp_luma_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+		if (!stitch->SEAM_COST_SELECT) {
+			ERROR_CHECK_OBJECT_(stitch->sobelx_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_S16));
+			ERROR_CHECK_OBJECT_(stitch->sobely_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_S16));
+			ERROR_CHECK_OBJECT_(stitch->sobel_magnitude_s16_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_S16));
+		}
+		ERROR_CHECK_OBJECT_(stitch->sobel_magnitude_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+		ERROR_CHECK_OBJECT_(stitch->sobel_phase_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+		ERROR_CHECK_OBJECT_(stitch->seamfind_weight_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+		ERROR_CHECK_OBJECT_(stitch->current_frame = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &stitch->current_frame_value));
+		if (stitch->SEAM_REFRESH) {
+			vx_enum StitchSeamSceneType;
+			ERROR_CHECK_TYPE_(StitchSeamSceneType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindSceneEntry)));
+			ERROR_CHECK_OBJECT_(stitch->seamfind_scene_array = vxCreateArray(stitch->context, StitchSeamSceneType, stitch->table_sizes.seamFindPrefInfoTableSize));
+			ERROR_CHECK_OBJECT_(stitch->scene_threshold = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &stitch->scene_threshold_value));
+		}
+		if (stitch->SEAM_COST_SELECT) {
+			vx_uint32 cost_enable = 1;
+			ERROR_CHECK_OBJECT_(stitch->seam_cost_enable = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &cost_enable));
+		}
+	}
+	// create data objects needed by multiband blend
+	if (stitch->MULTIBAND_BLEND) {
+		vx_enum StitchBlendValidType;
+		ERROR_CHECK_TYPE_(StitchBlendValidType = vxRegisterUserStruct(stitch->context, sizeof(StitchBlendValidEntry)));
+		ERROR_CHECK_OBJECT_(stitch->blend_offsets = vxCreateArray(stitch->context, StitchBlendValidType, stitch->table_sizes.blendOffsetTableSize));
+		ERROR_CHECK_ALLOC_(stitch->pStitchMultiband = new StitchMultibandData[stitch->num_bands]());
+		stitch->pStitchMultiband[0].WeightPyrImgGaussian = stitch->SEAM_FIND ? stitch->seamfind_weight_image : stitch->weight_image;	// for level#0: weight image is mask image after seem find
+		stitch->pStitchMultiband[0].DstPyrImgGaussian = stitch->EXPO_COMP ? stitch->RGBY2 : stitch->RGBY1;			// for level#0: dst image is image after exposure_comp
+		ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacian = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGB4_AMD));
+		ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGBX));
+		for (vx_int32 level = 1, levelAlign = 1; level < stitch->num_bands; level++) {
+			vx_uint32 width_l = (stitch->output_rgb_buffer_width + levelAlign) >> level;
+			vx_uint32 height_l = ((stitch->output_rgb_buffer_height + levelAlign) >> level) * stitch->num_cameras;
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = vxCreateImage(stitch->context, width_l, height_l, VX_DF_IMAGE_U8));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = vxCreateImage(stitch->context, width_l, height_l, VX_DF_IMAGE_RGBX));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = vxCreateImage(stitch->context, width_l, height_l, VX_DF_IMAGE_RGB4_AMD));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = vxCreateImage(stitch->context, width_l, height_l, VX_DF_IMAGE_RGB4_AMD));
+		}
+		for (int level = 0; level < stitch->num_bands; level++) {
+			stitch->pStitchMultiband[level].valid_array_offset = (vx_uint32)stitch->multibandBlendOffsetIntoBuffer[level];
+		}
+		ERROR_CHECK_OBJECT_(stitch->blend_mask_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+	}
+	if (stitch->SEAM_FIND || stitch->EXPO_COMP) {
+		ERROR_CHECK_OBJECT_(stitch->valid_mask_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_U8));
+	}
+
+	// initialize internal tables
+	vx_status status = InitializeInternalTablesForCamera(stitch);
+	if (status != VX_SUCCESS) {
+		vxAddLogEntry((vx_reference)stitch->context, status, "ERROR: AllocateInternalTablesForCamera: InitializeInternalTablesForCamera() failed (%d)\n", status);
+		return status;
+	}
+
+	if (!stitch->feature_enable_reinitialize) {
+		// release internal buffers as they are not needed anymore
+		if (stitch->validPixelCamMap) { delete[] stitch->validPixelCamMap; stitch->validPixelCamMap = nullptr; }
+		if (stitch->paddedPixelCamMap) { delete[] stitch->paddedPixelCamMap; stitch->paddedPixelCamMap = nullptr; }
+		if (stitch->camSrcMap) { delete[] stitch->camSrcMap; stitch->camSrcMap = nullptr; }
+		if (stitch->overlapRectBuf) { delete[] stitch->overlapRectBuf; stitch->overlapRectBuf = nullptr; }
+		if (stitch->camIndexTmpBuf) { delete[] stitch->camIndexTmpBuf; stitch->camIndexTmpBuf = nullptr; }
+		if (stitch->camIndexBuf) { delete[] stitch->camIndexBuf; stitch->camIndexBuf = nullptr; }
+		if (stitch->overlapMatrixBuf) { delete[] stitch->overlapMatrixBuf; stitch->overlapMatrixBuf = nullptr; }
+	}
+
 	return VX_SUCCESS;
 }
 
@@ -374,7 +1231,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOpenCLContext(ls_context stitch
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetRigParams(ls_context stitch, const rig_params * par)
 {
 	ERROR_CHECK_STATUS_(IsValidContext(stitch));
-	if (stitch->initialized && stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 0.0f) {
+	if (stitch->initialized && !stitch->feature_enable_reinitialize) {
 		ls_printf("ERROR: lsSetRigParams: lsReinitialize has been disabled\n");
 		return VX_ERROR_NOT_SUPPORTED;
 	}
@@ -415,9 +1272,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch,
 		ls_printf("ERROR: lsSetCameraConfig: dimensions are is not multiple of camera rows & columns\n");
 		return VX_ERROR_INVALID_DIMENSION;
 	}
-	// check that camera dimensions are multiples of 16x2
-	if (((buffer_width / num_camera_columns) % 16) != 0 || ((buffer_height / num_camera_rows) % 2) != 0) {
-		ls_printf("ERROR: lsSetCameraConfig: camera dimensions are required to be multiple of 16x2\n");
+	// check that camera dimensions are multiples of 16x2 and width must be less than 8K
+	if (((buffer_width / num_camera_columns) % 16) != 0 || ((buffer_height / num_camera_rows) % 2) != 0 || std::max(buffer_width, buffer_height / num_camera_rows) >= 8192) {
+		ls_printf("ERROR: lsSetCameraConfig: camera dimensions are required to be multiple of 16x2 and width less than 8K\n");
 		return VX_ERROR_INVALID_DIMENSION;
 	}
 	// set configuration parameters
@@ -427,6 +1284,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch,
 	stitch->camera_buffer_format = buffer_format;
 	stitch->camera_buffer_width = buffer_width;
 	stitch->camera_buffer_height = buffer_height;
+	stitch->camera_buffer_stride_in_bytes = buffer_width * (buffer_format == VX_DF_IMAGE_RGB ? 3 : 2);
 	ERROR_CHECK_ALLOC_(stitch->camera_par = new camera_params[stitch->num_cameras]());
 	stitch->camera_rgb_buffer_width = (vx_uint32)(stitch->camera_rgb_scale_factor * stitch->camera_buffer_width);
 	stitch->camera_rgb_buffer_height = (vx_uint32)(stitch->camera_rgb_scale_factor * stitch->camera_buffer_height);
@@ -470,6 +1328,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 	stitch->output_buffer_format = buffer_format;
 	stitch->output_buffer_width = buffer_width;
 	stitch->output_buffer_height = buffer_height;
+	stitch->output_buffer_stride_in_bytes = buffer_width * (buffer_format == VX_DF_IMAGE_RGB ? 3 : 2);
 	stitch->output_rgb_buffer_width = (vx_uint32)(stitch->output_buffer_width / stitch->output_rgb_scale_factor);
 	stitch->output_rgb_buffer_height = (vx_uint32)(stitch->output_buffer_height / stitch->output_rgb_scale_factor);
 
@@ -491,9 +1350,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayConfig(ls_context stitch
 		ls_printf("ERROR: lsSetOverlayConfig: dimensions are is not multiple of overlay rows and columns\n");
 		return VX_ERROR_INVALID_DIMENSION;
 	}
-	// check that overlay dimensions are multiples of 16x2
-	if (((buffer_width / num_overlay_columns) % 16) != 0 || ((buffer_height / num_overlay_rows) % 2) != 0) {
-		ls_printf("ERROR: lsSetOverlayConfig: overlay dimensions are required to be multiple of 16x2\n");
+	// check that overlay dimensions are multiples of 16x2 and width less than 8K
+	if (((buffer_width / num_overlay_columns) % 16) != 0 || ((buffer_height / num_overlay_rows) % 2) != 0 || std::max(buffer_width, buffer_height / num_overlay_columns) >= 8192) {
+		ls_printf("ERROR: lsSetOverlayConfig: overlay dimensions are required to be multiple of 16x2 and width is less than 8K\n");
 		return VX_ERROR_INVALID_DIMENSION;
 	}
 	// set configuration parameters
@@ -502,6 +1361,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayConfig(ls_context stitch
 	stitch->num_overlay_columns = num_overlay_columns;
 	stitch->overlay_buffer_width = buffer_width;
 	stitch->overlay_buffer_height = buffer_height;
+	stitch->overlay_buffer_stride_in_bytes = buffer_width * 4;
 	ERROR_CHECK_ALLOC_(stitch->overlay_par = new camera_params[stitch->num_overlays]());
 	// set default orientations
 	stitch->overlay_par[0].focal.pitch = -90.0f;
@@ -519,7 +1379,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraParams(ls_context stitch,
 		ls_printf("ERROR: lsSetCameraParams: invalid camera index (%d)\n", cam_index);
 		return VX_ERROR_INVALID_VALUE;
 	}
-	if (stitch->initialized && stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 0.0f) {
+	if (stitch->initialized && !stitch->feature_enable_reinitialize) {
 		ls_printf("ERROR: lsSetCameraParams: lsReinitialize has been disabled\n");
 		return VX_ERROR_NOT_SUPPORTED;
 	}
@@ -539,7 +1399,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayParams(ls_context stitch
 		ls_printf("ERROR: lsSetOverlayParams: invalid overlay index (%d)\n", overlay_index);
 		return VX_ERROR_INVALID_VALUE;
 	}
-	if (stitch->initialized && stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 0.0f) {
+	if (stitch->initialized && !stitch->feature_enable_reinitialize) {
 		ls_printf("ERROR: lsSetOverlayParams: lsReinitialize has been disabled\n");
 		return VX_ERROR_NOT_SUPPORTED;
 	}
@@ -631,6 +1491,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	stitch->stitching_mode = stitching_mode_normal;
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == (float)stitching_mode_quick_and_dirty)
 		stitch->stitching_mode = stitching_mode_quick_and_dirty;
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 1.0f)
+		stitch->feature_enable_reinitialize = true;
 	stitch->loomioAuxDataLength = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_IO_AUX_DATA_CAPACITY];
 	if (stitch->loomioAuxDataLength < (float)LOOMIO_MIN_AUX_DATA_CAPACITY ||
 		stitch->loomioAuxDataLength > (float)LOOMIO_MAX_AUX_DATA_CAPACITY ||
@@ -652,22 +1514,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	vxRegisterLogCallback(stitch->context, log_callback, vx_false_e);
 	ERROR_CHECK_STATUS_(vxPublishKernels(stitch->context));
 	ERROR_CHECK_OBJECT_(stitch->graphStitch = vxCreateGraph(stitch->context));
-	ERROR_CHECK_OBJECT_(stitch->graphInitializeStitch = vxCreateGraph(stitch->context));
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PROFILER] == 2.0f) {
 		ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->graphStitch, VX_DIRECTIVE_AMD_ENABLE_PROFILE_CAPTURE));
 	}
-
-	// create and initialize rig and camera param objects
-	ERROR_CHECK_OBJECT_(stitch->rig_par_mat = vxCreateMatrix(stitch->context, VX_TYPE_FLOAT32, sizeof(rig_params) / sizeof(vx_float32), 1));
-	ERROR_CHECK_OBJECT_(stitch->cam_par_mat = vxCreateMatrix(stitch->context, VX_TYPE_FLOAT32, sizeof(camera_params) / sizeof(vx_float32), stitch->num_cameras));
-	ERROR_CHECK_STATUS_(vxCopyMatrix(stitch->rig_par_mat, &stitch->rig_par, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-	ERROR_CHECK_STATUS_(vxCopyMatrix(stitch->cam_par_mat, stitch->camera_par, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-
-	vx_enum CameraParamsType;
-	ERROR_CHECK_TYPE_(CameraParamsType = vxRegisterUserStruct(stitch->context, sizeof(camera_params)));
-	ERROR_CHECK_OBJECT_(stitch->cam_par_array = vxCreateArray(stitch->context, CameraParamsType, stitch->num_cameras));
-	ERROR_CHECK_STATUS_(vxTruncateArray(stitch->cam_par_array, 0));
-	ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->cam_par_array, stitch->num_cameras, stitch->camera_par, sizeof(camera_params)));
 
 	// creating OpenVX image objects for input & output OpenCL buffers
 	if (strlen(stitch->loomio_camera.kernelName) > 0) {
@@ -749,12 +1598,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 
 	if (stitch->num_overlays > 0) {
-		// create and initialize rig and camera param objects
-		vx_enum OverlayParamsType;
-		ERROR_CHECK_TYPE_(OverlayParamsType = vxRegisterUserStruct(stitch->context, sizeof(camera_params)));
-		ERROR_CHECK_OBJECT_(stitch->ovr_par_array = vxCreateArray(stitch->context, OverlayParamsType, stitch->num_overlays));
-		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->ovr_par_array, 0));
-		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->ovr_par_array, stitch->num_overlays, stitch->overlay_par, sizeof(camera_params)));
 		// create overlay image
 		if (strlen(stitch->loomio_overlay.kernelName) > 0) {
 			// load OpenVX module (if specified)
@@ -791,41 +1634,44 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->overlay_remap = vxCreateRemap(stitch->context, stitch->overlay_buffer_width, stitch->overlay_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
 		ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgba = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGBX));
-		// build and verify graphOverlay using stitchInitializeStitchRemapNode
-		ERROR_CHECK_OBJECT_(stitch->graphOverlay = vxCreateGraph(stitch->context));
-		vx_node node;
-		ERROR_CHECK_OBJECT_(node = stitchInitializeStitchRemapNode(stitch->graphOverlay, stitch->num_overlay_rows, stitch->num_overlay_columns, stitch->overlay_buffer_width, stitch->overlay_buffer_height, stitch->output_rgb_buffer_width, stitch->rig_par_mat, stitch->ovr_par_array, stitch->overlay_remap));
-		ERROR_CHECK_STATUS_(vxReleaseNode(&node));
-		ERROR_CHECK_STATUS_(vxVerifyGraph(stitch->graphOverlay));
-		// execute graphOverlay to initialize remap table
-		ERROR_CHECK_STATUS_(vxProcessGraph(stitch->graphOverlay));
+		// initialize remap using lens model
+		ERROR_CHECK_STATUS_(AllocateLensModelBuffersForOverlay(stitch));
+		ERROR_CHECK_STATUS_(InitializeInternalTablesForRemap(stitch->overlay_remap, 
+			stitch->num_overlays, stitch->num_overlay_columns,
+			stitch->overlay_buffer_width / stitch->num_overlay_columns,
+			stitch->overlay_buffer_height / stitch->num_overlay_rows,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			&stitch->rig_par, stitch->overlay_par, stitch->overlaySrcMap, stitch->validPixelOverlayMap, 
+			stitch->overlayIndexTmpBuf, stitch->overlayIndexBuf));
+		if (!stitch->feature_enable_reinitialize) {
+			if (stitch->overlaySrcMap) { delete[] stitch->overlaySrcMap; stitch->overlaySrcMap = nullptr; }
+			if (stitch->validPixelOverlayMap) { delete[] stitch->validPixelOverlayMap; stitch->validPixelOverlayMap = nullptr; }
+			if (stitch->overlayIndexTmpBuf) { delete[] stitch->overlayIndexTmpBuf; stitch->overlayIndexTmpBuf = nullptr; }
+			if (stitch->overlayIndexBuf) { delete[] stitch->overlayIndexBuf; stitch->overlayIndexBuf = nullptr; }
+		}
 	}
 
 	////////////////////////////////////////////////////////////////////////
 	// build the input and output processing parts of stitch graph
-	vx_image rgb_input = stitch->Img_input;
+	stitch->rgb_input = stitch->Img_input;
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
 		// needs input color conversion
-		stitch->InputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, rgb_input, stitch->Img_input_rgb);
+		stitch->InputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
-		rgb_input = stitch->Img_input_rgb;
+		stitch->rgb_input = stitch->Img_input_rgb;
 	}
-	vx_image rgb_output = stitch->Img_output;
+	stitch->rgb_output = stitch->Img_output;
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
 		// needs output color conversion
-		stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, rgb_output);
+		stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output);
 		ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
-		rgb_output = stitch->Img_output_rgb;
+		stitch->rgb_output = stitch->Img_output_rgb;
 	}
 	if (stitch->Img_overlay) {
 		// need add overlay
-		vx_node node = vxRemapNode(stitch->graphStitch, stitch->Img_overlay, stitch->overlay_remap, VX_INTERPOLATION_TYPE_BILINEAR, stitch->Img_overlay_rgba);
-		ERROR_CHECK_OBJECT_(node);
-		ERROR_CHECK_STATUS_(vxReleaseNode(&node));
-		node = stitchAlphaBlendNode(stitch->graphStitch, stitch->Img_overlay_rgb, stitch->Img_overlay_rgba, rgb_output);
-		ERROR_CHECK_OBJECT_(node);
-		ERROR_CHECK_STATUS_(vxReleaseNode(&node));
-		rgb_output = stitch->Img_overlay_rgb;
+		ERROR_CHECK_OBJECT_(stitch->nodeOverlayRemap = vxRemapNode(stitch->graphStitch, stitch->Img_overlay, stitch->overlay_remap, VX_INTERPOLATION_TYPE_BILINEAR, stitch->Img_overlay_rgba));
+		ERROR_CHECK_OBJECT_(stitch->nodeOverlayBlend = stitchAlphaBlendNode(stitch->graphStitch, stitch->Img_overlay_rgb, stitch->Img_overlay_rgba, stitch->rgb_output));
+		stitch->rgb_output = stitch->Img_overlay_rgb;
 	}
 	if (strlen(stitch->loomio_viewing.kernelName) > 0) {
 		// load OpenVX module (if specified)
@@ -842,7 +1688,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->loomioViewingAuxData = vxCreateArray(stitch->context, VX_TYPE_UINT8, stitch->loomioAuxDataLength));
 		vx_reference params[] = {
 			(vx_reference)stitch->viewingMediaConfig,
-			(vx_reference)rgb_output,
+			(vx_reference)stitch->rgb_output,
 			(vx_reference)stitch->loomioCameraAuxData,
 			(vx_reference)stitch->loomioViewingAuxData,
 		};
@@ -854,24 +1700,30 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	************************************************************************************************************************************/
 	if (stitch->stitching_mode == stitching_mode_quick_and_dirty)
 	{
-		////////////////////////////////////////////////////////////////////////
-		// create and process graphInitializeStitch using stitchInitializeStitchRemapNode
-		////////////////////////////////////////////////////////////////////////
 		// create remap table object
-		ERROR_CHECK_OBJECT_(stitch->initialize_stitch_remap = vxCreateRemap(stitch->context, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
-		// build and verify graphInitializeStitch
-		vx_node node;
-		ERROR_CHECK_OBJECT_(node = stitchInitializeStitchRemapNode(stitch->graphInitializeStitch, stitch->num_camera_rows, stitch->num_camera_columns, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->rig_par_mat, stitch->cam_par_array, stitch->initialize_stitch_remap));
-		ERROR_CHECK_STATUS_(vxReleaseNode(&node));
-		ERROR_CHECK_STATUS_(vxVerifyGraph(stitch->graphInitializeStitch));
-		// execute graphInitializeStitch to initialize remap table
-		ERROR_CHECK_STATUS_(vxProcessGraph(stitch->graphInitializeStitch));
+		ERROR_CHECK_OBJECT_(stitch->camera_remap = vxCreateRemap(stitch->context, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
+		// initialize remap using lens model
+		ERROR_CHECK_STATUS_(AllocateLensModelBuffersForCamera(stitch));
+		ERROR_CHECK_STATUS_(InitializeInternalTablesForRemap(stitch->camera_remap,
+			stitch->num_cameras, stitch->num_camera_columns,
+			stitch->camera_buffer_width / stitch->num_camera_columns,
+			stitch->camera_buffer_height / stitch->num_camera_rows,
+			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+			&stitch->rig_par, stitch->camera_par, stitch->camSrcMap, stitch->validPixelCamMap,
+			stitch->camIndexTmpBuf, stitch->camIndexBuf));
+		if (!stitch->feature_enable_reinitialize) {
+			if (stitch->camSrcMap) { delete[] stitch->camSrcMap; stitch->camSrcMap = nullptr; }
+			if (stitch->validPixelCamMap) { delete[] stitch->validPixelCamMap; stitch->validPixelCamMap = nullptr; }
+			if (stitch->camIndexTmpBuf) { delete[] stitch->camIndexTmpBuf; stitch->camIndexTmpBuf = nullptr; }
+			if (stitch->camIndexBuf) { delete[] stitch->camIndexBuf; stitch->camIndexBuf = nullptr; }
+		}
 
 		////////////////////////////////////////////////////////////////////////
 		// create and verify graphStitch using simple remap kernel
 		////////////////////////////////////////////////////////////////////////
-		ERROR_CHECK_OBJECT_(stitch->SimpleStitchRemapNode = vxRemapNode(stitch->graphStitch, rgb_input, stitch->initialize_stitch_remap, VX_INTERPOLATION_TYPE_BILINEAR, rgb_output));
+		ERROR_CHECK_OBJECT_(stitch->SimpleStitchRemapNode = vxRemapNode(stitch->graphStitch, stitch->rgb_input, stitch->camera_remap, VX_INTERPOLATION_TYPE_BILINEAR, stitch->rgb_output));
 		ERROR_CHECK_STATUS_(vxVerifyGraph(stitch->graphStitch));
+		ERROR_CHECK_STATUS_(SyncInternalTables(stitch));
 	}
 	/***********************************************************************************************************************************
 	Normal Stitch mode -> Color Convert, Warp, Expo Comp & Merge
@@ -881,236 +1733,70 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		////////////////////////////////////////////////////////////////////////
 		// get configuration from environment variables
 		////////////////////////////////////////////////////////////////////////
-		char textBuffer[256];
-		stitch->EXPO_COMP = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP];
-		stitch->SEAM_FIND = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND];
-		stitch->SEAM_REFRESH = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH];
-		stitch->SEAM_COST_SELECT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT];
-		stitch->MULTIBAND_BLEND = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND];
-		stitch->num_bands = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS];
-		if (stitch->num_bands < 2) {
-			// general protection
-			stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 0.0f;
-			stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 0.0f;
-			stitch->MULTIBAND_BLEND = 0;
-			stitch->num_bands = 0;
-		}
-
-		// general protection: If numcam is less than 2, turn off Expo Comp, SeamFind & MultiBand Blend
-		if (stitch->num_cameras <= 1){ stitch->EXPO_COMP = 0; stitch->SEAM_FIND = 0; stitch->MULTIBAND_BLEND = 0; };
-
-		//Setting Initialize Stitch Config preference from global attributes
-		InitializeStitchAttributes attr;
-		attr.overlap_rectangle = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_OVERLAP_RECT];
-		attr.seam_find = (vx_float32)stitch->SEAM_FIND;
-		attr.seam_vertical_priority = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_VERT_PRIORITY];
-		attr.seam_horizontal_priority = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_HORT_PRIORITY];
-		attr.seam_frequency = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_FREQUENCY];
-		attr.seam_quality = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_QUALITY];
-		attr.seam_stagger = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CT_SEAM_STAGGER];
-		attr.multi_band = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND];
-		attr.num_bands = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS];
-		int CTAttr_size = (sizeof(InitializeStitchAttributes) / sizeof(vx_float32));
-		ERROR_CHECK_OBJECT_(stitch->InitializeStitchConfig_matrix = vxCreateMatrix(stitch->context, VX_TYPE_FLOAT32, CTAttr_size, 1));
-		ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->InitializeStitchConfig_matrix, &attr));
-
-		////////////////////////////////////////////////////////////////////////
-		// create and process graphInitializeStitch using stitchInitializeStitchConfigNode
-		////////////////////////////////////////////////////////////////////////
-		// create data objects needed by warp kernel
-		vx_uint32 width1 = (stitch->output_rgb_buffer_width + 127) >> 7;    // /128
-		vx_uint32 height1 = (stitch->output_rgb_buffer_height + 31) >> 5;   // /32
-		vx_enum StitchValidPixelEntryType, StitchWarpRemapEntryType;
-		ERROR_CHECK_TYPE_(StitchValidPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchValidPixelEntry)));
-		ERROR_CHECK_TYPE_(StitchWarpRemapEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchWarpRemapEntry)));
-		ERROR_CHECK_OBJECT_(stitch->ValidPixelEntry = vxCreateArray(stitch->context, StitchValidPixelEntryType, ((stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_cameras) / 8)));
-		ERROR_CHECK_OBJECT_(stitch->WarpRemapEntry = vxCreateArray(stitch->context, StitchWarpRemapEntryType, ((stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_cameras) / 8)));
-		ERROR_CHECK_OBJECT_(stitch->RGBY1 = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGBX));
-		// create data objects needed by exposure comp kernel
-		if (stitch->EXPO_COMP) {
-			vx_enum StitchOverlapPixelEntryType, StitchExpCompCalcEntryType;
-			ERROR_CHECK_TYPE_(StitchOverlapPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchOverlapPixelEntry)));
-			ERROR_CHECK_TYPE_(StitchExpCompCalcEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchExpCompCalcEntry)));
-			ERROR_CHECK_OBJECT_(stitch->OverlapPixelEntry = vxCreateArray(stitch->context, StitchOverlapPixelEntryType, (width1 * height1 * (stitch->num_cameras * stitch->num_cameras / 2))));
-			ERROR_CHECK_OBJECT_(stitch->overlap_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
-			ERROR_CHECK_OBJECT_(stitch->RGBY2 = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGBX));
-			ERROR_CHECK_OBJECT_(stitch->valid_array = vxCreateArray(stitch->context, StitchExpCompCalcEntryType, (width1 * height1 * stitch->num_cameras)));
-		}
-		// create data objects needed by merge kernel
-		ERROR_CHECK_OBJECT_(stitch->weight_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-		ERROR_CHECK_OBJECT_(stitch->cam_id_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U8));
-		ERROR_CHECK_OBJECT_(stitch->group1_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U16));
-		ERROR_CHECK_OBJECT_(stitch->group2_image = vxCreateImage(stitch->context, (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height, VX_DF_IMAGE_U16));
-		// create data objects needed by seamfind kernel
-		if (stitch->SEAM_FIND) {
-			//SeamFind Images
-			ERROR_CHECK_OBJECT_(stitch->mask_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			ERROR_CHECK_OBJECT_(stitch->overlap_rect_array = vxCreateArray(stitch->context, VX_TYPE_RECTANGLE, (stitch->num_cameras * stitch->num_cameras)));
-			ERROR_CHECK_OBJECT_(stitch->u8_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			//SeamFind Array Types
-			vx_enum StitchSeamFindValidEntryType, StitchSeamFindWeightEntryType;
-			vx_enum StitchSeamFindAccumEntryType, StitchSeamFindPreferenceType;
-			vx_enum StitchSeamFindInformationType, StitchSeamFindPathEntryType;
-			ERROR_CHECK_TYPE_(StitchSeamFindValidEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindValidEntry)));
-			ERROR_CHECK_TYPE_(StitchSeamFindWeightEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindWeightEntry)));
-			ERROR_CHECK_TYPE_(StitchSeamFindAccumEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindAccumEntry)));
-			ERROR_CHECK_TYPE_(StitchSeamFindPreferenceType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindPreference)));
-			ERROR_CHECK_TYPE_(StitchSeamFindInformationType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindInformation)));
-			ERROR_CHECK_TYPE_(StitchSeamFindPathEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindPathEntry)));
-
-			//get seamfind variable sizes from the utility functiion
-			SeamFindSizeInfo size_var;	vx_uint32 mode = 0;
-			ERROR_CHECK_STATUS_(seamfind_utility(mode, stitch->output_rgb_buffer_width, stitch->num_cameras, &size_var));
-
-			//SeamFind Arrays
-			ERROR_CHECK_OBJECT_(stitch->seamfind_valid_array = vxCreateArray(stitch->context, StitchSeamFindValidEntryType, size_var.valid_entry));
-			ERROR_CHECK_OBJECT_(stitch->seamfind_weight_array = vxCreateArray(stitch->context, StitchSeamFindWeightEntryType, size_var.weight_entry));
-			ERROR_CHECK_OBJECT_(stitch->seamfind_accum_array = vxCreateArray(stitch->context, StitchSeamFindAccumEntryType, size_var.accum_entry));
-			ERROR_CHECK_OBJECT_(stitch->seamfind_pref_array = vxCreateArray(stitch->context, StitchSeamFindPreferenceType, size_var.pref_entry));
-			ERROR_CHECK_OBJECT_(stitch->seamfind_info_array = vxCreateArray(stitch->context, StitchSeamFindInformationType, size_var.info_entry));
-			ERROR_CHECK_OBJECT_(stitch->seamfind_path_array = vxCreateArray(stitch->context, StitchSeamFindPathEntryType, size_var.path_entry));
-		}
-		else if (stitch->MULTIBAND_BLEND) {
-			ERROR_CHECK_OBJECT_(stitch->mask_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-		}
-
-		vx_enum StitchBlendValidType;
-		ERROR_CHECK_TYPE_(StitchBlendValidType = vxRegisterUserStruct(stitch->context, sizeof(StitchBlendValidEntry)));
-		if (stitch->MULTIBAND_BLEND && stitch->num_bands > 0) {
-			ERROR_CHECK_ALLOC_(stitch->pStitchMultiband = new StitchMultibandData[stitch->num_bands]);
-			memset(stitch->pStitchMultiband, 0, sizeof(StitchMultibandData)*stitch->num_bands);
-			vx_uint32 * array_offset = new vx_uint32[stitch->num_bands];
-			ERROR_CHECK_ALLOC_(array_offset);
-			vx_uint32 totalCount = Compute_StitchBlendArraySize(stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, stitch->num_cameras, stitch->num_bands, array_offset);
-			for (int level = 0; level < stitch->num_bands; level++) {
-				stitch->pStitchMultiband[level].valid_array_offset = array_offset[level];
+		if (stitch->num_cameras > 1) {
+			stitch->EXPO_COMP = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP];
+			stitch->SEAM_FIND = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND];
+			stitch->SEAM_REFRESH = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH];
+			stitch->SEAM_COST_SELECT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT];
+			stitch->SEAM_FLAGS = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_FLAGS];
+			stitch->scene_threshold_value = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_THRESHOLD];
+			stitch->SEAM_FIND_TARGET = 0;
+			stitch->MULTIBAND_BLEND = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND];
+			stitch->num_bands = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS];
+			if (stitch->num_bands < 2) {
+				// general protection
+				stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 0.0f;
+				stitch->live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 0.0f;
+				stitch->MULTIBAND_BLEND = 0;
+				stitch->num_bands = 0;
 			}
-			delete[] array_offset;
-			ERROR_CHECK_OBJECT_(stitch->blend_offsets = vxCreateArray(stitch->context, StitchBlendValidType, totalCount));
 		}
 
-		// build graph and process the graph to initialize the data objects
-		vx_node node = stitchInitializeStitchConfigNode(stitch->graphInitializeStitch, 
-			stitch->num_camera_rows, stitch->num_camera_columns, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, 
-			stitch->rig_par_mat, stitch->cam_par_array, stitch->InitializeStitchConfig_matrix,
-			stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->OverlapPixelEntry,
-			stitch->overlap_matrix, stitch->RGBY1, stitch->RGBY2, 
-			stitch->weight_image, stitch->cam_id_image, stitch->group1_image, stitch->group2_image, stitch->valid_array,
-			stitch->mask_image, stitch->overlap_rect_array, 
-			stitch->seamfind_valid_array, stitch->seamfind_accum_array, stitch->seamfind_weight_array, stitch->seamfind_pref_array, stitch->seamfind_info_array,
-			stitch->blend_offsets);
-		ERROR_CHECK_OBJECT_(node);
-		ERROR_CHECK_STATUS_(vxReleaseNode(&node));
-		ERROR_CHECK_STATUS_(vxVerifyGraph(stitch->graphInitializeStitch));
-		ERROR_CHECK_STATUS_(vxProcessGraph(stitch->graphInitializeStitch));
-		
+		// allocate internal tables
+		vx_status status = AllocateInternalTablesForCamera(stitch);
+		if (status != VX_SUCCESS)
+			return status;
+
 		////////////////////////////////////////////////////////////////////////
 		// create and verify graphStitch using low-level kernels
 		////////////////////////////////////////////////////////////////////////
 		// warping
-		if (!stitch->SEAM_FIND) {
-			ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, rgb_input, stitch->RGBY1, stitch->num_camera_columns));
-		}
-		else {
-			ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpU8Node(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, rgb_input, stitch->RGBY1, stitch->u8_image, stitch->num_camera_columns));
-		}
+		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->RGBY1, stitch->warp_luma_image, stitch->num_camera_columns));
 
 		// exposure comp
 		vx_image merge_input = stitch->RGBY1;
+		vx_image merge_weight = stitch->weight_image;
 		if (stitch->EXPO_COMP) {
-			// data objects specific to exposure comp
-			ERROR_CHECK_OBJECT_(stitch->A_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
-			ERROR_CHECK_ALLOC_(stitch->A_matrix_initial_value = new vx_int32[stitch->num_cameras * stitch->num_cameras]);
-			memset(stitch->A_matrix_initial_value, 0, stitch->num_cameras * stitch->num_cameras * sizeof(vx_int32));
-			ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->A_matrix, stitch->A_matrix_initial_value));
-			stitch->alpha = 0.01f;
-			stitch->beta = 100.0f;
-			ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras));
-			// graph
-			if (stitch->MULTIBAND_BLEND) {
-				ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnNode(stitch->graphStitch, stitch->num_cameras, stitch->RGBY1, stitch->OverlapPixelEntry, stitch->mask_image, stitch->A_matrix));
-			}
-			else {
-				ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnNode(stitch->graphStitch, stitch->num_cameras, stitch->RGBY1, stitch->OverlapPixelEntry, NULL, stitch->A_matrix));
-			}
+			ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnNode(stitch->graphStitch, stitch->num_cameras, stitch->RGBY1, stitch->OverlapPixelEntry, stitch->valid_mask_image, stitch->A_matrix));
 			ERROR_CHECK_OBJECT_(stitch->ExpcompSolveGainNode = stitchExposureCompSolveForGainNode(stitch->graphStitch, stitch->alpha, stitch->beta, stitch->A_matrix, stitch->overlap_matrix, stitch->gain_array));
 			ERROR_CHECK_OBJECT_(stitch->ExpcompApplyGainNode = stitchExposureCompApplyGainNode(stitch->graphStitch, stitch->RGBY1, stitch->gain_array, stitch->valid_array, stitch->RGBY2));
 			// update merge input
 			merge_input = stitch->RGBY2;
 		}
 		if (stitch->SEAM_FIND) {
-			//SeamFind Images
-			if (!stitch->SEAM_COST_SELECT){
-				ERROR_CHECK_OBJECT_(stitch->sobelx_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_S16));
-				ERROR_CHECK_OBJECT_(stitch->sobely_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_S16));
-				ERROR_CHECK_OBJECT_(stitch->s16_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_S16));
-			}
-			ERROR_CHECK_OBJECT_(stitch->sobel_magnitude_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			ERROR_CHECK_OBJECT_(stitch->sobel_phase_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			ERROR_CHECK_OBJECT_(stitch->new_weight_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			//Smart Cut Weight Image
-			void *weight_image_ptr = nullptr; vx_rectangle_t weight_rect; vx_imagepatch_addressing_t weight_addr;
-			weight_rect.start_x = weight_rect.start_y = 0; weight_rect.end_x = stitch->output_rgb_buffer_width; weight_rect.end_y = (stitch->output_rgb_buffer_height * stitch->num_cameras);
-			//SeamFind Weight image
-			void *new_weight_image_ptr = nullptr; vx_rectangle_t output_weight_rect; vx_imagepatch_addressing_t output_weight_addr;
-			output_weight_rect.start_x = output_weight_rect.start_y = 0; output_weight_rect.end_x = stitch->output_rgb_buffer_width; output_weight_rect.end_y = (stitch->output_rgb_buffer_height * stitch->num_cameras);
-			ERROR_CHECK_STATUS_(vxAccessImagePatch(stitch->weight_image, &weight_rect, 0, &weight_addr, &weight_image_ptr, VX_READ_ONLY));
-			ERROR_CHECK_STATUS_(vxAccessImagePatch(stitch->new_weight_image, &output_weight_rect, 0, &output_weight_addr, &new_weight_image_ptr, VX_READ_AND_WRITE));
-			vx_uint8 *weight_ptr = (vx_uint8*)weight_image_ptr;
-			vx_uint8 *output_weight_ptr = (vx_uint8*)new_weight_image_ptr;
-			//Copy Smart Cut weight into SeamFind weight image
-			void *ptr1 = nullptr;	void *ptr2 = nullptr;
-			size_t len = output_weight_addr.stride_x * (output_weight_addr.dim_x * output_weight_addr.scale_x) / VX_SCALE_UNITY;
-			for (vx_uint32 y = 0; y < (stitch->output_rgb_buffer_height * stitch->num_cameras); y += output_weight_addr.step_y)
-			{
-				ptr1 = vxFormatImagePatchAddress2d(weight_image_ptr, 0, y - weight_rect.start_y, &weight_addr);
-				ptr2 = vxFormatImagePatchAddress2d(new_weight_image_ptr, 0, y - output_weight_rect.start_y, &output_weight_addr);
-				memcpy(ptr2, ptr1, len);
-			}
-			ERROR_CHECK_STATUS_(vxCommitImagePatch(stitch->weight_image, &weight_rect, 0, &weight_addr, weight_image_ptr));
-			ERROR_CHECK_STATUS_(vxCommitImagePatch(stitch->new_weight_image, &output_weight_rect, 0, &output_weight_addr, new_weight_image_ptr));
-
-			//SeamFind Scalars
-			vx_int32 input_shift_value = 0;
-			stitch->current_frame_value = 0;
-			ERROR_CHECK_OBJECT_(stitch->input_shift = vxCreateScalar(stitch->context, VX_TYPE_INT32, &input_shift_value));
-			ERROR_CHECK_OBJECT_(stitch->current_frame = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &stitch->current_frame_value));
-			//SeamFind Seam Refresh
 			if (stitch->SEAM_REFRESH)
 			{
-				//Seam Refresh Scalars
-				stitch->scene_threshold_value = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SEAM_THRESHOLD];
-				ERROR_CHECK_OBJECT_(stitch->scene_threshold = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &stitch->scene_threshold_value));
-				//Seam Refresh Array
-				vx_enum StitchSeamSceneType;
-				ERROR_CHECK_TYPE_(StitchSeamSceneType = vxRegisterUserStruct(stitch->context, sizeof(StitchSeamFindSceneEntry)));
-				ERROR_CHECK_OBJECT_(stitch->seamfind_scene_array = vxCreateArray(stitch->context, StitchSeamSceneType, ((stitch->num_cameras * stitch->num_cameras) / 2)));
-				std::vector<StitchSeamFindSceneEntry> seam_scene;
-				seam_scene.resize((stitch->num_cameras * stitch->num_cameras) / 2);
-				memset(&seam_scene[0], 0, ((stitch->num_cameras * stitch->num_cameras) / 2) * (sizeof(StitchSeamFindSceneEntry) / sizeof(vx_uint8)));
-				StitchSeamFindSceneEntry *ARRAY_SeamFind_ptr = &seam_scene[0];
-				ERROR_CHECK_STATUS_(vxTruncateArray(stitch->seamfind_scene_array, 0));
-				ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->seamfind_scene_array, ((stitch->num_cameras * stitch->num_cameras) / 2), ARRAY_SeamFind_ptr, sizeof(StitchSeamFindSceneEntry)));
 				//SeamFind Step 1: Seam Refresh 
 				stitch->SeamfindStep1Node = stitchSeamFindSceneDetectNode(stitch->graphStitch, stitch->current_frame, stitch->scene_threshold,
-					stitch->u8_image, stitch->seamfind_info_array, stitch->seamfind_pref_array, stitch->seamfind_scene_array);
+					stitch->warp_luma_image, stitch->seamfind_info_array, stitch->seamfind_pref_array, stitch->seamfind_scene_array);
 				ERROR_CHECK_OBJECT_(stitch->SeamfindStep1Node);
 			}
 			//SeamFind Step 2 - Cost Generation: 0:OpenVX Sobel 1:Optimized Sobel
-			if (!stitch->SEAM_COST_SELECT){
-				ERROR_CHECK_OBJECT_(stitch->SobelNode = vxSobel3x3Node(stitch->graphStitch, stitch->u8_image, stitch->sobelx_image, stitch->sobely_image));
-				ERROR_CHECK_OBJECT_(stitch->MagnitudeNode = vxMagnitudeNode(stitch->graphStitch, stitch->sobelx_image, stitch->sobely_image, stitch->s16_image));
+			if (!stitch->SEAM_COST_SELECT) {
+				vx_int32 zero = 0; vx_scalar shift;
+				ERROR_CHECK_OBJECT_(shift = vxCreateScalar(stitch->context, VX_TYPE_INT32, &zero));
+				ERROR_CHECK_OBJECT_(stitch->SobelNode = vxSobel3x3Node(stitch->graphStitch, stitch->warp_luma_image, stitch->sobelx_image, stitch->sobely_image));
+				ERROR_CHECK_OBJECT_(stitch->MagnitudeNode = vxMagnitudeNode(stitch->graphStitch, stitch->sobelx_image, stitch->sobely_image, stitch->sobel_magnitude_s16_image));
 				ERROR_CHECK_OBJECT_(stitch->PhaseNode = vxPhaseNode(stitch->graphStitch, stitch->sobelx_image, stitch->sobely_image, stitch->sobel_phase_image));
-				ERROR_CHECK_OBJECT_(stitch->ConvertDepthNode = vxConvertDepthNode(stitch->graphStitch, stitch->s16_image, stitch->sobel_magnitude_image, VX_CONVERT_POLICY_SATURATE, stitch->input_shift));
+				ERROR_CHECK_OBJECT_(stitch->ConvertDepthNode = vxConvertDepthNode(stitch->graphStitch, stitch->sobel_magnitude_s16_image, stitch->sobel_magnitude_image, VX_CONVERT_POLICY_SATURATE, shift));
+				ERROR_CHECK_STATUS_(vxReleaseScalar(&shift));
 			}
-			else{
-				vx_uint32 exe_flag = 1;
-				ERROR_CHECK_OBJECT_(stitch->flag = vxCreateScalar(stitch->context, VX_TYPE_UINT32, &exe_flag));
-				ERROR_CHECK_OBJECT_(stitch->SeamfindStep2Node = stitchSeamFindCostGenerateNode(stitch->graphStitch, stitch->flag, stitch->u8_image, stitch->sobel_magnitude_image, stitch->sobel_phase_image));
+			else {
+				ERROR_CHECK_OBJECT_(stitch->SeamfindStep2Node = stitchSeamFindCostGenerateNode(stitch->graphStitch, stitch->seam_cost_enable, stitch->warp_luma_image, stitch->sobel_magnitude_image, stitch->sobel_phase_image));
 			}
 			//SeamFind Step 3 - Cost Accumulate
 			stitch->SeamfindStep3Node = stitchSeamFindCostAccumulateNode(stitch->graphStitch, stitch->current_frame, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
-				stitch->sobel_magnitude_image, stitch->sobel_phase_image, stitch->mask_image, stitch->seamfind_valid_array, stitch->seamfind_pref_array,
+				stitch->sobel_magnitude_image, stitch->sobel_phase_image, stitch->valid_mask_image, stitch->seamfind_valid_array, stitch->seamfind_pref_array,
 				stitch->seamfind_info_array, stitch->seamfind_accum_array);
 			ERROR_CHECK_OBJECT_(stitch->SeamfindStep3Node);
 			//SeamFind Step 4 - Path Trace
@@ -1119,24 +1805,15 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->SeamfindStep4Node);
 			//SeamFind Step 5 - Set Weights
 			stitch->SeamfindStep5Node = stitchSeamFindSetWeightsNode(stitch->graphStitch, stitch->current_frame, stitch->num_cameras, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
-				stitch->seamfind_weight_array, stitch->seamfind_path_array, stitch->seamfind_pref_array, stitch->new_weight_image);
+				stitch->seamfind_weight_array, stitch->seamfind_path_array, stitch->seamfind_pref_array, stitch->seamfind_weight_image, stitch->SEAM_FLAGS);
 			ERROR_CHECK_OBJECT_(stitch->SeamfindStep5Node);
+			// update merge weight image
+			merge_weight = stitch->seamfind_weight_image;
 		}
 		// create data objects and nodes for multiband blending
 		if (stitch->MULTIBAND_BLEND){
-			stitch->pStitchMultiband[0].WeightPyrImgGaussian = stitch->SEAM_FIND ? stitch->new_weight_image : stitch->weight_image;	// for level0: weight image is mask image after seem find
-			stitch->pStitchMultiband[0].DstPyrImgGaussian = stitch->EXPO_COMP ? stitch->RGBY2 : stitch->RGBY1;			// for level0: dst image is image after exposure_comp
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacian = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGB4_AMD));
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_RGBX));
-			//rgb_output;
-			// create gaussian weight pyramid images and Laplacian pyramids.
-			for (int i = 1; i < stitch->num_bands; i++){
-				vx_uint32 width_l = (stitch->output_rgb_buffer_width >> i);
-				vx_uint32 height_l = (stitch->output_rgb_buffer_height >> i)*stitch->num_cameras;
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].WeightPyrImgGaussian = vxCreateVirtualImage(stitch->graphStitch, width_l, height_l, VX_DF_IMAGE_U8));
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].DstPyrImgGaussian = vxCreateVirtualImage(stitch->graphStitch, width_l, height_l, VX_DF_IMAGE_RGBX));
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].DstPyrImgLaplacian = vxCreateVirtualImage(stitch->graphStitch, width_l, height_l, VX_DF_IMAGE_RGB4_AMD));
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].DstPyrImgLaplacianRec = vxCreateVirtualImage(stitch->graphStitch, width_l, height_l, VX_DF_IMAGE_RGB4_AMD));
+			// create Laplacian pyramids.
+			for (int i = 1; i < stitch->num_bands; i++) {
 				stitch->pStitchMultiband[i].WeightHSGNode = stitchMultiBandHalfScaleGaussianNode(stitch->graphStitch, stitch->num_cameras, stitch->pStitchMultiband[i].valid_array_offset,
 					stitch->blend_offsets, stitch->pStitchMultiband[i - 1].WeightPyrImgGaussian, stitch->pStitchMultiband[i].WeightPyrImgGaussian);
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].WeightHSGNode);
@@ -1162,54 +1839,16 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			stitch->pStitchMultiband[0].UpscaleAddNode = stitchMultiBandLaplacianReconstructNode(stitch->graphStitch, stitch->num_cameras, stitch->pStitchMultiband[0].valid_array_offset,
 				stitch->pStitchMultiband[0].DstPyrImgLaplacian, stitch->pStitchMultiband[1].DstPyrImgLaplacianRec, stitch->blend_offsets, stitch->pStitchMultiband[0].DstPyrImgLaplacianRec);
 			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].UpscaleAddNode);
-			// update merge input
+			// update merge input and weight images
 			merge_input = stitch->pStitchMultiband[0].DstPyrImgLaplacianRec;
+			merge_weight = stitch->blend_mask_image;
 		}
-		// merge data objects and node
-		ERROR_CHECK_OBJECT_(stitch->band_weights_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, 1));
-		vx_float32 *band_weights_ptr = nullptr;
-		vx_float32 bandweight = 1.0f;
-		band_weights_ptr = &bandweight;
-		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->band_weights_array, 0));
-		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->band_weights_array, 1, band_weights_ptr, sizeof(vx_float32)));
-		if (stitch->MULTIBAND_BLEND)
-		{		
-			ERROR_CHECK_OBJECT_(stitch->blend_mask_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), VX_DF_IMAGE_U8));
-			void *blend_mask_image_ptr = nullptr; vx_rectangle_t blend_mask_rect; vx_imagepatch_addressing_t blend_mask_addr;
-			blend_mask_rect.start_x = blend_mask_rect.start_y = 0; blend_mask_rect.end_x = stitch->output_rgb_buffer_width; blend_mask_rect.end_y = (stitch->output_rgb_buffer_height * stitch->num_cameras);
-			ERROR_CHECK_STATUS_(vxAccessImagePatch(stitch->blend_mask_image, &blend_mask_rect, 0, &blend_mask_addr, &blend_mask_image_ptr, VX_READ_AND_WRITE));
-			memset(blend_mask_image_ptr, -1, (stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_cameras));
-			ERROR_CHECK_STATUS_(vxCommitImagePatch(stitch->blend_mask_image, &blend_mask_rect, 0, &blend_mask_addr, blend_mask_image_ptr));			
-			ERROR_CHECK_OBJECT_(stitch->MergeNode = stitchMergeNode(stitch->graphStitch, 1, stitch->band_weights_array, stitch->cam_id_image, stitch->group1_image, stitch->group2_image, merge_input, stitch->blend_mask_image, rgb_output));
-		}
-		else
-		{
-			if (!stitch->SEAM_FIND) {
-				ERROR_CHECK_OBJECT_(stitch->MergeNode = stitchMergeNode(stitch->graphStitch, 1, stitch->band_weights_array, stitch->cam_id_image, stitch->group1_image, stitch->group2_image, merge_input, stitch->weight_image, rgb_output));
-			}
-			else {
-				ERROR_CHECK_OBJECT_(stitch->MergeNode = stitchMergeNode(stitch->graphStitch, 1, stitch->band_weights_array, stitch->cam_id_image, stitch->group1_image, stitch->group2_image, merge_input, stitch->new_weight_image, rgb_output));
-			}
-		}
-		ERROR_CHECK_OBJECT_(stitch->MergeNode);
+		// merge node
+		ERROR_CHECK_OBJECT_(stitch->MergeNode = stitchMergeNode(stitch->graphStitch,
+			stitch->cam_id_image, stitch->group1_image, stitch->group2_image, merge_input, merge_weight, stitch->rgb_output));
 		// verify the graph
 		ERROR_CHECK_STATUS_(vxVerifyGraph(stitch->graphStitch));
-		
-		stitch->SEAM_FIND_TARGET = 0;
-		if (StitchGetEnvironmentVariable("SEAM_FIND_TARGET", textBuffer, sizeof(textBuffer))) { stitch->SEAM_FIND_TARGET = atoi(textBuffer); }
-		// copy RGBY1 data from CPU to GPU because graphStitch expects the data initialized on GPU
-		ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->RGBY1, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));
-		if (stitch->SEAM_FIND)
-		{
-			ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->new_weight_image, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));
-			ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->seamfind_accum_array, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));	
-			if (stitch->SEAM_REFRESH)
-			{
-				ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->seamfind_pref_array, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));
-				if (!stitch->SEAM_FIND_TARGET)
-				ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->seamfind_scene_array, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));
-			}
-		}	
+		ERROR_CHECK_STATUS_(SyncInternalTables(stitch));
 	}
 	/***********************************************************************************************************************************
 	Other Modes
@@ -1243,23 +1882,39 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReinitialize(ls_context stitch)
 		ls_printf("ERROR: lsReinitialize: can't reinitialize when already scheduled\n");
 		return VX_ERROR_GRAPH_SCHEDULED;
 	}
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 0.0f) {
+	if (!stitch->feature_enable_reinitialize) {
 		ls_printf("ERROR: lsReinitialize has been disabled\n");
 		return VX_ERROR_NOT_SUPPORTED;
 	}
 
 	if (stitch->rig_params_updated || stitch->camera_params_updated) {
-		// execute graphInitializeStitch to re-initialize tables
-		ERROR_CHECK_STATUS_(vxProcessGraph(stitch->graphInitializeStitch));
-		if (stitch->RGBY1) {
-			// copy RGBY1 data from CPU to GPU because graphStitch expects the data initialized on GPU
-			ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->RGBY1, VX_DIRECTIVE_AMD_COPY_TO_OPENCL));
+		// re-initialize tables for camera
+		if (stitch->camera_remap) {
+			ERROR_CHECK_STATUS_(InitializeInternalTablesForRemap(stitch->camera_remap,
+				stitch->num_cameras, stitch->num_camera_columns,
+				stitch->camera_buffer_width / stitch->num_camera_columns,
+				stitch->camera_buffer_height / stitch->num_camera_rows,
+				stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				&stitch->rig_par, stitch->camera_par, stitch->camSrcMap, stitch->validPixelCamMap,
+				stitch->camIndexTmpBuf, stitch->camIndexBuf));
+		}
+		else {
+			ERROR_CHECK_STATUS_(InitializeInternalTablesForCamera(stitch));
 		}
 	}
-	if (stitch->overlay_params_updated) {
-		// execute graphOverlay to re-initialize tables
-		ERROR_CHECK_STATUS_(vxProcessGraph(stitch->graphOverlay));
+	if (stitch->rig_params_updated || stitch->overlay_params_updated) {
+		// re-initialize tables for overlay
+		if (stitch->overlay_remap) {
+			ERROR_CHECK_STATUS_(InitializeInternalTablesForRemap(stitch->overlay_remap,
+				stitch->num_overlays, stitch->num_overlay_columns,
+				stitch->overlay_buffer_width / stitch->num_overlay_columns,
+				stitch->overlay_buffer_height / stitch->num_overlay_rows,
+				stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
+				&stitch->rig_par, stitch->overlay_par, stitch->overlaySrcMap, stitch->validPixelOverlayMap,
+				stitch->overlayIndexTmpBuf, stitch->overlayIndexBuf));
+		}
 	}
+	ERROR_CHECK_STATUS_(SyncInternalTables(stitch));
 
 	// clear flags
 	stitch->reinitialize_required = false;
@@ -1281,24 +1936,14 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		ERROR_CHECK_STATUS_(IsValidContext(stitch));
 		// graph profile dump if requested
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PROFILER]) {
-			const char * name[3] = { "graphInitializeStitch", "graphOverlay", "graphStitch" };
-			vx_graph graph[3] = { stitch->graphInitializeStitch, stitch->graphOverlay, stitch->graphStitch };
-			for (int i = 0; i < 3; i++) {
-				if (graph[i]) {
-					ls_printf("> graph profile: %s\n", name[i]); char fileName[] = "stdout";
-					ERROR_CHECK_STATUS_(vxQueryGraph(graph[i], VX_GRAPH_ATTRIBUTE_AMD_PERFORMANCE_INTERNAL_PROFILE, fileName, 0));
-				}
+			if (stitch->graphStitch) {
+				ls_printf("> stitch graph profile\n"); char fileName[] = "stdout";
+				ERROR_CHECK_STATUS_(vxQueryGraph(stitch->graphStitch, VX_GRAPH_ATTRIBUTE_AMD_PERFORMANCE_INTERNAL_PROFILE, fileName, 0));
 			}
 		}
 		// configuration
 		if (stitch->camera_par) delete[] stitch->camera_par;
 		if (stitch->overlay_par) delete[] stitch->overlay_par;
-		//Matrix
-		if (stitch->rig_par_mat) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->rig_par_mat));
-		if (stitch->cam_par_mat) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->cam_par_mat));
-		//Array
-		if (stitch->cam_par_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->cam_par_array));
-		if (stitch->ovr_par_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->ovr_par_array));
 		//Stitch Mode 1 Release
 		//Image
 		if (stitch->Img_input) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input));
@@ -1310,11 +1955,13 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->Img_overlay_rgba) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay_rgba));
 		//Remap
 		if (stitch->overlay_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->overlay_remap));
-		if (stitch->initialize_stitch_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->initialize_stitch_remap));
+		if (stitch->camera_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->camera_remap));
 		//Node
 		if (stitch->InputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->InputColorConvertNode));
 		if (stitch->SimpleStitchRemapNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SimpleStitchRemapNode));
 		if (stitch->OutputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->OutputColorConvertNode));
+		if (stitch->nodeOverlayRemap) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayRemap));
+		if (stitch->nodeOverlayBlend) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayBlend));
 
 		//Stitch Mode 2 Release
 		//Image
@@ -1343,14 +1990,14 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 
 		//Stitch SeamFind
 		//Image
-		if (stitch->mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->mask_image));
-		if (stitch->u8_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->u8_image));
-		if (stitch->s16_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->s16_image));
+		if (stitch->valid_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->valid_mask_image));
+		if (stitch->warp_luma_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->warp_luma_image));
+		if (stitch->sobel_magnitude_s16_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_s16_image));
 		if (stitch->sobelx_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobelx_image));
 		if (stitch->sobely_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobely_image));
 		if (stitch->sobel_magnitude_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_image));
 		if (stitch->sobel_phase_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_phase_image));
-		if (stitch->new_weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->new_weight_image));
+		if (stitch->seamfind_weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->seamfind_weight_image));
 		//Array
 		if (stitch->overlap_rect_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->overlap_rect_array));
 		if (stitch->seamfind_valid_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_valid_array));
@@ -1370,16 +2017,13 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->SeamfindStep4Node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SeamfindStep4Node));
 		if (stitch->SeamfindStep5Node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SeamfindStep5Node));
 		//Scalar
-		if (stitch->input_shift) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->input_shift));
 		if (stitch->current_frame) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->current_frame));
 		if (stitch->scene_threshold) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->scene_threshold));
-		if (stitch->flag) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->flag));
+		if (stitch->seam_cost_enable) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->seam_cost_enable));
 
 		//Stitch MultiBand
 		//Image
 		if (stitch->blend_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->blend_mask_image));
-		//Array
-		if (stitch->band_weights_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->band_weights_array));
 		if (stitch->blend_offsets) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->blend_offsets));
 		//Node
 		if (stitch->MULTIBAND_BLEND && stitch->pStitchMultiband){
@@ -1395,7 +2039,8 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacian));
 				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
 			}
-			delete stitch->pStitchMultiband;
+			delete[] stitch->pStitchMultiband;
+			delete[] stitch->multibandBlendOffsetIntoBuffer;
 		}
 		// LoomIO
 		if (stitch->cameraMediaConfig) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->cameraMediaConfig));
@@ -1413,9 +2058,20 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 
 		//Graph & Context
 		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
-		if (stitch->graphInitializeStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphInitializeStitch));
-		if (stitch->graphOverlay) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphOverlay));
 		if (stitch->context) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
+
+		// release internal buffers
+		if (stitch->validPixelCamMap) { delete[] stitch->validPixelCamMap; stitch->validPixelCamMap = nullptr; }
+		if (stitch->paddedPixelCamMap) { delete[] stitch->paddedPixelCamMap; stitch->paddedPixelCamMap = nullptr; }
+		if (stitch->camSrcMap) { delete[] stitch->camSrcMap; stitch->camSrcMap = nullptr; }
+		if (stitch->overlapRectBuf) { delete[] stitch->overlapRectBuf; stitch->overlapRectBuf = nullptr; }
+		if (stitch->camIndexTmpBuf) { delete[] stitch->camIndexTmpBuf; stitch->camIndexTmpBuf = nullptr; }
+		if (stitch->camIndexBuf) { delete[] stitch->camIndexBuf; stitch->camIndexBuf = nullptr; }
+		if (stitch->overlapMatrixBuf) { delete[] stitch->overlapMatrixBuf; stitch->overlapMatrixBuf = nullptr; }
+		if (stitch->overlaySrcMap) { delete[] stitch->overlaySrcMap; stitch->overlaySrcMap = nullptr; }
+		if (stitch->validPixelOverlayMap) { delete[] stitch->validPixelOverlayMap; stitch->validPixelOverlayMap = nullptr; }
+		if (stitch->overlayIndexTmpBuf) { delete[] stitch->overlayIndexTmpBuf; stitch->overlayIndexTmpBuf = nullptr; }
+		if (stitch->overlayIndexBuf) { delete[] stitch->overlayIndexBuf; stitch->overlayIndexBuf = nullptr; }
 
 		// TBD need complete cleanup to be reviewed
 
@@ -1687,106 +2343,117 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetViewingModule(ls_context stitch
 	kernelArguments[kernelArguments_size - 1] = '\0';
 	return VX_SUCCESS;
 }
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context stitch, const char * exportType, char * buf, size_t size)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context stitch, const char * exportType, const char * fileName)
 {
 	ERROR_CHECK_STATUS_(IsValidContext(stitch));
-#define APPEND_TO_BUF(call) { call; if (pos < size) { strncpy(&buf[pos], txt, size - pos); pos += strlen(&buf[pos]); } }
-	buf[0] = buf[--size] = '\0';
-	char txt[1024]; size_t pos = 0;
 	if (!_stricmp(exportType, "loom_shell")) {
-		buf[--size] = '\0';
-		char txt[1024];
-		size_t pos = 0;
-		APPEND_TO_BUF(sprintf(txt, "lsSetRigParams(ls[0],{%.3f,%.3f,%.3f,%.3f})\n", stitch->rig_par.yaw, stitch->rig_par.pitch, stitch->rig_par.roll, stitch->rig_par.d));
-		APPEND_TO_BUF(sprintf(txt, "lsSetOutputConfig(ls[0],%4.4s,%d,%d)\n", &stitch->output_buffer_format, stitch->output_buffer_width, stitch->output_buffer_height));
-		APPEND_TO_BUF(sprintf(txt, "lsSetCameraConfig(ls[0],%d,%d,%4.4s,%d,%d)\n", stitch->num_camera_rows, stitch->num_camera_columns, &stitch->camera_buffer_format, stitch->camera_buffer_width, stitch->camera_buffer_height));
+		FILE * fp = stdout;
+		if (fileName) {
+			fp = fopen(fileName, "w");
+			if (!fp) {
+				ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+				return VX_FAILURE;
+			}
+		}
+		fprintf(fp, "ls_context context;\n");
+		fprintf(fp, "context = lsCreateContext();\n");
 		for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
 			camera_params camera_par = stitch->camera_par[i];
-			APPEND_TO_BUF(sprintf(txt, "lsSetCameraParams(ls[0],%2d,{{%8.3f,%8.3f,%8.3f,%.0f,%.0f,%.0f},{%d,%.0f,%.3f,%f,%f,%f,%.3f,%.3f,%.1f}})\n", i,
+			char lensType[64];
+			if (camera_par.lens.lens_type == ptgui_lens_rectilinear) strcpy(lensType, "ptgui_lens_rectilinear");
+			else if (camera_par.lens.lens_type == ptgui_lens_fisheye_ff) strcpy(lensType, "ptgui_lens_fisheye_ff");
+			else if (camera_par.lens.lens_type == ptgui_lens_fisheye_circ) strcpy(lensType, "ptgui_lens_fisheye_circ");
+			else if (camera_par.lens.lens_type == adobe_lens_rectilinear) strcpy(lensType, "adobe_lens_rectilinear");
+			else if (camera_par.lens.lens_type == adobe_lens_fisheye) strcpy(lensType, "adobe_lens_fisheye");
+			else {
+				ls_printf("ERROR: lsExportConfiguration: loom_shell: (cam) lens_type=%d not supported\n", camera_par.lens.lens_type);
+				return VX_ERROR_NOT_SUPPORTED;
+			}
+			fprintf(fp, "camera_params cam%02d_par = {{%8.3f,%8.3f,%8.3f,%.0f,%.0f,%.0f},{%.3f,%.1f,%.1f,%.3f,%.3f,%s,%f,%f,%f}};\n", i,
 				camera_par.focal.yaw, camera_par.focal.pitch, camera_par.focal.roll,
 				camera_par.focal.tx, camera_par.focal.ty, camera_par.focal.tz,
-				camera_par.lens.lens_type, camera_par.lens.haw, camera_par.lens.hfov,
-				camera_par.lens.k1, camera_par.lens.k2, camera_par.lens.k3,
-				camera_par.lens.du0, camera_par.lens.dv0, camera_par.lens.r_crop));
+				camera_par.lens.hfov, camera_par.lens.haw, camera_par.lens.r_crop,
+				camera_par.lens.du0, camera_par.lens.dv0,
+				lensType, camera_par.lens.k1, camera_par.lens.k2, camera_par.lens.k3);
 		}
 		if (stitch->num_overlays > 0) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetOverlayConfig(%d,%d,RGBA,%d,%d)\n", stitch->num_overlay_rows, stitch->num_overlay_columns, stitch->overlay_buffer_width, stitch->overlay_buffer_height));
 			for (vx_uint32 i = 0; i < stitch->num_overlays; i++) {
 				camera_params camera_par = stitch->overlay_par[i];
-				APPEND_TO_BUF(sprintf(txt, "lsSetOverlayParams(ls[0],%2d,{{%8.3f,%8.3f,%8.3f,%.0f,%.0f,%.0f},{%d,%.0f,%.3f,%f,%f,%f,%.3f,%.3f,%.1f}})\n", i,
+				char lensType[64];
+				if (camera_par.lens.lens_type == ptgui_lens_rectilinear) strcpy(lensType, "ptgui_lens_rectilinear");
+				else if (camera_par.lens.lens_type == ptgui_lens_fisheye_ff) strcpy(lensType, "ptgui_lens_fisheye_ff");
+				else if (camera_par.lens.lens_type == ptgui_lens_fisheye_circ) strcpy(lensType, "ptgui_lens_fisheye_circ");
+				else if (camera_par.lens.lens_type == adobe_lens_rectilinear) strcpy(lensType, "adobe_lens_rectilinear");
+				else if (camera_par.lens.lens_type == adobe_lens_fisheye) strcpy(lensType, "adobe_lens_fisheye");
+				else {
+					ls_printf("ERROR: lsExportConfiguration: loom_shell: (ovr) lens_type=%d not supported\n", camera_par.lens.lens_type);
+					return VX_ERROR_NOT_SUPPORTED;
+				}
+				fprintf(fp, "camera_params ovr%02d_par = {{%8.3f,%8.3f,%8.3f,%.0f,%.0f,%.0f},{%.3f,%.1f,%.1f,%.3f,%.3f,%s,%f,%f,%f}};\n", i,
 					camera_par.focal.yaw, camera_par.focal.pitch, camera_par.focal.roll,
 					camera_par.focal.tx, camera_par.focal.ty, camera_par.focal.tz,
-					camera_par.lens.lens_type, camera_par.lens.haw, camera_par.lens.hfov,
-					camera_par.lens.k1, camera_par.lens.k2, camera_par.lens.k3,
-					camera_par.lens.du0, camera_par.lens.dv0, camera_par.lens.r_crop));
+					camera_par.lens.hfov, camera_par.lens.haw, camera_par.lens.r_crop,
+					camera_par.lens.du0, camera_par.lens.dv0,
+					lensType, camera_par.lens.k1, camera_par.lens.k2, camera_par.lens.k3);
 			}
 		}
-		if (stitch->output_buffer_stride_in_bytes) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetOutputBufferStride(ls[0],%d)\n", stitch->output_buffer_stride_in_bytes));
+		char formatName[64];
+		if (stitch->output_buffer_format == VX_DF_IMAGE_RGB) strcpy(formatName, "VX_DF_IMAGE_RGB");
+		else if (stitch->output_buffer_format == VX_DF_IMAGE_UYVY) strcpy(formatName, "VX_DF_IMAGE_UYVY");
+		else if (stitch->output_buffer_format == VX_DF_IMAGE_YUYV) strcpy(formatName, "VX_DF_IMAGE_YUYV");
+		else { memcpy(formatName, &stitch->output_buffer_format, 4); formatName[4] = 0; }
+		fprintf(fp, "lsSetOutputConfig(context,%s,%d,%d);\n", formatName, stitch->output_buffer_width, stitch->output_buffer_height);
+		if (stitch->camera_buffer_format == VX_DF_IMAGE_RGB) strcpy(formatName, "VX_DF_IMAGE_RGB");
+		else if (stitch->camera_buffer_format == VX_DF_IMAGE_UYVY) strcpy(formatName, "VX_DF_IMAGE_UYVY");
+		else if (stitch->camera_buffer_format == VX_DF_IMAGE_YUYV) strcpy(formatName, "VX_DF_IMAGE_YUYV");
+		else { memcpy(formatName, &stitch->camera_buffer_format, 4); formatName[4] = 0; }
+		fprintf(fp, "lsSetCameraConfig(context,%d,%d,%s,%d,%d);\n", stitch->num_camera_rows, stitch->num_camera_columns, formatName, stitch->camera_buffer_width, stitch->camera_buffer_height);
+		for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
+			camera_params camera_par = stitch->camera_par[i];
+			fprintf(fp, "lsSetCameraParams(context,%2d,&cam%02d_par);\n", i, i);
 		}
-		if (stitch->camera_buffer_stride_in_bytes) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetCameraBufferStride(ls[0],%d)\n", stitch->camera_buffer_stride_in_bytes));
+		if (stitch->num_overlays > 0) {
+			fprintf(fp, "lsSetOverlayConfig(context,%d,%d,VX_DF_IMAGE_RGBX,%d,%d);\n", stitch->num_overlay_rows, stitch->num_overlay_columns, stitch->overlay_buffer_width, stitch->overlay_buffer_height);
+			for (vx_uint32 i = 0; i < stitch->num_overlays; i++) {
+				camera_params camera_par = stitch->overlay_par[i];
+				fprintf(fp, "lsSetOverlayParams(context,%2d,&ovr%02d_par\n", i, i);
+			}
 		}
-		if (stitch->overlay_buffer_stride_in_bytes) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetOverlayBufferStride(ls[0],%d)\n", stitch->overlay_buffer_stride_in_bytes));
-		}
-		if (stitch->loomio_viewing.kernelName[0]) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetViewingModule(ls[0],\"%s\",\"%s\",\"%s\")\n", stitch->loomio_viewing.module, stitch->loomio_viewing.kernelName, stitch->loomio_viewing.kernelArguments));
-		}
+		fprintf(fp, "lsSetRigParams(context,{%.3f,%.3f,%.3f,%.3f});\n", stitch->rig_par.yaw, stitch->rig_par.pitch, stitch->rig_par.roll, stitch->rig_par.d);
 		if (stitch->loomio_output.kernelName[0]) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetOutputModule(ls[0],\"%s\",\"%s\",\"%s\")\n", stitch->loomio_output.module, stitch->loomio_output.kernelName, stitch->loomio_output.kernelArguments));
+			fprintf(fp, "lsSetOutputModule(context,\"%s\",\"%s\",\"%s\");\n", stitch->loomio_output.module, stitch->loomio_output.kernelName, stitch->loomio_output.kernelArguments);
+		}
+		else if (stitch->output_buffer_stride_in_bytes) {
+			fprintf(fp, "lsSetOutputBufferStride(context,%d);\n", stitch->output_buffer_stride_in_bytes);
 		}
 		if (stitch->loomio_camera.kernelName[0]) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetCameraModule(ls[0],\"%s\",\"%s\",\"%s\")\n", stitch->loomio_camera.module, stitch->loomio_camera.kernelName, stitch->loomio_camera.kernelArguments));
+			fprintf(fp, "lsSetCameraModule(context,\"%s\",\"%s\",\"%s\");\n", stitch->loomio_camera.module, stitch->loomio_camera.kernelName, stitch->loomio_camera.kernelArguments);
+		}
+		else if (stitch->camera_buffer_stride_in_bytes) {
+			fprintf(fp, "lsSetCameraBufferStride(context,%d);\n", stitch->camera_buffer_stride_in_bytes);
 		}
 		if (stitch->loomio_overlay.kernelName[0]) {
-			APPEND_TO_BUF(sprintf(txt, "lsSetOverlayModule(ls[0],\"%s\",\"%s\",\"%s\")\n", stitch->loomio_overlay.module, stitch->loomio_overlay.kernelName, stitch->loomio_overlay.kernelArguments));
+			fprintf(fp, "lsSetOverlayModule(context,\"%s\",\"%s\",\"%s\");\n", stitch->loomio_overlay.module, stitch->loomio_overlay.kernelName, stitch->loomio_overlay.kernelArguments);
 		}
-		if (pos == size) {
-			ls_printf("ERROR: lsExportConfiguration: %s: buffer size too small: %d\n", exportType, (vx_uint32)(size+1));
-			return VX_ERROR_NOT_SUFFICIENT;
+		else if (stitch->overlay_buffer_stride_in_bytes) {
+			fprintf(fp, "lsSetOverlayBufferStride(context,%d);\n", stitch->overlay_buffer_stride_in_bytes);
 		}
-	}
-	else if (!_stricmp(exportType, "gdf:rig")) {
-		APPEND_TO_BUF(sprintf(txt, "%.3f %.3f %.3f %.3f\n", stitch->rig_par.yaw, stitch->rig_par.pitch, stitch->rig_par.roll, stitch->rig_par.d));
-		if (strlen(txt) < size) {
-			strcpy(buf, txt);
+		if (stitch->loomio_viewing.kernelName[0]) {
+			fprintf(fp, "lsSetViewingModule(context,\"%s\",\"%s\",\"%s\");\n", stitch->loomio_viewing.module, stitch->loomio_viewing.kernelName, stitch->loomio_viewing.kernelArguments);
 		}
-		else {
-			ls_printf("ERROR: lsExportConfiguration: %s: buffer size too small: %d\n", exportType, (vx_uint32)(size + 1));
-			return VX_ERROR_NOT_SUFFICIENT;
-		}
-	}
-	else if (!_stricmp(exportType, "gdf:camera")) {
-		// write output as hex values
-		for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
-			unsigned char * par = (unsigned char *) &stitch->camera_par[i];
-			for (size_t j = 0; j < sizeof(camera_params); j++) {
-				APPEND_TO_BUF(sprintf(txt, " %02X", par[j]));
-			}
-			APPEND_TO_BUF(sprintf(txt, "\n"));
-		}
-		if (pos == size) {
-			ls_printf("ERROR: lsExportConfiguration: %s: buffer size too small: %d\n", exportType, (vx_uint32)(size + 1));
-			return VX_ERROR_NOT_SUFFICIENT;
-		}
-	}
-	else if (!_stricmp(exportType, "gdf:overlay")) {
-		// write output as hex values
-		for (vx_uint32 i = 0; i < stitch->num_overlays; i++) {
-			unsigned char * par = (unsigned char *)&stitch->overlay_par[i];
-			for (size_t j = 0; j < sizeof(camera_params); j++) {
-				APPEND_TO_BUF(sprintf(txt, " %02X", par[j]));
-			}
-			APPEND_TO_BUF(sprintf(txt, "\n"));
-		}
-		if (pos == size) {
-			ls_printf("ERROR: lsExportConfiguration: %s: buffer size too small: %d\n", exportType, (vx_uint32)(size + 1));
-			return VX_ERROR_NOT_SUFFICIENT;
-		}
+		if(fp != stdout)
+			fclose(fp);
 	}
 	else if (!_strnicmp(exportType, "pts", 3)) {
-		const char * camFileFormat = exportType[3] == ':' ? &exportType[4] : "CAM%02d.jpg";
+		FILE * fp = stdout;
+		if (fileName) {
+			fp = fopen(fileName, "w");
+			if (!fp) {
+				ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+				return VX_FAILURE;
+			}
+		}
+		const char * camFileFormat = exportType[3] == ':' ? &exportType[4] : "CAM%02d.bmp";
 		bool gotCamFileList = strstr(camFileFormat, ",") ? true : false;
 		if (stitch->num_cameras < 1) {
 			ls_printf("ERROR: lsExportConfiguration: %s: no cameras detected in current configuration\n", exportType);
@@ -1796,10 +2463,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			ls_printf("ERROR: lsExportConfiguration: %s: non-zero d field in rig_param is not supported\n", exportType);
 			return VX_ERROR_NOT_SUPPORTED;
 		}
-		APPEND_TO_BUF(sprintf(txt, "# ptGui project file\n\n"));
-		APPEND_TO_BUF(sprintf(txt, "p w%d h%d f2 v360 u0 n\"JPEG g0 q95\"\n", stitch->output_buffer_width, stitch->output_buffer_height));
-		APPEND_TO_BUF(sprintf(txt, "m g0 i0\n\n"));
-		APPEND_TO_BUF(sprintf(txt, "# input images:\n"));
+		fprintf(fp, "# ptGui project file\n\n");
+		fprintf(fp, "p w%d h%d f2 v360 u0 n\"JPEG g0 q95\"\n", stitch->output_buffer_width, stitch->output_buffer_height);
+		fprintf(fp, "m g0 i0\n\n");
+		fprintf(fp, "# input images:\n");
 		for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
 			int lens_type = -1;
 			if (stitch->camera_par[i].lens.lens_type == ptgui_lens_rectilinear)
@@ -1833,7 +2500,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			// add camera entry
 			vx_uint32 width = stitch->camera_buffer_width / stitch->num_camera_columns;
 			vx_uint32 height = stitch->camera_buffer_height / stitch->num_camera_rows;
-			APPEND_TO_BUF(sprintf(txt, "#-imgfile %d %d \"%s\"\n", width, height, camFileName));
+			fprintf(fp, "#-imgfile %d %d \"%s\"\n", width, height, camFileName);
 			vx_float32 d = stitch->camera_par[i].lens.du0;
 			vx_float32 e = stitch->camera_par[i].lens.dv0;
 			if (stitch->camera_par[i].lens.lens_type == ptgui_lens_fisheye_circ && stitch->camera_par[i].lens.haw != width) {
@@ -1843,35 +2510,340 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 				top = cy - (haw / 2); bottom = top + haw - 1;
 				d = d - (int)d;
 				e = e - (int)e;
-				APPEND_TO_BUF(sprintf(txt, "o f%d y%f r%f p%f v%f a%f b%f c%f d%f e%f g0 t0 C%d,%d,%d,%d\n",
+				fprintf(fp, "o f%d y%f r%f p%f v%f a%f b%f c%f d%f e%f g0 t0 C%d,%d,%d,%d\n",
 					lens_type,
 					stitch->camera_par[i].focal.yaw - stitch->rig_par.yaw,
 					stitch->camera_par[i].focal.roll - stitch->rig_par.roll,
 					stitch->camera_par[i].focal.pitch - stitch->rig_par.pitch,
 					stitch->camera_par[i].lens.hfov,
 					stitch->camera_par[i].lens.k1, stitch->camera_par[i].lens.k2, stitch->camera_par[i].lens.k3,
-					d, e, left, right, top, bottom));
+					d, e, left, right, top, bottom);
 			}
 			else {
-				APPEND_TO_BUF(sprintf(txt, "o f%d y%f r%f p%f v%f a%f b%f c%f d%f e%f g0 t0\n",
+				fprintf(fp, "o f%d y%f r%f p%f v%f a%f b%f c%f d%f e%f g0 t0\n",
 					lens_type,
 					stitch->camera_par[i].focal.yaw - stitch->rig_par.yaw,
 					stitch->camera_par[i].focal.roll - stitch->rig_par.roll,
 					stitch->camera_par[i].focal.pitch - stitch->rig_par.pitch,
 					stitch->camera_par[i].lens.hfov * width / stitch->camera_par[i].lens.haw,
 					stitch->camera_par[i].lens.k1, stitch->camera_par[i].lens.k2, stitch->camera_par[i].lens.k3,
-					d, e));
+					d, e);
 			}
 		}
+		if(fp != stdout)
+			fclose(fp);
+	}
+	else if (!_stricmp(exportType, "gdf")) {
+		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
+		if (_stricmp(fileName + strlen(fileName) - 4, ".gdf")) {
+			ls_printf("ERROR: lsExportConfiguration: gdf: requires fileName extension to be .gdf\n");
+			return VX_ERROR_INVALID_PARAMETERS;
+		}
+		char fileNamePrefixForTables[1024] = { 0 }; strncpy(fileNamePrefixForTables, fileName, strlen(fileName) - 4);
+		FILE * fp = fopen(fileName, "w");
+		if (!fp) {
+			ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+			return VX_FAILURE;
+		}
+		vx_node nodeObjList[] = {
+			stitch->InputColorConvertNode, stitch->SimpleStitchRemapNode, stitch->OutputColorConvertNode,
+			stitch->WarpNode, stitch->ExpcompComputeGainNode, stitch->ExpcompSolveGainNode, stitch->ExpcompApplyGainNode, stitch->MergeNode,
+			stitch->SobelNode, stitch->MagnitudeNode, stitch->PhaseNode, stitch->ConvertDepthNode, 
+			stitch->SeamfindStep1Node, stitch->SeamfindStep2Node, stitch->SeamfindStep3Node, stitch->SeamfindStep4Node, stitch->SeamfindStep5Node,
+			stitch->nodeOverlayRemap, stitch->nodeOverlayBlend,
+			stitch->nodeLoomIoCamera, stitch->nodeLoomIoOverlay, stitch->nodeLoomIoOutput, stitch->nodeLoomIoViewing,
+		};
+		const char * kernelNameList[] = {
+			"com.amd.loomsl.color_convert", "org.khronos.openvx.remap", "com.amd.loomsl.color_convert",
+			"com.amd.loomsl.warp", "com.amd.loomsl.expcomp_compute_gainmatrix", "com.amd.loomsl.expcomp_solvegains", "com.amd.loomsl.expcomp_applygains", "com.amd.loomsl.merge",
+			"org.khronos.openvx.sobel_3x3", "org.khronos.openvx.magnitude", "org.khronos.openvx.phase", "org.khronos.openvx.convert_depth",
+			"com.amd.loomsl.seamfind_scene_detect", "com.amd.loomsl.seamfind_cost_generate", "com.amd.loomsl.seamfind_cost_accumulate", "com.amd.loomsl.seamfind_path_trace", "com.amd.loomsl.seamfind_set_weights",
+			"org.khronos.openvx.remap", "com.amd.loomsl.alpha_blend",
+			stitch->loomio_camera.kernelName, stitch->loomio_overlay.kernelName, stitch->loomio_output.kernelName, stitch->loomio_viewing.kernelName,
+		};
+		std::map<vx_node, std::string> nodeMap;
+		for (vx_size i = 0; i < dimof(nodeObjList); i++) {
+			if (nodeObjList[i]) {
+				nodeMap[nodeObjList[i]] = kernelNameList[i];
+			}
+		}
+		if (stitch->MULTIBAND_BLEND){
+			for (int i = 1; i < stitch->num_bands; i++) {
+				nodeMap[stitch->pStitchMultiband[i].WeightHSGNode] = "com.amd.loomsl.half_scale_gaussian";
+				nodeMap[stitch->pStitchMultiband[i].SourceHSGNode] = "com.amd.loomsl.half_scale_gaussian";
+				nodeMap[stitch->pStitchMultiband[i].UpscaleSubtractNode] = "com.amd.loomsl.upscale_gaussian_subtract";
+			}
+			int i = stitch->num_bands - 1;
+			nodeMap[stitch->pStitchMultiband[i].BlendNode] = "com.amd.loomsl.multiband_blend";
+			--i;
+			for (; i > 0; --i){
+				nodeMap[stitch->pStitchMultiband[i].UpscaleAddNode] = "com.amd.loomsl.upscale_gaussian_add";
+			}
+			nodeMap[stitch->pStitchMultiband[0].UpscaleAddNode] = "com.amd.loomsl.laplacian_reconstruct";
+		}
+		std::map<vx_reference, std::string> refSuffixList;
+		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
+			vx_node node = it->first;
+			if (node) {
+				vx_uint32 paramCount;
+				ERROR_CHECK_STATUS_(vxQueryNode(node, VX_NODE_PARAMETERS, &paramCount, sizeof(paramCount)));
+				for (vx_uint32 paramIndex = 0; paramIndex < paramCount; paramIndex++) {
+					vx_reference ref = avxGetNodeParamRef(node, paramIndex);
+					if (vxGetStatus(ref) == VX_SUCCESS) {
+						if (refSuffixList.find(ref) == refSuffixList.end()) {
+							bool isIntermediateTmpData = false;
+							const char * fileNameSuffix = GetFileNameSuffix(stitch, ref, isIntermediateTmpData);
+							if (fileNameSuffix && !isIntermediateTmpData) {
+								refSuffixList[ref] = fileNameSuffix;
+							}
+						}
+					}
+				}
+			}
+		}
+		fprintf(fp, "import vx_loomsl\n");
+		std::map<vx_reference, std::string> refNameList;
+		if (stitch->stitching_mode == stitching_mode_normal) {
+			fprintf(fp, "type WarpValidPixelEntryType userstruct:%d\n", (int)sizeof(StitchValidPixelEntry));
+			fprintf(fp, "type WarpRemapEntryType userstruct:%d\n", (int)sizeof(StitchWarpRemapEntry));
+			fprintf(fp, "data warpValidPixelTable = array:WarpValidPixelEntryType,%d\n", (int)stitch->table_sizes.warpTableSize);
+			fprintf(fp, "data warpRemapTable = array:WarpRemapEntryType,%d\n", (int)stitch->table_sizes.warpTableSize);
+			fprintf(fp, "data RGBY1 = image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+			fprintf(fp, "data weight_image = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+			fprintf(fp, "data cam_id_image = image:%d,%d,U008\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
+			fprintf(fp, "data group1_image = image:%d,%d,U016\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
+			fprintf(fp, "data group2_image = image:%d,%d,U016\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
+			refNameList[(vx_reference)stitch->ValidPixelEntry] = "warpValidPixelTable";
+			refNameList[(vx_reference)stitch->WarpRemapEntry] = "warpRemapTable";
+			refNameList[(vx_reference)stitch->RGBY1] = "RGBY1";
+			refNameList[(vx_reference)stitch->weight_image] = "weight_image";
+			refNameList[(vx_reference)stitch->cam_id_image] = "cam_id_image";
+			refNameList[(vx_reference)stitch->group1_image] = "group1_image";
+			refNameList[(vx_reference)stitch->group2_image] = "group2_image";
+			if (stitch->EXPO_COMP) {
+				fprintf(fp, "type ExpCompValidEntryType userstruct:%d\n", (int)sizeof(StitchOverlapPixelEntry));
+				fprintf(fp, "type ExpCompCalcEntryType userstruct:%d\n", (int)sizeof(StitchExpCompCalcEntry));
+				fprintf(fp, "data expCompValidTable = array:ExpCompValidEntryType,%d\n", (int)stitch->table_sizes.expCompValidTableSize);
+				fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
+				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras);
+				fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				fprintf(fp, "data expCompCountMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				fprintf(fp, "data RGBY2 = image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				refNameList[(vx_reference)stitch->valid_array] = "expCompValidTable";
+				refNameList[(vx_reference)stitch->OverlapPixelEntry] = "expCompCalcTable";
+				refNameList[(vx_reference)stitch->gain_array] = "expCompGain";
+				refNameList[(vx_reference)stitch->A_matrix] = "expCompAMat";
+				refNameList[(vx_reference)stitch->overlap_matrix] = "expCompCountMat";
+				refNameList[(vx_reference)stitch->RGBY2] = "RGBY2";
+			}
+			if (stitch->SEAM_FIND) {
+				fprintf(fp, "type SeamFindValidEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindValidEntry));
+				fprintf(fp, "type SeamFindWeightEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindWeightEntry));
+				fprintf(fp, "type SeamFindAccumEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindAccumEntry));
+				fprintf(fp, "type SeamFindPreferenceType userstruct:%d\n", (int)sizeof(StitchSeamFindPreference));
+				fprintf(fp, "type SeamFindInformationType userstruct:%d\n", (int)sizeof(StitchSeamFindInformation));
+				fprintf(fp, "type SeamFindPathEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindPathEntry));
+				fprintf(fp, "data seamFindValid = array:SeamFindValidEntryType,%d\n", (int)stitch->table_sizes.seamFindValidTableSize);
+				fprintf(fp, "data seamFindWeight = array:SeamFindWeightEntryType,%d\n", (int)stitch->table_sizes.seamFindWeightTableSize);
+				fprintf(fp, "data seamFindAccum = array:SeamFindAccumEntryType,%d\n", (int)stitch->table_sizes.seamFindAccumTableSize);
+				fprintf(fp, "data seamFindPref = array:SeamFindPreferenceType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
+				fprintf(fp, "data seamFindInfo = array:SeamFindInformationType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
+				fprintf(fp, "data seamFindPath = array:SeamFindPathEntryType,%d\n", (int)stitch->table_sizes.seamFindPathTableSize);
+				fprintf(fp, "data warpLuma = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				refNameList[(vx_reference)stitch->seamfind_valid_array] = "seamFindValid";
+				refNameList[(vx_reference)stitch->seamfind_weight_array] = "seamFindWeight";
+				refNameList[(vx_reference)stitch->seamfind_accum_array] = "seamFindAccum";
+				refNameList[(vx_reference)stitch->seamfind_pref_array] = "seamFindPref";
+				refNameList[(vx_reference)stitch->seamfind_info_array] = "seamFindInfo";
+				refNameList[(vx_reference)stitch->seamfind_path_array] = "seamFindPath";
+				refNameList[(vx_reference)stitch->warp_luma_image] = "warpLuma";
+				if (!stitch->SEAM_COST_SELECT) {
+					fprintf(fp, "data seamFindSobelX = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+					fprintf(fp, "data seamFindSobelY = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+					fprintf(fp, "data seamFindMagS16 = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+					refNameList[(vx_reference)stitch->sobelx_image] = "seamFindSobelX";
+					refNameList[(vx_reference)stitch->sobely_image] = "seamFindSobelY";
+					refNameList[(vx_reference)stitch->sobel_magnitude_s16_image] = "seamFindMagS16";
+				}
+				fprintf(fp, "data seamFindMag = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				fprintf(fp, "data seamFindPhase = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				fprintf(fp, "data seamFindWeightImage = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				fprintf(fp, "data seamFindCurFrame = scalar:VX_TYPE_UINT32,%d\n", stitch->current_frame_value);
+				refNameList[(vx_reference)stitch->sobel_magnitude_image] = "seamFindMag";
+				refNameList[(vx_reference)stitch->sobel_phase_image] = "seamFindPhase";
+				refNameList[(vx_reference)stitch->seamfind_weight_image] = "seamFindWeightImage";
+				refNameList[(vx_reference)stitch->current_frame] = "seamFindCurFrame";
+				if (stitch->SEAM_REFRESH) {
+					fprintf(fp, "type SeamFindSceneEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindSceneEntry));
+					fprintf(fp, "data seamFindSceneTable = array:SeamFindSceneEntryType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
+					fprintf(fp, "data seamFindSceneThreshold = scalar:VX_TYPE_UINT32,%d\n", stitch->scene_threshold_value);
+					refNameList[(vx_reference)stitch->seamfind_scene_array] = "seamFindSceneTable";
+					refNameList[(vx_reference)stitch->scene_threshold] = "seamFindSceneThreshold";
+				}
+				if (stitch->SEAM_COST_SELECT) {
+					vx_uint32 cost_enable = 1;
+					fprintf(fp, "data seamFindCost = scalar:VX_TYPE_UINT32,%d\n", cost_enable);
+					refNameList[(vx_reference)stitch->seam_cost_enable] = "seamFindCost";
+				}
+			}
+			if (stitch->MULTIBAND_BLEND) {
+				fprintf(fp, "type BlendValidEntryType userstruct:%d\n", (int)sizeof(StitchBlendValidEntry));
+				fprintf(fp, "data blendValidTable = array:BlendValidEntryType,%d\n", (int)stitch->table_sizes.blendOffsetTableSize);
+				refNameList[(vx_reference)stitch->blend_offsets] = "blendValidTable";
+			}
+			if (stitch->SEAM_FIND || stitch->EXPO_COMP) {
+				fprintf(fp, "data validMaskImage = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
+				refNameList[(vx_reference)stitch->valid_mask_image] = "validMaskImage";
+			}
+		}
+		fprintf(fp, "data rgb_input = image:%d,%d,RGB2\n", stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height);
+		fprintf(fp, "data rgb_output = image:%d,%d,RGB2\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
+		refNameList[(vx_reference)stitch->rgb_input] = "rgb_input";
+		refNameList[(vx_reference)stitch->rgb_output] = "rgb_output";
+		if (stitch->overlay_remap) {
+			fprintf(fp, "data overlay_input = image:%d,%d,RGBA\n", stitch->overlay_buffer_width, stitch->overlay_buffer_height);
+			fprintf(fp, "data overlay_output = image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
+			fprintf(fp, "data overlay_blended = image:%d,%d,RGB2\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
+			fprintf(fp, "data remapOverlay = remap:%d,%d,%d,%d\n", stitch->overlay_buffer_width, stitch->overlay_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
+			refNameList[(vx_reference)stitch->Img_overlay] = "overlay_input";
+			refNameList[(vx_reference)stitch->Img_overlay_rgba] = "overlay_output";
+			refNameList[(vx_reference)stitch->Img_overlay_rgb] = "overlay_blended";
+			refNameList[(vx_reference)stitch->overlay_remap] = "remapOverlay";
+		}
+		if (stitch->camera_remap) {
+			fprintf(fp, "data remapCamera = remap:%d,%d,%d,%d\n", stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
+			refNameList[(vx_reference)stitch->camera_remap] = "remapCamera";
+		}
+		int genImageCount = 0, genScalarCount = 0;
+		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
+			vx_node node = it->first;
+			if (node) {
+				vx_uint32 paramCount;
+				ERROR_CHECK_STATUS_(vxQueryNode(node, VX_NODE_PARAMETERS, &paramCount, sizeof(paramCount)));
+				for (vx_uint32 paramIndex = 0; paramIndex < paramCount; paramIndex++) {
+					vx_reference ref = avxGetNodeParamRef(node, paramIndex);
+					if (vxGetStatus(ref) == VX_SUCCESS) {
+						if (refNameList.find(ref) == refNameList.end()) {
+							vx_enum type;
+							ERROR_CHECK_STATUS_(vxQueryReference(ref, VX_REF_ATTRIBUTE_TYPE, &type, sizeof(type)));
+							if (type == VX_TYPE_IMAGE) {
+								vx_uint32 width, height; vx_df_image format;
+								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_WIDTH, &width, sizeof(width)));
+								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_HEIGHT, &height, sizeof(height)));
+								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_FORMAT, &format, sizeof(format)));
+								char name[64]; sprintf(name, "img_%02d", genImageCount++);
+								fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, &format);
+								refNameList[ref] = name;
+							}
+							else if (type == VX_TYPE_SCALAR) {
+								vx_enum data_type; char value[1024] = { 0 };
+								ERROR_CHECK_STATUS_(vxQueryScalar((vx_scalar)ref, VX_SCALAR_TYPE, &data_type, sizeof(data_type)));
+								ERROR_CHECK_STATUS_(vxReadScalarValue((vx_scalar)ref, value));
+								char name[64]; sprintf(name, "scalar_%02d", genScalarCount++);
+								if (data_type == VX_TYPE_UINT32) fprintf(fp, "data %s = scalar:VX_TYPE_UINT32,%u\n", name, *(vx_uint32 *)value);
+								else if (data_type == VX_TYPE_ENUM) fprintf(fp, "data %s = scalar:VX_TYPE_ENUM,0x%08x\n", name, *(vx_enum *)value);
+								else if (data_type == VX_TYPE_INT32) fprintf(fp, "data %s = scalar:VX_TYPE_INT32,%d\n", name, *(vx_int32 *)value);
+								else if (data_type == VX_TYPE_FLOAT32) fprintf(fp, "data %s = scalar:VX_TYPE_FLOAT32,%f\n", name, *(vx_float32 *)value);
+								else if (data_type == VX_TYPE_STRING_AMD) fprintf(fp, "data %s = scalar:VX_TYPE_STRING_AMD,\"%s\"\n", name, value);
+								else { ls_printf("ERROR: lsExportConfiguration: gdf: unsupported scalar data type found: %d\n", data_type); return VX_FAILURE; }
+								refNameList[ref] = name;
+							}
+							else {
+								ls_printf("ERROR: lsExportConfiguration: gdf: unsupported object type detected as arg#%d of node: %s\n", paramIndex, it->second.c_str());
+								return VX_FAILURE;
+							}
+						}
+					}
+				}
+			}
+		}
+		for (auto it = refSuffixList.begin(); it != refSuffixList.end(); it++) {
+			if (refNameList.find(it->first) == refNameList.end()) {
+				vx_enum type; char name[64] = { 0 }; const char * suffix = it->second.c_str();
+				ERROR_CHECK_STATUS_(vxQueryReference(it->first, VX_REF_ATTRIBUTE_TYPE, &type, sizeof(type)));
+				if (*suffix == '|') strcpy(name, suffix + 1);
+				else {
+					for (int i = 0; suffix[i]; i++) {
+						name[i] = (suffix[i] == '.' || suffix[i] == '-') ? '_' : suffix[i];
+					}
+				}
+				refNameList[it->first] = name;
+				if (type == VX_TYPE_IMAGE) {
+					vx_uint32 width, height; vx_df_image format;
+					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_WIDTH, &width, sizeof(width)));
+					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_HEIGHT, &height, sizeof(height)));
+					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_FORMAT, &format, sizeof(format)));
+					fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, &format);
+				}
+				else if (type == VX_TYPE_SCALAR) {
+					vx_enum data_type; char value[1024] = { 0 };
+					ERROR_CHECK_STATUS_(vxQueryScalar((vx_scalar)it->first, VX_SCALAR_TYPE, &data_type, sizeof(data_type)));
+					ERROR_CHECK_STATUS_(vxReadScalarValue((vx_scalar)it->first, value));
+					if (data_type == VX_TYPE_UINT32) fprintf(fp, "data %s = scalar:VX_TYPE_UINT32,%u\n", name, *(vx_uint32 *)value);
+					else if (data_type == VX_TYPE_ENUM) fprintf(fp, "data %s = scalar:VX_TYPE_ENUM,0x%08x\n", name, *(vx_enum *)value);
+					else if (data_type == VX_TYPE_INT32) fprintf(fp, "data %s = scalar:VX_TYPE_INT32,%d\n", name, *(vx_int32 *)value);
+					else if (data_type == VX_TYPE_FLOAT32) fprintf(fp, "data %s = scalar:VX_TYPE_FLOAT32,%f\n", name, *(vx_float32 *)value);
+					else if (data_type == VX_TYPE_STRING_AMD) fprintf(fp, "data %s = scalar:VX_TYPE_STRING_AMD,\"%s\"\n", name, value);
+					else { ls_printf("ERROR: lsExportConfiguration: gdf: unsupported scalar data type found: %d\n", data_type); return VX_FAILURE; }
+				}
+				else {
+					ls_printf("ERROR: lsExportConfiguration: gdf: internal error: one of the object type is not supported: %d\n", type);
+					return VX_FAILURE;
+				}
+			}
+		}
+		fprintf(fp, "\n");
+		for (auto it = refSuffixList.begin(); it != refSuffixList.end(); it++) {
+			fprintf(fp, "init %s %s-%s\n", refNameList[it->first].c_str(), fileNamePrefixForTables, it->second.c_str());
+		}
+		fprintf(fp, "\n");
+		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
+			vx_node node = it->first;
+			if (node) {
+				vx_uint32 paramCount;
+				ERROR_CHECK_STATUS_(vxQueryNode(node, VX_NODE_PARAMETERS, &paramCount, sizeof(paramCount)));
+				fprintf(fp, "node %s", it->second.c_str());
+				for (vx_uint32 paramIndex = 0; paramIndex < paramCount; paramIndex++) {
+					vx_reference ref = avxGetNodeParamRef(node, paramIndex);
+					if (vxGetStatus(ref) == VX_SUCCESS) {
+						if (refNameList.find(ref) == refNameList.end()) {
+							vx_enum type;
+							ERROR_CHECK_STATUS_(vxQueryReference(ref, VX_REF_ATTRIBUTE_TYPE, &type, sizeof(type)));
+							if (type == VX_TYPE_SCALAR) {
+								char value[1024];
+								ERROR_CHECK_STATUS_(vxReadScalarValue((vx_scalar)ref, value));
+								fprintf(fp, " !%d", *(int *)value);
+							}
+							else {
+								ls_printf("ERROR: lsExportConfiguration: gdf: unsupported data object as arg#%d of node object: %s\n", paramIndex, it->second.c_str());
+								return VX_FAILURE;
+							}
+						}
+						else {
+							fprintf(fp, " %s", refNameList[ref].c_str());
+						}
+					}
+					else {
+						fprintf(fp, " NULL");
+					}
+				}
+				fprintf(fp, "\n");
+			}
+		}
+		fclose(fp);
+		return DumpInternalTables(stitch, fileNamePrefixForTables, false);
+	}
+	else if (!_stricmp(exportType, "data")) {
+		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
+		return DumpInternalTables(stitch, fileName, true);
 	}
 	else {
 		ls_printf("ERROR: lsExportConfiguration: unsupported exportType: %s\n", exportType);
 		return VX_ERROR_NOT_SUPPORTED;
 	}
 	return VX_SUCCESS;
-#undef  APPEND_TO_BUF
 }
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context stitch, const char * importType, const char * text)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context stitch, const char * importType, const char * fileName)
 {
 	ERROR_CHECK_STATUS_(IsValidContext(stitch));
 	if (!_stricmp(importType, "pts")) {
@@ -1885,7 +2857,17 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 		vx_uint32 width = stitch->camera_buffer_width / stitch->num_camera_columns;
 		vx_uint32 height = stitch->camera_buffer_height / stitch->num_camera_rows;
 		bool isDummy = false;
-		while (*text) {
+		FILE * fp = fopen(fileName, "rb");
+		if (!fp) {
+			ls_printf("ERROR: lsImportConfiguration: unable to open: %s\n", fileName);
+			return VX_FAILURE;
+		}
+		fseek(fp, 0L, SEEK_END); long fileSize = ftell(fp); fseek(fp, 0L, SEEK_SET);
+		char * textBuf = new char[fileSize + 1];
+		fread(textBuf, 1, fileSize, fp);
+		fclose(fp);
+		textBuf[fileSize] = 0;
+		for (const char * text = textBuf; *text; ) {
 			if (!strncmp(text, "#-dummyimage", 12)) {
 				isDummy = true;
 			}
@@ -1893,6 +2875,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 				vx_uint32 left = 0, top = 0, right = width-1, bottom = height-1;
 				if (camIndex >= stitch->num_cameras) {
 					ls_printf("ERROR: lsImportConfiguration: %s: PTS has more cameras than current configuration\n", importType);
+					delete[] textBuf;
 					return VX_ERROR_NOT_SUPPORTED;
 				}
 				while (*text && *text != '\n') {
@@ -1906,6 +2889,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 						else if (text[1] == '3') lens_type = ptgui_lens_fisheye_ff;
 						else {
 							ls_printf("ERROR: lsImportConfiguration: %s: lens_type f%c not supported\n", importType, text[1]);
+							delete[] textBuf;
 							return VX_ERROR_NOT_SUPPORTED;
 						}
 					}
@@ -1950,6 +2934,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 			if (*text == '\n')
 				text++;
 		}
+		delete[] textBuf;
 		if (camIndex != stitch->num_cameras) {
 			ls_printf("ERROR: lsImportConfiguration: %s: could not import for all %d cameras (found %d)\n", importType, stitch->num_cameras, camIndex);
 			return VX_ERROR_NOT_SUFFICIENT;

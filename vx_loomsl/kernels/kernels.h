@@ -20,21 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-
-#ifndef __VX_STITCHING_H__
-#define __VX_STITCHING_H__
-
-//////////////////////////////////////////////////////////////////////
-// OpenVX standard header files and openVX AMD extensions
-#include <VX/vx.h>
-#include <vx_ext_amd.h>
-#include <VX/vx_compatibility.h>
-
-#if !_WIN32
-#include <strings.h>
-#define _strnicmp strncasecmp
-#define _stricmp  strcasecmp
-#endif
+#ifndef __KERNELS_H__
+#define __KERNELS_H__
 
 //////////////////////////////////////////////////////////////////////
 // SHARED_PUBLIC - shared sybols for export
@@ -51,6 +38,24 @@ THE SOFTWARE.
 #include "live_stitch_api.h"
 #include <omp.h>
 #include <vector>
+#include <VX/vx.h>
+#include <vx_ext_amd.h>
+#include <VX/vx_compatibility.h>
+#define _USE_MATH_DEFINES
+#include <math.h>
+#include <algorithm>
+
+#if _WIN32
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+
+#if !_WIN32
+#include <strings.h>
+#define _strnicmp strncasecmp
+#define _stricmp  strcasecmp
+#endif
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The AMD extension library for stitching
@@ -140,263 +145,6 @@ enum vx_kernel_stitching_amd_e {
 };
 
 //////////////////////////////////////////////////////////////////////
-//! \brief The valid pixel entry for 8 consecutive pixel locations.
-typedef struct {
-	vx_uint32 camId : 5; // destination buffer/camera ID
-	vx_uint32 reserved0 : 2; // reserved (shall be zero)
-	vx_uint32 allValid : 1; // all 8 consecutive pixels are valid
-	vx_uint32 dstX : 11; // destination pixel x-coordinate/8 (integer)
-	vx_uint32 dstY : 13; // destination pixel y-coordinate   (integer)
-} StitchValidPixelEntry;
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The overlap pixel entry.
-typedef struct {
-	vx_uint32 camId0 : 5; // destination buffer/camera ID
-	vx_uint32 start_x : 14; // destination start pixel x-coordinate
-	vx_uint32 start_y : 13; // destination start pixel y-coordinate
-	vx_uint32 end_x : 7; // ending pixel x-coordinate within the 128x32 block
-	vx_uint32 end_y : 5; // ending pixel y-coordinate within the 128x32 block
-	vx_uint32 camId1 : 5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId2 : 5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId3 : 5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId4 : 5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-} StitchOverlapPixelEntry;
-
-typedef struct {
-	unsigned int camId : 6; // destination buffer/camera ID
-	unsigned int dstX : 12; // destination pixel x-coordinate/8 (integer)
-	unsigned int dstY : 14; // destination pixel y-coordinate/2 (integer)
-	unsigned int start_x : 8; // starting pixel x-coordinate within the 128x32 block
-	unsigned int start_y : 8; // starting pixel y-coordinate within the 128x32 block
-	unsigned int  end_x : 8;		// ending pixel x-coordinate within the 128x32 block
-	unsigned int  end_y : 8;		// ending pixel y-coordinate within the 128x32 block
-} StitchExpCompCalcEntry;
-
-typedef struct {
-	unsigned int camId : 5; // destination buffer/camera ID
-	unsigned int dstX : 14; // destination pixel x-coordinate (integer)
-	unsigned int dstY : 13; // destination pixel y-coordinate (integer)
-	unsigned int  end_x : 8;		// ending pixel x-coordinate within the 64x16 block
-	unsigned int  end_y : 8;		// ending pixel y-coordinate within the 64x16 block
-	unsigned int start_x : 8; // starting pixel x-coordinate within the 64x16 block
-	unsigned int start_y : 8; // starting pixel y-coordinate within the 64x16 block
-} StitchBlendValidEntry;
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The warp pixel remap entry for 8 consecutive pixel locations.
-//  Entry is invalid if srcX and srcY has all bits set to 1s.
-//  For srcX and srcY coordinates, below fixed-point representation is used:
-//     Q13.3
-typedef struct {
-	vx_uint16 srcX0; // source pixel (x,y) for (dstX*8+0,dstY) in Q13.3 format
-	vx_uint16 srcY0;
-	vx_uint16 srcX1; // source pixel (x,y) for (dstX*8+1,dstY) in Q13.3 format
-	vx_uint16 srcY1;
-	vx_uint16 srcX2; // source pixel (x,y) for (dstX*8+2,dstY) in Q13.3 format
-	vx_uint16 srcY2;
-	vx_uint16 srcX3; // source pixel (x,y) for (dstX*8+3,dstY) in Q13.3 format
-	vx_uint16 srcY3;
-	vx_uint16 srcX4; // source pixel (x,y) for (dstX*8+4,dstY) in Q13.3 format
-	vx_uint16 srcY4;
-	vx_uint16 srcX5; // source pixel (x,y) for (dstX*8+5,dstY) in Q13.3 format
-	vx_uint16 srcY5;
-	vx_uint16 srcX6; // source pixel (x,y) for (dstX*8+6,dstY) in Q13.3 format
-	vx_uint16 srcY6;
-	vx_uint16 srcX7; // source pixel (x,y) for (dstX*8+7,dstY) in Q13.3 format
-	vx_uint16 srcY7;
-} StitchWarpRemapEntry;
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The merge cameraId packing within U016 pixel entry.
-typedef struct {
-	vx_uint16 camId0 : 5; // values 0..30 are valid; 31 indicates invalid cameraId
-	vx_uint16 camId1 : 5; // values 0..30 are valid; 31 indicates invalid cameraId
-	vx_uint16 camId2 : 5; // values 0..30 are valid; 31 indicates invalid cameraId
-	vx_uint16 reserved0 : 1; // reserved (shall be zero)
-} StitchMergeCamIdEntry;
-
-
-/*********************************************************************
-SeamFind Data Structures
-**********************************************************************/
-#define ENABLE_VERTICAL_SEAM 1
-#define ENABLE_HORIZONTAL_SEAM 1
-
-#define VERTICAL_SEAM 0
-#define HORIZONTAL_SEAM 1
-#define DIAGONAL_SEAM 2
-
-//! \brief TheInitialize Stitch Config User Perference attributes.
-typedef struct {
-	vx_float32 overlap_rectangle;
-	vx_float32 seam_find;
-	vx_float32 seam_vertical_priority;
-	vx_float32 seam_horizontal_priority;
-	vx_float32 seam_frequency;
-	vx_float32 seam_quality;
-	vx_float32 seam_stagger;
-	vx_float32 multi_band;
-	vx_float32 num_bands;
-} InitializeStitchAttributes;
-
-//! \brief The Seam Size Information struct.
-typedef struct {
-	vx_uint32 valid_entry;
-	vx_uint32 weight_entry;
-	vx_uint32 accum_entry;
-	vx_uint32 pref_entry;
-	vx_uint32 info_entry;
-	vx_uint32 path_entry;
-} SeamFindSizeInfo;
-
-//! \brief The Seam Information struct.
-typedef struct {
-	vx_int16 cam_id_1;		// Overlap CAM ID - 1
-	vx_int16 cam_id_2;		// Overlap CAM ID - 2
-	vx_int16 start_x;		// Overlap Rectangle start x
-	vx_int16 end_x;			// Overlap Rectangle end x
-	vx_int16 start_y;		// Overlap Rectangle start y
-	vx_int16 end_y;			// Overlap Rectangle end y
-	vx_int32 offset;		// Offset location in accumulate buffer
-} StitchSeamFindInformation;
-
-//! \brief The Seam Find Preference attributes.
-typedef struct {
-	vx_int16 type;			// Overlap type: 0 - Vertical Overlap, 1 - Hortzontal Overlap,  2 - Diagonal Overlap
-	vx_int16 seam_type_num;	// Overlap type ID - vertical/horizontal overlap ID
-	vx_int16 start_frame;	// Start frame to calculate the seam
-	vx_int16 frequency;		// Frequency to calculate the seam		
-	vx_int16 quality;		// Quality of the calculated the seam		
-	vx_int16 priority;		// Priority to calculate the seam	
-	vx_int16 seam_lock;		// Lock the seam after scene change is detected for n frames
-	vx_int16 scene_flag;	// Scene change detection flag
-} StitchSeamFindPreference;
-
-//! \brief The valid pixel entry for Seam Find.
-typedef struct {
-	vx_int16 dstX;		 // destination pixel x-coordinate (integer)
-	vx_int16 dstY;		 // destination pixel y-coordinate  (integer)
-	vx_int16 height;	 // y - Height
-	vx_int16 width;		 // x - Width
-	vx_int16 OverLapX;   // Absolute Overlap destination pixel x-coordinate (integer)
-	vx_int16 OverLapY;   // Absolute Overlap destination pixel y-coordinate (integer)
-	vx_int16 CAMERA_ID_1;// Overlap Camera i
-	vx_int16 ID;		 // Overlap Number	
-} StitchSeamFindValidEntry;
-
-//! \brief The valid pixel entry for Weight Manipulation Seam Find.
-typedef struct {
-	vx_int16 x;				//pixel x-coordinate (integer)
-	vx_int16 y;				//pixel y-coordinate (integer)
-	vx_int16 cam_id_1;		// Overlap Camera i
-	vx_int16 cam_id_2;		// Overlap Camera j
-	vx_int16 overlap_id;	// Overlap Number	
-	vx_int16 overlap_type;	// Overlap Type: 0: Vert Seam 1: Hort Seam 2: Diag Seam
-} StitchSeamFindWeightEntry;
-
-//! \brief The Output Accum entry for Seam Find.
-typedef struct{
-	vx_int16 parent_x;		//pixel x-coordinate of parent (integer)
-	vx_int16 parent_y;		//pixel y-coordinate of parent (integer)
-	vx_int32 value;			//value accumulated
-	vx_int32 propagate;		//propogate paths from start to finish
-}StitchSeamFindAccumEntry;
-
-//! \brief The path entry for Seam Find.
-typedef struct {
-	vx_int16 min_pixel;			//pixel x/y - coordinate (integer)
-	vx_int16 weight_value_i;    //mask Value             (integer)
-} StitchSeamFindPathEntry;
-
-//! \brief The Scene Change Segments for Seam Find.
-#define MAX_SEGMENTS 24
-#define MAX_SEAM_BYTES 8
-typedef struct{
-	vx_uint8 segment[MAX_SEGMENTS][MAX_SEAM_BYTES];
-}StitchSeamFindSceneEntry;
-
-//! \brief The Output Accum entry for Seam Find.
-typedef struct{
-	vx_int16 parent_x;
-	vx_int16 parent_y;
-	vx_int32 value;
-}StitchSeamFindAccum;
-
-/*********************************************************************
-Multiband blend Data Structures
-**********************************************************************/
-typedef struct{
-	vx_image WeightPyrImgGaussian;
-	vx_image DstPyrImgGaussian;
-	vx_image DstPyrImgLaplacian;
-	vx_image DstPyrImgLaplacianRec;
-	vx_node WeightHSGNode;
-	vx_node SourceHSGNode;
-	vx_node UpscaleSubtractNode;
-	vx_node BlendNode;
-	vx_node UpscaleAddNode;
-	vx_node LaplacianReconNode;
-	vx_uint32 valid_array_offset;		// in number of elements
-}StitchMultibandData;
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The gray scale compute method modes
-enum {
-	STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG = 0, // Use: Y = (R + G + B) / 3
-	STITCH_GRAY_SCALE_COMPUTE_METHOD_DIST = 1, // Use: Y = sqrt(R*R + G*G + B*B)
-};
-
-//////////////////////////////////////////////////////////////////////
-// Useful macros to detect number of parameters
-#define NUM_LENS_PARAM_RECTILINEAR				(sizeof(lens_param_rectilinear) / sizeof(float))
-#define NUM_LENS_PARAM_FISHEYE					(sizeof(lens_param_fisheye) / sizeof(float))
-#define NUM_LENS_PARAM_BARREL					(sizeof(lens_param_barrel) / sizeof(float))
-#define NUM_LENS_PARAM_CIRCULAR_FISHEYE			(sizeof(lens_param_circular_fisheye) / sizeof(float))
-#define NUM_WARP_PARAM							(sizeof(camera_param_alignment) / sizeof(float))
-#define NUM_RIG_PARAM							(sizeof(rig_param_orientation) / sizeof(float))
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The macro for error checking from OpenVX status.
-#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS){ printf("ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
-//! \brief The macro for error checking from OpenVX object.
-#define ERROR_CHECK_OBJECT(obj)  { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS){ vxAddLogEntry((vx_reference)(obj), status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
-//! \brief The macro for getting the dimensions.
-#define dimof(x)                    (sizeof(x)/sizeof(x[0]))
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The user kernel registration functions.
-vx_status color_convert_publish(vx_context context);
-vx_status lens_distortion_remap_publish(vx_context context);
-vx_status initialize_stitch_config_publish(vx_context context);
-vx_status initialize_stitch_remap_publish(vx_context context);
-vx_status warp_publish(vx_context context);
-vx_status exposure_compensation_publish(vx_context context);
-vx_status merge_publish(vx_context context);
-vx_status exposure_comp_calcErrorFn_publish(vx_context context);
-vx_status exposure_comp_solvegains_publish(vx_context context);
-vx_status exposure_comp_applygains_publish(vx_context context);
-vx_status alpha_blend_publish(vx_context context);
-vx_status blend_2bandfilter_publish(vx_context context);
-vx_status multiband_blend_publish(vx_context context);
-vx_status half_scale_gaussian_publish(vx_context context);
-vx_status upscale_gaussian_subtract_publish(vx_context context);
-vx_status upscale_gaussian_add_publish(vx_context context);
-vx_status laplacian_reconstruct_publish(vx_context context);
-
-//SeamFind Kernels
-vx_status seamfind_model_publish(vx_context context);
-vx_status seamfind_scene_detect_publish(vx_context context);
-vx_status seamfind_cost_generate_publish(vx_context context);
-vx_status seamfind_cost_accumulate_publish(vx_context context);
-vx_status seamfind_path_trace_publish(vx_context context);
-vx_status seamfind_set_weights_publish(vx_context context);
-vx_status seamfind_analyze_publish(vx_context context);
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The utility function to get reference of a node parameter at specified index
-vx_reference avxGetNodeParamRef(vx_node node, vx_uint32 index);
-
 //! \brief The module entry point for publishing kernel.
 SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context);
 
@@ -453,12 +201,10 @@ VX_API_ENTRY vx_node VX_API_CALL stitchLensDistortionNode(vx_graph graph, vx_mat
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam,
-	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_uint32 num_camera_columns);
+	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns);
 
 /*! \brief [Graph] Creates a Stitch Merge node.
 * \param [in] graph The reference to the graph.
-* \param [in] input The Scalar to indicate number of bands.
-* \param [in] input The Array of Float32 Band Weights.
 * \param [in] input The camera id image.
 * \param [in] input The group1 id image.
 * \param [in] input The group2 id image.
@@ -469,8 +215,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_uint8 numBands,
-	vx_array bandWeights, vx_image camera_id_image, vx_image group1_image, vx_image group2_image, vx_image input, vx_image weight_image, vx_image output);
+VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera_id_image, vx_image group1_image, vx_image group2_image, vx_image input, vx_image weight_image, vx_image output);
 
 /*! \brief [Graph] Creates a AlphaBlend node.
 * \param [in] graph The reference to the graph.
@@ -610,28 +355,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
 
-/***********************************************************************************************************************************
-Seam Find
-Talk to Radha : TBD
-************************************************************************************************************************************/
-/*! \brief [Graph] Creates a Warp U8 node.
-* \param [in] graph The reference to the graph.
-* \param [in] method The input computation method type.
-* \param [in] num_cam The input scalar number of cameras.
-* \param [in] ValidPixelEntry The input array of StitchValidPixel.
-* \param [in] WarpRemapEntry The input array of StitchWarpRemap
-* \param [in] input The input image.
-* \param [out] output The output image.
-* \param [out] output_u8 The U8 output image.
-* \param [out] num_camera_columns The num of camera columns.
-* \see <tt>AMDOVX_KERNEL_STITCHING_WARP</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpU8Node(vx_graph graph, vx_enum method, vx_uint32 num_cam,
-	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image output_u8, vx_uint32 num_camera_columns);
-
-
 /*! \brief [Graph] Creates a SeamFind Accumulate node K0 - GPU/CPU.
 * \param [in] graph The reference to the graph.
 * \param [in] current_frame The input scalar current frame.
@@ -730,7 +453,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx_scalar current_frame, vx_uint32 NumCam,
 	vx_uint32 output_width, vx_uint32 output_height, vx_array seam_weight, vx_array seam_path,
-	vx_array seam_pref, vx_image weight_image);
+	vx_array seam_pref, vx_image weight_image, vx_uint32 flags);
 
 /*! \brief [Graph] Creates a SeamFind CPU Node.
 * \param [in] graph         The reference to the graph.
@@ -749,23 +472,19 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindModelNode(vx_graph graph, vx_uint
 	vx_array overlap_roi, vx_matrix overlap_matrix, vx_image cost_img,
 	vx_image mask_img, vx_image weight_image, vx_image new_weight_image);
 
-/////////////////////////////////////////////////////////////////////////////////////
-/*! \brief The utility function to initialize StitchOverlapPixelEntry array for exp_comp kernel implementation
-* \param[in] input Array of valid regions of rectangles
-* \param[out] output Array of StitchOverlapPixelEntry .
-*/
-extern vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pValid_roi, vx_array ExpCompOut, int numCameras);
-extern vx_status Compute_StitchExpCompCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array pExpCompOut, int numCameras, int Dst_height);
-extern vx_status Compute_StitchBlendCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array blendOffs, int numCameras);
-bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueSize);
-vx_status simple_blend(vx_uint32 BLEND_MODE, vx_uint32 BLEND_HORIZONTAL, vx_uint32 BLEND_WIDTH, vx_image weight_image, vx_uint32 heightDstCamera, vx_uint32 numCamera);
-vx_status Seamfind_CopyWeights(vx_image weight_image, vx_image new_weight_image, vx_rectangle_t *Overlap_ROI, vx_int32 *Overlap_matrix, vx_uint32 width, vx_uint32 height, vx_uint32 NumCam);
-vx_status Seamfind_seamrange(vx_uint32 *seam_adjust, vx_uint32 x_dir);
-vx_uint32 Compute_StitchBlendArraySize(int width, int height, int num_camera, int num_bands, vx_uint32 offset[]);
-vx_status Compute_StitchMultiBandCalcValidEntry(vx_rectangle_t *pOverlap_roi, vx_array blendOffs, int numCameras, int numBands, int width, int height);
+//////////////////////////////////////////////////////////////////////
+//! \brief The utility functions
+vx_reference avxGetNodeParamRef(vx_node node, vx_uint32 index);
 vx_node stitchCreateNode(vx_graph graph, vx_enum kernelEnum, vx_reference params[], vx_uint32 num);
 vx_node stitchCreateNode(vx_graph graph, const char * kernelName, vx_reference params[], vx_uint32 num);
-vx_status seamfind_utility(vx_uint32 mode, vx_uint32 eqr_width, vx_uint32 num_cam, SeamFindSizeInfo *entry_var);
-vx_status seamfind_accurate_utility(vx_uint32 mode, vx_uint32 num_cam, vx_uint32 ip_width, vx_uint32 ip_height, vx_uint32 eqr_width, vx_matrix mat_rig_params, vx_array array_cam_params, SeamFindSizeInfo *entry_var);
+bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueSize);
 
-#endif //__VX_STITCHING_H__
+//////////////////////////////////////////////////////////////////////
+//! \brief The macro for error checking from OpenVX status.
+#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS){ printf("ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
+//! \brief The macro for error checking from OpenVX object.
+#define ERROR_CHECK_OBJECT(obj)  { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS){ vxAddLogEntry((vx_reference)(obj), status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
+//! \brief The macro for getting the dimensions.
+#define dimof(x)                    (sizeof(x)/sizeof(x[0]))
+
+#endif //__KERNELS_H__

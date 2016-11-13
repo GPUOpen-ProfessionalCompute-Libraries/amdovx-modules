@@ -20,7 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-// header file for exposure compensation implementation on CPU prototype
+#ifndef __EXP_COMP_H__
+#define __EXP_COMP_H__
+
 #include "kernels.h"
 
 #define MAX_NUM_IMAGES_IN_STITCHED_OUTPUT	16
@@ -67,3 +69,13 @@ private:
 	void solve_gauss(vx_float64 **A, vx_float32* g, int num);
 	vx_status applygains_thread_func(vx_int32 img_num, char *in_base_addr);
 };
+
+vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pValid_roi, vx_array ExpCompOut, int numCameras);
+vx_status Compute_StitchExpCompCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array pExpCompOut, int numCameras, int Dst_height);
+vx_status Compute_StitchBlendCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array blendOffs, int numCameras);
+
+//////////////////////////////////////////////////////////////////////
+//! \brief The kernel registration functions.
+vx_status exposure_compensation_publish(vx_context context);
+
+#endif // __EXP_COMP_H__

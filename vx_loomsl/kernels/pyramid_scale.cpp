@@ -21,10 +21,8 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "kernels.h"
-#include <CL/cl.h>
-#include <stdio.h>
-#include <algorithm>
+#include "pyramid_scale.h"
+#include "multiband_blender.h"
 
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK half_scale_gaussian_input_validator(vx_node node, vx_uint32 index)

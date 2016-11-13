@@ -30,6 +30,33 @@
     <ClInclude Include="kernels\kernels.h">
       <Filter>Header Files\kernels</Filter>
     </ClInclude>
+    <ClInclude Include="kernels\lens_distortion_remap.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\seam_find.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\multiband_blender.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\pyramid_scale.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\alpha_blend.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\color_convert.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\warp.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\merge.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\exposure_compensation.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kernels\warp.cpp">
@@ -66,12 +93,6 @@
       <Filter>Source Files\kernels</Filter>
     </ClCompile>
     <ClCompile Include="kernels\multiband_blender.cpp">
-      <Filter>Source Files\kernels</Filter>
-    </ClCompile>
-    <ClCompile Include="kernels\initialize_stitch_remap.cpp">
-      <Filter>Source Files\kernels</Filter>
-    </ClCompile>
-    <ClCompile Include="kernels\initialize_stitch_config.cpp">
       <Filter>Source Files\kernels</Filter>
     </ClCompile>
   </ItemGroup>

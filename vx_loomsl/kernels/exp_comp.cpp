@@ -19,10 +19,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
-#include "kernels.h"
-#include <math.h>
+
 #include "exp_comp.h"
-#include <algorithm>
+#include "exposure_compensation.h"
 #include <thread>
 
 /////////////////////////////////////////////////////////////////////////////////////

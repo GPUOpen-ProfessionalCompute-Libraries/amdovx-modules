@@ -21,10 +21,9 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "kernels.h"
-#define _USE_MATH_DEFINES
-#include <math.h>
-#include <algorithm>
+#include "merge.h"
+
+#pragma intrinsic(_BitScanReverse)
 
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index)
@@ -35,45 +34,6 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 	ERROR_CHECK_OBJECT(ref);
 	// validate each parameter
 	if (index == 0)
-	{ // object of SCALAR type
-		vx_enum itemtype = VX_TYPE_INVALID;
-		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
-		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
-		if (itemtype == VX_TYPE_UINT8) {
-			status = VX_SUCCESS;
-		}
-		else {
-			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: merge number of bands scalar type should be of UINT8 type\n");
-		}
-	}
-	else if (index == 1)
-	{ // array object of UINT8 type
-		vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);
-		vx_uint8 scalarvalue = 0;
-		ERROR_CHECK_OBJECT(scalar);
-		ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &scalarvalue));
-		vx_enum itemtype = 0;
-		vx_size capacity = 0;
-		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
-		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		if (itemtype == VX_TYPE_FLOAT32) {
-			status = VX_SUCCESS;
-		}
-		else {
-			status = VX_ERROR_INVALID_DIMENSION;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: merge array element should be FLOAT32 type\n");
-		}
-		if (capacity >= scalarvalue) {
-			status = VX_SUCCESS;
-		}
-		else {
-			status = VX_ERROR_INVALID_VALUE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: merge array capacity must be at least equal to the number of bands\n");
-		}
-		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
-	}
-	else if (index == 2)
 	{ // image object of U008 type
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -87,9 +47,9 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 		return status;
 	}
-	else if (index == 3 || index == 4)
+	else if (index == 1 || index == 2)
 	{ // image of format S016
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
@@ -114,9 +74,9 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 			status = VX_SUCCESS;
 		}
 	}
-	else if (index == 5)
+	else if (index == 3)
 	{ // input image of format RGBX
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
@@ -141,9 +101,9 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 			status = VX_SUCCESS;
 		}
 	}
-	else if (index == 6)
+	else if (index == 4)
 	{ // input weight image of format U008
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 5);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 3);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
@@ -175,10 +135,10 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 static vx_status VX_CALLBACK merge_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
-	if (index == 7)
+	if (index == 5)
 	{ // image of format RGB2
 		// get image configuration
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 input_width = 0, input_height = 0;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
@@ -243,20 +203,12 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 	// get input and output image configurations
 	vx_uint32 width = 0, height = 0;
 	vx_df_image output_format = VX_DF_IMAGE_VIRT;
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 7);				// output image
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 5);				// output image
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
-	vx_uint32 totalInputHeight = 0;
-	image = (vx_image)avxGetNodeParamRef(node, 5);						// input image
-	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &totalInputHeight, sizeof(totalInputHeight)));
-	ERROR_CHECK_STATUS(vxReleaseImage(&image));
-	vx_uint8 numBands = 0;
-	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);			// number of bands
-	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &numBands));
-	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
 	// set kernel configuration
 	strcpy(opencl_kernel_function_name, "merge");
 	vx_uint32 work_items[2] = { (width + 3) / 4, height };
@@ -271,7 +223,6 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 	opencl_local_buffer_size_in_bytes = 0;
 
 	vx_float32 wt_mul_factor = 1.0f / 255.0f;
-	vx_uint32 bandHeight = (vx_uint32)(totalInputHeight / numBands);
 	// kernel header and reading
 	char item[8192];
 	sprintf(item,
@@ -283,9 +234,7 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 		"}\n"
 		"\n"
 		"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n" // opencl_local_work[0], opencl_local_work[1]
-		"void %s(uint numbands,\n"
-		"        __global char * band_weights_buf, uint band_weights_buf_offset, uint band_weights_buf_num_items,\n"
-		"        uint camID0_img_width, uint camID0_img_height, __global uchar * camID0_img_buf, uint camID0_img_stride, uint camID0_img_offset,\n" // opencl_kernel_function_name
+		"void %s(uint camID0_img_width, uint camID0_img_height, __global uchar * camID0_img_buf, uint camID0_img_stride, uint camID0_img_offset,\n" // opencl_kernel_function_name
 		"        uint camID1_img_width, uint camID1_img_height, __global uchar * camID1_img_buf, uint camID1_img_stride, uint camID1_img_offset,\n"
 		"        uint camID2_img_width, uint camID2_img_height, __global uchar * camID2_img_buf, uint camID2_img_stride, uint camID2_img_offset,\n"
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
@@ -303,118 +252,67 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 		"  uint4 pRGB_out;\n"
 		"  camID0_img_buf += camID0_img_offset + gy * camID0_img_stride + (gx >> 1);\n"
 		"  uchar camIdSelect = *(__global uchar *)camID0_img_buf;\n"
-		"  __global float * bandWt_arr = (__global float *)(band_weights_buf + band_weights_buf_offset);"
 		"  uint4 pRGBX_in; float4 weights;\n"
 		"  uint Xmask = 0xff000000;\n"
 		"  float16 fa = 0;\n"
-		"  float bandWt;\n"
-		"  if(camIdSelect < 31) {\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camIdSelect) * ip_stride) + (gx << 4));\n"						//band * bandHeight
-			"    bandWt = bandWt_arr[%d];\n"	// band
-			"    fa.s0123 += (bandWt * amd_unpack(pRGBX_in.s0));\n"
-			"    fa.s4567 += (bandWt * amd_unpack(pRGBX_in.s1));\n"
-			"    fa.s89AB += (bandWt * amd_unpack(pRGBX_in.s2));\n"
-			"    fa.sCDEF += (bandWt * amd_unpack(pRGBX_in.s3));\n"
-			, band * bandHeight, band);
-		opencl_kernel_code += item;
-	}			
-	opencl_kernel_code +=
-		"    }\n"
-		"    else if(camIdSelect > 31) {\n"
+		"  if(camIdSelect < 31) {\n"
+		"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx << 4));\n"
+		"    fa.s0123 += amd_unpack(pRGBX_in.s0);\n"
+		"    fa.s4567 += amd_unpack(pRGBX_in.s1);\n"
+		"    fa.s89AB += amd_unpack(pRGBX_in.s2);\n"
+		"    fa.sCDEF += amd_unpack(pRGBX_in.s3);\n"
+		"  }\n"
+		"  else if(camIdSelect > 31) {\n"
 		"    camID1_img_buf += camID1_img_offset + gy * camID1_img_stride + ((gx >> 1) << 1);\n"
 		"    ushort camID_struct = *(__global ushort *)camID1_img_buf;\n"
-		"    ushort camId = camID_struct & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"    bandWt = bandWt_arr[%d];\n"																										// band
-			"    weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"    weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"    weights *= weight_mul_factor; weights *= bandWt;\n"
-			"    fa.s0123 += weights.s0 * amd_unpack(pRGBX_in.s0); fa.s4567 += weights.s1 * amd_unpack(pRGBX_in.s1); fa.s89AB += weights.s2 * amd_unpack(pRGBX_in.s2); fa.sCDEF += weights.s3 * amd_unpack(pRGBX_in.s3);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
+		"    ushort camId = camID_struct & 0x1f;\n"
+		"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"    weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"    weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"    weights *= weight_mul_factor;\n"
+		"    fa.s0123 += weights.s0 * amd_unpack(pRGBX_in.s0); fa.s4567 += weights.s1 * amd_unpack(pRGBX_in.s1); fa.s89AB += weights.s2 * amd_unpack(pRGBX_in.s2); fa.sCDEF += weights.s3 * amd_unpack(pRGBX_in.s3);\n"
 		"    \n"
-		"    camId = (camID_struct >> 5) & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"    bandWt = bandWt_arr[%d];\n"																										// band
-			"    weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"    weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"    weights *= weight_mul_factor; weights *= bandWt;\n"
-			"    fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
+		"    camId = (camID_struct >> 5) & 0x1f;\n"
+		"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"    weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"    weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"    weights *= weight_mul_factor;\n"
+		"    fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
 		"    if(camIdSelect > 128) {\n"
-		"      camId = (camID_struct >> 10) & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"      bandWt = bandWt_arr[%d];\n"																										// band
-			"      weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"      weights *= weight_mul_factor; weights *= bandWt;\n"
-			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
-		"      }\n\n"
-		"      if(camIdSelect > 129) {\n"
+		"      camId = (camID_struct >> 10) & 0x1f;\n"
+		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"      weights *= weight_mul_factor;\n"
+		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+		"    }\n\n"
+		"    if(camIdSelect > 129) {\n"
 		"      camID2_img_buf += camID2_img_offset + gy * camID2_img_stride + ((gx >> 1) << 1);\n"
 		"      camID_struct = *(__global ushort *)camID2_img_buf;\n"
-		"      camId = camID_struct & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"      bandWt = bandWt_arr[%d];\n"																											// band
-			"      weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"      weights *= weight_mul_factor; weights *= bandWt;\n"
-			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
-		"      }\n\n"
-		"      if(camIdSelect > 130) {\n"
-		"      camId = (camID_struct >> 5) & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"      bandWt = bandWt_arr[%d];\n"																											// band
-			"      weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"      weights *= weight_mul_factor; weights *= bandWt;\n"
-			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
-		"      }\n\n"
-		"      if(camIdSelect > 131) {\n"
-		"      camId = (camID_struct >> 10) & 0x1f;\n";
-	for (int band = 0; band < numBands; band++) {
-		sprintf(item,
-			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((%d + gy + op_height * camId) * ip_stride) + (gx << 4));\n"					//band * bandHeight
-			"      bandWt = bandWt_arr[%d];\n"																											// band
-			"      weights = convert_float4(*(__global uchar4 *) (%d + wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"	//band * bandHeight
-			"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
-			"      weights *= weight_mul_factor; weights *= bandWt;\n"
-			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-			, band * bandHeight, band, band * bandHeight);
-		opencl_kernel_code += item;
-	}
-	opencl_kernel_code +=
-		"      }\n"
-		"    }\n\n";
+		"      camId = camID_struct & 0x1f;\n"
+		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"      weights *= weight_mul_factor;\n"
+		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+		"    }\n\n"
+		"    if(camIdSelect > 130) {\n"
+		"      camId = (camID_struct >> 5) & 0x1f;\n"
+		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"      weights *= weight_mul_factor;\n"
+		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+		"    }\n\n"
+		"    if(camIdSelect > 131) {\n"
+		"      camId = (camID_struct >> 10) & 0x1f;\n"
+		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+		"      weights = select(weights, (float4) 0,(uint4)(camId == 31));\n"
+		"      weights *= weight_mul_factor;\n"
+		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+		"    }\n"
+		"  }\n\n";
 	if (output_format == VX_DF_IMAGE_RGB) {
 		opencl_kernel_code +=
 			"  pRGB_out.s0 = amd_pack(fa.s0124); pRGB_out.s1 = amd_pack(fa.s5689); pRGB_out.s2 = amd_pack(fa.sACDE);\n"
@@ -466,7 +364,7 @@ vx_status merge_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.merge",
 		AMDOVX_KERNEL_STITCHING_MERGE,
 		merge_kernel,
-		8,
+		6,
 		merge_input_validator,
 		merge_output_validator,
 		merge_initialize,
@@ -478,18 +376,123 @@ vx_status merge_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_CODEGEN_CALLBACK, &opencl_codegen_callback_f, sizeof(opencl_codegen_callback_f)));
 
 	// set kernel parameters
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
 
+	return VX_SUCCESS;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Generate data in buffers for merge
+vx_status GenerateMergeBuffers(
+	vx_uint32 numCamera,                  // [in] number of cameras
+	vx_uint32 eqrWidth,                   // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                  // [in] output equirectangular image height
+	const vx_uint32 * validPixelCamMap,   // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_uint32 * paddedPixelCamMap,  // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight] (optional)
+	vx_uint32  camIdStride,               // [in] stride (in bytes) of camId table (image)
+	vx_uint32  camGroup1Stride,           // [in] stride (in bytes) of camGroup1 table (image)
+	vx_uint32  camGroup2Stride,           // [in] stride (in bytes) of camGroup2 table (image)
+	vx_uint8 * camIdBuf,                  // [out] camId table (image)
+	StitchMergeCamIdEntry * camGroup1Buf, // [out] camId Group1 table (image)
+	StitchMergeCamIdEntry * camGroup2Buf  // [out] camId Group2 table (image)
+	)
+{
+	for (vx_uint32 y = 0; y < eqrHeight; y++) {
+		for (vx_uint32 x = 0, xi = 0; x < eqrWidth; x += 8, xi++) {
+			vx_uint32 validMaskFor8Pixels =
+				validPixelCamMap[x + 0] | validPixelCamMap[x + 1] |
+				validPixelCamMap[x + 2] | validPixelCamMap[x + 3] |
+				validPixelCamMap[x + 4] | validPixelCamMap[x + 5] |
+				validPixelCamMap[x + 6] | validPixelCamMap[x + 7];
+			if (paddedPixelCamMap) {
+				validMaskFor8Pixels |=
+					paddedPixelCamMap[x + 0] | paddedPixelCamMap[x + 1] |
+					paddedPixelCamMap[x + 2] | paddedPixelCamMap[x + 3] |
+					paddedPixelCamMap[x + 4] | paddedPixelCamMap[x + 5] |
+					paddedPixelCamMap[x + 6] | paddedPixelCamMap[x + 7];
+			}
+			vx_uint32 count = __popcnt(validMaskFor8Pixels);
+			vx_uint8 camId = 31;
+			vx_uint8 id[6] = { 31, 31, 31, 31, 31, 31 };
+			if (count == 1) {
+				// use two pixel mode with second cam as 31 if not all 8 pixels are from same camera
+				vx_uint32 commonValidMaskFor8Pixels =
+					validPixelCamMap[x + 0] & validPixelCamMap[x + 1] &
+					validPixelCamMap[x + 2] & validPixelCamMap[x + 3] &
+					validPixelCamMap[x + 4] & validPixelCamMap[x + 5] &
+					validPixelCamMap[x + 6] & validPixelCamMap[x + 7];
+				if (paddedPixelCamMap) {
+					commonValidMaskFor8Pixels =
+						(validPixelCamMap[x + 0] & paddedPixelCamMap[x + 0]) &
+						(validPixelCamMap[x + 1] & paddedPixelCamMap[x + 1]) &
+						(validPixelCamMap[x + 2] & paddedPixelCamMap[x + 2]) &
+						(validPixelCamMap[x + 3] & paddedPixelCamMap[x + 3]) &
+						(validPixelCamMap[x + 4] & paddedPixelCamMap[x + 4]) &
+						(validPixelCamMap[x + 5] & paddedPixelCamMap[x + 5]) &
+						(validPixelCamMap[x + 6] & paddedPixelCamMap[x + 6]) &
+						(validPixelCamMap[x + 7] & paddedPixelCamMap[x + 7]);
+				}
+
+				if (commonValidMaskFor8Pixels == 0) {
+					count = 2;
+				}
+			}
+			if (count == 1) {
+				unsigned long bitPos;
+				_BitScanReverse(&bitPos, validMaskFor8Pixels);
+				camId = (vx_uint8)bitPos;
+			}
+			else if (count >= 2) {
+				camId = (vx_uint8)(126 + count);
+				for (vx_uint32 j = 0, k = 0; j < 32 && k < 6; j++) {
+					if (validMaskFor8Pixels & (1 << j)) {
+						id[k++] = j;
+					}
+				}
+			}
+			StitchMergeCamIdEntry group1 = { id[0], id[1], id[2], 0 };
+			StitchMergeCamIdEntry group2 = { id[3], id[4], id[5], 0 };
+			camIdBuf[xi] = camId;
+			camGroup1Buf[xi] = group1;
+			camGroup2Buf[xi] = group2;
+		}
+		validPixelCamMap += eqrWidth;
+		if (paddedPixelCamMap) paddedPixelCamMap += eqrWidth;
+		camIdBuf += camIdStride;
+		camGroup1Buf += (camGroup1Stride >> 1);
+		camGroup2Buf += (camGroup2Stride >> 1);
+	}
+	return VX_SUCCESS;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Generate default merge mask image
+vx_status GenerateDefaultMergeMaskImage(
+	vx_uint32 numCamera,                  // [in] number of cameras
+	vx_uint32 eqrWidth,                   // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                  // [in] output equirectangular image height
+	const vx_uint8 * defaultCamIndex,     // [in] default camera index (255 refers to no camera): size: [eqrWidth * eqrHeight] (optional)
+	vx_uint32  maskStride,                // [in] stride (in bytes) of mask image
+	vx_uint8 * maskBuf                    // [out] mask image buffer: size: [eqrWidth * eqrHeight * numCamera]
+	)
+{
+	vx_uint32 maskPosition = 0;
+	for (vx_uint32 camId = 0; camId < numCamera; camId++) {
+		for (vx_uint32 y = 0, pixelPosition = 0; y < eqrHeight; y++) {
+			for (vx_uint32 x = 0; x < eqrWidth; x++, pixelPosition++) {
+				maskBuf[maskPosition + x] = (defaultCamIndex[pixelPosition] == camId) ? 255 : 0;
+			}
+			maskPosition += maskStride;
+		}
+	}
 	return VX_SUCCESS;
 }

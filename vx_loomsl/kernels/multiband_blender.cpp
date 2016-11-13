@@ -21,8 +21,7 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "kernels.h"
-//#include "blend.h"
+#include "multiband_blender.h"
 
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK multiband_blend_input_validator(vx_node node, vx_uint32 index)
@@ -347,82 +346,111 @@ vx_status multiband_blend_publish(vx_context context)
 	return VX_SUCCESS;
 }
 
-vx_uint32 Compute_StitchBlendArraySize(int width, int height, int num_camera, int num_bands, vx_uint32 offset[])
+//////////////////////////////////////////////////////////////////////
+// Calculate buffer sizes and generate data in buffers for blend
+//   CalculateLargestBlendBufferSizes  - useful when reinitialize is enabled
+//   CalculateSmallestBlendBufferSizes - useful when reinitialize is disabled
+//   GenerateBlendBuffers              - generate tables
+
+vx_uint32 CalculateLargestBlendBufferSizes(
+	vx_uint32 numCamera,                    // [in] number of cameras
+	vx_uint32 eqrWidth,                     // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                    // [in] output equirectangular image height
+	vx_uint32 numBands,						// [in] number of bands in multiband blend
+	vx_size * blendOffsetIntoBuffer,        // [out] individual level offset table: size [numBands]
+	vx_size * blendOffsetEntryCount         // [out] number of entries needed by blend offset table
+	)
 {
-	vx_uint32 totalCount = 0;
-	for (int level = 0; level < num_bands; level++){
-		offset[level] = 1 + totalCount;
-		vx_uint32 count = 1 + (((width >> level) + 63) >> 6) * (((height >> level) + 15) >> 4) * num_camera;
+	vx_uint32 totalCount = 0, levelRound = 0;
+	for (vx_uint32 level = 0; level < numBands; level++) {
+		blendOffsetIntoBuffer[level] = 1 + totalCount;
+		vx_uint32 count = 1 + ((((eqrWidth + levelRound) >> level) + 63) >> 6) * ((((eqrHeight + levelRound) >> level) + 15) >> 4) * numCamera;
 		totalCount += count;
+		levelRound = (levelRound << 1) | 1;
 	}
-	return totalCount;
-}
-
-// helper function for calculating offset tables for blend
-vx_status Compute_StitchMultiBandCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array blendOffs, int numCameras, int numBands, int width, int height)
-{
-	vx_uint32 *array_offset = new vx_uint32[numBands];
-	vx_rectangle_t *pRoi_rect = new vx_rectangle_t[numCameras];
-	Compute_StitchBlendArraySize(width, height, numCameras, numBands, array_offset);
-	vx_size max_size;
-	StitchBlendValidEntry blend_entry = { 0 };
-	ERROR_CHECK_STATUS(vxQueryArray(blendOffs, VX_ARRAY_ATTRIBUTE_CAPACITY, &max_size, sizeof(max_size)));
-	ERROR_CHECK_STATUS(vxAddArrayItems(blendOffs, max_size, &blend_entry, 0));		// stride 0 will make all the elements initialized to 0
-	StitchBlendValidEntry *pBlendArr = nullptr;
-	vx_size stride_blend_arr = sizeof(StitchBlendValidEntry);
-	ERROR_CHECK_STATUS(vxAccessArrayRange(blendOffs, 0, max_size, &stride_blend_arr, (void **)&pBlendArr, VX_READ_AND_WRITE));
-	int align = (1 << (numBands-1));
-	int border = align * 2;			// to make sure all desired pixels are filtered
-	vx_int32 x1, y1, x2, y2;
-	for (int i = 0; i < numCameras; i++){
-		vx_rectangle_t *pRect = pValid_roi + i;
-		x1 = pRect->start_x, x2 = pRect->end_x;
-		y1 = pRect->start_y, y2 = pRect->end_y;
-		x1 -= border; y1 -= border;
-		x2 += border; y2 += border;
-		if (x1 < 0) x1 = 0;
-		if (y1 < 0) y1 = 0;
-		if (x2 >= width) x2 = width - 1;
-		if (y2 >= height) y2 = height - 1;
-		x1 = x1 & ~(align - 1);
-		if (x1 < 0) x1 = 0;
-		y1 = y1 & ~(align - 1);
-		if (y1 < 0) y1 = 0;
-		x2 = (x2 + align - 1) & ~(align - 1);
-		y2 = (y2 + align - 1) & ~(align - 1);
-		if (x2 >= width) x2 = width - 1;
-		if (y2 >= height) y2 = height - 1;
-		pRoi_rect[i] = { x1, y1, x2, y2 };
-	}
-
-	for (int level = 0; level < numBands; level++){
-		StitchBlendValidEntry *entry_start = &pBlendArr[array_offset[level] - 1];
-		StitchBlendValidEntry *entry = entry_start+1;
-		int num_entries = 0;
-		for (int i = 0; i < numCameras; i++){
-			vx_rectangle_t *pRect = pRoi_rect + i;
-			x1 = pRect->start_x, x2 = pRect->end_x;
-			y1 = pRect->start_y, y2 = pRect->end_y;
-			x1 >>= level, y1 >>= level;
-			x2 >>= level, y2 >>= level;
-			for (int y = y1; y < y2; y += 16){
-				for (int x = x1 & ~15; x < x2; x += 64){
-					entry->camId = i;
-					entry->dstX = x;
-					entry->dstY = y;
-					entry->end_x = ((x + 63) > x2) ? (x2 - x) : 63;
-					entry->end_y = ((y + 15) > y2) ? (y2 - y) : 15;
-					entry->start_x = (x < x1) ? (x1 - x) : 0;
-					entry->start_y = 0;
-					entry++;
-				}
-			}
-		}
-		*((vx_uint32 *)entry_start) = (vx_uint32)(entry - entry_start - 1);
-	}
-	ERROR_CHECK_STATUS(vxCommitArrayRange(blendOffs, 0, max_size, pBlendArr));
-	delete array_offset;
-	delete pRoi_rect;
+	*blendOffsetEntryCount = totalCount;
 	return VX_SUCCESS;
 }
 
+vx_uint32 CalculateSmallestBlendBufferSizes(
+	vx_uint32 numCamera,                           // [in] number of cameras
+	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
+	vx_uint32 numBands,						       // [in] number of bands in multiband blend
+	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	vx_size * blendOffsetIntoBuffer,               // [out] individual level offset table: size [numBands]
+	vx_size * blendOffsetEntryCount                // [out] number of entries needed by blend offset table
+	)
+{
+	vx_uint32 totalCount = 0;
+	vx_int32 align = (1 << (numBands - 1)), border = align * 2;
+	for (vx_uint32 level = 0; level < numBands; level++) {
+		blendOffsetIntoBuffer[level] = 1 + totalCount;
+		vx_uint32 entryCount = 0;
+		vx_int32 levelAlign = (1 << level) - 1;
+		for (vx_uint32 camId = 0; camId < numCamera; camId++) {
+			vx_int32 start_x = overlapPadded[camId][camId].start_x, end_x = overlapPadded[camId][camId].end_x;
+			vx_int32 start_y = overlapPadded[camId][camId].start_y, end_y = overlapPadded[camId][camId].end_y;
+			start_x = (std::max(0, start_x - border) & ~(align - 1)) >> level;
+			start_y = (std::max(0, start_y - border) & ~(align - 1)) >> level;
+			end_x = (std::min((vx_int32)eqrWidth, (end_x + border + align - 1) & ~(align - 1)) + levelAlign) >> level;
+			end_y = (std::min((vx_int32)eqrHeight, (end_y + border + align - 1) & ~(align - 1)) + levelAlign) >> level;
+			for (int y = start_y; y < end_y; y += 16) {
+				for (int x = start_x & ~15; x < end_x; x += 64) {
+					entryCount++;
+				}
+			}
+		}
+		totalCount += 1 + entryCount;
+	}
+	*blendOffsetEntryCount = totalCount;
+	return VX_SUCCESS;
+}
+
+vx_uint32 GenerateBlendBuffers(
+	vx_uint32 numCamera,                             // [in] number of cameras
+	vx_uint32 eqrWidth,                              // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                             // [in] output equirectangular image height
+	vx_uint32 numBands,						         // [in] number of bands in multiband blend
+	const vx_uint32 * validPixelCamMap,              // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_uint32 * paddedPixelCamMap,             // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapPadded,    // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * paddedCamOverlapInfo,          // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_size * blendOffsetIntoBuffer,           // [in] individual level offset table: size [numBands]
+	vx_size blendOffsetTableSize,                    // [in] size of blend offset table
+	StitchBlendValidEntry * blendOffsetTable         // [out] blend offset table
+	)
+{
+	vx_int32 align = (1 << (numBands - 1)), border = align * 2;
+	for (vx_uint32 level = 0; level < numBands; level++) {
+		StitchBlendValidEntry * entryBuf = &blendOffsetTable[blendOffsetIntoBuffer[level]];
+		vx_uint32 entryCount = 0;
+		vx_int32 levelAlign = (1 << level) - 1;
+		for (vx_uint32 camId = 0; camId < numCamera; camId++) {
+			vx_int32 start_x = overlapPadded[camId][camId].start_x, end_x = overlapPadded[camId][camId].end_x;
+			vx_int32 start_y = overlapPadded[camId][camId].start_y, end_y = overlapPadded[camId][camId].end_y;
+			start_x = (std::max(0, start_x - border) & ~(align - 1)) >> level;
+			start_y = (std::max(0, start_y - border) & ~(align - 1)) >> level;
+			end_x = (std::min((vx_int32)eqrWidth, (end_x + border + align - 1) & ~(align - 1)) + levelAlign) >> level;
+			end_y = (std::min((vx_int32)eqrHeight, (end_y + border + align - 1) & ~(align - 1)) + levelAlign) >> level;
+			for (int y = start_y; y < end_y; y += 16) {
+				for (int x = start_x & ~15; x < end_x; x += 64) {
+					StitchBlendValidEntry * entry = &entryBuf[entryCount++];
+					entry->camId = camId;
+					entry->dstX = x;
+					entry->dstY = y;
+					entry->last_x = std::min(64, end_x - x) - 1;
+					entry->last_y = std::min(16, end_y - y) - 1;
+					entry->skip_x = (x < start_x) ? (start_x - x) : 0;
+					entry->skip_y = 0;
+				}
+			}
+		}
+		*((vx_uint64 *)&entryBuf[-1]) = entryCount;
+	}
+
+	return VX_SUCCESS;
+}

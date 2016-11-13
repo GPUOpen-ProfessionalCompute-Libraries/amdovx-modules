@@ -74,10 +74,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="help.cpp" />
     <ClCompile Include="loom_shell.cpp" />
+    <ClCompile Include="loom_shell_util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="loom_shell.h" />
+    <ClInclude Include="loom_shell_util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

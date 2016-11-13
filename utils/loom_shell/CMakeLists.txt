@@ -30,7 +30,9 @@ include_directories(${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include ${CMAKE_SOURC
 
 
 list(APPEND SOURCES
+	loom_shell_util.cpp
 	loom_shell.cpp
+	help.cpp
 )
 
 add_executable(loom_shell ${SOURCES})

@@ -21,10 +21,7 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "kernels.h"
-#include <CL/cl.h>
-#include <stdio.h>
-#include <algorithm>
+#include "warp.h"
 
 #define WRITE_LUMA_AS_A 1
 
@@ -763,6 +760,151 @@ vx_status warp_publish(vx_context context)
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
+
+	return VX_SUCCESS;
+}
+
+//////////////////////////////////////////////////////////////////////
+// Calculate buffer sizes and generate data in buffers for warp
+//   CalculateLargestWarpBufferSizes  - useful when reinitialize is enabled
+//   CalculateSmallestWarpBufferSizes - useful when reinitialize is disabled
+//   GenerateWarpBuffers              - generate tables
+
+vx_status CalculateLargestWarpBufferSizes(
+	vx_uint32 numCamera,                  // [in] number of cameras
+	vx_uint32 eqrWidth,                   // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                  // [in] output equirectangular image height
+	vx_size * warpMapEntryCount           // [out] number of entries needed by warp map table
+	)
+{
+	// one entry for every eight consecutive pixels one in every camera
+	*warpMapEntryCount = ((eqrWidth + 7) >> 3) * eqrHeight * numCamera;
+	return VX_SUCCESS;
+}
+
+vx_status CalculateSmallestWarpBufferSizes(
+	vx_uint32 numCamera,                         // [in] number of cameras
+	vx_uint32 eqrWidth,                          // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                         // [in] output equirectangular image height
+	const vx_uint32 * validPixelCamMap,          // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_uint32 * paddedPixelCamMap,         // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight]
+	vx_size * warpMapEntryCount                  // [out] number of entries needed by warp map table
+	)
+{
+	vx_uint32  entryCount = 0;
+	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < eqrHeight; y_eqr++)
+	{
+		for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr += 8, pixelPosition += 8)
+		{
+			// get camera use mask for consecutive 8 pixels from current pixel position
+			vx_uint32 validMaskFor8Pixels =
+				validPixelCamMap[pixelPosition + 0] | validPixelCamMap[pixelPosition + 1] |
+				validPixelCamMap[pixelPosition + 2] | validPixelCamMap[pixelPosition + 3] |
+				validPixelCamMap[pixelPosition + 4] | validPixelCamMap[pixelPosition + 5] |
+				validPixelCamMap[pixelPosition + 6] | validPixelCamMap[pixelPosition + 7];
+			if (paddedPixelCamMap) {
+				validMaskFor8Pixels |=
+					paddedPixelCamMap[pixelPosition + 0] | paddedPixelCamMap[pixelPosition + 1] |
+					paddedPixelCamMap[pixelPosition + 2] | paddedPixelCamMap[pixelPosition + 3] |
+					paddedPixelCamMap[pixelPosition + 4] | paddedPixelCamMap[pixelPosition + 5] |
+					paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
+			}
+			// each bit in validMaskFor8Pixels indicates that a warpMapEntry is needed for that camera
+			entryCount += __popcnt(validMaskFor8Pixels);
+		}
+	}
+	*warpMapEntryCount = entryCount;
+
+	return VX_SUCCESS;
+}
+
+vx_status GenerateWarpBuffers(
+	vx_uint32 numCamera,                         // [in] number of cameras
+	vx_uint32 eqrWidth,                          // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                         // [in] output equirectangular image height
+	const vx_uint32 * validPixelCamMap,          // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_uint32 * paddedPixelCamMap,         // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight]
+	const StitchCoord2dFloat * camSrcMap,        // [in] camera coordinate mapping: size: [numCamera * eqrWidth * eqrHeight] (optional)
+	vx_uint32 numCameraColumns,                  // [in] number of camera columns
+	vx_uint32 camWidth,                          // [in] input camera image width
+	vx_size   mapTableSize,                      // [in] size of warp/valid map table, in terms of number of entries
+	StitchValidPixelEntry * validMap,            // [in] valid map table
+	StitchWarpRemapEntry * warpMap,              // [in] warp map table
+	vx_size * mapEntryCount                      // [out] number of entries added to warp/valid map table
+	)
+{
+	vx_uint32  entryCount = 0;
+	for (vx_uint32 camId = 0; camId < numCamera; camId++)
+	{
+		float xSrcOffset = (float)((camId % numCameraColumns) * camWidth) * 8.0f;
+		vx_uint32 camMapBit = 1 << camId;
+		const StitchCoord2dFloat * camSrcMapCurrent = camSrcMap + camId * eqrWidth * eqrHeight;
+		for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < eqrHeight; y_eqr++)
+		{
+			for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr += 8, pixelPosition += 8)
+			{
+				// get camera use mask for consecutive 8 pixels from current pixel position
+				vx_uint32 validMaskFor8Pixels =
+					validPixelCamMap[pixelPosition + 0] | validPixelCamMap[pixelPosition + 1] |
+					validPixelCamMap[pixelPosition + 2] | validPixelCamMap[pixelPosition + 3] |
+					validPixelCamMap[pixelPosition + 4] | validPixelCamMap[pixelPosition + 5] |
+					validPixelCamMap[pixelPosition + 6] | validPixelCamMap[pixelPosition + 7];
+				if (paddedPixelCamMap) {
+					validMaskFor8Pixels |=
+						paddedPixelCamMap[pixelPosition + 0] | paddedPixelCamMap[pixelPosition + 1] |
+						paddedPixelCamMap[pixelPosition + 2] | paddedPixelCamMap[pixelPosition + 3] |
+						paddedPixelCamMap[pixelPosition + 4] | paddedPixelCamMap[pixelPosition + 5] |
+						paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
+				}
+				if (validMaskFor8Pixels & camMapBit)
+				{
+					if (entryCount < mapTableSize)
+					{
+						// get mask to check if all pixels are valid and set validMap entry
+						vx_uint32 allValidMaskFor8Pixels;
+						if (paddedPixelCamMap) {
+							allValidMaskFor8Pixels =
+								(validPixelCamMap[pixelPosition + 0] & paddedPixelCamMap[pixelPosition + 0]) &
+								(validPixelCamMap[pixelPosition + 1] & paddedPixelCamMap[pixelPosition + 1]) &
+								(validPixelCamMap[pixelPosition + 2] & paddedPixelCamMap[pixelPosition + 2]) &
+								(validPixelCamMap[pixelPosition + 3] & paddedPixelCamMap[pixelPosition + 3]) &
+								(validPixelCamMap[pixelPosition + 4] & paddedPixelCamMap[pixelPosition + 4]) &
+								(validPixelCamMap[pixelPosition + 5] & paddedPixelCamMap[pixelPosition + 5]) &
+								(validPixelCamMap[pixelPosition + 6] & paddedPixelCamMap[pixelPosition + 6]) &
+								(validPixelCamMap[pixelPosition + 7] & paddedPixelCamMap[pixelPosition + 7]);
+						}
+						else {
+							allValidMaskFor8Pixels =
+								validPixelCamMap[pixelPosition + 0] & validPixelCamMap[pixelPosition + 1] &
+								validPixelCamMap[pixelPosition + 2] & validPixelCamMap[pixelPosition + 3] &
+								validPixelCamMap[pixelPosition + 4] & validPixelCamMap[pixelPosition + 5] &
+								validPixelCamMap[pixelPosition + 6] & validPixelCamMap[pixelPosition + 7];
+						}
+						StitchValidPixelEntry validEntry = { 0 };
+						validEntry.camId = camId;
+						validEntry.allValid = (allValidMaskFor8Pixels & camMapBit) ? 1 : 0;
+						validEntry.dstX = x_eqr >> 3;
+						validEntry.dstY = y_eqr;
+						validMap[entryCount] = validEntry;
+						// set warpMap entry: NOTE: assumes that current structure of StitchWarpRemapEntry to be consetive (x,y) value pairs
+						const StitchCoord2dFloat * srcEntry = &camSrcMapCurrent[pixelPosition];
+						vx_uint16 * warpEntry = (vx_uint16 *)&warpMap[entryCount];
+						for (vx_uint32 i = 0; i < 8; i++, warpEntry += 2, srcEntry++) {
+							warpEntry[0] = (srcEntry->x < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->x * 8.0f + 0.5f + xSrcOffset);
+							warpEntry[1] = (srcEntry->y < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->y * 8.0f + 0.5f);
+						}
+					}
+					entryCount++;
+				}
+			}
+		}
+	}
+	*mapEntryCount = entryCount;
+
+	// check for buffer overflow error condition
+	if (entryCount > mapTableSize) {
+		return VX_ERROR_NOT_SUFFICIENT;
+	}
 
 	return VX_SUCCESS;
 }

@@ -18,9 +18,18 @@
     <ClCompile Include="loom_shell.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="loom_shell_util.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="help.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="loom_shell.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="loom_shell_util.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
