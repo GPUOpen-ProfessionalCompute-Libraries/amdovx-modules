@@ -650,14 +650,19 @@ vx_status saveBufferToImage(cl_mem mem, const char * fileName, vx_df_image buffe
 vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uint32 num_rows, vx_uint32 num_cols, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height, vx_uint32 stride_in_bytes)
 {
 	const char * fileNameExt = fileName + strlen(fileName) - 4;
-	if (buffer_format != VX_DF_IMAGE_RGB || !!_stricmp(fileNameExt, ".bmp")) return Error("ERROR: loadBufferFromImage/loadBufferFromMultipleImages: supports only RGB images and BMP files");
+	if ((buffer_format != VX_DF_IMAGE_RGB && buffer_format != VX_DF_IMAGE_RGBX) || !!_stricmp(fileNameExt, ".bmp")) {
+		return Error("ERROR: loadBufferFromImage/loadBufferFromMultipleImages: supports only RGB images and BMP files");
+	}
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
 	vx_uint32 size = globalClMem2SizeMap[mem];
 	cl_int err;
 	unsigned char * img = (unsigned char *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE, 0, size, 0, NULL, NULL, &err);
 	if (err) return Error("ERROR: clEnqueueMapBuffer() failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
-	if (stride_in_bytes == 0) stride_in_bytes = buffer_width * 3;
+	if (stride_in_bytes == 0) {
+		if (buffer_format == VX_DF_IMAGE_RGBX) stride_in_bytes = buffer_width * 4;
+		else stride_in_bytes = buffer_width * 3;
+	}
 	vx_uint32 width = buffer_width / num_cols;
 	vx_uint32 height = buffer_height / num_rows;
 	unsigned char * buf = nullptr;
@@ -665,32 +670,62 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 		for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
 			char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
 			FILE * fp = fopen(bmpFileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", bmpFileName);
-			unsigned short bmpHeader[54 / 2];
-			fread(bmpHeader, 1, sizeof(bmpHeader), fp);
-			if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
-				return Error("ERROR: The BMP should be %dx%d: got %dx%d\n", width, height, bmpHeader[9], bmpHeader[11]);
+			if (buffer_format == VX_DF_IMAGE_RGB) {
+				unsigned short bmpHeader[54 / 2];
+				fread(bmpHeader, 1, sizeof(bmpHeader), fp);
+				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
+					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
+				}
+				vx_uint32 size = (bmpHeader[2] << 16) + bmpHeader[1] - bmpHeader[5];
+				if (bmpHeader[0] != 0x4d42 || bmpHeader[5] != 54 || bmpHeader[13] != 1 || bmpHeader[14] != 24 ||
+					((size != width * height * 3) && (size != (width * height * 3 + 1)) && (size != (width * height * 3 + 2))))
+				{
+					return Error("ERROR: The BMP format is not supported or dimensions doesn't match buffer size in %s\n", bmpFileName);
+				}
+				if (!buf) { buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3); }
+				for (vx_uint32 y = 0; y < height; y++) {
+					fread(buf, 1, width * 3, fp);
+					unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 3, *p = buf;
+					for (vx_uint32 x = 0; x < width; x++, p += 3, q += 3) {
+						q[0] = p[2];
+						q[1] = p[1];
+						q[2] = p[0];
+					}
+				}
 			}
-			vx_uint32 size = (bmpHeader[2] << 16) + bmpHeader[1] - bmpHeader[5];
-			if (bmpHeader[0] != 19778 || bmpHeader[5] != 54 || 
-				((size != width * height * 3) && (size != (width * height * 3 + 2))))
-			{
-				return Error("ERROR: The BMP format is not supported or dimensions doesn't match buffer size\n");
-			}
-			if (!buf) { buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3); }
-			for (vx_uint32 y = 0; y < height; y++) {
-				fread(buf, 1, width * 3, fp);
-				unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 3, *p = buf;
-				for (vx_uint32 x = 0; x < width; x++, p += 3, q += 3) {
-					q[0] = p[2];
-					q[1] = p[1];
-					q[2] = p[0];
+			else if (buffer_format == VX_DF_IMAGE_RGBX) {
+				unsigned short bmpHeader[122 / 2];
+				fread(bmpHeader, 1, 54, fp);
+				if (bmpHeader[5] == 122)
+					fread(&bmpHeader[54 / 2], 1, 122 - 54, fp);
+				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
+					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
+				}
+				vx_uint32 size = (bmpHeader[2] << 16) + bmpHeader[1] - bmpHeader[5];
+				if (bmpHeader[0] != 0x4d42 || bmpHeader[13] != 1 || bmpHeader[14] != 32 || (size != width * height * 4)) {
+					return Error("ERROR: The BMP format is not supported or dimensions doesn't match buffer size in %s\n", bmpFileName);
+				}
+				if ((bmpHeader[5] != 54 && bmpHeader[5] != 122) || (bmpHeader[5] == 122 && bmpHeader[27] != 0x00ff)) {
+					return Error("ERROR: The BMP format is not supported in %s\n", bmpFileName);
+				}
+				for (vx_uint32 y = 0; y < height; y++) {
+					unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 4;
+					fread(q, 1, width * 4, fp);
+					if (bmpHeader[27] != 0x00ff) {
+						// convert BGRA to RGBA
+						for (vx_uint32 x = 0; x < width; x++) {
+							vx_uint32 color = *(vx_uint32 *)&q[x << 2];
+							color = (color & 0xff00ff00) | ((color & 0x00ff0000) >> 16) | ((color & 0x000000ff) << 16);
+							*(vx_uint32 *)&q[x << 2] = color;
+						}
+					}
 				}
 			}
 			fclose(fp);
 			Message("OK: loaded %s\n", bmpFileName);
 		}
 	}
-	delete[] buf;
+	if(buf) delete[] buf;
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
@@ -700,42 +735,118 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint32 num_rows, vx_uint32 num_cols, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height, vx_uint32 stride_in_bytes)
 {
 	const char * fileNameExt = fileName + strlen(fileName) - 4;
-	if (buffer_format != VX_DF_IMAGE_RGB || !!_stricmp(fileNameExt, ".bmp")) return Error("ERROR: saveBufferToImage/saveBufferToMultipleImages: supports only RGB images and BMP files");
+	if ((buffer_format != VX_DF_IMAGE_RGB && buffer_format != VX_DF_IMAGE_RGBX && buffer_format != VX_DF_IMAGE_UYVY && buffer_format != VX_DF_IMAGE_YUYV) || !!_stricmp(fileNameExt, ".bmp")) {
+		return Error("ERROR: saveBufferToImage/saveBufferToMultipleImages: supports only RGB images and BMP files");
+	}
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
 	vx_uint32 size = globalClMem2SizeMap[mem];
 	cl_int err;
 	unsigned char * img = (unsigned char *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, size, 0, NULL, NULL, &err);
 	if (err) return Error("ERROR: clEnqueueMapBuffer() failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
-	if (stride_in_bytes == 0) stride_in_bytes = buffer_width * 3;
+	if (stride_in_bytes == 0) {
+		if (buffer_format == VX_DF_IMAGE_RGBX) stride_in_bytes = buffer_width * 4;
+		else if (buffer_format == VX_DF_IMAGE_UYVY || buffer_format == VX_DF_IMAGE_YUYV) stride_in_bytes = buffer_width * 2;
+		else stride_in_bytes = buffer_width * 3;
+	}
 	vx_uint32 width = buffer_width / num_cols;
 	vx_uint32 height = buffer_height / num_rows;
-	unsigned char * buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3);
-	for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
-		for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
-			char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
-			FILE * fp = fopen(bmpFileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", bmpFileName);
-			vx_uint32 size = 3 * width * height;
-			short bmpHeader[54 / 2] = {
-				19778, (short)((size + 54) & 0xffff), (short)((size + 54) >> 16), 0, 0, 54, 0, 40, 0,
-				(short)width, 0, (short)height, 0, 1, 24, 0, 0,
-				(short)(size & 0xffff), (short)(size >> 16), 0, 0, 0, 0, 0, 0, 0, 0
-			};
-			fwrite(bmpHeader, 1, sizeof(bmpHeader), fp);
-			for (vx_uint32 y = 0; y < height; y++) {
-				unsigned char * p = img + (height * row + height - 1 - y)*stride_in_bytes + column * width * 3, *q = buf;
-				for (vx_uint32 x = 0; x < width; x++, p += 3, q += 3) {
-					q[0] = p[2];
-					q[1] = p[1];
-					q[2] = p[0];
+	if (buffer_format == VX_DF_IMAGE_RGB) {
+		unsigned char * buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3);
+		for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
+			for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
+				char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
+				FILE * fp = fopen(bmpFileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", bmpFileName);
+				vx_uint32 size = 3 * width * height;
+				short bmpHeader[54 / 2] = {
+					0x4d42, (short)((size + 54) & 0xffff), (short)((size + 54) >> 16), 0, 0, 54, 0, 40, 0,
+					(short)width, 0, (short)height, 0, 1, 24, 0, 0,
+					(short)(size & 0xffff), (short)(size >> 16), 0, 0, 0, 0, 0, 0, 0, 0
+				};
+				fwrite(bmpHeader, 1, sizeof(bmpHeader), fp);
+				for (vx_uint32 y = 0; y < height; y++) {
+					unsigned char * p = img + (height * row + height - 1 - y)*stride_in_bytes + column * width * 3, *q = buf;
+					for (vx_uint32 x = 0; x < width; x++, p += 3, q += 3) {
+						q[0] = p[2];
+						q[1] = p[1];
+						q[2] = p[0];
+					}
+					fwrite(buf, 1, width * 3, fp);
 				}
-				fwrite(buf, 1, width * 3, fp);
+				fclose(fp);
+				Message("OK: created %s\n", bmpFileName);
 			}
-			fclose(fp);
-			Message("OK: created %s\n", bmpFileName);
+		}
+		delete[] buf;
+	}
+	else if (buffer_format == VX_DF_IMAGE_RGBX) {
+		for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
+			for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
+				char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
+				FILE * fp = fopen(bmpFileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", bmpFileName);
+				vx_uint32 size = 4 * width * height;
+				short bmpHeader[122 / 2] = {
+					0x4d42, (short)((size + 122) & 0xffff), (short)((size + 122) >> 16), 0, 0, 122, 0, 108, 0,
+					(short)width, 0, (short)height, 0, 1, 32, 3, 0,
+					(short)(size & 0xffff), (short)(size >> 16), 0, 0, 0, 0, 0, 0, 0, 0,
+					0x00ff, 0x0000, (short)0xff00, 0x0000, 0x0000, 0x00ff, 0x0000, (short)0xff00,
+					0x6e20, 0x5769, 0
+				};
+				fwrite(bmpHeader, 1, sizeof(bmpHeader), fp);
+				for (vx_uint32 y = 0; y < height; y++) {
+					unsigned char * p = img + (height * row + height - 1 - y)*stride_in_bytes + column * width * 4;
+					fwrite(p, 1, width * 4, fp);
+				}
+				fclose(fp);
+				Message("OK: created %s\n", bmpFileName);
+			}
 		}
 	}
-	delete[] buf;
+	else if (buffer_format == VX_DF_IMAGE_UYVY || buffer_format == VX_DF_IMAGE_YUYV) {
+		unsigned char * buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3);
+		for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
+			for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
+				char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
+				FILE * fp = fopen(bmpFileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", bmpFileName);
+				vx_uint32 size = 3 * width * height;
+				short bmpHeader[54 / 2] = {
+					0x4d42, (short)((size + 54) & 0xffff), (short)((size + 54) >> 16), 0, 0, 54, 0, 40, 0,
+					(short)width, 0, (short)height, 0, 1, 24, 0, 0,
+					(short)(size & 0xffff), (short)(size >> 16), 0, 0, 0, 0, 0, 0, 0, 0
+				};
+				fwrite(bmpHeader, 1, sizeof(bmpHeader), fp);
+				for (vx_uint32 y = 0; y < height; y++) {
+					unsigned char * p = img + (height * row + height - 1 - y)*stride_in_bytes + column * width * 2, *q = buf;
+					if (buffer_format == VX_DF_IMAGE_UYVY) {
+						for (vx_uint32 x = 0; x < width; x += 2, p += 4, q += 6) {
+							vx_int32 u = p[0] - 128, y0 = p[1], v = p[2] - 128, y1 = p[3];
+							q[0] = (unsigned char)max(0, min(255, y0 + (1.770f * u)));
+							q[1] = (unsigned char)max(0, min(255, y0 - (0.344f * u) - (0.714f * v)));
+							q[2] = (unsigned char)max(0, min(255, y0 + (1.403f * v)));
+							q[3] = (unsigned char)max(0, min(255, y1 + (1.770f * u)));
+							q[4] = (unsigned char)max(0, min(255, y1 - (0.344f * u) - (0.714f * v)));
+							q[5] = (unsigned char)max(0, min(255, y1 + (1.403f * v)));
+						}
+					}
+					else {
+						for (vx_uint32 x = 0; x < width; x += 2, p += 4, q += 6) {
+							vx_int32 u = p[1] - 128, y0 = p[0], v = p[3] - 128, y1 = p[2];
+							q[0] = (unsigned char)max(0, min(255, y0 + (1.770f * u)));
+							q[1] = (unsigned char)max(0, min(255, y0 - (0.344f * u) - (0.714f * v)));
+							q[2] = (unsigned char)max(0, min(255, y0 + (1.403f * v)));
+							q[3] = (unsigned char)max(0, min(255, y1 + (1.770f * u)));
+							q[4] = (unsigned char)max(0, min(255, y1 - (0.344f * u) - (0.714f * v)));
+							q[5] = (unsigned char)max(0, min(255, y1 + (1.403f * v)));
+						}
+					}
+					fwrite(buf, 1, width * 3, fp);
+				}
+				fclose(fp);
+				Message("OK: created %s\n", bmpFileName);
+			}
+		}
+		delete[] buf;
+	}
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
