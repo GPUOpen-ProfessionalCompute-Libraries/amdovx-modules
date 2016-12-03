@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <vector>
 #include <map>
 
 #if _WIN32
@@ -668,7 +669,22 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 	unsigned char * buf = nullptr;
 	for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
 		for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
-			char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
+			char bmpFileName[256] = { 0 };
+			if (strstr(fileName, "%")) sprintf(bmpFileName, fileName, camIndex);
+			else {
+				vx_uint32 pos = 0;
+				for (vx_uint32 skipItem = 0; skipItem < camIndex; skipItem++) {
+					while (fileName[pos] && fileName[pos] != ',')
+						pos++;
+					if (fileName[pos] == ',')
+						pos++;
+				}
+				if (!fileName[pos]) {
+					return Error("ERROR: loadBufferFromMultipleImages: missing '%'/',' missing in the fileName: %s\n", fileName);
+				}
+				for (vx_uint32 i = 0; fileName[pos + i] && fileName[pos + i] != ','; i++)
+					bmpFileName[i] = fileName[pos + i];
+			}
 			FILE * fp = fopen(bmpFileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", bmpFileName);
 			if (buffer_format == VX_DF_IMAGE_RGB) {
 				unsigned short bmpHeader[54 / 2];
@@ -755,7 +771,22 @@ vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint3
 		unsigned char * buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3);
 		for (vx_uint32 row = 0, camIndex = 0; row < num_rows; row++) {
 			for (vx_uint32 column = 0; column < num_cols; column++, camIndex++) {
-				char bmpFileName[256]; sprintf(bmpFileName, fileName, camIndex);
+				char bmpFileName[256] = { 0 };
+				if (strstr(fileName, "%")) sprintf(bmpFileName, fileName, camIndex);
+				else {
+					vx_uint32 pos = 0;
+					for (vx_uint32 skipItem = 0; skipItem < camIndex; skipItem++) {
+						while (fileName[pos] && fileName[pos] != ',')
+							pos++;
+						if (fileName[pos] == ',')
+							pos++;
+					}
+					if (!fileName[pos]) {
+						return Error("ERROR: saveBufferToMultipleImages: missing '%'/',' missing in the fileName: %s\n", fileName);
+					}
+					for (vx_uint32 i = 0; fileName[pos + i] && fileName[pos + i] != ','; i++)
+						bmpFileName[i] = fileName[pos + i];
+				}
 				FILE * fp = fopen(bmpFileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", bmpFileName);
 				vx_uint32 size = 3 * width * height;
 				short bmpHeader[54 / 2] = {
@@ -887,5 +918,49 @@ vx_status saveBuffer(cl_mem mem, const char * fileName)
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
 	Message("OK: saved %d bytes into %s\n", size, fileName);
+	return VX_SUCCESS;
+}
+
+vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName)
+{
+	std::vector<vx_float32> gains(num_entries);
+	FILE * fp = fopen(fileName, "r"); if (!fp) return Error("ERROR: unable to open: %s", fileName);
+	for (vx_size i = 0; i < gains.size(); i++) {
+		vx_float32 f;
+		if (fscanf(fp, "%g", &f) != 1) {
+			return Error("ERROR: loadExpCompGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)i);
+		}
+		gains[i] = f;
+	}
+	fclose(fp);
+	vx_status status = lsSetExpCompGains(stitch, num_entries, gains.data());
+	if (status) return Error("ERROR: lsSetExpCompGains: failed (%d)\n", status);
+	Message("OK: loadExpCompGains: loaded %d values from %s\n", (vx_uint32)gains.size(), fileName);
+	return VX_SUCCESS;
+}
+
+vx_status saveExpCompGains(ls_context stitch, size_t num_entries, const char * fileName)
+{
+	std::vector<vx_float32> gains(num_entries);
+	vx_status status = lsGetExpCompGains(stitch, num_entries, gains.data());
+	if (status) return Error("ERROR: lsGetExpCompGains: failed (%d)\n", status);
+	FILE * fp = fopen(fileName, "w"); if (!fp) return Error("ERROR: unable to create: %s", fileName);
+	for (vx_size i = 0; i < gains.size(); i++) {
+		fprintf(fp, "%12g\n", gains[i]);
+	}
+	fclose(fp);
+	Message("OK: saveExpCompGains: saved %d values into %s\n", (vx_uint32)gains.size(), fileName);
+	return VX_SUCCESS;
+}
+
+vx_status showExpCompGains(ls_context stitch, size_t num_entries)
+{
+	std::vector<vx_float32> gains(num_entries);
+	vx_status status = lsGetExpCompGains(stitch, num_entries, gains.data());
+	if (status) return Error("ERROR: lsGetExpCompGains: failed (%d)\n", status);
+	for (vx_size i = 0; i < gains.size(); i++) {
+		Message(" %12g", gains[i]);
+	}
+	Message("\n");
 	return VX_SUCCESS;
 }

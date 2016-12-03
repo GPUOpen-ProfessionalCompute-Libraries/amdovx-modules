@@ -116,10 +116,12 @@ static vx_status VX_CALLBACK half_scale_gaussian_output_validator(vx_node node, 
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
-		if (output_width != (input_width + 1) >> 1) {
+		 
+		//not possible to ensure the following when we go beyond 4 levels
+		if (output_width < (input_width + 1) >> 1) {
 			output_width = (input_width + 1) >> 1;
 		}
-		if (output_height != (input_height + 1) >> 1) {
+		if (output_height < (input_height + 1) >> 1) {
 			output_height = (input_height + 1) >> 1;
 		}
 		if ((output_format != VX_DF_IMAGE_U8) || (output_format != VX_DF_IMAGE_RGBX)) {

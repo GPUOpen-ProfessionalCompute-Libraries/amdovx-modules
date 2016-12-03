@@ -566,6 +566,11 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.k2), "ERROR: invalid k2 value");
 			SYNTAX_CHECK_WITH_MESSAGE(ParseSkip(s, ","), "ERROR: missing k3 value");
 			SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.k3), "ERROR: invalid k3 value");
+			for (vx_uint32 i = 0; i < 7; i++) {
+				s = ParseSkip(s, ""); if (*s != ',') break;
+				s = ParseSkip(s, ",");
+				SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.reserved[i]), "ERROR: invalid reserved field value");
+			}
 			SYNTAX_CHECK_WITH_MESSAGE(ParseSkip(s, "}})"), "ERROR: missing '}})'");
 			SYNTAX_CHECK(ParseEndOfLine(s));
 		}
@@ -576,14 +581,6 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseEndOfLine(s));
 			if (camParList.find(parName) == camParList.end()) return Error("ERROR: camera_params %s not defined", parName);
 			memcpy(&camera_par, &camParList[parName], sizeof(camera_par));
-		}
-		if (Verbose()) {
-			Message("..%s: index#%d {{%8.3f,%8.3f,%8.3f,%.0f,%.0f,%.0f},{%d,%.0f,%.3f,%f,%f,%f,%.3f,%.3f,%.1f}}\n", command, index,
-				camera_par.focal.yaw, camera_par.focal.pitch, camera_par.focal.roll,
-				camera_par.focal.tx, camera_par.focal.ty, camera_par.focal.tz,
-				camera_par.lens.lens_type, camera_par.lens.haw, camera_par.lens.hfov,
-				camera_par.lens.k1, camera_par.lens.k2, camera_par.lens.k3,
-				camera_par.lens.du0, camera_par.lens.dv0, camera_par.lens.r_crop);
 		}
 		// process the command
 		if (isCamera) {
@@ -1527,6 +1524,11 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.k2), "ERROR: invalid k2 value");
 		SYNTAX_CHECK_WITH_MESSAGE(ParseSkip(s, ","), "ERROR: missing k3 value");
 		SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.k3), "ERROR: invalid k3 value");
+		for (vx_uint32 i = 0; i < 7; i++) {
+			s = ParseSkip(s, ""); if (*s != ',') break;
+			s = ParseSkip(s, ",");
+			SYNTAX_CHECK_WITH_MESSAGE(ParseFloat(s, camera_par.lens.reserved[i]), "ERROR: invalid reserved field value");
+		}
 		SYNTAX_CHECK_WITH_MESSAGE(ParseSkip(s, "}}"), "ERROR: missing '}}'");
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (camParList.find(parName) != camParList.end()) return Error("ERROR: camera_params %s already exists", parName);
@@ -1556,6 +1558,39 @@ int CLoomShellParser::OnCommand()
 		// process the command
 		rigParList[parName] = rig_par;
 		Message("..rig_params %s declared\n", parName);
+	}
+	else if (!_stricmp(command, "loadExpCompGains") || !_stricmp(command, "saveExpCompGains") || !_stricmp(command, "showExpCompGains")) {
+		// parse the command
+		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };
+		const char * invalidSyntax = !_stricmp(command, "loadExpCompGains") ?
+			"ERROR: invalid syntax: expects: loadExpCompGains(context,num_entries,\"gains.txt\");" :
+			"ERROR: invalid syntax: expects: saveExpCompGains(context,num_entries,\"gains.txt\");";
+		if (!_stricmp(command, "showExpCompGains"))
+			invalidSyntax = "ERROR: invalid syntax: expects: saveExpCompGains(context,num_entries);";
+		vx_uint32 num_entries;
+		SYNTAX_CHECK(ParseSkip(s, "("));
+		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_entries));
+		if (_stricmp(command, "showExpCompGains") != 0) {
+			SYNTAX_CHECK(ParseSkip(s, ","));
+			SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
+		}
+		SYNTAX_CHECK(ParseSkip(s, ")"));
+		SYNTAX_CHECK(ParseEndOfLine(s));
+		// process the command
+		if (!_stricmp(command, "loadExpCompGains")) {
+			vx_status status = loadExpCompGains(context_[contextIndex], num_entries, fileName);
+			if (status) return status;
+		}
+		else if (!_stricmp(command, "saveExpCompGains")) {
+			vx_status status = saveExpCompGains(context_[contextIndex], num_entries, fileName);
+			if (status) return status;
+		}
+		else {
+			vx_status status = showExpCompGains(context_[contextIndex], num_entries);
+			if (status) return status;
+		}
 	}
 	else if (!_stricmp(command, "help")) {
 		Message("..help\n");
@@ -1721,13 +1756,78 @@ int CCommandLineParser::Run(const char * fileName)
 		else if (!_stricmp(cmd, "exit")) {
 			break;
 		}
-		else if (!_strnicmp(cmd, "chdir ", 6)) {
-			const char * dirPath = &cmd[6];
-			if (_chdir(dirPath)) {
-				Error("ERROR: unable to change directory to %s\n", dirPath);
+		else if (!_strnicmp(cmd, "chdir", 5) || !_strnicmp(cmd, "copy", 4)) {
+			bool isCmdChdir = false, isCmdCopy = false, isCmdCopyIfMissing = false;
+			const char * commandName = "", * usage = "";
+			if (!_strnicmp(cmd, "chdir", 5)) {
+				isCmdChdir = true;
+				commandName = "chdir";
+				usage = "chdir(\"directory\")";
+			}
+			else if (!_strnicmp(cmd, "copy", 4)) {
+				isCmdCopy = true;
+				commandName = "copy";
+				usage = "copy(\"srcFileName\",\"dstFileName\")";
+				if (!_strnicmp(cmd, "copyifmissing", 13)) {
+					isCmdCopyIfMissing = true;
+					commandName = "copyifmissing";
+					usage = "copyifmissing(\"srcFileName\",\"dstFileName\")";
+				}
+			}
+			char path[256] = { 0 }, file[256] = { 0 };
+			bool syntaxError = false;
+			const char * s = cmd + strlen(commandName);
+			while (*s && *s == ' ') s++; if (*s == '(') s++; else syntaxError = true;
+			while (*s && *s == ' ') s++; if (*s == '"') s++; else syntaxError = true;
+			if (!syntaxError) {
+				for (vx_uint32 i = 0; i < (sizeof(path)-1) && *s && *s != '"'; i++, s++)
+					path[i] = *s;
+				if (*s == '"') s++; else syntaxError = true;
+				while (*s && *s == ' ') s++;
+				if (isCmdCopy && !syntaxError && *s == ',') {
+					s++;
+					while (*s && *s == ' ') s++; if (*s == '"') s++; else syntaxError = true;
+					for (vx_uint32 i = 0; i < (sizeof(file) - 1) && *s && *s != '"'; i++, s++)
+						file[i] = *s;
+					if (strlen(file) < 1) syntaxError = true;
+					if (*s == '"') s++; else syntaxError = true;
+				}
+				while (*s && *s == ' ') s++; if (*s == ')') s++; else syntaxError = true;
+				while (*s && *s == ' ') s++; if (*s == ';') s++; else syntaxError = true;
+			}
+			if (!syntaxError && strlen(path) > 0) {
+				if (isCmdChdir) {
+					if (_chdir(path)) {
+						Error("ERROR: unable to change directory to %s\n", path);
+						exit(1);
+					}
+					Message("... changed directory to %s\n", path);
+				}
+				else if (isCmdCopy) {
+					bool copyDisabled = false;
+					if (isCmdCopyIfMissing) {
+						FILE * fp = fopen(file, "rb");
+						if (fp) {
+							fclose(fp);
+							copyDisabled = true;
+						}
+					}
+					if (!copyDisabled) {
+						FILE * fp = fopen(path, "rb"); if (!fp) { Error("ERROR: %s: unable to open: %s\n", commandName, path); exit(1); }
+						FILE * fo = fopen(file, "wb"); if (!fp) { Error("ERROR: %s: unable to create: %s\n", commandName, file); exit(1); }
+						char buf[8192];
+						for (size_t size; (size = fread(buf, 1, sizeof(buf), fp)) > 0;)
+							fwrite(buf, 1, size, fo);
+						fclose(fo);
+						fclose(fp);
+						Message("... copied %s to %s\n", path, file);
+					}
+				}
+			}
+			else {
+				Error("ERROR: incorrect usage: expects: %s; - got '%s'\n", usage, cmd);
 				exit(1);
 			}
-			Message("... changed directory to %s\n", dirPath);
 		}
 		else if (!_strnicmp(cmd, "include ", 8)) {
 			if (includeLevels_ > 5) {
@@ -1738,7 +1838,7 @@ int CCommandLineParser::Run(const char * fileName)
 			int lineNum = lineNum_;
 			char scriptFileName[256] = { 0 };
 			if (cmd[8] == '"' && cmd[strlen(cmd)-1] == '"' && strlen(&cmd[8]) > 2) {
-				strncpy(scriptFileName, &cmd[9], sizeof(scriptFileName) - 1);
+				strncpy(scriptFileName, &cmd[8+1], sizeof(scriptFileName) - 1);
 				scriptFileName[strlen(scriptFileName) - 1] = '\0';
 				includeLevels_++;
 				status = Run(scriptFileName);
@@ -1748,7 +1848,7 @@ int CCommandLineParser::Run(const char * fileName)
 				status = Run(nullptr);
 			}
 			else {
-				Error("ERROR: incorrect usage: expects: include \"script.lss\"|prompt: got '%s'\n", cmd);
+				Error("ERROR: incorrect usage: expects: include \"script.lss\"|prompt - got '%s'\n", cmd);
 				exit(1);
 			}
 			fileName_ = fileName;

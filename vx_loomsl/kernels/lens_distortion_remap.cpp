@@ -57,6 +57,7 @@ static inline void MatMul3x1(float * Y, const float * M, const float * X)
 
 static vx_status CalculateCameraWarpParameters(
 	vx_uint32 numCamera,               // number of cameras
+	vx_uint32 camWidth, vx_uint32 camHeight, // [in] individual camera dimensions
 	const rig_params * rigParam,       // rig configuration
 	const camera_params * camParam,    // individual camera configuration
 	float * Mcam,                      // M matrices: one 3x3 per camera
@@ -80,25 +81,12 @@ static vx_status CalculateCameraWarpParameters(
 		else {
 			Tcam[cam * 3 + 0] = Tcam[cam * 3 + 1] = Tcam[cam * 3 + 2] = 0.0f;
 		}
-		if (camParam[cam].lens.lens_type == ptgui_lens_rectilinear) { // ptgui rectilinear
+		fcam[cam * 2 + 1] = 0.5f * (camParam[cam].lens.haw > 0 ? camParam[cam].lens.haw : (float)camWidth);
+		if (camParam[cam].lens.lens_type == ptgui_lens_rectilinear || camParam[cam].lens.lens_type == adobe_lens_rectilinear) { // rectilinear
 			fcam[cam * 2 + 0] = 1.0f / tanf(0.5f * camParam[cam].lens.hfov * deg2rad);
-			fcam[cam * 2 + 1] = 0.5f * camParam[cam].lens.haw;
 		}
-		else if (camParam[cam].lens.lens_type == ptgui_lens_fisheye_ff || camParam[cam].lens.lens_type == ptgui_lens_fisheye_circ) { // ptgui fisheye
+		else if (camParam[cam].lens.lens_type == ptgui_lens_fisheye_ff || camParam[cam].lens.lens_type == ptgui_lens_fisheye_circ || camParam[cam].lens.lens_type == adobe_lens_fisheye) { // fisheye
 			fcam[cam * 2 + 0] = 1.0f / (0.5f * camParam[cam].lens.hfov * deg2rad);
-			fcam[cam * 2 + 1] = 0.5f * camParam[cam].lens.haw;
-			if (camParam[cam].lens.lens_type == ptgui_lens_fisheye_circ && camParam[cam].lens.r_crop <= 0.0f) {
-				printf("WARNING: CalculateCameraWarpParameters: CAM#%d -- Circular Fisheye with r_crop = %0.2f is not fully supported.\n",
-					cam, camParam[cam].lens.r_crop);
-			}
-		}
-		else if (camParam[cam].lens.lens_type == adobe_lens_rectilinear) { // adobe rectilinear
-			fcam[cam * 2 + 0] = 1.0f / tanf(0.5f * camParam[cam].lens.hfov * deg2rad);
-			fcam[cam * 2 + 1] = 0.5f * camParam[cam].lens.haw;
-		}
-		else if (camParam[cam].lens.lens_type == adobe_lens_fisheye) { // adobe fisheye
-			fcam[cam * 2 + 0] = 1.0f / (0.5f * camParam[cam].lens.hfov * deg2rad);
-			fcam[cam * 2 + 1] = 0.5f * camParam[cam].lens.haw;
 		}
 		else{ // unsupported lens
 			printf("ERROR: CalculateCameraWarpParameters: lens_type = %d not supported [cam#%d]\n", camParam[cam].lens.lens_type, cam);
@@ -145,14 +133,15 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 	vx_uint32 camId,                         // [in] camera index
 	const float * M, const float * T, const float * f,
 	float k1, float k2, float k3, float k0, float du0, float dv0, float r_crop,
+	float left, float top, float right, float bottom,
 	float(&lens_model_f)(float th, float fr, float k1, float k2, float k3, float k0)
 	)
 {
 	vx_uint32 camMapBit = 1 << camId;
 	float pi_by_h = (float)M_PI / (float)eqrHeight;
 	float center_x = du0 + (float)camWidth * 0.5f, center_y = dv0 + (float)camHeight * 0.5f;
-	float right_x = (float)camWidth - 1, right_x2 = right_x * 2;
-	float bottom_y = (float)camHeight - 1, bottom_y2 = bottom_y * 2;
+	float rightMinus1 = right - 1, right2Minus2 = rightMinus1 * 2;
+	float bottomMinus1 = bottom - 1, bottom2Minus2 = bottomMinus1 * 2;
 	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
 		float pe = (float)y_eqr * pi_by_h - (float)M_PI_2;
 		float sin_pe = sinf(pe);
@@ -184,7 +173,7 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 
 				bool validCamIndex = false;
 				if (validPixelCamMap &&
-					(x_src >= 0 && x_src <= camWidth - 1) && (y_src >= 0 && y_src <= camHeight - 1) &&
+					(x_src >= left && x_src <= rightMinus1) && (y_src >= top && y_src <= bottomMinus1) &&
 					(r_crop <= 0.0f || rr <= r_crop))
 				{
 					validCamIndex = true;
@@ -192,13 +181,13 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 					validPixelCamMap[pixelPosition] |= camMapBit;
 				}
 				else if (paddedPixelCamMap &&
-					(x_src >= -(float)paddingPixelCount) && (x_src <= camWidth - 1 + paddingPixelCount) &&
-					(y_src >= -(float)paddingPixelCount) && (y_src <= camHeight - 1 + paddingPixelCount) &&
+					(x_src >= left - (float)paddingPixelCount) && (x_src <= rightMinus1 + paddingPixelCount) &&
+					(y_src >= top - (float)paddingPixelCount) && (y_src <= bottomMinus1 + paddingPixelCount) &&
 					((r_crop <= 0.0f) || (rr <= (r_crop + paddingPixelCount))))
 				{
 					// reflect the source coordinates
-					if (x_src < 0) x_src = -x_src; else if (x_src >= right_x) x_src = right_x2 - x_src;
-					if (y_src < 0) y_src = -y_src; else if (y_src >= bottom_y) y_src = bottom_y2 - y_src;
+					if (x_src < left) x_src = left - x_src; else if (x_src >= rightMinus1) x_src = right2Minus2 - x_src;
+					if (y_src < top) y_src = top - y_src; else if (y_src >= bottomMinus1) y_src = bottom2Minus2 - y_src;
 					// update camera map
 					paddedPixelCamMap[pixelPosition] |= camMapBit;
 				}
@@ -248,7 +237,7 @@ vx_status CalculateLensDistortionAndWarpMaps(
 	}
 	// compute camera warp parameters and check for supported lens types
 	float Mcam[32 * 9], Tcam[32 * 3], fcam[32 * 2], Mr[3 * 3];
-	vx_status status = CalculateCameraWarpParameters(numCamera, rigParam, camParam, Mcam, Tcam, fcam, Mr);
+	vx_status status = CalculateCameraWarpParameters(numCamera, camWidth, camHeight, rigParam, camParam, Mcam, Tcam, fcam, Mr);
 	if (status != VX_SUCCESS) return status;
 	// initialize buffers
 	if (validPixelCamMap) {
@@ -274,33 +263,40 @@ vx_status CalculateLensDistortionAndWarpMaps(
 		// perform lens distortion and warp for each pixel in the equirectangular destination image
 		const camera_lens_params * lens = &camParam[cam].lens;
 		float k0 = 1.0f - (lens->k1 + lens->k2 + lens->k3);
+		float left = 0, top = 0, right = (float)camWidth, bottom = (float)camHeight;
+		if (lens->lens_type <= ptgui_lens_fisheye_circ && (lens->reserved[3] != 0 || lens->reserved[4] != 0 || lens->reserved[5] != 0 || lens->reserved[6] != 0)) {
+			left = std::max(left, lens->reserved[3]);
+			top = std::max(top, lens->reserved[4]);
+			right = std::min(right, lens->reserved[5]);
+			bottom = std::min(bottom, lens->reserved[6]);
+		}
 		if (lens->lens_type == ptgui_lens_rectilinear) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-                ptgui_lens_rectilinear_model);
+				left, top, right, bottom, ptgui_lens_rectilinear_model);
 		}
 		else if (lens->lens_type == ptgui_lens_fisheye_ff || lens->lens_type == ptgui_lens_fisheye_circ) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				ptgui_lens_fisheye_model);
+				left, top, right, bottom, ptgui_lens_fisheye_model);
 		}
 		else if (lens->lens_type == adobe_lens_rectilinear) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				adobe_lens_rectilinear_model);
+				left, top, right, bottom, adobe_lens_rectilinear_model);
 		}
 		else if (lens->lens_type == adobe_lens_fisheye) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				adobe_lens_fisheye_model);
+				left, top, right, bottom, adobe_lens_fisheye_model);
 		}
 	}
 
@@ -322,8 +318,8 @@ vx_uint32 CalculateValidOverlapRegions(
 	)
 {
 	// initialize camera overlap info
-	memset(validCamOverlapInfo, 0, 32 * sizeof(vx_uint32));
-	if (paddedCamOverlapInfo) memset(paddedCamOverlapInfo, 0, 32 * sizeof(vx_uint32));
+	memset(validCamOverlapInfo, 0, LIVE_STITCH_MAX_CAMERAS * sizeof(vx_uint32));
+	if (paddedCamOverlapInfo) memset(paddedCamOverlapInfo, 0, LIVE_STITCH_MAX_CAMERAS * sizeof(vx_uint32));
 
 	// disable outputs when input is not available
 	if (!paddedPixelCamMap) {

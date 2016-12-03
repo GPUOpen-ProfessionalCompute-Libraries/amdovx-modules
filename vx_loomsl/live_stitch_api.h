@@ -30,40 +30,57 @@ THE SOFTWARE.
 #include <CL/cl.h>
 
 //////////////////////////////////////////////////////////////////////
+//! \brief Maximum number of cameras supported
+#define LIVE_STITCH_MAX_CAMERAS          31
+
+//////////////////////////////////////////////////////////////////////
 //! \brief The attributes
 //  - provide a convenient way to manipulate certain features and parameters of the stitch
 //  - all attributes assume default values when not set explicitly before creating the context
 //  - the default values of these attributes will be good enough for most applications
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API 
 enum {
-	LIVE_STITCH_ATTR_PROFILER               =    0,   // profiler attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_EXPCOMP                =    1,   // exp-comp attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_SEAMFIND               =    2,   // seamfind attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_SEAM_REFRESH           =    3,   // seamfind seam refresh attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_SEAM_COST_SELECT       =    4,   // seamfind cost generate attribute: 0:OpenVX Sobel Mag/Phase 1:Optimized Sobel Mag/Phase
-	LIVE_STITCH_ATTR_MULTIBAND              =    5,   // multiband attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS     =    6,   // multiband attribute: numbands 2-6
-	LIVE_STITCH_ATTR_STITCH_MODE            =    7,   // stitch mode: 0:normal 1:quick (default: normal)
-	LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR     =    8,   // input scale factor: use 0.5 or 1.0 (default 1.0)
-	LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR    =    9,   // output scale factor: use 0.5 or 1.0 (default 1.0)
-	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE    =   10,   // enable lsReinitialize (default disabled)
-	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION  =   11,   // Reduces the overlap region by n*n pixels (default: 0)
-	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY     =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
-	LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY     =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
-	LIVE_STITCH_ATTR_SEAM_FREQUENCY         =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation.
-	LIVE_STITCH_ATTR_SEAM_QUALITY           =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 0)
-	LIVE_STITCH_ATTR_SEAM_STAGGER           =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames
-	LIVE_STITCH_ATTR_SEAM_LOCK              =   17,   // Seam lock (default: 0)
-	LIVE_STITCH_ATTR_SEAM_FLAGS             =   18,   // Seam flags (default: 0)
-	LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS   =   19,   // multiband attribute: padding pixel count (default: 0)
-	LIVE_STITCH_ATTR_IO_AUX_DATA_CAPACITY   =   32,   // LoomIO: auxiliary data buffer size in bytes. Default 1024.
+	LIVE_STITCH_ATTR_PROFILER                 =    0,   // profiler attribute: 0:OFF 1:ON
+	LIVE_STITCH_ATTR_EXPCOMP                  =    1,   // exp-comp attribute: 0:OFF 1:Global 2:GlobalUser 4:BlockUser
+	LIVE_STITCH_ATTR_SEAMFIND                 =    2,   // seamfind attribute: 0:OFF 1:ON
+	LIVE_STITCH_ATTR_SEAM_REFRESH             =    3,   // seamfind seam refresh attribute: 0:OFF 1:ON
+	LIVE_STITCH_ATTR_SEAM_COST_SELECT         =    4,   // seamfind cost generate attribute: 0:OpenVX Sobel Mag/Phase 1:Optimized Sobel Mag/Phase
+	LIVE_STITCH_ATTR_MULTIBAND                =    5,   // multiband attribute: 0:OFF 1:ON
+	LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS       =    6,   // multiband attribute: numbands 2-6
+	LIVE_STITCH_ATTR_STITCH_MODE              =    7,   // stitch mode: 0:normal 1:quick (default: normal)
+	LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR       =    8,   // input scale factor: use 0.5 or 1.0 (default 1.0)
+	LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR      =    9,   // output scale factor: use 0.5 or 1.0 (default 1.0)
+	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
+	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
+	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
+	LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY       =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
+	LIVE_STITCH_ATTR_SEAM_FREQUENCY           =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation.
+	LIVE_STITCH_ATTR_SEAM_QUALITY             =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 0)
+	LIVE_STITCH_ATTR_SEAM_STAGGER             =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames
+	LIVE_STITCH_ATTR_SEAM_LOCK                =   17,   // Seam lock (default: 0)
+	LIVE_STITCH_ATTR_SEAM_FLAGS               =   18,   // Seam flags (default: 0)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE      =   20,   // Seam find special case for circular fisheye on equator (default: enabled)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN    =   21,   // min HFOV in degrees (default: 120)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL   =   22,   // pitch tolerance in degrees (default: 5)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL     =   23,   // yaw tolerance in degrees (default: 5)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR  =   24,   // max horizontal overlap ratio (default: 0.25)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD  =   25,   // max vertical overlap in degrees (default: 20)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL  =   26,   // top and bottom camera pitch tolerance (default: 5)
+	LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD  =   27,   // top and bottom camera vertical overlap clamp in degrees for equaor cameras (default: 0)
+	LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS     =   29,   // multiband attribute: padding pixel count (default: 0)
+	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W       =   30,   // exp-comp attribute: gain image width (default: 1)
+	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H       =   31,   // exp-comp attribute: gain image height (default: 1)
+	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION  =   32,   // LoomIO: auxiliary data buffer selection. 0:default 1:camera 2:overlay.
+	LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE  =   33,   // LoomIO: camera auxiliary data buffer size in bytes.
+	LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE =   34,   // LoomIO: overlay auxiliary data buffer size in bytes.
+	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE  =   35,   // LoomIO: display auxiliary data buffer size in bytes.
 	// Dynamic LoomSL attributes
-	LIVE_STITCH_ATTR_SEAM_THRESHOLD			=	51,    // seamfind seam refresh Threshold: 0 - 100 percentage change
+	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change
 	// ... reserved for LoomSL internal attributes
-	LIVE_STITCH_ATTR_RESERVED_CORE_END      =  127,   // reserved first 128 attributes for LoomSL internal attributes
-	LIVE_STITCH_ATTR_RESERVED_EXT_BEGIN     =  128,   // start of reserved attributes for extensions
+	LIVE_STITCH_ATTR_RESERVED_CORE_END        =  127,   // reserved first 128 attributes for LoomSL internal attributes
+	LIVE_STITCH_ATTR_RESERVED_EXT_BEGIN       =  128,   // start of reserved attributes for extensions
 	// ... reserved for extension attributes
-	LIVE_STITCH_ATTR_MAX_COUNT              =  256    // total number of attributes
+	LIVE_STITCH_ATTR_MAX_COUNT                =  256    // total number of attributes
 };
 
 
@@ -82,8 +99,8 @@ typedef enum {
 //! \brief The lens distortion parameters 
 typedef struct {
 	float            hfov;        // horizontal viewing angle (in degrees)
-	float            haw;         // horizontal active pixel count (should be < width)
-	float            r_crop;      // crop radius in pixels; pixels are invalid if r_crop > 0 && r_crop > r
+	float            haw;         // horizontal active pixel count (should be <= width)
+	float            r_crop;      // crop radius in pixels for circular fisheye (pixels valid if r <= r_crop), must be zero for other lens types
 	float            du0, dv0;    // optical center correction in pixel units
 	camera_lens_type lens_type;   // lens type
 	float            k1, k2, k3;  // lens distortion correction parameters (PTGui: a, b, c)
@@ -300,7 +317,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 //! \brief export configuration.
 //  - exportType: "pts" - PtGui project (.pts text file)
 //  - exportType: "loom_shell" - loom_shell script (.lss text file)
+//  - exportType: "gdf" - gdf script (.gdf text file) and other data files with same fileName prefix
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context stitch, const char * exportType, const char * fileName);
+
+//! \brief exposure compensation module.
+//  - valid when exposure compensation is active
+//  - gain: image/block-level gains (depending on the exposure compensation mode)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetExpCompGains(ls_context stitch, size_t num_entries, vx_float32 * gains);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetExpCompGains(ls_context stitch, size_t num_entries, vx_float32 * gains);
 
 #endif //__LIVE_STITCH_API_H__

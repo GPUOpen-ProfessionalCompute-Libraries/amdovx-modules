@@ -36,16 +36,6 @@ SeamFind Data Structures
 #define HORIZONTAL_SEAM 1
 #define DIAGONAL_SEAM 2
 
-//! \brief The Seam Size Information struct.
-typedef struct {
-	vx_uint32 valid_entry;
-	vx_uint32 weight_entry;
-	vx_uint32 accum_entry;
-	vx_uint32 pref_entry;
-	vx_uint32 info_entry;
-	vx_uint32 path_entry;
-} SeamFindSizeInfo; // TBD remove
-
 //! \brief The Seam Information struct.
 typedef struct {
 	vx_int16 cam_id_1;		// Overlap CAM ID - 1
@@ -119,10 +109,6 @@ typedef struct{
 	vx_int32 value;
 }StitchSeamFindAccum;
 
-vx_status Seamfind_CopyWeights(vx_image weight_image, vx_image new_weight_image, vx_rectangle_t *Overlap_ROI, vx_int32 *Overlap_matrix, vx_uint32 width, vx_uint32 height, vx_uint32 NumCam);
-vx_status Seamfind_seamrange(vx_uint32 *seam_adjust, vx_uint32 x_dir);
-vx_status seamfind_utility(vx_uint32 mode, vx_uint32 eqr_width, vx_uint32 num_cam, SeamFindSizeInfo *entry_var);
-
 //////////////////////////////////////////////////////////////////////
 //! \brief The kernel registration functions.
 vx_status seamfind_model_publish(vx_context context);
@@ -154,12 +140,13 @@ vx_status CalculateSmallestSeamFindBufferSizes(
 	vx_uint32 numCamera,                           // [in] number of cameras
 	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
 	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
+	const camera_params * camera_par,               // [in] camera parameters
 	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
 	const vx_rectangle_t * const * overlapValid,   // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
-	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS]
 	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
 	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
-	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
+	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS](optional)
 	const vx_float32 * live_stitch_attr,           // [in] attributes
 	vx_size * seamFindValidEntryCount,             // [out] number of entries needed by seamFind valid table
 	vx_size * seamFindWeightEntryCount,            // [out] number of entries needed by seamFind weight table
@@ -172,12 +159,13 @@ vx_status GenerateSeamFindBuffers(
 	vx_uint32 numCamera,                            // [in] number of cameras
 	vx_uint32 eqrWidth,                             // [in] output equirectangular image width
 	vx_uint32 eqrHeight,                            // [in] output equirectangular image height
+	const camera_params * camera_par,               // [in] camera parameters
 	const vx_uint32 * validPixelCamMap,             // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
 	const vx_rectangle_t * const * overlapValid,    // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
-	const vx_uint32 * validCamOverlapInfo,          // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_uint32 * validCamOverlapInfo,          // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS]
 	const vx_uint32 * paddedPixelCamMap,            // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
 	const vx_rectangle_t * const * overlapPadded,   // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
-	const vx_uint32 * paddedCamOverlapInfo,         // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
+	const vx_uint32 * paddedCamOverlapInfo,         // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS](optional)
 	const vx_float32 * live_stitch_attr,            // [in] attributes
 	vx_size validTableSize,                         // [in] size of seamFind valid table in terms of number of entries
 	vx_size weightTableSize,                        // [in] size of seamFind weight table in terms of number of entries

@@ -460,10 +460,11 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 	{ // image of format RGBX
 		vx_array arr = (vx_array)avxGetNodeParamRef(node, 1);
 		ERROR_CHECK_OBJECT(arr);
-		vx_size capacity = 0;
-		ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		ERROR_CHECK_STATUS(vxReleaseArray(&arr));
-		vx_uint32 numCameras = (vx_uint32)capacity;
+		vx_uint32 num_cam = 0;
+		vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 3);			// input scalar - num cameras
+		ERROR_CHECK_OBJECT(scalar);
+		ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cam));
+		ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -475,9 +476,9 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation doesn't support input image format: %4.4s\n", &input_format);
 		}
-		else if ((input_height % numCameras) != 0) {
+		else if ((input_height % num_cam) != 0) {
 			status = VX_ERROR_INVALID_DIMENSION;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation invalid input image dimensions: %dx%d (height should be multiple of %d)\n", input_width, input_height, numCameras);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation invalid input image dimensions: %dx%d (height should be multiple of %d)\n", input_width, input_height, num_cam);
 		}
 		else {
 			status = VX_SUCCESS;
@@ -509,7 +510,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
 		if (itemsize != sizeof(StitchExpCompCalcEntry)) {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation gains array type should be float32\n");
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation offset array type should be VX_TYPE_UINT64\n");
 		}
 		else if (capacity == 0) {
 			status = VX_ERROR_INVALID_DIMENSION;
@@ -520,6 +521,34 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 		}
 		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
 	}
+	else if (index == 3)
+	{ // scalar for numcam
+		vx_enum itemtype = VX_TYPE_INVALID;
+		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+		if (itemtype == VX_TYPE_UINT32) {
+			status = VX_SUCCESS;
+		}
+		else {
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exp_comp num_cameras scalar type should be a UINT32\n");
+		}
+	}
+	else if ((index == 4) || (index == 5))
+	{ // optional parameter for block_gain buffer width/height
+		if (ref){
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype == VX_TYPE_UINT32) {
+				status = VX_SUCCESS;
+			}
+			else {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: exp_comp num_cameras scalar type should be a UINT32\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -527,7 +556,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 static vx_status VX_CALLBACK exposure_comp_applygains_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
-	if (index == 3)
+	if (index == 6)
 	{ // image of format RGBX
 		// get image configuration
 		vx_image image = (vx_image)avxGetNodeParamRef(node, index);
@@ -572,15 +601,16 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_global_work_update(
 	const vx_size opencl_local_work[]              // [input] local_work[] for clEnqueueNDRangeKernel()
 	)
 {
+	vx_array arr = (vx_array)parameters[2];				// input array
+	vx_scalar sc_width = (vx_scalar)parameters[4];		// input scalar - bg width
 	// Get the number of elements in the stitchWarpRemapEntry array
 	vx_size arr_numitems = 0;
-	vx_array arr = (vx_array)avxGetNodeParamRef(node, 2);				// input array
-	ERROR_CHECK_OBJECT(arr);
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
-	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
 	opencl_global_work[0] = arr_numitems*opencl_local_work[0];
-	opencl_global_work[1] = opencl_local_work[1];
-
+	if (sc_width)
+		opencl_global_work[1] = opencl_local_work[1]<<1;
+	else
+		opencl_global_work[1] = opencl_local_work[1];
 	return VX_SUCCESS;
 }
 
@@ -600,7 +630,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
 	)
 {
-	vx_size		wg_num, num_cam;
+	vx_size		wg_num;
 	vx_uint32 input_width = 0, input_height = 0, output_width = 0, output_height = 0;
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 	vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
@@ -609,91 +639,183 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
-	image = (vx_image)avxGetNodeParamRef(node, 3);
+	image = (vx_image)avxGetNodeParamRef(node, 6);
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
-
 	vx_array wg_offsets = (vx_array)avxGetNodeParamRef(node, 2);
 	ERROR_CHECK_STATUS(vxQueryArray(wg_offsets, VX_ARRAY_ATTRIBUTE_CAPACITY, &wg_num, sizeof(wg_num)));
 	ERROR_CHECK_STATUS(vxReleaseArray(&wg_offsets));
-
-	vx_array gain_array = (vx_array)avxGetNodeParamRef(node, 1);
-	ERROR_CHECK_STATUS(vxQueryArray(gain_array, VX_ARRAY_ATTRIBUTE_CAPACITY, &num_cam, sizeof(num_cam)));
-	ERROR_CHECK_STATUS(vxReleaseArray(&gain_array));
+	vx_uint32 num_cam = 0;
+	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 3);			// input scalar - num cameras
+	ERROR_CHECK_OBJECT(scalar);
+	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cam));
+	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
 	if (!num_cam) num_cam = 1;	// has to be atleast 1
-
+	
+	// check if we get extra parameters for bg_width and bg_height ( for doing block_gain compensation
+	vx_uint32 bg_width = 1, bg_height = 1;
+	vx_scalar sc_width = (vx_scalar)avxGetNodeParamRef(node, 4);			// input scalar - bg width
+	vx_scalar sc_height = (vx_scalar)avxGetNodeParamRef(node, 5);			// input scalar - bg height
+	vx_uint32 height_one_in, height_one_out;
+	height_one_in = (vx_uint32)(input_height / num_cam);
+	height_one_out = (vx_uint32)(output_height / num_cam);
 	// set kernel configuration
 	strcpy(opencl_kernel_function_name, "exposure_comp_apply_gains");
 	opencl_work_dim = 2;
 	opencl_local_work[0] = 16;
 	opencl_local_work[1] = 16;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
-	opencl_global_work[1] = opencl_local_work[1];
-	vx_uint32 height_one_in, height_one_out;
-	height_one_in = (vx_uint32)(input_height / num_cam);
-	height_one_out = (vx_uint32)(output_height / num_cam);
 	// opencl kernel header and reading
 	char item[8192];
-	sprintf(item,
-		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-		"\n"
-		"float4 amd_unpack(uint src)\n"
-		"{\n"
-		"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
-		"}\n"
-		"\n"
-		"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
-		"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
-		"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
-		"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num,\n"
-		"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
-		"{\n"
-		"	int grp_id = get_global_id(0)>>4;\n"
-		"   if (grp_id < pExpData_num) {\n"
-		"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
+	if (sc_width && sc_height){
+		opencl_global_work[1] = opencl_local_work[1]<<1;
+		float xscale, yscale;
+		// calculate xscale and yscale for block_gain computation
+		ERROR_CHECK_STATUS(vxReadScalarValue(sc_width, &bg_width));
+		ERROR_CHECK_STATUS(vxReadScalarValue(sc_height, &bg_height));
+		xscale = (bg_width > 1) ? ((float)bg_width / output_width) : 1.0f;
+		yscale = (bg_height > 1) ? ((float)bg_height / output_height) : 1.0f;
+		vx_uint32 height_one_bg = bg_height / num_cam;
+		sprintf(item,
+			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+			"\n"
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n"
+			"float BilinearSample(__global float *p, uint ystride, float fy0, float fy1, int x, float fx0, float fx1)\n"
+			"{\n"
+			"  float4 f;\n"
+			"  p += x;\n"
+			"  f.s0 = p[0]; f.s1 = p[1];\n"
+			"  p += ystride;\n"
+			"  f.s2 = p[0]; f.s3 = p[1];\n"
+			"  f.s0 = mad(f.s0, fx0, f.s1 * fx1);\n"
+			"  f.s2 = mad(f.s2, fx0, f.s3 * fx1);\n"
+			"  f.s0 = mad(f.s0, fy0, f.s2 * fy1);\n"
+			"  return f.s0;\n"
+			"}\n"
+			"\n"
+			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+			"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+			"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+			"         uint bg_width, uint bg_height, \n"
+			"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+			"{\n"
+			"	int grp_id = get_global_id(0)>>4;\n"
+			"   if (grp_id < pExpData_num) {\n"
+			"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+			"	float2 scalexy = (float2)(%f, %f); uint size_bg = bg_width *%d;\n"
+			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, height_one_bg);
 		opencl_kernel_code = item;
 		opencl_kernel_code +=
-				"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
-				"	pG_buf += pG_offs; int cam_id = offs.s0&0x3f;\n"
-				"	float g = ((__global float *)pG_buf)[cam_id];\n"
-				"	int  lx = get_local_id(0);\n"
-				"	int  ly = get_local_id(1);\n"
-				"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
-				"   int   gy = ly + (offs.s0 >> 18) ;\n"
-				"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24((gy<<1), (int)pIn_stride, (gx<<5));\n"
-				"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24((gy<<1), (int)pOut_stride, (gx<<5));\n"
-				"   uchar4 offs4 = as_uchar4(offs.s1); \n"
-				"   if (((lx<<3) < (int)offs4.s2) && (ly*2 < (int)offs4.s3)) {\n"
-				"	uint8 r0, r1; float4 f4;\n"
-				"	float4 g4 = (float4)((float3)g, (float)1.0f);\n"
-				"	r0 =  *(__global uint8 *)pIn_buf;\n"
-				"	r1 =  *(__global uint8 *)(pIn_buf+pIn_stride);\n"
-				"	f4 = amd_unpack(r0.s0)*g4; r0.s0 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s1)*g4; r0.s1 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s2)*g4; r0.s2 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s3)*g4; r0.s3 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s4)*g4; r0.s4 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s5)*g4; r0.s5 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s6)*g4; r0.s6 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r0.s7)*g4; r0.s7 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s0)*g4; r1.s0 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s1)*g4; r1.s1 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s2)*g4; r1.s2 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s3)*g4; r1.s3 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s4)*g4; r1.s4 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s5)*g4; r1.s5 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s6)*g4; r1.s6 = amd_pack(f4); \n"
-				"	f4 = amd_unpack(r1.s7)*g4; r1.s7 = amd_pack(f4); \n"
-				"	*(__global uint8 *)(pOut_buf) = r0;\n"
-				"	*(__global uint8 *)(pOut_buf+pOut_stride) = r1;\n"
-				"}\n"
+			"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+			"	int cam_id = offs.s0&0x3f;\n"
+			"	__global float *pGainBuf = (__global float *)(pG_buf + pG_offs);\n"
+			"	pGainBuf += (cam_id*size_bg);\n"
+			"	int  lx = get_local_id(0);\n"
+			"	int  ly = get_global_id(1);\n"
+			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+			"   int   gy = ly + (offs.s0 >> 17) ;\n"
+			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
+			"   uchar4 offs4 = as_uchar4(offs.s1); \n"
+			"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+			"	float fx, fy, fy0, fy1, fint, frac;\n"
+			"	fx = (gx<<3)*scalexy.s0, fy = gy*scalexy.s1;\n"
+			"	fy0 = floor(fy); fy1 = fy - fy0; fy0 = 1.0f - fy1;\n"
+			"	float4 f, f4; \n"
+			"	pGainBuf += mul24((uint)fy, bg_width);\n"
+			"	fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	uint8 r0 =  *(__global uint8 *)pIn_buf;\n"
+			"	f4 = amd_unpack(r0.s0)*(float4)f.s0; r0.s0 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s1)*(float4)f.s1; r0.s1 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s2)*(float4)f.s2; r0.s2 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s3)*(float4)f.s3; r0.s3 = amd_pack(f4); \n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+			"	f4 = amd_unpack(r0.s4)*(float4)f.s0; r0.s4 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s5)*(float4)f.s1; r0.s5 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s6)*(float4)f.s2; r0.s6 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s7)*(float4)f.s3; r0.s7 = amd_pack(f4); \n"
+			"	*(__global uint8 *)(pOut_buf) = r0;\n"
 			"}\n"
-	      "}\n";
+		"}\n"
+	"}\n";
+	ERROR_CHECK_STATUS(vxReleaseScalar(&sc_width));
+	ERROR_CHECK_STATUS(vxReleaseScalar(&sc_height));
+	}
+	else
+	{
+		opencl_global_work[1] = opencl_local_work[1];
+		sprintf(item,
+			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+			"\n"
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n"
+			"\n"
+			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+			"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+			"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+			"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+			"{\n"
+			"	int grp_id = get_global_id(0)>>4;\n"
+			"   if (grp_id < pExpData_num) {\n"
+			"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
+		opencl_kernel_code = item;
+		opencl_kernel_code +=
+			"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+			"	pG_buf += pG_offs; int cam_id = offs.s0&0x3f;\n"
+			"	float g = ((__global float *)pG_buf)[cam_id];\n"
+			"	int  lx = get_local_id(0);\n"
+			"	int  ly = get_local_id(1);\n"
+			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+			"   int   gy = ly + (offs.s0 >> 18) ;\n"
+			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24((gy<<1), (int)pIn_stride, (gx<<5));\n"
+			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24((gy<<1), (int)pOut_stride, (gx<<5));\n"
+			"   uchar4 offs4 = as_uchar4(offs.s1); \n"
+			"   if (((lx<<3) < (int)offs4.s2) && (ly*2 < (int)offs4.s3)) {\n"
+			"	uint8 r0, r1; float4 f4;\n"
+			"	float4 g4 = (float4)((float3)g, (float)1.0f);\n"
+			"	r0 =  *(__global uint8 *)pIn_buf;\n"
+			"	r1 =  *(__global uint8 *)(pIn_buf+pIn_stride);\n"
+			"	f4 = amd_unpack(r0.s0)*g4; r0.s0 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s1)*g4; r0.s1 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s2)*g4; r0.s2 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s3)*g4; r0.s3 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s4)*g4; r0.s4 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s5)*g4; r0.s5 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s6)*g4; r0.s6 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r0.s7)*g4; r0.s7 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s0)*g4; r1.s0 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s1)*g4; r1.s1 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s2)*g4; r1.s2 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s3)*g4; r1.s3 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s4)*g4; r1.s4 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s5)*g4; r1.s5 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s6)*g4; r1.s6 = amd_pack(f4); \n"
+			"	f4 = amd_unpack(r1.s7)*g4; r1.s7 = amd_pack(f4); \n"
+			"	*(__global uint8 *)(pOut_buf) = r0;\n"
+			"	*(__global uint8 *)(pOut_buf+pOut_stride) = r1;\n"
+			"}\n"
+		"}\n"
+	"}\n";
+	}
 	return VX_SUCCESS;
 }
 
@@ -704,7 +826,7 @@ vx_status exposure_comp_applygains_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.expcomp_applygains",
 		AMDOVX_KERNEL_STITCHING_EXPCOMP_APPLYGAINS,
 		exposure_comp_applygains_kernel,
-		4,
+		6,
 		exposure_comp_applygains_input_validator,
 		exposure_comp_applygains_output_validator,
 		nullptr,
@@ -720,7 +842,10 @@ vx_status exposure_comp_applygains_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));

@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "live_stitch_api.h"
 #include <CL/cl_ext.h>
 
-#define VERSION          "0.9.3"
+#define VERSION          "0.9.4"
 #define SCRIPT_EXTENSION ".lss"
 #if _WIN32
 #define PROGRAM_NAME     "loom_shell.exe"

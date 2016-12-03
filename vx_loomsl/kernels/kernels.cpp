@@ -184,68 +184,6 @@ bool StitchGetEnvironmentVariable(const char * name, char * value, size_t valueS
 OVX Stich Nodes
 ************************************************************************************************************************************/
 /**
-* \brief Function to create Initialize Stitch Config node
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchInitializeStitchConfigNode(vx_graph graph, 
-	vx_uint32 num_buff_rows, vx_uint32 num_buff_cols, vx_uint32 cam_buffer_width, vx_uint32 cam_buffer_height, vx_uint32 dst_width,
-	vx_matrix rig_param, vx_array camera_param, vx_matrix InitializeStitchConfig,
-	vx_array valid_pixels, vx_array warp_remap, vx_array overlap_pixel, vx_matrix overlap_count, 
-	vx_image warp_image, vx_image exp_comp_image, vx_image weight_image,
-	vx_image camera_id_image, vx_image group1_image, vx_image group2_image, 
-	vx_array exp_comp_calc, vx_image mask_image, vx_array overlap_rect, 
-	vx_array seamfind_valid, vx_array seamfind_accum, vx_array seamfind_weight, vx_array seamfind_pref, vx_array seamfind_info,
-	vx_array twoband_blend)
-{
-	vx_context context = vxGetContext((vx_reference)graph);
-	vx_scalar s_num_rows = vxCreateScalar(context, VX_TYPE_UINT32, &num_buff_rows);
-	vx_scalar s_num_cols = vxCreateScalar(context, VX_TYPE_UINT32, &num_buff_cols);
-	vx_scalar s_buffer_width = vxCreateScalar(context, VX_TYPE_UINT32, &cam_buffer_width);
-	vx_scalar s_buffer_height = vxCreateScalar(context, VX_TYPE_UINT32, &cam_buffer_height);
-	vx_scalar s_dst_width = vxCreateScalar(context, VX_TYPE_UINT32, &dst_width);
-
-	vx_reference params[] = {
-		(vx_reference)s_num_rows,
-		(vx_reference)s_num_cols,
-		(vx_reference)s_buffer_width,
-		(vx_reference)s_buffer_height,
-		(vx_reference)s_dst_width,
-		(vx_reference)rig_param,
-		(vx_reference)camera_param,
-		(vx_reference)InitializeStitchConfig,
-		(vx_reference)valid_pixels,
-		(vx_reference)warp_remap,
-		(vx_reference)overlap_pixel,
-		(vx_reference)overlap_count,
-		(vx_reference)warp_image,
-		(vx_reference)exp_comp_image,
-		(vx_reference)weight_image,
-		(vx_reference)camera_id_image,
-		(vx_reference)group1_image,
-		(vx_reference)group2_image,
-		(vx_reference)exp_comp_calc,
-		(vx_reference)mask_image,
-		(vx_reference)overlap_rect,
-		(vx_reference)seamfind_valid,
-		(vx_reference)seamfind_accum,
-		(vx_reference)seamfind_weight,
-		(vx_reference)seamfind_pref,
-		(vx_reference)seamfind_info,
-		(vx_reference)twoband_blend,
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_CONFIG,
-		params,
-		dimof(params));
-
-	vxReleaseScalar(&s_num_rows);
-	vxReleaseScalar(&s_num_cols);
-	vxReleaseScalar(&s_buffer_width);
-	vxReleaseScalar(&s_buffer_height);
-	vxReleaseScalar(&s_dst_width);
-	return node;
-}
-
-/**
 * \brief Function to create Color Convert node
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output)
@@ -332,42 +270,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image i
 }
 
 /**
-* \brief Function to create Initialize Stitch Remap
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchInitializeStitchRemapNode(vx_graph graph, vx_uint32 num_buff_rows,
-	vx_uint32 num_buff_cols, vx_uint32 cam_buffer_width, vx_uint32 cam_buffer_height, vx_uint32 dst_width, vx_matrix rig_param, vx_array camera_param, vx_remap table)
-{
-	vx_context context = vxGetContext((vx_reference)graph);
-	vx_scalar s_buff_rows = vxCreateScalar(context, VX_TYPE_UINT32, &num_buff_rows);
-	vx_scalar s_buff_cols = vxCreateScalar(context, VX_TYPE_UINT32, &num_buff_cols);
-	vx_scalar s_buffer_width = vxCreateScalar(context, VX_TYPE_UINT32, &cam_buffer_width);
-	vx_scalar s_buffer_height = vxCreateScalar(context, VX_TYPE_UINT32, &cam_buffer_height);
-	vx_scalar d_img_width = vxCreateScalar(context, VX_TYPE_UINT32, &dst_width);
-
-	vx_reference params[] = {
-		(vx_reference)s_buff_rows,
-		(vx_reference)s_buff_cols,
-		(vx_reference)s_buffer_width,
-		(vx_reference)s_buffer_height,
-		(vx_reference)d_img_width,
-		(vx_reference)rig_param,
-		(vx_reference)camera_param,
-		(vx_reference)table,
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_REMAP,
-		params,
-		dimof(params));
-
-	vxReleaseScalar(&s_buff_rows);
-	vxReleaseScalar(&s_buff_cols);
-	vxReleaseScalar(&s_buffer_width);
-	vxReleaseScalar(&s_buffer_height);
-	vxReleaseScalar(&d_img_width);
-	return node;
-}
-
-/**
 * \brief Function to create Calculate Error Function node
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity)
@@ -418,13 +320,22 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompSolveForGainNode(vx_graph gra
 /**
 * \brief Function to create Apply Gains node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph, vx_image input, vx_array in_gains, vx_array in_offsets, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph, vx_image input, vx_array in_gains, vx_array in_offsets, vx_uint32 num_cam, vx_uint32 gain_width, vx_uint32 gain_height, vx_image output)
 {
+	vx_scalar Num_Camera = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
+	vx_scalar bg_width = nullptr; vx_scalar bg_height = nullptr;
+	if ((gain_width > 1) || (gain_height > 1)) {
+		bg_width = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &gain_width);
+		bg_height = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &gain_height);
+	}
 
 	vx_reference params[] = {
 		(vx_reference)input,
 		(vx_reference)in_gains,
 		(vx_reference)in_offsets,
+		(vx_reference)Num_Camera,
+		(vx_reference)bg_width,
+		(vx_reference)bg_height,
 		(vx_reference)output,
 	};
 	vx_node node = stitchCreateNode(graph,
@@ -432,31 +343,9 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 		params,
 		dimof(params));
 
-	return node;
-}
-
-/**
-* \brief Function to create Seam Find CPU node
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindModelNode(vx_graph graph, vx_uint32 numCam, vx_array overlap_roi, vx_matrix overlap_matrix, vx_image cost_img,
-	vx_image mask_img, vx_image weight_image, vx_image new_weight_image)
-{
-	vx_scalar CAMERA = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &numCam);
-
-	vx_reference params[] = {
-		(vx_reference)CAMERA,
-		(vx_reference)overlap_roi,
-		(vx_reference)overlap_matrix,
-		(vx_reference)cost_img,
-		(vx_reference)mask_img,
-		(vx_reference)weight_image,
-		(vx_reference)new_weight_image
-
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_SEAMFIND_MODEL,
-		params,
-		dimof(params));
+	vxReleaseScalar(&Num_Camera);
+	if (bg_width) vxReleaseScalar(&bg_width);
+	if (bg_height) vxReleaseScalar(&bg_height);
 	return node;
 }
 

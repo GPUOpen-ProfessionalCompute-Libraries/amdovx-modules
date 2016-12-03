@@ -24,10 +24,17 @@ THE SOFTWARE.
 #include "seam_find.h"
 
 //developer settings
-#define GET_TIMING 0
+#define GET_TIMING     0
+#define SHOW_MESSAGES  0
 
 #if _WIN32
 #include <windows.h>
+#endif
+
+#if SHOW_MESSAGES
+#define PRINTF       printf
+#else
+#define PRINTF(...)
 #endif
 
 #if GET_TIMING
@@ -54,41 +61,8 @@ int64_t stitchGetClockFrequency()
 }
 #endif //GET_TIMING
 
-//! \brief SeamFind Utility Function to set sizes.
-vx_status seamfind_utility(vx_uint32 mode, vx_uint32 eqr_width, vx_uint32 num_cam, SeamFindSizeInfo *entry_var)
-{
-	if (eqr_width <= 0 || num_cam <= 0) return VX_FAILURE;
-
-	vx_uint32 eqr_height = (eqr_width >> 1);
-	//Conservative Allocation of memory
-	if (mode == 0)
-	{
-		entry_var->valid_entry = (vx_uint32)(eqr_height * num_cam * (num_cam -1) * 0.5);
-		entry_var->weight_entry = (vx_uint32)(eqr_width * eqr_height * num_cam * 0.5);
-		entry_var->pref_entry = (vx_uint32)(num_cam * (num_cam - 1) * 0.5);
-		entry_var->info_entry = (vx_uint32)(num_cam * (num_cam - 1) * 0.5);
-		entry_var->accum_entry = (vx_uint32)(eqr_width * eqr_height * num_cam * 0.5);
-		entry_var->path_entry = (vx_uint32)(eqr_width * num_cam * (num_cam - 1) * 0.5);
-	}
-	//Liberal Allocation of memory
-	if (mode == 1)
-	{
-		entry_var->valid_entry = (vx_uint32)(eqr_width * eqr_height);
-		entry_var->weight_entry = (vx_uint32)(eqr_width * eqr_height * num_cam);
-		entry_var->pref_entry = (vx_uint32)(num_cam * num_cam);
-		entry_var->info_entry = (vx_uint32)(num_cam * num_cam);
-		entry_var->accum_entry = (vx_uint32)(eqr_width * eqr_height * num_cam);
-		entry_var->path_entry = (vx_uint32)(eqr_width * num_cam * num_cam);
-	}
-
-	return VX_SUCCESS;
-}
-
-
 /***********************************************************************************************************************************
-
 												Seam Find CPU Model
-
 ***********************************************************************************************************************************/
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK seamfind_model_input_validator(vx_node node, vx_uint32 index)
@@ -1971,7 +1945,7 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 		"					accum.s0 = -1;\n"
 		"					accum.s1 = Pixel;\n"
 		"					accum.s2 = 0;\n"
-		"					if (Pixel != 0x7F00FFFF)\n"
+		"					if (Pixel != 0x7F00FFFF && (dim.s0 > info.s2 && dim.s0 < info.s3))\n"
 		"						accum.s2 = 1;\n"
 		"				}\n"
 		"				else\n"
@@ -1981,7 +1955,7 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 		"					char mask_1 = 0, mask_2 = 0;\n"
 		"\n"
 		"					/* Finding parent right, left & middle values */\n"
-		"					if(dim.s0 > 0)\n"
+		"					if(dim.s0 > 0 && dim.s0 > info.s2)\n"
 		"					{\n"
 		"\n"
 		"						uint ID_left = overlap_offset + ((dim.s1 - info.s4 + i - 1) * dim.s3) + (dim.s0 - info.s2 - 1);\n"
@@ -1996,7 +1970,7 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 		"\n"
 		"					}\n"
 		"\n"
-		"					if(dim.s0 < equi_width - 1)\n"
+		"					if(dim.s0 < equi_width - 1 && dim.s0 < info.s3)\n"
 		"					{\n"
 		"\n"
 		"						uint ID_right = overlap_offset + ((dim.s1 - info.s4 + i - 1) * dim.s3) + (dim.s0 - info.s2 + 1);\n"
@@ -2615,7 +2589,7 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"				int ye = (int)info.s5 - 1;\n"
 		"				min_y = ye;\n"
 		"				short p_x = -1, p_y = -1;\n"
-		"				for (int xe = (int)info.s3-1; xe >= (int)info.s2; xe--)\n"
+		"				for (int xe = (int)info.s3 - 1; xe >= (int)info.s2; xe--)\n"
 		"				{\n"
 		"					uint pixel_id = overlap_offset + ((ye - info.s4) * x_dir) + (xe - info.s2);\n"
 		"					accum = vload4(0, (__global int *)&seam_accum_buf[pixel_id * 12]); \n"
@@ -2634,7 +2608,7 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"				uint path_offset = (gid * ip_weight_width);\n"
 		"\n"
 		"				int i_val = 0;\n"
-		"				uint weight_pixel_check = ((info.s5 + offset_1 - 1) * ip_weight_width) + info.s3 - 1;\n"
+		"				uint weight_pixel_check = (((info.s5 - 1)/2 + offset_1) * ip_weight_width) + info.s3 - 1;\n"
 		"				char weight_i =	 *(__global char *)&ip_weight_buf[weight_pixel_check];\n"
 		"				if (weight_i) i_val = 255;\n"
 		"\n"
@@ -2654,6 +2628,10 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"					p_x = (accum.s0 & 0x0000FFFF);\n"
 		"					p_y = ((accum.s0 & 0xFFFF0000) >> 16);\n"
 		"\n"
+		"					if ((p_x > min_x + 1) || (p_x < min_x - 1))\n"
+		"					{\n"
+		"					p_x = min_x - 1;\n"
+		"					}\n"
 		"				}\n"
 		"\n"
 #endif
@@ -3645,85 +3623,207 @@ vx_status CalculateLargestSeamFindBufferSizes(
 	return VX_SUCCESS;
 }
 
-vx_status CalculateSmallestSeamFindBufferSizes(
-	vx_uint32 numCamera,                           // [in] number of cameras
-	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
-	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
-	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
-	const vx_rectangle_t * const * overlapValid,   // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
-	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
-	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
-	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
-	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
-	const vx_float32 * live_stitch_attr,           // [in] attributes
-	vx_size * seamFindValidEntryCount,             // [out] number of entries needed by seamFind valid table
-	vx_size * seamFindWeightEntryCount,            // [out] number of entries needed by seamFind weight table
-	vx_size * seamFindAccumEntryCount,             // [out] number of entries needed by seamFind accum table
-	vx_size * seamFindPrefInfoEntryCount,          // [out] number of entries needed by seamFind pref/info table
-	vx_size * seamFindPathEntryCount               // [out] number of entries needed by seamFind path table
+static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
+	vx_uint32 numCamera,                          // [in] number of cameras
+	vx_uint32 eqrWidth,                           // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                          // [in] output equirectangular image height
+	const camera_params * camera_par,             // [in] camera parameters
+	const vx_float32 * live_stitch_attr,          // [in] attributes
+	const vx_uint32 * validPixelCamMap,           // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapValid,  // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	vx_rectangle_t ** overlapRegion               // [out] overlap regions: overlapRegion[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
 	)
 {
-	// generate tables
-	vx_uint32 accumulation_entry = 0, valid_entry = 0, weight_entry = 0, overlap_number = 0;
-	vx_int16 horizontal_overlap = 0, vertical_overlap = 0;
-	for (vx_uint32 i = 1; i < numCamera; i++) {
-		for (vx_uint32 j = 0; j < i; j++) {
-			vx_uint32 overlapMaskBits = (1 << i) | (1 << j);
-			vx_uint32 start_x = overlapValid[i][j].start_x, end_x = overlapValid[i][j].end_x;
-			vx_uint32 start_y = overlapValid[i][j].start_y, end_y = overlapValid[i][j].end_y;
-			if (start_x < end_x && start_y < end_y) {
-				vx_uint32 offsetY_i = i * eqrHeight;
-				vx_uint32 offsetY_j = j * eqrHeight;
-				vx_int16 overlapWidth = end_x - start_x;
-				vx_int16 overlapHeight = end_y - start_y;
-				vx_int16 SEAM_TYPE = -1;
-				if (overlapHeight >= overlapWidth) {
-					// vertical seam
-					SEAM_TYPE = VERTICAL_SEAM;
-					for (vx_uint32 x = start_x; x < end_x; x++) {
-						valid_entry++;
-					}
-					vertical_overlap++;
+	// initialize output overlap region to overlap valid
+	for (vx_uint32 i = 0; i < numCamera; i++) {
+		for (vx_uint32 j = 0; j <= i; j++) {
+			overlapRegion[i][j] = overlapValid[i][j];
+		}
+	}
+
+	// get configuration parameters
+	vx_float32 hfovMin = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN];
+	vx_float32 pitchTolerance = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL];
+	vx_float32 yawTolerance = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL];
+	vx_float32 overlapHorizontalRatio = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR];
+	vx_float32 overlapVertialInDegree = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD];
+	vx_float32 topBotTolerance = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL];
+	vx_float32 topBotVerticalGapInDegree = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD];
+	vx_int32 SEAM_COEQUSH_ENABLE = ((vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE]);
+
+	// get cameras on equator sorted with yaw from zero and above
+	typedef struct { vx_float32 yaw; vx_uint32 camId; } CameraItem;
+	CameraItem camList[LIVE_STITCH_MAX_CAMERAS];
+	vx_uint32 eqrCamCount = 0, eqrCamIdTop = numCamera, eqrCamIdBot = numCamera;
+	for (vx_uint32 camId = 0; camId < numCamera; camId++) {
+		if (camera_par[camId].lens.hfov >= hfovMin && fabsf(camera_par[camId].focal.pitch) <= pitchTolerance) {
+			camList[eqrCamCount].camId = camId;
+			camList[eqrCamCount].yaw = camera_par[camId].focal.yaw + (camera_par[camId].focal.yaw < 0 ? 360 : 0);
+			eqrCamCount++;
+		}
+		else if (eqrCamIdTop == numCamera && camera_par[camId].focal.pitch >= (90 - topBotTolerance) && camera_par[camId].focal.pitch <= 90) {
+			eqrCamIdTop = camId;
+		}
+		else if (eqrCamIdBot == numCamera && camera_par[camId].focal.pitch <= (topBotTolerance - 90) && camera_par[camId].focal.pitch >= -90) {
+			eqrCamIdBot = camId;
+		}
+		else {
+			return false; // detected that not all cameras are on equator or top or bottom
+		}
+	}
+	for (bool sorted = false; !sorted;) {
+		sorted = true;
+		for (vx_uint32 i = 1; i < eqrCamCount; i++) {
+			if (camList[i - 1].yaw > camList[i].yaw) {
+				CameraItem tmp = camList[i - 1];
+				camList[i - 1] = camList[i];
+				camList[i] = tmp;
+				sorted = false;
+			}
+		}
+	}
+	for (vx_uint32 cam = 1; cam < eqrCamCount; cam++) {
+		if (fabsf(camList[cam].yaw - (camList[0].yaw + 360.0f * cam / eqrCamCount)) > yawTolerance) {
+			return false; // detected that not all cameras are equidistant
+		}
+	}
+	if (eqrCamCount < 2) {
+		return false; // need atleast two or more cameras on equator
+	}
+
+	// disable overlaps between top and bottom cameras (if they both exist)
+	if (eqrCamIdTop < numCamera && eqrCamIdBot < numCamera) {
+		vx_rectangle_t * overlapRect = &overlapRegion[max(eqrCamIdTop, eqrCamIdBot)][min(eqrCamIdTop, eqrCamIdBot)];
+		overlapRect->start_x = overlapRect->end_x = 0;
+		overlapRect->start_y = overlapRect->end_y = 0;
+	}
+
+	// calculate overlap region for cameras on equator with their neighbors
+	float overlapInDegrees = overlapHorizontalRatio * 360.0f / eqrCamCount;
+	for (vx_uint32 index = 0; index < eqrCamCount; index++) {
+		vx_uint32 indexToRight = (index + 1) % eqrCamCount;
+		vx_uint32 indexToLeft = (index - 1 + eqrCamCount) % eqrCamCount;
+		vx_uint32 camId = camList[index].camId;
+		vx_uint32 camIdToRight = camList[indexToRight].camId;
+		// disable non-neighbor camera overlaps
+		for (vx_uint32 indexOfNeighbor = 0; indexOfNeighbor < eqrCamCount; indexOfNeighbor++) {
+			if (indexOfNeighbor != index && indexOfNeighbor != indexToLeft && indexOfNeighbor != indexToRight) {
+				vx_rectangle_t * overlapRect;
+				overlapRect = &overlapRegion[max(camId, camList[indexOfNeighbor].camId)][min(camId, camList[indexOfNeighbor].camId)];
+				overlapRect->start_x = overlapRect->end_x = 0;
+				overlapRect->start_y = overlapRect->end_y = 0;
+			}
+		}
+		// update neighbor camera overlaps
+		float yawRightBorder = camList[index].yaw < camList[indexToRight].yaw ?
+			(camList[index].yaw + camList[indexToRight].yaw) * 0.5f :
+			(camList[index].yaw + camList[indexToRight].yaw - 360) * 0.5f;
+		vx_int32 start_x = ((vx_int32)((180 + yawRightBorder - overlapInDegrees * 0.5f) * eqrWidth / 360.0f + 1) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+		vx_int32 end_x = ((vx_int32)((180 + yawRightBorder + overlapInDegrees * 0.5f) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+		if (end_x < start_x) {
+			// when region wraps from right to left, pick the larger of righside or leftside
+			if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+			else end_x = (vx_int32)eqrWidth;
+		}
+		vx_rectangle_t * overlapRect = &overlapRegion[max(camId, camIdToRight)][min(camId, camIdToRight)];
+		overlapRect->start_x = max(overlapRect->start_x, (vx_uint32)start_x);
+		overlapRect->end_x = min(overlapRect->end_x, (vx_uint32)end_x);
+		// update overlap with top and bottom cameras (if present)
+		float yawLeftBorder = camList[index].yaw > camList[indexToLeft].yaw ?
+			(camList[index].yaw + camList[indexToLeft].yaw) * 0.5f :
+			(camList[index].yaw + camList[indexToLeft].yaw - 360) * 0.5f;
+		if (eqrCamIdTop < numCamera) {
+			vx_rectangle_t * overlapRectHoriz = &overlapRegion[max(camId, eqrCamIdTop)][min(camId, eqrCamIdTop)];
+			if (SEAM_COEQUSH_ENABLE > 1) {
+				// update overlap between equator and top camera
+				float pitchCenterToTop = (camera_par[camId].focal.pitch + camera_par[eqrCamIdTop].focal.pitch) * 0.5f;
+				start_x = ((vx_int32)((180 + yawLeftBorder) * eqrWidth / 360.0f + 1) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+				end_x = ((vx_int32)((180 + yawRightBorder) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+				if (end_x < start_x) {
+					// when region wraps from right to left, pick the larger of righside or leftside
+					if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+					else end_x = (vx_int32)eqrWidth;
 				}
-				else {
-					// horizontal seam
-					vx_int16 SEAM_TYPE = HORIZONTAL_SEAM;
-					for (vx_uint32 y = start_y; y < end_y; y++) {
-						valid_entry++;
-					}
-					horizontal_overlap++;
+				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
+				overlapRectHoriz->end_x = min(overlapRectHoriz->end_x, (vx_uint32)end_x);
+				overlapRectHoriz->start_y = (vx_uint32)max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToTop - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
+				overlapRectHoriz->end_y = (vx_uint32)min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToTop + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
+				vx_uint32 width = overlapRectHoriz->end_x - overlapRectHoriz->start_x;
+				vx_uint32 height = overlapRectHoriz->end_y - overlapRectHoriz->start_y;
+				if (width < 2 * height) {
+					vx_uint32 mid_y = (overlapRectHoriz->start_y + overlapRectHoriz->end_y) / 2;
+					overlapRectHoriz->start_y = mid_y - width / 4;
+					overlapRectHoriz->end_y = mid_y + width / 4;
 				}
-				for (vx_uint32 ye = start_y; ye < end_y; ye++) {
-					for (vx_uint32 xe = start_x; xe < end_x; xe++)	{
-						if ((validPixelCamMap[ye  * eqrWidth + xe] & overlapMaskBits) == overlapMaskBits) {
-							weight_entry++;
-						}
+			}
+			else {
+				// disable overlap between equator and top camera
+				overlapRectHoriz->start_x = overlapRectHoriz->end_x = 0;
+				// reduce the overlap top to default seam border
+				float veriticalGapInDegrees = topBotVerticalGapInDegree;
+				if (topBotVerticalGapInDegree < 0) {
+					veriticalGapInDegrees = 0;
+					if (camera_par[eqrCamIdTop].lens.r_crop > 0) {
+						veriticalGapInDegrees = camera_par[eqrCamIdTop].lens.hfov * camera_par[eqrCamIdTop].lens.r_crop / camera_par[eqrCamIdTop].lens.haw;
 					}
 				}
-				accumulation_entry += overlapWidth * overlapHeight;
-				overlap_number++;
+				overlapRect->start_y = max(overlapRect->start_y, (vx_uint32)(veriticalGapInDegrees * eqrHeight / 180.0f));
+			}
+		}
+		if (eqrCamIdBot < numCamera) {
+			vx_rectangle_t *overlapRectHoriz = &overlapRegion[max(camId, eqrCamIdBot)][min(camId, eqrCamIdBot)];
+			if (SEAM_COEQUSH_ENABLE > 1) {
+				// update overlap between equator and bottom camera
+				float pitchCenterToBot = (camera_par[camId].focal.pitch + camera_par[eqrCamIdBot].focal.pitch) * 0.5f;
+				start_x = ((vx_int32)((180 + yawLeftBorder) * eqrWidth / 360.0f + 1) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+				end_x = ((vx_int32)((180 + yawRightBorder) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
+				if (end_x < start_x) {
+					// when region wraps from right to left, pick the larger of righside or leftside
+					if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+					else end_x = (vx_int32)eqrWidth;
+				}
+				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
+				overlapRectHoriz->end_x = min(overlapRectHoriz->end_x, (vx_uint32)end_x);
+				overlapRectHoriz->start_y = (vx_uint32)max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToBot - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
+				overlapRectHoriz->end_y = (vx_uint32)min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToBot + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
+				vx_uint32 width = overlapRectHoriz->end_x - overlapRectHoriz->start_x;
+				vx_uint32 height = overlapRectHoriz->end_y - overlapRectHoriz->start_y;
+				if (width < 2 * height) {
+					vx_uint32 mid_y = (overlapRectHoriz->start_y + overlapRectHoriz->end_y) / 2;
+					overlapRectHoriz->start_y = mid_y - width / 4;
+					overlapRectHoriz->end_y = mid_y + width / 4;
+				}
+			}
+			else {
+				// disable overlap between equator and bottom camera
+				overlapRectHoriz->start_x = overlapRectHoriz->end_x = 0;
+				// reduce the overlap bttom to default seam border
+				float veriticalGapInDegrees = topBotVerticalGapInDegree;
+				if (topBotVerticalGapInDegree < 0) {
+					veriticalGapInDegrees = 0;
+					if (camera_par[eqrCamIdBot].lens.r_crop > 0) {
+						veriticalGapInDegrees = camera_par[eqrCamIdBot].lens.hfov * camera_par[eqrCamIdBot].lens.r_crop / camera_par[eqrCamIdBot].lens.haw;
+					}
+				}
+				overlapRect->end_y = min(overlapRect->end_y, (vx_uint32)((180 - veriticalGapInDegrees) * eqrHeight / 180.0f));
 			}
 		}
 	}
 
-	*seamFindValidEntryCount = valid_entry;
-	*seamFindWeightEntryCount = weight_entry;
-	*seamFindAccumEntryCount = accumulation_entry;
-	*seamFindPrefInfoEntryCount = overlap_number;
-	*seamFindPathEntryCount = overlap_number * eqrWidth;
-	return VX_SUCCESS;
+	return true;
 }
 
-vx_status GenerateSeamFindBuffers(
+static inline vx_status GenerateSeamFindBuffersModel(
 	vx_uint32 numCamera,                            // [in] number of cameras
 	vx_uint32 eqrWidth,                             // [in] output equirectangular image width
 	vx_uint32 eqrHeight,                            // [in] output equirectangular image height
+	const camera_params * camera_par,               // [in] camera parameters
 	const vx_uint32 * validPixelCamMap,             // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
 	const vx_rectangle_t * const * overlapValid,    // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
-	const vx_uint32 * validCamOverlapInfo,          // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32]
+	const vx_uint32 * validCamOverlapInfo,          // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS]
 	const vx_uint32 * paddedPixelCamMap,            // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
 	const vx_rectangle_t * const * overlapPadded,   // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
-	const vx_uint32 * paddedCamOverlapInfo,         // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [32](optional)
+	const vx_uint32 * paddedCamOverlapInfo,         // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS](optional)
 	const vx_float32 * live_stitch_attr,            // [in] attributes
 	vx_size validTableSize,                         // [in] size of seamFind valid table in terms of number of entries
 	vx_size weightTableSize,                        // [in] size of seamFind weight table in terms of number of entries
@@ -3749,15 +3849,74 @@ vx_status GenerateSeamFindBuffers(
 	vx_int32 SEAM_STAGGER = (vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_STAGGER];
 	vx_int32 SEAM_LOCK = (vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_LOCK];
 	vx_int32 SEAM_FLAG = ((vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_FLAGS]) & 3;
+	vx_int32 SEAM_COEQUSH_ENABLE = ((vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE]);
 
-	// generate tables
+	// allocate memory for overlap region
+	std::vector<vx_rectangle_t> overlapRegionRect(numCamera * numCamera);
+	vx_rectangle_t * overlapRegion[LIVE_STITCH_MAX_CAMERAS];
+	for (vx_uint32 i = 0; i < numCamera; i++) {
+		overlapRegion[i] = overlapRegionRect.data() + i * numCamera;
+	}
+
+	if (SEAM_COEQUSH_ENABLE) {
+		// check for special handling for circular fisheye lens on equator
+		bool doSpecialHandlingOfCircFishEyeOnEquator = GenerateSeamFindOverlapsForFishEyeOnEquator(numCamera, eqrWidth, eqrHeight,
+			camera_par, live_stitch_attr, validPixelCamMap, overlapValid, overlapRegion);
+		if (doSpecialHandlingOfCircFishEyeOnEquator) {
+			overlapValid = overlapRegion;
+		}
+	}
+
 	vx_uint32 accumulation_entry = 0, valid_entry = 0, weight_entry = 0, overlap_number = 0;
 	vx_int16 horizontal_overlap = 0, vertical_overlap = 0;
+	// generate tables
 	for (vx_uint32 i = 1; i < numCamera; i++) {
 		for (vx_uint32 j = 0; j < i; j++) {
 			vx_uint32 overlapMaskBits = (1 << i) | (1 << j);
 			vx_uint32 start_x = overlapValid[i][j].start_x, end_x = overlapValid[i][j].end_x;
 			vx_uint32 start_y = overlapValid[i][j].start_y, end_y = overlapValid[i][j].end_y;
+			if (start_x < end_x && (end_x - start_x) <= (end_y - start_y)) {
+				// make sure top and bottom has a valid pixels between start_x+1 and end_x-1
+				for (; start_y < end_y; start_y++) {
+					const vx_uint32 * map = validPixelCamMap + start_y * eqrWidth;
+					vx_uint32 x = start_x + 1;
+					for (; x < end_x - 1; x++)
+					if ((map[x] & overlapMaskBits) == overlapMaskBits)
+						break;
+					if (x < end_x - 1)
+						break;
+				}
+				for (; start_y < end_y; end_y--) {
+					const vx_uint32 * map = validPixelCamMap + (end_y - 1) * eqrWidth;
+					vx_uint32 x = start_x + 1;
+					for (; x < end_x - 1; x++)
+					if ((map[x] & overlapMaskBits) == overlapMaskBits)
+						break;
+					if (x < end_x - 1)
+						break;
+				}
+			}
+			if (start_y < end_y && (end_y - start_y) <= (end_x - start_x)) {
+				// make sure left and right has a valid pixels between start_y+1 and end_y-1
+				for (; start_x < end_x; start_x++) {
+					const vx_uint32 * map = validPixelCamMap + start_x;
+					vx_uint32 y = start_y + 1;
+					for (; y < end_y - 1; y++)
+						if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
+							break;
+					if (y < end_y - 1)
+						break;
+				}
+				for (; start_x < end_x; end_x--) {
+					const vx_uint32 * map = validPixelCamMap + (end_x - 1);
+					vx_uint32 y = start_y + 1;
+					for (; y < end_y - 1; y++)
+						if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
+							break;
+					if (y < end_y - 1)
+						break;
+				}
+			}
 			if (start_x < end_x && start_y < end_y) {
 				vx_uint32 offsetY_i = i * eqrHeight;
 				vx_uint32 offsetY_j = j * eqrHeight;
@@ -3765,96 +3924,116 @@ vx_status GenerateSeamFindBuffers(
 				vx_int16 overlapHeight = end_y - start_y;
 				vx_int16 SEAM_TYPE = -1;
 				if (overlapHeight >= overlapWidth) {
+					PRINTF("SEAM-VERTICAL   %2d %2d (%4d,%4d)-(%4d,%4d) (%4dx%4d)\n", i, j, start_x, start_y, end_x, end_y, overlapWidth, overlapHeight);
 					// vertical seam
 					SEAM_TYPE = VERTICAL_SEAM;
 					vertical_overlap++;
-					for (vx_uint32 x = start_x; x < end_x; x++) {
-						if (valid_entry < validTableSize) {
-							StitchSeamFindValidEntry validTableEntry = { 0 };
-							validTableEntry.dstX = (vx_int16)x;
-							validTableEntry.dstY = (vx_int16)start_y;
-							validTableEntry.width = overlapWidth;
-							validTableEntry.height = overlapHeight;
-							validTableEntry.OverLapX = (vx_int16)x;
-							validTableEntry.OverLapY = (vx_int16)(start_y + offsetY_i);
-							validTableEntry.CAMERA_ID_1 = (vx_int16)j;
-							validTableEntry.ID = (vx_int16)overlap_number;
-							validTable[valid_entry] = validTableEntry;
+					if (validTable) {
+						for (vx_uint32 x = start_x; x < end_x; x++) {
+							if (valid_entry < validTableSize) {
+								StitchSeamFindValidEntry validTableEntry = { 0 };
+								validTableEntry.dstX = (vx_int16)x;
+								validTableEntry.dstY = (vx_int16)start_y;
+								validTableEntry.width = overlapWidth;
+								validTableEntry.height = overlapHeight;
+								validTableEntry.OverLapX = (vx_int16)x;
+								validTableEntry.OverLapY = (vx_int16)(start_y + offsetY_i);
+								validTableEntry.CAMERA_ID_1 = (vx_int16)j;
+								validTableEntry.ID = (vx_int16)overlap_number;
+								validTable[valid_entry] = validTableEntry;
+							}
+							valid_entry++;
 						}
-						valid_entry++;
 					}
-					if (overlap_number < prefInfoTableSize)	{
-						StitchSeamFindPreference prefTableEntry = { 0 };
-						prefTableEntry.type = SEAM_TYPE;
-						prefTableEntry.seam_type_num = vertical_overlap;
-						prefTableEntry.start_frame = SEAM_STAGGER * vertical_overlap;
-						prefTableEntry.frequency = SEAM_FREQUENCY;
-						prefTableEntry.quality = SEAM_QUALITY;
-						prefTableEntry.priority = VERTICAL_SEAM_PRIORITY;
-						prefTableEntry.seam_lock = SEAM_LOCK;
-						prefTableEntry.scene_flag = SEAM_FLAG;
-						prefTable[overlap_number] = prefTableEntry;
+					else {
+						valid_entry += end_x - start_x;
+					}
+					if (prefTable) {
+						if (overlap_number < prefInfoTableSize)	{
+							StitchSeamFindPreference prefTableEntry = { 0 };
+							prefTableEntry.type = SEAM_TYPE;
+							prefTableEntry.seam_type_num = vertical_overlap;
+							prefTableEntry.start_frame = SEAM_STAGGER * vertical_overlap;
+							prefTableEntry.frequency = SEAM_FREQUENCY;
+							prefTableEntry.quality = SEAM_QUALITY;
+							prefTableEntry.priority = VERTICAL_SEAM_PRIORITY;
+							prefTableEntry.seam_lock = SEAM_LOCK;
+							prefTableEntry.scene_flag = SEAM_FLAG;
+							prefTable[overlap_number] = prefTableEntry;
+						}
 					}
 				}
 				else {
+					PRINTF("SEAM-HORIZONTAL %2d %2d (%4d,%4d)-(%4d,%4d) (%4dx%4d)\n", i, j, start_x, start_y, end_x, end_y, overlapWidth, overlapHeight);
 					// horizontal seam
 					vx_int16 SEAM_TYPE = HORIZONTAL_SEAM;
 					horizontal_overlap++;
-					for (vx_uint32 y = start_y; y < end_y; y++) {
-						if (valid_entry < validTableSize) {
-							StitchSeamFindValidEntry  validTableEntry = { 0 };
-							validTableEntry.dstX = (vx_int16)start_x;
-							validTableEntry.dstY = (vx_int16)y;
-							validTableEntry.width = overlapWidth;
-							validTableEntry.height = overlapHeight;
-							validTableEntry.OverLapX = (vx_int16)start_x;
-							validTableEntry.OverLapY = (vx_int16)(y + offsetY_i);
-							validTableEntry.CAMERA_ID_1 = (vx_int16)j;
-							validTableEntry.ID = (vx_int16)overlap_number;
-							validTable[valid_entry] = validTableEntry;
+					if (validTable) {
+						for (vx_uint32 y = start_y; y < end_y; y++) {
+							if (valid_entry < validTableSize) {
+								StitchSeamFindValidEntry  validTableEntry = { 0 };
+								validTableEntry.dstX = (vx_int16)start_x;
+								validTableEntry.dstY = (vx_int16)y;
+								validTableEntry.width = overlapWidth;
+								validTableEntry.height = overlapHeight;
+								validTableEntry.OverLapX = (vx_int16)start_x;
+								validTableEntry.OverLapY = (vx_int16)(y + offsetY_i);
+								validTableEntry.CAMERA_ID_1 = (vx_int16)j;
+								validTableEntry.ID = (vx_int16)overlap_number;
+								validTable[valid_entry] = validTableEntry;
+							}
+							valid_entry++;
 						}
-						valid_entry++;
 					}
-					if (overlap_number < prefInfoTableSize) {
-						StitchSeamFindPreference prefTableEntry = { 0 };
-						prefTableEntry.type = SEAM_TYPE;
-						prefTableEntry.seam_type_num = horizontal_overlap;
-						prefTableEntry.start_frame = SEAM_STAGGER * horizontal_overlap;
-						prefTableEntry.frequency = SEAM_FREQUENCY;
-						prefTableEntry.quality = SEAM_QUALITY;
-						prefTableEntry.priority = HORIZONTAL_SEAM_PRIORITY;
-						prefTableEntry.seam_lock = SEAM_LOCK;
-						prefTableEntry.scene_flag = SEAM_FLAG;
-						prefTable[overlap_number] = prefTableEntry;
+					else {
+						valid_entry += end_y - start_y;
+					}
+					if (prefTable) {
+						if (overlap_number < prefInfoTableSize) {
+							StitchSeamFindPreference prefTableEntry = { 0 };
+							prefTableEntry.type = SEAM_TYPE;
+							prefTableEntry.seam_type_num = horizontal_overlap;
+							prefTableEntry.start_frame = SEAM_STAGGER * horizontal_overlap;
+							prefTableEntry.frequency = SEAM_FREQUENCY;
+							prefTableEntry.quality = SEAM_QUALITY;
+							prefTableEntry.priority = HORIZONTAL_SEAM_PRIORITY;
+							prefTableEntry.seam_lock = SEAM_LOCK;
+							prefTableEntry.scene_flag = SEAM_FLAG;
+							prefTable[overlap_number] = prefTableEntry;
+						}
 					}
 				}
 				for (vx_uint32 ye = start_y; ye < end_y; ye++) {
 					for (vx_uint32 xe = start_x; xe < end_x; xe++)	{
 						if ((validPixelCamMap[ye  * eqrWidth + xe] & overlapMaskBits) == overlapMaskBits) {
-							if (weight_entry < weightTableSize) {
-								StitchSeamFindWeightEntry weightTableEntry = { 0 };
-								weightTableEntry.x = xe;
-								weightTableEntry.y = ye;
-								weightTableEntry.cam_id_1 = j;
-								weightTableEntry.cam_id_2 = i;
-								weightTableEntry.overlap_id = overlap_number;
-								weightTableEntry.overlap_type = SEAM_TYPE;
-								weightTable[weight_entry] = weightTableEntry;
+							if (weightTable) {
+								if (weight_entry < weightTableSize) {
+									StitchSeamFindWeightEntry weightTableEntry = { 0 };
+									weightTableEntry.x = xe;
+									weightTableEntry.y = ye;
+									weightTableEntry.cam_id_1 = j;
+									weightTableEntry.cam_id_2 = i;
+									weightTableEntry.overlap_id = overlap_number;
+									weightTableEntry.overlap_type = SEAM_TYPE;
+									weightTable[weight_entry] = weightTableEntry;
+								}
 							}
 							weight_entry++;
 						}
 					}
 				}
-				if (overlap_number < prefInfoTableSize)	{
-					StitchSeamFindInformation infoTableEntry = { 0 };
-					infoTableEntry.cam_id_1 = j;
-					infoTableEntry.cam_id_2 = i;
-					infoTableEntry.start_x = start_x;
-					infoTableEntry.start_y = start_y;
-					infoTableEntry.end_x = end_x;
-					infoTableEntry.end_y = end_y;
-					infoTableEntry.offset = accumulation_entry;
-					infoTable[overlap_number] = infoTableEntry;
+				if (infoTable) {
+					if (overlap_number < prefInfoTableSize)	{
+						StitchSeamFindInformation infoTableEntry = { 0 };
+						infoTableEntry.cam_id_1 = j;
+						infoTableEntry.cam_id_2 = i;
+						infoTableEntry.start_x = start_x;
+						infoTableEntry.start_y = start_y;
+						infoTableEntry.end_x = end_x;
+						infoTableEntry.end_y = end_y;
+						infoTableEntry.offset = accumulation_entry;
+						infoTable[overlap_number] = infoTableEntry;
+					}
 				}
 				accumulation_entry += overlapWidth * overlapHeight;
 				overlap_number++;
@@ -3863,21 +4042,25 @@ vx_status GenerateSeamFindBuffers(
 	}
 
 	// check for buffer overflow error condition
-	if (valid_entry > validTableSize || weight_entry > weightTableSize ||
-		accumulation_entry > accumTableSize || overlap_number > prefInfoTableSize)
+	if ((validTable && valid_entry > validTableSize) ||
+		(weightTable && weight_entry > weightTableSize) ||
+		(accumTable && accumulation_entry > accumTableSize) ||
+		(infoTable && overlap_number > prefInfoTableSize))
 	{
 		return VX_ERROR_NOT_SUFFICIENT;
 	}
 
 	// initialize accumTable
-	if (accumulation_entry <= accumTableSize) {
-		StitchSeamFindAccumEntry entry = { 0 };
-		entry.parent_x = -1;
-		entry.parent_y = -1;
-		entry.value = -1;
-		entry.propagate = -1;
-		for (vx_uint32 i = 0; i < accumulation_entry; i++) {
-			accumTable[i] = entry;
+	if (accumTable) {
+		if (accumulation_entry <= accumTableSize) {
+			StitchSeamFindAccumEntry entry = { 0 };
+			entry.parent_x = -1;
+			entry.parent_y = -1;
+			entry.value = -1;
+			entry.propagate = -1;
+			for (vx_uint32 i = 0; i < accumulation_entry; i++) {
+				accumTable[i] = entry;
+			}
 		}
 	}
 
@@ -3888,4 +4071,65 @@ vx_status GenerateSeamFindBuffers(
 	*seamFindPathEntryCount = overlap_number * eqrWidth;
 
 	return VX_SUCCESS;
+}
+
+vx_status CalculateSmallestSeamFindBufferSizes(
+	vx_uint32 numCamera,                           // [in] number of cameras
+	vx_uint32 eqrWidth,                            // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                           // [in] output equirectangular image height
+	const camera_params * camera_par,              // [in] camera parameters
+	const vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapValid,   // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * validCamOverlapInfo,         // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS]
+	const vx_uint32 * paddedPixelCamMap,           // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
+	const vx_rectangle_t * const * overlapPadded,  // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
+	const vx_uint32 * paddedCamOverlapInfo,        // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS](optional)
+	const vx_float32 * live_stitch_attr,           // [in] attributes
+	vx_size * seamFindValidEntryCount,             // [out] number of entries needed by seamFind valid table
+	vx_size * seamFindWeightEntryCount,            // [out] number of entries needed by seamFind weight table
+	vx_size * seamFindAccumEntryCount,             // [out] number of entries needed by seamFind accum table
+	vx_size * seamFindPrefInfoEntryCount,          // [out] number of entries needed by seamFind pref/info table
+	vx_size * seamFindPathEntryCount               // [out] number of entries needed by seamFind path table
+	)
+{
+	return GenerateSeamFindBuffersModel(numCamera, eqrWidth, eqrHeight, camera_par,
+		validPixelCamMap, overlapValid, validCamOverlapInfo,
+		paddedPixelCamMap, overlapPadded, paddedCamOverlapInfo,
+		live_stitch_attr, 0, 0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr,
+		seamFindValidEntryCount, seamFindWeightEntryCount, seamFindAccumEntryCount, seamFindPrefInfoEntryCount, seamFindPathEntryCount);
+}
+
+vx_status GenerateSeamFindBuffers(
+	vx_uint32 numCamera,                            // [in] number of cameras
+	vx_uint32 eqrWidth,                             // [in] output equirectangular image width
+	vx_uint32 eqrHeight,                            // [in] output equirectangular image height
+	const camera_params * camera_par,               // [in] camera parameters
+	const vx_uint32 * validPixelCamMap,             // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	const vx_rectangle_t * const * overlapValid,    // [in] overlap regions: overlapValid[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i
+	const vx_uint32 * validCamOverlapInfo,          // [in] camera overlap info - use "validCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS]
+	const vx_uint32 * paddedPixelCamMap,            // [in] padded pixel camera index map: size: [eqrWidth * eqrHeight](optional)
+	const vx_rectangle_t * const * overlapPadded,   // [in] overlap regions: overlapPadded[cam_i][cam_j] for overlap of cam_i and cam_j, cam_j <= cam_i(optional)
+	const vx_uint32 * paddedCamOverlapInfo,         // [in] camera overlap info - use "paddedCamOverlapInfo[cam_i] & (1 << cam_j)": size: [LIVE_STITCH_MAX_CAMERAS](optional)
+	const vx_float32 * live_stitch_attr,            // [in] attributes
+	vx_size validTableSize,                         // [in] size of seamFind valid table in terms of number of entries
+	vx_size weightTableSize,                        // [in] size of seamFind weight table in terms of number of entries
+	vx_size accumTableSize,                         // [in] size of seamFind accum table in terms of number of entries
+	vx_size prefInfoTableSize,                      // [in] size of seamFind pref/info table in terms of number of entries
+	StitchSeamFindValidEntry * validTable,          // [out] valid table
+	StitchSeamFindWeightEntry * weightTable,        // [out] weight table
+	StitchSeamFindAccumEntry * accumTable,          // [out] accum table
+	StitchSeamFindPreference * prefTable,           // [out] preference table
+	StitchSeamFindInformation * infoTable,          // [out] info table
+	vx_size * seamFindValidEntryCount,              // [out] number of entries needed by seamFind valid table
+	vx_size * seamFindWeightEntryCount,             // [out] number of entries needed by seamFind weight table
+	vx_size * seamFindAccumEntryCount,              // [out] number of entries needed by seamFind accum table
+	vx_size * seamFindPrefInfoEntryCount,           // [out] number of entries needed by seamFind pref/info table
+	vx_size * seamFindPathEntryCount                // [out] number of entries needed by seamFind path table
+	)
+{
+	return GenerateSeamFindBuffersModel(numCamera, eqrWidth, eqrHeight, camera_par,
+		validPixelCamMap, overlapValid, validCamOverlapInfo,
+		paddedPixelCamMap, overlapPadded, paddedCamOverlapInfo,
+		live_stitch_attr, validTableSize, weightTableSize, accumTableSize, prefInfoTableSize, validTable, weightTable, accumTable, prefTable, infoTable,
+		seamFindValidEntryCount, seamFindWeightEntryCount, seamFindAccumEntryCount, seamFindPrefInfoEntryCount, seamFindPathEntryCount);
 }

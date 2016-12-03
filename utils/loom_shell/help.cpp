@@ -117,6 +117,10 @@ void CLoomShellParser::help(bool detailed)
 	Message("        showAttributes(context,offset,count);\n");
 	Message("        saveAttributes(context,offset,count,\"attr.txt\");\n");
 	Message("        loadAttributes(context,offset,count,\"attr.txt\");\n");
+	Message("    ~ components (advanced)\n");
+	Message("        showExpCompGains(context,num_entries);\n");
+	Message("        loadExpCompGains(context,num_entries,\"gains.txt\");\n");
+	Message("        saveExpCompGains(context,num_entries,\"gains.txt\");\n");
 	Message("    ~ miscellaneous\n");
 	Message("        help\n");
 	Message("        include \"script.lss\"\n");
@@ -145,7 +149,7 @@ void CLoomShellParser::help(bool detailed)
 	Message("| du0,dv0         | optical center correction in pixel units\n");
 	Message("| r_crop          | crop radius in pixel units\n");
 	Message("| importType      | supported values: \"pts\"\n");
-	Message("| exportType      | supported values: \"pts\", \"loom_shell\"\n");
+	Message("| exportType      | supported values: \"pts\", \"loom_shell\", \"gdf\"\n");
 	Message("| frameCount      | number of frames to process (for live capture, use 0)\n");
 	Message("| size            | size of a buffer in bytes\n");
 	Message("| stride          | stride of an image inside buffer in bytes\n");

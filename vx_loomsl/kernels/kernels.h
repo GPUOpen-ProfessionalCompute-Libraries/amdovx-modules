@@ -73,74 +73,67 @@ enum vx_df_image_amd_stitching_e {
 //////////////////////////////////////////////////////////////////////
 //! \brief The list of kernels in the stitching library.
 enum vx_kernel_stitching_amd_e {
-	//! \brief The Lens Distortion Correction Remap kernel. Kernel name is "com.amd.loomsl.lens_distortion_remap".
-	AMDOVX_KERNEL_STITCHING_LENS_DISTORTION_REMAP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
-
-	//! \brief The Initialize Stitch Config kernel. Kernel name is "com.amd.loomsl.initialize_stitch_config".
-	AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_CONFIG = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x002,
-
-	//! \brief The Simple Stitch Remap kernel. Kernel name is "com.amd.loomsl.initialize_stitch_remap".
-	AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_REMAP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x003,
-
 	//! \brief The Color Convert with optional 2x2 scale down function kernel. Kernel name is "com.amd.loomsl.color_convert".
-	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x004,
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
 
 	//! \brief The Warp function kernel. Kernel name is "com.amd.loomsl.warp".
-	AMDOVX_KERNEL_STITCHING_WARP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x005,
-
-	//! \brief The Exposure Compensation kernel. Kernel name is "com.amd.loomsl.exposure_compensation_model".
-	AMDOVX_KERNEL_STITCHING_EXPOSURE_COMPENSATION_MODEL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x006,
+	AMDOVX_KERNEL_STITCHING_WARP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x002,
 
 	//! \brief The Merge kernel. Kernel name is "com.amd.loomsl.merge".
-	AMDOVX_KERNEL_STITCHING_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x007,
-
-	//! \brief The Exposure Comp Stage#1 kernel. Kernel name is "com.amd.loomsl.expcomp_compute_gainmatrix".
-	AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x008,
-
-	//! \brief The Exposure Comp Stage#2 kernel. Kernel name is "com.amd.loomsl.expcomp_solvegains".
-	AMDOVX_KERNEL_STITCHING_EXPCOMP_SOLVE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x009,
-
-	//! \brief The Exposure Comp Stage#3 kernel. Kernel name is "com.amd.loomsl.expcomp_applygains".
-	AMDOVX_KERNEL_STITCHING_EXPCOMP_APPLYGAINS = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00A,
+	AMDOVX_KERNEL_STITCHING_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x003,
 
 	//! \brief The Alpha Blend kernel. Kernel name is "com.amd.loomsl.alpha_blend".
-	AMDOVX_KERNEL_STITCHING_ALPHA_BLEND = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00B,
+	AMDOVX_KERNEL_STITCHING_ALPHA_BLEND = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x004,
+
+	//! \brief The Exposure Comp Stage#1 kernel. Kernel name is "com.amd.loomsl.expcomp_compute_gainmatrix".
+	AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x005,
+
+	//! \brief The Exposure Comp Stage#2 kernel. Kernel name is "com.amd.loomsl.expcomp_solvegains".
+	AMDOVX_KERNEL_STITCHING_EXPCOMP_SOLVE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x006,
+
+	//! \brief The Exposure Comp Stage#3 kernel. Kernel name is "com.amd.loomsl.expcomp_applygains".
+	AMDOVX_KERNEL_STITCHING_EXPCOMP_APPLYGAINS = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x007,
 
 	//! \brief The Multi-band blend kernel. Kernel name is "com.amd.loomsl.multiband_blend".
-	AMDOVX_KERNEL_STITCHING_MULTIBAND_BLEND = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00C,
+	AMDOVX_KERNEL_STITCHING_MULTIBAND_BLEND = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x008,
 
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.half_scale_gaussian".
-	AMDOVX_KERNEL_STITCHING_HALF_SCALE_GAUSSIAN = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00D,
+	AMDOVX_KERNEL_STITCHING_HALF_SCALE_GAUSSIAN = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x009,
 
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.upscale_gaussian_subtract".
-	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_SUBTRACT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00E,
+	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_SUBTRACT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00a,
 
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.upscale_gaussian_add".
-	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00F,
+	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00b,
 
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.laplacian_reconstruct".
-	AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x010,
-
-	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.seamfind_model".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_MODEL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x011,
+	AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00c,
 
 	//! \brief The Seam Finding kernel 0. Kernel name is "com.amd.loomsl.seamfind_scene_detect".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_SCENE_DETECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x012,
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_SCENE_DETECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00d,
 
 	//! \brief The Seam Finding kernel 1. Kernel name is "com.amd.loomsl.seamfind_cost_generate".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_COST_GENERATE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x013,
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_COST_GENERATE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00e,
 
 	//! \brief The Seam Finding kernel 2. Kernel name is "com.amd.loomsl.seamfind_cost_accumulate".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_COST_ACCUMULATE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x014,
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_COST_ACCUMULATE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00f,
 
 	//! \brief The Seam Finding kernel 3. Kernel name is "com.amd.loomsl.seamfind_path_trace".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_PATH_TRACE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x015,
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_PATH_TRACE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x010,
 
 	//! \brief The Seam Finding kernel 4. Kernel name is "com.amd.loomsl.seamfind_set_weights".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_SET_WEIGHTS = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x016,
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_SET_WEIGHTS = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x011,
 
 	//! \brief The Seam Finding kernel. Kernel name is "com.amd.stitching.seamfind_analyze".
-	AMDOVX_KERNEL_STITCHING_SEAMFIND_ANALYZE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_ANALYZE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x012,
+
+	// TBD: remove
+
+	//! \brief The Exposure Compensation kernel. Kernel name is "com.amd.loomsl.exposure_compensation_model".
+	AMDOVX_KERNEL_STITCHING_EXPOSURE_COMPENSATION_MODEL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x100,
+
+	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.seamfind_model".
+	AMDOVX_KERNEL_STITCHING_SEAMFIND_MODEL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x101,
 
 };
 
@@ -150,42 +143,14 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context);
 
 //////////////////////////////////////////////////////////////////////
 
-/*! \brief [Graph] Creates a Initialize Stitch Config node.
-* \param [in] graph The reference to the graph.
-* TBD
-* \see <tt>AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_CONFIG</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchInitializeStitchConfigNode(vx_graph graph, 
-	vx_uint32 num_buff_rows, vx_uint32 num_buff_cols, vx_uint32 cam_buffer_width, vx_uint32 cam_buffer_height, vx_uint32 dst_width, 
-	vx_matrix rig_param, vx_array camera_param, vx_matrix InitializeStitchConfigAttr,
-	vx_array valid_pixels, vx_array warp_remap, vx_array overlap_pixel, vx_matrix overlap_count,
-	vx_image warp_image, vx_image exp_comp_image, vx_image weight_image,
-	vx_image camera_id_image, vx_image group1_image, vx_image group2_image,
-	vx_array exp_comp_calc, vx_image mask_image, vx_array overlap_rect,
-	vx_array seamfind_valid, vx_array seamfind_accum, vx_array seamfind_weight, vx_array seamfind_pref, vx_array seamfind_info,
-	vx_array twoband_blend);
-
 /*! \brief [Graph] Creates a Color Convert node.
 * \param [in] graph The reference to the graph.
 * \param [in] input The input image.
 * \param [out] output The output image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_COLOR_CONVERT</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output);
-
-/*! \brief [Graph] Creates a Lens Distortion node.
-* \param [in] graph The reference to the graph.
-* \param [in] input The input lens param matrix.
-* \param [out] output The output remap table.
-* \see <tt>AMDOVX_KERNEL_STITCHING_LENS_DISTORTION_REMAP</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchLensDistortionNode(vx_graph graph, vx_matrix lens_param, vx_matrix warp_param, vx_matrix rig_parm, vx_remap table, vx_array warp_ROI);
 
 /*! \brief [Graph] Creates a Warp node.
 * \param [in] graph The reference to the graph.
@@ -196,7 +161,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchLensDistortionNode(vx_graph graph, vx_mat
 * \param [in] input The input image.
 * \param [out] output The output image.
 * \param [in] num_camera_columns The number of camera columns (optional)
-* \see <tt>AMDOVX_KERNEL_STITCHING_WARP</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -211,7 +175,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 * \param [in] input The input image.
 * \param [in] input The weight image.
 * \param [out] output The output image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_MERGE</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -222,21 +185,10 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera
 * \param [in] input_rgb Input RGB image.
 * \param [in] input_rgba Input RGBX image with alpha channel.
 * \param [out] output_rgb Output RGB image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_ALPHA_BLEND</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb);
-
-/*! \brief [Graph] Creates a Initialize Stitch Remap.
-* \param [in] graph The reference to the graph.
-* TBD
-* \see <tt>AMDOVX_KERNEL_STITCHING_INITIALIZE_STITCH_REMAP</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchInitializeStitchRemapNode(vx_graph graph, vx_uint32 num_buff_rows,
-	vx_uint32 num_buff_cols, vx_uint32 cam_buffer_width, vx_uint32 cam_buffer_height, vx_uint32 dst_width, vx_matrix rig_param, vx_array camera_param, vx_remap table);
 
 /*! \brief [Graph] Creates a ExposureCompCalcErrorFn node.
 * \param [in] graph      The reference to the graph.
@@ -245,7 +197,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchInitializeStitchRemapNode(vx_graph graph,
 * \param [in] exp_data   Input Array of expdata.
 * \param [in] mask       Mask image.
 * \param [out] out_intensity     Output matrix for sum of overlapping pixels.
-* \see <tt>AMDOVX_KERNEL_STITCHING_EXPOSURE_COMP_CALC_ERROR_FUNC</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -260,7 +211,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnNode(vx_graph grap
 * \param [in] in_intensity  Input matrix for sum of overlapping pixels.
 * \param [in] in_count      Input matrix for count of overlapping pixels.
 * \param [out] out_gains    Output array for gains.
-* \see <tt>AMDOVX_KERNEL_STITCHING_EXPOSURE_COMP_SOLVE_FOR_GAIN</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -272,13 +222,15 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompSolveForGainNode(vx_graph gra
 * \param [in] input      Input image
 * \param [in] in_gains   Array of valid regions of rectangles
 * \param [in] in_offsets Array of StitchExpCompCalcEntry
+* \param [in] num_cam      scalar 
+* \param [in] gain_width scalar for gain_array width
+* \param [in] gain_height scalar for gain_array height
 * \param [out] output    Exposure adjusted image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_EXPOSURE_COMP_SOLVE_FOR_GAIN</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph, vx_image input,
-	vx_array in_gains, vx_array in_offsets, vx_image output);
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph, vx_image input, vx_array in_gains, vx_array in_offsets, 
+	vx_uint32 num_cam, vx_uint32 gain_width, vx_uint32 gain_height, vx_image output);
 
 /*! \brief [Graph] Creates a stitchBlendMultiBandMerge node.
 * \param [in] graph         The reference to the graph.
@@ -288,7 +240,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 * \param [in] weight_img    Weight image(source U8 image)
 * \param [in] valid_arr     Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [out] output       Reconstructed from multibands.
-* \see <tt>AMDOVX_KERNEL_STITCHING_MULTIBAND_BLEND</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -302,7 +253,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandMergeNode(vx_graph graph, vx_uin
 * \param [in] valid_arr     Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [in] input         Src image (RGBA)
 * \param [out] output   Output image
-* \see <tt>AMDOVX_KERNEL_STITCHING_HALF_SCALE_GAUSSIAN</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -318,7 +268,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandHalfScaleGaussianNode(vx_graph g
 * \param [in] valid_arr Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [in/optional] Weight_img input weight image for blending
 * \param [out] output Output image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_HALF_SCALE_GAUSSIAN</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -333,7 +282,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 * \param [in] input2 src image2
 * \param [in] valid_arr Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [out] output (img)
-* \see <tt>AMDOVX_KERNEL_STITCHING_HALF_SCALE_GAUSSIAN</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -348,7 +296,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 * \param [in] input2 The src image2
 * \param [in] valid_arr The offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [out] output image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -363,7 +310,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_grap
 * \param [in] seam_info The input array of seam info.
 * \param [out] seam_pref The array of seam preference.
 * \param [out] output The array of seam scene change.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_K0</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -376,31 +322,11 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSceneDetectNode(vx_graph graph, v
 * \param [in] input_weight_image The input U8 weight image from Warp.
 * \param [out] magnitude_image The output magnitude image.
 * \param [out] phase_image The output phase image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_COST_GENERATE</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindCostGenerateNode(vx_graph graph, vx_scalar executeFlag,
 	vx_image input_weight_image, vx_image magnitude_image, vx_image phase_image);
-
-/*! \brief [Graph] Creates a SeamFind Accumulate node K2 - GPU.
-* \param [in] graph The reference to the graph.
-* \param [in] current_frame The Current Frame.
-* \param [in] output_width  The output image width.
-* \param [in] output_height The output image height.
-* \param [in] magnitude_img The input Magnitude Image from K1
-* \param [in] phase_img     The input Phase Image from K1
-* \param [in] mask_img      The input Mask Image fromInitialize Stitch Config.
-* \param [in] valid_seam    The input array of valid_seam pixels
-* \param [in] pref_seam     The input array of seam preference
-* \param [out] output       The output seam_accum array.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_K2</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindK2Node(vx_graph graph, vx_scalar current_frame,
-	vx_uint32 output_width, vx_uint32 output_height, vx_image magnitude_img, vx_image phase_img,
-	vx_image mask_img, vx_array valid_seam, vx_array pref_seam, vx_array accum_seam);
 
 /*! \brief [Graph] Creates a SeamFind Cost Accumulate node - K2 - GPU.
 * \param [in] graph The reference to the graph.
@@ -414,7 +340,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindK2Node(vx_graph graph, vx_scalar 
 * \param [in] pref_seam     The input array of seam preference.
 * \param [in] info_seam     The input seam info array.
 * \param [out] output       The output seam_accum array.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_K2</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -430,7 +355,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindCostAccumulateNode(vx_graph graph
 * \param [in] seam_accum    The input seam_accum array.
 * \param [in] seam_pref     The input array of seam preference
 * \param [out] output       The Path Array.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_K3_A</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -447,30 +371,12 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 * \param [in] seam_path     The input array of seam path .
 * \param [in] seam_pref     The input array of seam preference.
 * \param [out] output       The weight image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_K3_B</tt>
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx_scalar current_frame, vx_uint32 NumCam,
 	vx_uint32 output_width, vx_uint32 output_height, vx_array seam_weight, vx_array seam_path,
 	vx_array seam_pref, vx_image weight_image, vx_uint32 flags);
-
-/*! \brief [Graph] Creates a SeamFind CPU Node.
-* \param [in] graph         The reference to the graph.
-* \param [in] numCam        The input scalar number of cameras.
-* \param [in] overlap_roi   The input array of overlap_roi
-* \param [in] overlap_matrix The input Overlap Matrix.
-* \param [in] cost_img      The input Cost Image.
-* \param [in] mask_img      The input Mask Image fromInitialize Stitch Config.
-* \param [in] weight_image  The input Weight Image
-* \param [out] output       The output New Weight Image.
-* \see <tt>AMDOVX_KERNEL_STITCHING_SEAMFIND_MODEL</tt>
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindModelNode(vx_graph graph, vx_uint32 numCam,
-	vx_array overlap_roi, vx_matrix overlap_matrix, vx_image cost_img,
-	vx_image mask_img, vx_image weight_image, vx_image new_weight_image);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The utility functions
