@@ -75,7 +75,7 @@ static vx_status VX_CALLBACK multiband_blend_input_validator(vx_node node, vx_ui
 	{ // image object of U008 type
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
-		if (format == VX_DF_IMAGE_U8) {
+		if ((format == VX_DF_IMAGE_U8) || (format == VX_DF_IMAGE_S16)) {
 			status = VX_SUCCESS;
 		}
 		else {
@@ -179,6 +179,13 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &in_height, sizeof(in_height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &in_format, sizeof(in_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+	vx_df_image wt_format = VX_DF_IMAGE_VIRT;
+	image = (vx_image)avxGetNodeParamRef(node, 3);				// input weight image
+	ERROR_CHECK_OBJECT(image);
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &in_width, sizeof(in_width)));
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &in_height, sizeof(in_height)));
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &wt_format, sizeof(wt_format)));
+	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 	vx_df_image out_format = VX_DF_IMAGE_VIRT;
 	image = (vx_image)avxGetNodeParamRef(node, 5);				// output image
 	ERROR_CHECK_OBJECT(image);
@@ -220,62 +227,85 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 		"	if (grp_id < pG_num) {\n"
 		"	uint2 offs = ((__global uint2 *)(pG_buf+pG_offs))[grp_id+arr_offs];\n"
 		"	uint camera_id = offs.x & 0x1f; uint gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); uint gy = ly + (offs.x >> 19);\n"
-		"   bool outputValid = (lx*4 < (offs.y & 0xFF)) & (ly <= (offs.y >> 8) ) ;\n"
-		"	wt_buf += wt_offset + mad24(gy, wt_stride, gx);\n"
+		"   bool outputValid = (lx*4 < (offs.y & 0xFF)) & (ly <= (offs.y >> 8) );\n"
 		"	op_buf  += op_offset + mad24(gy, op_stride, gx*6);\n"
 		"	ip_buf += (camera_id * ip_stride*%d);\n"
 		"	wt_buf += (camera_id * wt_stride*%d);\n"
 		"	op_buf += (camera_id * op_stride*%d);\n"
+		"	if (outputValid){\n"
 		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height1, height1, height1);
 	opencl_kernel_code = item;
 	if (in_format == VX_DF_IMAGE_RGBX) {
+		if (wt_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"	wt_buf += wt_offset + mad24(gy, wt_stride, gx);\n"
+				"	uchar4 wt_in  = *(__global uchar4*)(wt_buf); float divfactor = 0.0627451f;\n";
+		}
+		else
+		{
+			opencl_kernel_code +=
+			"	wt_buf += wt_offset + mad24(gy, wt_stride, gx<<1);\n"
+			"	short4 wt_in  = *(__global short4*)(wt_buf); float divfactor = 0.000490196f;\n";
+		}
 		opencl_kernel_code +=
-			"	if (outputValid){\n"
-			"		uint4 RGB_in;\n"
-			"		float4 f0;\n"
-			"		ip_buf += ip_offset + mad24(gy, ip_stride, gx<<2);\n"
-			"		RGB_in = *(__global uint4*)(ip_buf);\n"
-			"		uchar4 wt_in  = *(__global uchar4*)(wt_buf);\n"
-			"		f0 = amd_unpack(RGB_in.s0)*(float4)wt_in.s0;\n"
-			"		f0 *= (float4)0.00392157f;	// normalize\n"
-			"		*(__global short3*)(op_buf) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s1)*(float4)wt_in.s1;\n"
-			"		f0 *= (float4)0.00392157f;	// normalize\n"
-			"		*(__global short3*)(op_buf+6) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s2)*(float4)wt_in.s2;\n"
-			"		f0 *= (float4)0.00392157f;	// normalize\n"
-			"		*(__global short3*)(op_buf+12) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s3)*(float4)wt_in.s3;\n"
-			"		f0 *= (float4)0.00392157f;	// normalize\n"
-			"		*(__global short3*)(op_buf+18) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"	}\n";
+		"		uint4 RGB_in;\n"
+		"		float4 f0;\n"
+		"		ip_buf += ip_offset + mad24(gy, ip_stride, gx<<2);\n"
+		"		RGB_in = *(__global uint4*)(ip_buf);\n"
+		"		f0 = amd_unpack(RGB_in.s0)*(float4)wt_in.s0;\n"
+		"		//f0 += (float4)127.5f;\n"
+		"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
+		"		*(__global short3*)(op_buf) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
+		"		f0 = amd_unpack(RGB_in.s1)*(float4)wt_in.s1;\n"
+		"		//f0 += (float4)127.5f;\n"
+		"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
+		"		*(__global short3*)(op_buf+6) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
+		"		f0 = amd_unpack(RGB_in.s2)*(float4)wt_in.s2;\n"
+		"		//f0 += (float4)127.5f;\n"
+		"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
+		"		*(__global short3*)(op_buf+12) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
+		"		f0 = amd_unpack(RGB_in.s3)*(float4)wt_in.s3;\n"
+		"		//f0 += (float4)127.5f;\n"
+		"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
+		"		*(__global short3*)(op_buf+18) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
+		"	}\n"
+	"	}\n"
+	" }\n";
 	}
 	else
 	{
+		if (wt_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+			"	wt_buf += wt_offset + mad24(gy, wt_stride, gx);\n"
+			"	uchar4 wt_in  = *(__global uchar4*)(wt_buf); float divfactor = 0.0.0627451f;\n";
+		}
+		else
+		{
+			opencl_kernel_code +=
+			"	wt_buf += wt_offset + mad24(gy, wt_stride, gx<<1);\n"
+			"	short4 wt_in  = *(__global short4*)(wt_buf); float divfactor = 0.000490196f;\n";
+		}
 		opencl_kernel_code +=
-			"	if (outputValid){\n"
-			"		uint4 RGB_in0; uint2 RGB_in1;\n"
-			"		float3 RGB_out;\n"
-			"		float8 f0; float4 f1;\n"
-			"		ip_buf += ip_offset + mad24(gy, ip_stride, gx*6);\n"
-			"		RGB_in0 = *(__global uint4*)(ip_buf);\n"
-			"		RGB_in1 = *(__global uint2*)(ip_buf+16);\n"
-			"		uchar4 wt_in  = *(__global uchar4*)(wt_buf);\n"
-			"		f0  = convert_float8(as_short8(RGB_in0));\n"
-			"		f1  = convert_float4(as_short4(RGB_in1));\n"
-			"		RGB_out = f0.s012*(float3)wt_in.s0*(float3)0.00392157f;\n"
-			"		*(__global short3*)(op_buf) = convert_short3(RGB_out);\n"
-			"		RGB_out = f0.s345*(float3)wt_in.s1*(float3)0.00392157f;\n"
-			"		*(__global short3*)(op_buf+6) = convert_short3(RGB_out);\n"
-			"		RGB_out = (float3)(f0.s67,f1.s0) *(float3)wt_in.s2*(float3)0.00392157f;\n"
-			"		*(__global short3*)(op_buf+12) = convert_short3(RGB_out);\n"
-			"		RGB_out = f1.s123*(float3)wt_in.s3*(float3)0.00392157f;\n"
-			"		*(__global short3*)(op_buf+18) = convert_short3(RGB_out);\n"
-			"	}\n";
-	}
-	opencl_kernel_code +=
+		"		uint4 RGB_in0; uint2 RGB_in1;\n"
+		"		float3 RGB_out;\n"
+		"		float8 f0; float4 f1;\n"
+		"		ip_buf += ip_offset + mad24(gy, ip_stride, gx*6);\n"
+		"		RGB_in0 = *(__global uint4*)(ip_buf);\n"
+		"		RGB_in1 = *(__global uint2*)(ip_buf+16);\n"
+		"		f0  = convert_float8(as_short8(RGB_in0));\n"
+		"		f1  = convert_float4(as_short4(RGB_in1));\n"
+		"		RGB_out = f0.s012*(float3)wt_in.s0*(float3)divfactor;\n"
+		"		*(__global short3*)(op_buf) = convert_short3(RGB_out);\n"
+		"		RGB_out = f0.s345*(float3)wt_in.s1*(float3)divfactor;\n"
+		"		*(__global short3*)(op_buf+6) = convert_short3(RGB_out);\n"
+		"		RGB_out = (float3)(f0.s67,f1.s0) *(float3)wt_in.s2*(float3)0.divfactor;\n"
+		"		*(__global short3*)(op_buf+12) = convert_short3(RGB_out);\n"
+		"		RGB_out = f1.s123*(float3)wt_in.s3*(float3)divfactor;\n"
+		"		*(__global short3*)(op_buf+18) = convert_short3(RGB_out);\n"
 		"	}\n"
-		" }\n";
+		" }\n"
+	" }\n";
+	}
 	return VX_SUCCESS;
 }
 
@@ -446,6 +476,9 @@ vx_uint32 GenerateBlendBuffers(
 					entry->last_y = std::min(16, end_y - y) - 1;
 					entry->skip_x = (x < start_x) ? (start_x - x) : 0;
 					entry->skip_y = 0;
+					// check if the workgroup is processing border pixels, store it in high bits of skip_y
+					entry->skip_y |= ((!x) | (((x + 64) << level) >= (vx_int32)eqrWidth)) << 6;
+					entry->skip_y |= ((!y) | (((y + 16) << level) >= (vx_int32)eqrHeight)) << 7;
 				}
 			}
 		}

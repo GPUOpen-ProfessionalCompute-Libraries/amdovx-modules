@@ -253,7 +253,6 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 		"  camID0_img_buf += camID0_img_offset + gy * camID0_img_stride + (gx >> 1);\n"
 		"  uchar camIdSelect = *(__global uchar *)camID0_img_buf;\n"
 		"  uint4 pRGBX_in; float4 weights;\n"
-		"  uint Xmask = 0xff000000;\n"
 		"  float16 fa = 0;\n"
 		"  if(camIdSelect < 31) {\n"
 		"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx << 4));\n"
@@ -325,6 +324,7 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 	}
 	else { // RGBX out
 		opencl_kernel_code +=
+			"  uint Xmask = 0xff000000;\n"
 			"  pRGB_out.s0 = amd_pack(fa.s0123); pRGB_out.s0 |= Xmask;\n"
 			"  pRGB_out.s1 = amd_pack(fa.s4567); pRGB_out.s1 |= Xmask;\n"
 			"  pRGB_out.s2 = amd_pack(fa.s89AB); pRGB_out.s2 |= Xmask;\n"
@@ -432,14 +432,14 @@ vx_status GenerateMergeBuffers(
 					validPixelCamMap[x + 6] & validPixelCamMap[x + 7];
 				if (paddedPixelCamMap) {
 					commonValidMaskFor8Pixels =
-						(validPixelCamMap[x + 0] & paddedPixelCamMap[x + 0]) &
-						(validPixelCamMap[x + 1] & paddedPixelCamMap[x + 1]) &
-						(validPixelCamMap[x + 2] & paddedPixelCamMap[x + 2]) &
-						(validPixelCamMap[x + 3] & paddedPixelCamMap[x + 3]) &
-						(validPixelCamMap[x + 4] & paddedPixelCamMap[x + 4]) &
-						(validPixelCamMap[x + 5] & paddedPixelCamMap[x + 5]) &
-						(validPixelCamMap[x + 6] & paddedPixelCamMap[x + 6]) &
-						(validPixelCamMap[x + 7] & paddedPixelCamMap[x + 7]);
+						(validPixelCamMap[x + 0] | paddedPixelCamMap[x + 0]) &
+						(validPixelCamMap[x + 1] | paddedPixelCamMap[x + 1]) &
+						(validPixelCamMap[x + 2] | paddedPixelCamMap[x + 2]) &
+						(validPixelCamMap[x + 3] | paddedPixelCamMap[x + 3]) &
+						(validPixelCamMap[x + 4] | paddedPixelCamMap[x + 4]) &
+						(validPixelCamMap[x + 5] | paddedPixelCamMap[x + 5]) &
+						(validPixelCamMap[x + 6] | paddedPixelCamMap[x + 6]) &
+						(validPixelCamMap[x + 7] | paddedPixelCamMap[x + 7]);
 				}
 
 				if (commonValidMaskFor8Pixels == 0) {

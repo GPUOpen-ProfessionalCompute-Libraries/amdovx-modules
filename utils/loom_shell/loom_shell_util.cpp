@@ -923,14 +923,26 @@ vx_status saveBuffer(cl_mem mem, const char * fileName)
 
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName)
 {
+	bool textFileFormat = (strlen(fileName) > 4 && !_stricmp(&fileName[strlen(fileName) - 4], ".txt")) ? true : false;
+	FILE * fp = fopen(fileName, textFileFormat ? "r" : "rb");
+	if (!fp) return Error("ERROR: unable to open: %s", fileName);
 	std::vector<vx_float32> gains(num_entries);
-	FILE * fp = fopen(fileName, "r"); if (!fp) return Error("ERROR: unable to open: %s", fileName);
-	for (vx_size i = 0; i < gains.size(); i++) {
-		vx_float32 f;
-		if (fscanf(fp, "%g", &f) != 1) {
-			return Error("ERROR: loadExpCompGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)i);
+	if (!textFileFormat) {
+		size_t count = fread(gains.data(), sizeof(vx_float32), gains.size(), fp);
+		if (count != gains.size()) {
+			fclose(fp);
+			return Error("ERROR: loadExpCompGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)count);
 		}
-		gains[i] = f;
+	}
+	else {
+		for (vx_size i = 0; i < gains.size(); i++) {
+			vx_float32 f;
+			if (fscanf(fp, "%g", &f) != 1) {
+				fclose(fp);
+				return Error("ERROR: loadExpCompGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)i);
+			}
+			gains[i] = f;
+		}
 	}
 	fclose(fp);
 	vx_status status = lsSetExpCompGains(stitch, num_entries, gains.data());

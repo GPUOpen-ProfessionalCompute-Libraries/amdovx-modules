@@ -630,7 +630,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
 	)
 {
-	vx_size		wg_num;
+	vx_size		wg_num, num_gains;
 	vx_uint32 input_width = 0, input_height = 0, output_width = 0, output_height = 0;
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 	vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
@@ -654,11 +654,20 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cam));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
 	if (!num_cam) num_cam = 1;	// has to be atleast 1
-	
+	vx_array gains = (vx_array)avxGetNodeParamRef(node, 1);
+	ERROR_CHECK_STATUS(vxQueryArray(gains, VX_ARRAY_ATTRIBUTE_CAPACITY, &num_gains, sizeof(num_gains)));
+
 	// check if we get extra parameters for bg_width and bg_height ( for doing block_gain compensation
-	vx_uint32 bg_width = 1, bg_height = 1;
+	vx_uint32 bg_width=1, bg_height=1;
 	vx_scalar sc_width = (vx_scalar)avxGetNodeParamRef(node, 4);			// input scalar - bg width
 	vx_scalar sc_height = (vx_scalar)avxGetNodeParamRef(node, 5);			// input scalar - bg height
+	if (sc_width)ERROR_CHECK_STATUS(vxReadScalarValue(sc_width, &bg_width));
+	if (sc_height)ERROR_CHECK_STATUS(vxReadScalarValue(sc_height, &bg_height));
+	bg_width = std::max(1, (int)bg_width);
+	bg_height = std::max(1, (int)bg_height);
+	if (num_gains < bg_width*bg_height*num_cam)
+		return VX_ERROR_INVALID_DIMENSION;
+	vx_int32 bRGBGain = (num_gains >= bg_width*bg_height*num_cam * 3);			// if gain array gives gain for R, G and B seperate
 	vx_uint32 height_one_in, height_one_out;
 	height_one_in = (vx_uint32)(input_height / num_cam);
 	height_one_out = (vx_uint32)(output_height / num_cam);
@@ -671,89 +680,170 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	// opencl kernel header and reading
 	char item[8192];
 	if (sc_width && sc_height){
-		opencl_global_work[1] = opencl_local_work[1]<<1;
-		float xscale, yscale;
+		opencl_global_work[1] = opencl_local_work[1] << 1;
+		vx_float32 xscale = 1.0f, yscale = 1.0f, xoffset = 0.0f, yoffset = 0.0f;
 		// calculate xscale and yscale for block_gain computation
-		ERROR_CHECK_STATUS(vxReadScalarValue(sc_width, &bg_width));
-		ERROR_CHECK_STATUS(vxReadScalarValue(sc_height, &bg_height));
-		xscale = (bg_width > 1) ? ((float)bg_width / output_width) : 1.0f;
-		yscale = (bg_height > 1) ? ((float)bg_height / output_height) : 1.0f;
-		vx_uint32 height_one_bg = bg_height / num_cam;
-		sprintf(item,
-			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-			"\n"
-			"float4 amd_unpack(uint src)\n"
-			"{\n"
-			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+		if (bg_width > 1){
+			xscale = (vx_float32)bg_width / output_width;
+			xoffset = (vx_float32)(xscale*0.5 - 0.5);
+		}
+		if (bg_height > 1){
+			yscale = (vx_float32)(bg_height*num_cam) / output_height;
+			yoffset = (vx_float32)(yscale*0.5 - 0.5);
+		}
+		if (!bRGBGain){
+			sprintf(item,
+				"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+				"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+				"\n"
+				"float4 amd_unpack(uint src)\n"
+				"{\n"
+				"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+				"}\n"
+				"float BilinearSample(__global float *p, uint ystride, float fy0, float fy1, int x, float fx0, float fx1)\n"
+				"{\n"
+				"  float4 f;\n"
+				"  p += x;\n"
+				"  f.s0 = p[0]; f.s1 = p[1];\n"
+				"  p += ystride;\n"
+				"  f.s2 = p[0]; f.s3 = p[1];\n"
+				"  f.s0 = mad(f.s0, fx0, f.s1 * fx1);\n"
+				"  f.s2 = mad(f.s2, fx0, f.s3 * fx1);\n"
+				"  f.s0 = mad(f.s0, fy0, f.s2 * fy1);\n"
+				"  return f.s0;\n"
+				"}\n"
+				"\n"
+				"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+				"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+				"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+				"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+				"         uint bg_width, uint bg_height, \n"
+				"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+				"{\n"
+				"	int grp_id = get_global_id(0)>>4;\n"
+				"   if (grp_id < pExpData_num) {\n"
+				"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+				"	float4 scalexy = (float4)(%f, %f, %f, %f); uint size_bg = bg_width *%d;\n"
+				, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
+			opencl_kernel_code = item;
+			opencl_kernel_code +=
+				"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+				"	int cam_id = offs.s0&0x3f;\n"
+				"	__global float *pGainBuf = (__global float *)(pG_buf + pG_offs);\n"
+				"	pGainBuf += (cam_id*size_bg);\n"
+				"	int  lx = get_local_id(0);\n"
+				"	int  ly = get_global_id(1);\n"
+				"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+				"   int   gy = ly + (offs.s0 >> 17) ;\n"
+				"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+				"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
+				"   uchar4 offs4 = as_uchar4(offs.s1); \n"
+				"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+				"	float fx, fy, fy0, fy1, fint, frac;\n"
+				"	fx = mad((gx<<3), scalexy.s0, scalexy.s2); fy = mad(gy, scalexy.s1, scalexy.s3);\n"
+				"	fy0 = floor(fy); fy1 = fy - fy0; fy0 = 1.0f - fy1;\n"
+				"	float4 f, f4; \n"
+				"	pGainBuf += mul24((uint)fy, bg_width);\n"
+				"	fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	uint8 r0 =  *(__global uint8 *)pIn_buf;\n"
+				"	f4 = amd_unpack(r0.s0)*(float4)f.s0; r0.s0 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s1)*(float4)f.s1; r0.s1 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s2)*(float4)f.s2; r0.s2 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s3)*(float4)f.s3; r0.s3 = amd_pack(f4); \n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	f4 = amd_unpack(r0.s4)*(float4)f.s0; r0.s4 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s5)*(float4)f.s1; r0.s5 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s6)*(float4)f.s2; r0.s6 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s7)*(float4)f.s3; r0.s7 = amd_pack(f4); \n"
+				"	*(__global uint8 *)(pOut_buf) = r0;\n"
+				"}\n"
+				"}\n"
+				"}\n";
+		}
+		else
+		{
+			sprintf(item,
+				"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+				"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+				"\n"
+				"float4 amd_unpack(uint src)\n"
+				"{\n"
+				"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+				"}\n"
+				"float3 BilinearSample3(__global float *p, uint ystride, float fy0, float fy1, int x, float fx0, float fx1)\n"
+				"{\n"
+				"  float3 f0, f1, f2, f3;\n"
+				"  p += x*3;\n"
+				"  f0 = (float3)(p[0],p[1],p[2]); f1 = (float3)(p[3], p[4], p[5]);\n"
+				"  p += ystride;\n"
+				"  f2 = (float3)(p[0],p[1],p[2]); f3 = (float3)(p[3], p[4], p[5]);\n"
+				"  f0 = mad(f0, fx0, f1 * fx1);\n"
+				"  f2 = mad(f2, fx0, f3 * fx1);\n"
+				"  f0 = mad(f0, fy0, f2 * fy1);\n"
+				"  return f0;\n"
+				"}\n"
+				"\n"
+				"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+				"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+				"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+				"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+				"         uint bg_width, uint bg_height, \n"
+				"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+				"{\n"
+				"	int grp_id = get_global_id(0)>>4;\n"
+				"   if (grp_id < pExpData_num) {\n"
+				"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+				"	float4 scalexy = (float4)(%f, %f, %f, %f); uint size_bg = bg_width*3*%d;\n"
+				, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
+			opencl_kernel_code = item;
+			opencl_kernel_code +=
+				"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+				"	int cam_id = offs.s0&0x3f; uint gstride = bg_width*3;\n"
+				"	__global float *pGainBuf = (__global float *)(pG_buf + pG_offs);\n"
+				"	pGainBuf += (cam_id*size_bg);\n"
+				"	int  lx = get_local_id(0);\n"
+				"	int  ly = get_global_id(1);\n"
+				"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+				"   int   gy = ly + (offs.s0 >> 17) ;\n"
+				"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+				"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
+				"   uchar4 offs4 = as_uchar4(offs.s1); \n"
+				"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+				"	float fx, fy, fy0, fy1, fint, frac;\n"
+				"	fx = mad((gx<<3), scalexy.s0, scalexy.s2); fy = mad(gy, scalexy.s1, scalexy.s3);\n"
+				"	fy0 = floor(fy); fy1 = fy - fy0; fy0 = 1.0f - fy1;\n"
+				"	float4 f4; float3 f0, f1, f2, f3;\n"
+				"	pGainBuf += mul24((uint)fy, gstride);\n"
+				"	fint = floor(fx); frac = fx - fint; f0 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f1 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f2 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f3 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	uint8 r0 =  *(__global uint8 *)pIn_buf;\n"
+				"	f4 = amd_unpack(r0.s0)*(float4)(f0, 1.0f); r0.s0 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s1)*(float4)(f1, 1.0f); r0.s1 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s2)*(float4)(f2, 1.0f); r0.s2 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s3)*(float4)(f3, 1.0f); r0.s3 = amd_pack(f4); \n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f0 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f1 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f2 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f3 = BilinearSample3(pGainBuf, gstride, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
+				"	f4 = amd_unpack(r0.s4)*(float4)(f0, 1.0f); r0.s4 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s5)*(float4)(f1, 1.0f); r0.s5 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s6)*(float4)(f2, 1.0f); r0.s6 = amd_pack(f4); \n"
+				"	f4 = amd_unpack(r0.s7)*(float4)(f3, 1.0f); r0.s7 = amd_pack(f4); \n"
+				"	*(__global uint8 *)(pOut_buf) = r0;\n"
+				"}\n"
 			"}\n"
-			"float BilinearSample(__global float *p, uint ystride, float fy0, float fy1, int x, float fx0, float fx1)\n"
-			"{\n"
-			"  float4 f;\n"
-			"  p += x;\n"
-			"  f.s0 = p[0]; f.s1 = p[1];\n"
-			"  p += ystride;\n"
-			"  f.s2 = p[0]; f.s3 = p[1];\n"
-			"  f.s0 = mad(f.s0, fx0, f.s1 * fx1);\n"
-			"  f.s2 = mad(f.s2, fx0, f.s3 * fx1);\n"
-			"  f.s0 = mad(f.s0, fy0, f.s2 * fy1);\n"
-			"  return f.s0;\n"
-			"}\n"
-			"\n"
-			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
-			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
-			"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
-			"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
-			"         uint bg_width, uint bg_height, \n"
-			"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
-			"{\n"
-			"	int grp_id = get_global_id(0)>>4;\n"
-			"   if (grp_id < pExpData_num) {\n"
-			"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
-			"	float2 scalexy = (float2)(%f, %f); uint size_bg = bg_width *%d;\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, height_one_bg);
-		opencl_kernel_code = item;
-		opencl_kernel_code +=
-			"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
-			"	int cam_id = offs.s0&0x3f;\n"
-			"	__global float *pGainBuf = (__global float *)(pG_buf + pG_offs);\n"
-			"	pGainBuf += (cam_id*size_bg);\n"
-			"	int  lx = get_local_id(0);\n"
-			"	int  ly = get_global_id(1);\n"
-			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
-			"   int   gy = ly + (offs.s0 >> 17) ;\n"
-			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
-			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
-			"   uchar4 offs4 = as_uchar4(offs.s1); \n"
-			"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
-			"	float fx, fy, fy0, fy1, fint, frac;\n"
-			"	fx = (gx<<3)*scalexy.s0, fy = gy*scalexy.s1;\n"
-			"	fy0 = floor(fy); fy1 = fy - fy0; fy0 = 1.0f - fy1;\n"
-			"	float4 f, f4; \n"
-			"	pGainBuf += mul24((uint)fy, bg_width);\n"
-			"	fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	uint8 r0 =  *(__global uint8 *)pIn_buf;\n"
-			"	f4 = amd_unpack(r0.s0)*(float4)f.s0; r0.s0 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s1)*(float4)f.s1; r0.s1 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s2)*(float4)f.s2; r0.s2 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s3)*(float4)f.s3; r0.s3 = amd_pack(f4); \n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s0 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s1 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s2 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	fx += scalexy.s0; fint = floor(fx); frac = fx - fint; f.s3 = BilinearSample(pGainBuf, bg_width, fy0, fy1, (int)fint, 1.0f - frac, frac);\n"
-			"	f4 = amd_unpack(r0.s4)*(float4)f.s0; r0.s4 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s5)*(float4)f.s1; r0.s5 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s6)*(float4)f.s2; r0.s6 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r0.s7)*(float4)f.s3; r0.s7 = amd_pack(f4); \n"
-			"	*(__global uint8 *)(pOut_buf) = r0;\n"
-			"}\n"
-		"}\n"
-	"}\n";
-	ERROR_CHECK_STATUS(vxReleaseScalar(&sc_width));
-	ERROR_CHECK_STATUS(vxReleaseScalar(&sc_height));
+		"}\n";
+		}
+		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_width));
+		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_height));
 	}
 	else
 	{
@@ -1217,20 +1307,22 @@ vx_status GenerateExpCompBuffers(
 							overlapPixelCountMatrix[i * numCamera + j] += count;
 							overlapPixelCountMatrix[j * numCamera + i] += count;
 							// add overlapTable entry
-							if (overlapEntryCount < overlapTableSize) {
-								StitchOverlapPixelEntry overlapEntry;
-								overlapEntry.camId0 = i;
-								overlapEntry.start_x = xs;
-								overlapEntry.start_y = ys;
-								overlapEntry.end_x = xe - xs - 1;
-								overlapEntry.end_y = ye - ys - 1;
-								overlapEntry.camId1 = j;
-								overlapEntry.camId2 = 0x1F;
-								overlapEntry.camId3 = 0x1F;
-								overlapEntry.camId4 = 0x1F;
-								overlapTable[overlapEntryCount] = overlapEntry;
+							if (overlapTable){
+								if (overlapEntryCount < overlapTableSize) {
+									StitchOverlapPixelEntry overlapEntry;
+									overlapEntry.camId0 = i;
+									overlapEntry.start_x = xs;
+									overlapEntry.start_y = ys;
+									overlapEntry.end_x = xe - xs - 1;
+									overlapEntry.end_y = ye - ys - 1;
+									overlapEntry.camId1 = j;
+									overlapEntry.camId2 = 0x1F;
+									overlapEntry.camId3 = 0x1F;
+									overlapEntry.camId4 = 0x1F;
+									overlapTable[overlapEntryCount] = overlapEntry;
+								}
+								overlapEntryCount++;
 							}
-							overlapEntryCount++;
 						}
 					}
 				}
@@ -1239,7 +1331,7 @@ vx_status GenerateExpCompBuffers(
 	}
 
 	// check for buffer overflow error condition and updated output entry counts
-	if (validEntryCount > validTableSize || overlapEntryCount > overlapTableSize) {
+	if (validEntryCount > validTableSize || (overlapTable && (overlapEntryCount > overlapTableSize))) {
 		return VX_ERROR_NOT_SUFFICIENT;
 	}
 	*validTableEntryCount = validEntryCount;

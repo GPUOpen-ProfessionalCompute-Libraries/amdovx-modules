@@ -309,7 +309,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		")\n"
 		"{\n"
 		"  int gid = get_global_id(0);\n"
-		"  float4 f, mf; uint sx, sy, offset; __global uchar * pt; uint4 outpix;\n"
+		"  float4 f, mf; uint sx, sy, offset; uint4 outpix;\n"
 		"  uint QF = 3;\n"
 		"  uint QFB = (1 << QF) - 1; float QFM = 1.0f / (1 << QF);\n"
 		"  uint ip_image_height_offset = %d;\n" // ip_image_height_offs
@@ -844,41 +844,28 @@ vx_status GenerateWarpBuffers(
 			for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr += 8, pixelPosition += 8)
 			{
 				// get camera use mask for consecutive 8 pixels from current pixel position
-				vx_uint32 validMaskFor8Pixels =
-					validPixelCamMap[pixelPosition + 0] | validPixelCamMap[pixelPosition + 1] |
-					validPixelCamMap[pixelPosition + 2] | validPixelCamMap[pixelPosition + 3] |
-					validPixelCamMap[pixelPosition + 4] | validPixelCamMap[pixelPosition + 5] |
-					validPixelCamMap[pixelPosition + 6] | validPixelCamMap[pixelPosition + 7];
+				vx_uint32 validMask[8];
+				vx_uint32 validMaskFor8Pixels = 0;
 				if (paddedPixelCamMap) {
-					validMaskFor8Pixels |=
-						paddedPixelCamMap[pixelPosition + 0] | paddedPixelCamMap[pixelPosition + 1] |
-						paddedPixelCamMap[pixelPosition + 2] | paddedPixelCamMap[pixelPosition + 3] |
-						paddedPixelCamMap[pixelPosition + 4] | paddedPixelCamMap[pixelPosition + 5] |
-						paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
+					for (vx_uint32 i = 0; i < 8; i++) {
+						validMask[i] = validPixelCamMap[pixelPosition + i] | paddedPixelCamMap[pixelPosition + i];
+						validMaskFor8Pixels |= validMask[i];
+					}
+				}
+				else {
+					for (vx_uint32 i = 0; i < 8; i++) {
+						validMask[i] = validPixelCamMap[pixelPosition + i];
+						validMaskFor8Pixels |= validMask[i];
+					}
 				}
 				if (validMaskFor8Pixels & camMapBit)
 				{
 					if (entryCount < mapTableSize)
 					{
 						// get mask to check if all pixels are valid and set validMap entry
-						vx_uint32 allValidMaskFor8Pixels;
-						if (paddedPixelCamMap) {
-							allValidMaskFor8Pixels =
-								(validPixelCamMap[pixelPosition + 0] & paddedPixelCamMap[pixelPosition + 0]) &
-								(validPixelCamMap[pixelPosition + 1] & paddedPixelCamMap[pixelPosition + 1]) &
-								(validPixelCamMap[pixelPosition + 2] & paddedPixelCamMap[pixelPosition + 2]) &
-								(validPixelCamMap[pixelPosition + 3] & paddedPixelCamMap[pixelPosition + 3]) &
-								(validPixelCamMap[pixelPosition + 4] & paddedPixelCamMap[pixelPosition + 4]) &
-								(validPixelCamMap[pixelPosition + 5] & paddedPixelCamMap[pixelPosition + 5]) &
-								(validPixelCamMap[pixelPosition + 6] & paddedPixelCamMap[pixelPosition + 6]) &
-								(validPixelCamMap[pixelPosition + 7] & paddedPixelCamMap[pixelPosition + 7]);
-						}
-						else {
-							allValidMaskFor8Pixels =
-								validPixelCamMap[pixelPosition + 0] & validPixelCamMap[pixelPosition + 1] &
-								validPixelCamMap[pixelPosition + 2] & validPixelCamMap[pixelPosition + 3] &
-								validPixelCamMap[pixelPosition + 4] & validPixelCamMap[pixelPosition + 5] &
-								validPixelCamMap[pixelPosition + 6] & validPixelCamMap[pixelPosition + 7];
+						vx_uint32 allValidMaskFor8Pixels = validMask[0];
+						for (vx_uint32 i = 1; i < 8; i++) {
+							allValidMaskFor8Pixels &= validMask[i];
 						}
 						StitchValidPixelEntry validEntry = { 0 };
 						validEntry.camId = camId;
@@ -890,8 +877,8 @@ vx_status GenerateWarpBuffers(
 						const StitchCoord2dFloat * srcEntry = &camSrcMapCurrent[pixelPosition];
 						vx_uint16 * warpEntry = (vx_uint16 *)&warpMap[entryCount];
 						for (vx_uint32 i = 0; i < 8; i++, warpEntry += 2, srcEntry++) {
-							warpEntry[0] = (srcEntry->x < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->x * 8.0f + 0.5f + xSrcOffset);
-							warpEntry[1] = (srcEntry->y < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->y * 8.0f + 0.5f);
+							warpEntry[0] = !(validMask[i] & camMapBit) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->x * 8.0f + 0.5f + xSrcOffset);
+							warpEntry[1] = !(validMask[i] & camMapBit) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->y * 8.0f + 0.5f);
 						}
 					}
 					entryCount++;

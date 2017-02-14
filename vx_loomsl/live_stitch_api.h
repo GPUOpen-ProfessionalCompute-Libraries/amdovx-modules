@@ -74,6 +74,7 @@ enum {
 	LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE  =   33,   // LoomIO: camera auxiliary data buffer size in bytes.
 	LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE =   34,   // LoomIO: overlay auxiliary data buffer size in bytes.
 	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE  =   35,   // LoomIO: display auxiliary data buffer size in bytes.
+	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C		  =	  36,   // exp-comp attribute: gain image num channels (default: 1)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change
 	// ... reserved for LoomSL internal attributes

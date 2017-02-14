@@ -638,7 +638,7 @@ vx_status seamfind_model_publish(vx_context context)
 }
 
 /***********************************************************************************************************************************
-														Seam Find GPU 
+														Seam Find GPU
 ***********************************************************************************************************************************/
 
 /***********************************************************************************************************************************
@@ -806,11 +806,8 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
 
 	char textBuffer[256];
-	int VIEW_SCENE_CHANGE = 0, SCENE_DURATION = 300, DETECT_ALG = 0;
+	int VIEW_SCENE_CHANGE = 0;
 	if (StitchGetEnvironmentVariable("VIEW_SCENE_CHANGE", textBuffer, sizeof(textBuffer))) { VIEW_SCENE_CHANGE = atoi(textBuffer); }
-	if (StitchGetEnvironmentVariable("SCENE_DURATION", textBuffer, sizeof(textBuffer))) { SCENE_DURATION = atoi(textBuffer); }
-	if (StitchGetEnvironmentVariable("DETECT_ALG", textBuffer, sizeof(textBuffer))) { DETECT_ALG = atoi(textBuffer); }
-
 	// set kernel configuration
 	vx_uint32 work_items = (vx_uint32)arr_capacity;
 	strcpy(opencl_kernel_function_name, "seamfind_scene_detect");
@@ -843,7 +840,7 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 		"int gid = get_global_id(0);\n"
 		"\n"
 		"if (gid < seam_info_num_items)\n"
-		"	{\n"
+		"{\n"
 		"\n"
 		"		seam_info_buf += seam_info_buf_offset + (gid * 16);\n"
 		"		seam_pref_buf  =  seam_pref_buf + seam_pref_buf_offset;\n"
@@ -859,20 +856,11 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 		"		uint offset_2 = (info.s1 * equi_height);\n"
 		"		uint x_dir = (info.s3 - info.s2);\n"
 		"		uint y_dir = (info.s5 - info.s4);\n"
-		"		uint threshold_scene_vert = 1500;\n"	//Default Value if 0 threshold passed
-		"		uint threshold_scene_hort = 50;\n"		//Default Value if 0 threshold passed
-		"		uint max_val = 255;\n"
+		"		uint thresholdDefaultPercentage = 2;\n" // default if no threshold passed
+		"		uint threshold_scene_vert = 0;\n"
+		"		uint threshold_scene_hort = 0;\n"
 		"\n";
-	if (DETECT_ALG == 1)
-	{
-		opencl_kernel_code +=
-			"\n"
-			"		threshold_scene_vert = 30;\n"		//Default Value if 0 threshold passed
-			"		max_val = 8;\n"
-			"\n";
-	}
 	opencl_kernel_code +=
-		"\n"
 		"\n"
 		"/* Vertical Seam */\n"
 		"			if (y_dir >= x_dir)\n"
@@ -889,7 +877,7 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 	if (VIEW_SCENE_CHANGE)
 	{
 		opencl_kernel_code +=
-			"					pref.s2 = current_frame;\n";	//Clear scene change display
+			"					pref.s2 = current_frame;\n";	// clear scene change display
 	}
 	opencl_kernel_code +=
 		"					}\n"
@@ -898,104 +886,77 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 		"\n"
 		"				uint SAD = 0;\n"
 		"				uint valid_pixel = 0;\n"
-		"				for (uint f = 0; f < 8; f++)\n"
-		"				{\n"
-		"					uint y_start = info.s4 + ((y_dir / 8) * f);\n"
-		"					for (uint g = 0; g < 3; g++)\n"
-		"					{\n"
-		"						uint x_start = info.s2 + (((x_dir / 2) + ((x_dir / 10)*(g - 1))) - 4);\n"
-		"						uint cost_id_1 = ((y_start + offset_1) * ip_cost_width) + x_start;\n"
-		"						uint cost_id_2 = ((y_start + offset_2) * ip_cost_width) + x_start;\n"
-		"						uint output_id = ((f*24)+(g*8));\n"
+		"				uint changed_valid_pixel = 0;\n"
 		"\n"
-		"						for (uint k = 0; k < 8; k++)\n"
+		"				if (pref.s7 == 0)\n"
+		"				{\n"
+		"					for (uint f = 0; f < 8; f++)\n"
+		"					{\n"
+		"						uint y_start = info.s4 + ((y_dir / 8) * f);\n"
+		"						for (uint g = 0; g < 3; g++)\n"
 		"						{\n"
-		"							char input_img_1 = *(__global char *)&ip_cost_buf[cost_id_1 + k];\n"
-		"							char input_img_2 = *(__global char *)&ip_cost_buf[cost_id_2 + k];\n"
-		"							char past_frame = 0;\n"
-		"							char present_frame = input_img_1;\n";
-	if (DETECT_ALG == 0)
-	{
-		opencl_kernel_code +=
-			"							if(input_img_1 && input_img_2)\n"
-			"							{\n"
-			"								past_frame = *(__global char *)&seam_scene_buf[(gid * 192) + output_id + k];\n"
-			"								*(__global char *)&seam_scene_buf[(gid * 192) + output_id + k] = present_frame;\n"
-			"								SAD += abs_diff(present_frame, past_frame);\n"
-			"								valid_pixel++;\n"
-			"							}\n";
-	}
-	if (DETECT_ALG == 1)
-	{
-		opencl_kernel_code +=
-			"							if(input_img_1 && input_img_2)\n"
-			"							{\n"
-			"								char present_lbp_value = 0;\n"
-			"								char8 LBP;\n"
-			"								LBP.s6 = *(__global char *)&ip_cost_buf[cost_id_1 + k - 1];\n"
-			"								LBP.s2 = *(__global char *)&ip_cost_buf[cost_id_1 + k + 1];\n"
-			"								LBP.s7 = *(__global char *)&ip_cost_buf[((y_start + offset_1 - 1) * ip_cost_width) + x_start + k - 1];\n"
-			"								LBP.s0 = *(__global char *)&ip_cost_buf[((y_start + offset_1 - 1) * ip_cost_width) + x_start + k];\n"
-			"								LBP.s1 = *(__global char *)&ip_cost_buf[((y_start + offset_1 - 1) * ip_cost_width) + x_start + k + 1];\n"
-			"								LBP.s5 = *(__global char *)&ip_cost_buf[((y_start + offset_1 + 1) * ip_cost_width) + x_start + k - 1];\n"
-			"								LBP.s4 = *(__global char *)&ip_cost_buf[((y_start + offset_1 + 1) * ip_cost_width) + x_start + k];\n"
-			"								LBP.s3 = *(__global char *)&ip_cost_buf[((y_start + offset_1 + 1) * ip_cost_width) + x_start + k + 1];\n"
-			"								if(present_frame >= LBP.s0) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s1) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s2) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s3) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s4) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s5) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s6) present_lbp_value++;\n"
-			"								if(present_frame >= LBP.s7) present_lbp_value++;\n"
-			"								char past_lbp_value  = *(__global char *)&seam_scene_buf[(gid * 192) + output_id + k];\n"
-			"								*(__global char *)&seam_scene_buf[(gid * 192) + output_id + k] = present_lbp_value;\n"
-			"								SAD += abs_diff(past_lbp_value, present_lbp_value);\n"
-			"								valid_pixel++;\n"
-			"							}\n";
-	}
-	opencl_kernel_code +=
+		"							uint x_start = info.s2 + (((x_dir / 2) + ((x_dir / 10)*(g - 1))) - 4);\n"
+		"							uint cost_id_1 = ((y_start + offset_1) * ip_cost_width) + x_start;\n"
+		"							uint cost_id_2 = ((y_start + offset_2) * ip_cost_width) + x_start;\n"
+		"							uint output_id = ((f*24)+(g*8));\n"
+		"\n"
+		"							for (uint k = 0; k < 8; k++)\n"
+		"							{\n"
+		"								char input_img_1 = *(__global char *)&ip_cost_buf[cost_id_1 + k];\n"
+		"								char input_img_2 = *(__global char *)&ip_cost_buf[cost_id_2 + k];\n"
+		"								char past_frame = 0;\n"
+		"								char present_frame = input_img_1;\n"
+		"								if(input_img_1 && input_img_2)\n"
+		"								{\n"
+		"									past_frame = *(__global char *)&seam_scene_buf[(gid * 192) + output_id + k];\n"
+		"									*(__global char *)&seam_scene_buf[(gid * 192) + output_id + k] = present_frame;\n"
+		"									SAD = abs_diff(present_frame, past_frame);\n"
+		"									valid_pixel++;\n"
+		"									if(SAD){ changed_valid_pixel++; SAD = 0; }\n"
+		"								}\n"
+		"							}\n"
 		"						}\n"
 		"					}\n"
-		"				}\n"
 		"\n"
-		"				if (threshold != 0)\n"
-		"				threshold_scene_vert = (int)(threshold * valid_pixel * max_val * 0.01);\n" //threshold: 0 - 100 in percentage
+		"					if (threshold > 0 && threshold <= 100 )\n" // if threshold: 1 - 100 in percentage
+		"						thresholdDefaultPercentage = threshold; \n"
 		"\n"
-		"				if(SAD > threshold_scene_vert && pref.s7 == 0 && current_frame != 0 )\n"
-		"				{\n"
-		"					pref.s2 = current_frame;\n"
-		"					pref.s6 = 150;\n"
+		"					threshold_scene_vert = (uint)(thresholdDefaultPercentage * valid_pixel * 0.01);\n"
+		"\n"
+		"					if(changed_valid_pixel > threshold_scene_vert && current_frame != 0 )\n"
+		"					{\n"
+		"						pref.s2 = current_frame;\n"
+		"						pref.s6 = 150;\n"
 		"\n";
 	if (!VIEW_SCENE_CHANGE)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 1;\n";
+			"						pref.s7 = 1;\n";
 	}
 	if (VIEW_SCENE_CHANGE == 1)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 2;\n";	//View Scene Change - Dark
+			"						pref.s7 = 2;\n";	// view Scene Change - Dark
 	}
 	if (VIEW_SCENE_CHANGE == 2)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 3;\n";	//View Scene Change - Bright
+			"						pref.s7 = 3;\n";	// view Scene Change - Bright
 	}
 	opencl_kernel_code +=
+		"					}\n"
 		"				}\n"
 		"\n"
-		"\n"
-		"			*(__global short8 *)&seam_pref_buf[gid * 16] = pref;\n"
+		"				*(__global short8 *)&seam_pref_buf[gid * 16] = pref;\n"
 		"\n"
 #endif
-		"		}\n"
+		"			}\n"
 
 		"\n";
 	opencl_kernel_code +=
 		"/* Horizontal Seam */\n"
-		"		else if(x_dir > y_dir)\n"
-		"		{\n"
+		"			else if(x_dir > y_dir)\n"
+		"			{\n"
 #if ENABLE_HORIZONTAL_SEAM
 		"\n"
 		"				if (pref.s7 != 0)\n"
@@ -1008,7 +969,7 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 	if (VIEW_SCENE_CHANGE)
 	{
 		opencl_kernel_code +=
-			"					pref.s2 = current_frame;\n";	//Clear scene change display
+			"					pref.s2 = current_frame;\n";	// clear scene change display
 	}
 	opencl_kernel_code +=
 		"					}\n"
@@ -1016,60 +977,72 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 		"				}\n"
 		"\n"
 		"				uint SAD = 0;\n"
-		"				for (uint f = 0; f < 8; f++)\n"
-		"				{\n"
-		"					uint x_start = info.s2 + ((x_dir / 8) * f);\n"
-		"					for (uint g = 0; g < 3; g++)\n"
-		"					{\n"
-		"						uint y_start = info.s4 + (((y_dir / 2) + ((y_dir / 10)*(g - 1))) - 4);\n"
-		"						uint cost_id_1 = ((y_start + offset_1) * ip_cost_width) + x_start;\n"
-		"						uint cost_id_2 = ((y_start + offset_2) * ip_cost_width) + x_start;\n"
-		"						uint output_id = ((f*24)+(g*8));\n"
+		"				uint valid_pixel = 0;\n"
+		"				uint changed_valid_pixel = 0;\n"
 		"\n"
-		"						for (uint k = 0; k < 8; k++)\n"
+		"				if (pref.s7 == 0)\n"
+		"				{\n"
+		"					for (uint f = 0; f < 8; f++)\n"
+		"					{\n"
+		"						uint x_start = info.s2 + ((x_dir / 8) * f);\n"
+		"						for (uint g = 0; g < 3; g++)\n"
 		"						{\n"
-		"							char input_img_1 = *(__global char *)&ip_cost_buf[cost_id_1 + k];\n"
-		"							char input_img_2 = *(__global char *)&ip_cost_buf[cost_id_2 + k];\n"
-		"							char past_frame = 0;\n"
-		"							char present_frame = abs(input_img_1);\n"
-		"							if(input_img_1 && input_img_2)\n"
+		"							uint y_start = info.s4 + (((y_dir / 2) + ((y_dir / 10)*(g - 1))) - 4);\n"
+		"							uint cost_id_1 = ((y_start + offset_1) * ip_cost_width) + x_start;\n"
+		"							uint cost_id_2 = ((y_start + offset_2) * ip_cost_width) + x_start;\n"
+		"							uint output_id = ((f*24)+(g*8));\n"
+		"\n"
+		"							for (uint k = 0; k < 8; k++)\n"
 		"							{\n"
-		"								past_frame = *(__global char *)&seam_scene_buf[(gid * 192) + output_id + k];\n"
-		"								*(__global char *)&seam_scene_buf[(gid * 192) + output_id + k] = present_frame;\n"
-		"								SAD += abs_diff(present_frame, past_frame);\n"
+		"								char input_img_1 = *(__global char *)&ip_cost_buf[cost_id_1 + k];\n"
+		"								char input_img_2 = *(__global char *)&ip_cost_buf[cost_id_2 + k];\n"
+		"								char past_frame = 0;\n"
+		"								char present_frame = abs(input_img_1);\n"
+		"								if(input_img_1 && input_img_2)\n"
+		"								{\n"
+		"									past_frame = *(__global char *)&seam_scene_buf[(gid * 192) + output_id + k];\n"
+		"									*(__global char *)&seam_scene_buf[(gid * 192) + output_id + k] = present_frame;\n"
+		"									SAD = abs_diff(present_frame, past_frame);\n"
+		"									valid_pixel++;\n"
+		"									if(SAD){ changed_valid_pixel++; SAD = 0; }\n"
+		"								}\n"
 		"							}\n"
 		"						}\n"
 		"					}\n"
-		"				}\n"
 		"\n"
+		"					if (threshold > 0 && threshold <= 100 )\n" // if threshold: 1 - 100 in percentage
+		"						thresholdDefaultPercentage = threshold; \n"
 		"\n"
-		"				if(SAD > threshold_scene_hort && pref.s7 == 0 && current_frame != 0 )\n"
-		"				{\n"
-		"					pref.s2 = current_frame;\n"
-		"					pref.s6 = 150;\n"
+		"					threshold_scene_hort = (uint)(thresholdDefaultPercentage * valid_pixel * 0.01);\n"
+		"\n"
+		"					if(changed_valid_pixel > threshold_scene_hort && current_frame != 0 )\n"
+		"					{\n"
+		"						pref.s2 = current_frame;\n"
+		"						pref.s6 = 150;\n"
 		"\n";
 	if (!VIEW_SCENE_CHANGE)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 1;\n";
+			"						pref.s7 = 1;\n";
 	}
 	if (VIEW_SCENE_CHANGE == 1)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 2;\n";	//View Scene Change - Dark
+			"						pref.s7 = 2;\n";	// view Scene Change - Dark
 	}
 	if (VIEW_SCENE_CHANGE == 2)
 	{
 		opencl_kernel_code +=
-			"					pref.s7 = 3;\n";	//View Scene Change - Bright
+			"						pref.s7 = 3;\n";	// view Scene Change - Bright
 	}
 	opencl_kernel_code +=
+		"					}\n"
 		"				}\n"
 		"\n"
+		"				*(__global short8 *)&seam_pref_buf[gid * 16] = pref;\n"
 		"\n"
-		"			*(__global short8 *)&seam_pref_buf[gid * 16] = pref;\n"
 #endif
-		"		}\n"
+		"			}\n"
 		"\n";
 
 	opencl_kernel_code +=
@@ -1279,9 +1252,6 @@ static vx_status VX_CALLBACK seamfind_scene_detect_kernel(vx_node node, const vx
 			}
 #endif
 		}
-		/***********************************************************************************************************************************
-		Special Case SeamCut: TBD
-		************************************************************************************************************************************/
 	}
 
 	ERROR_CHECK_STATUS(vxCommitImagePatch(input_image, &input_rect, 0, &input_addr, input_image_ptr));
@@ -1541,9 +1511,9 @@ static vx_status VX_CALLBACK seamfind_cost_generate_opencl_codegen(
 		"    // Filter row 1\n"
 		"    pix = vload4(0, lbufptr + (lstride >> 2));\n"
 		"    tempf = (float8)(amd_unpack3(pix.s0), amd_unpack0(pix.s1), amd_unpack1(pix.s1), amd_unpack2(pix.s1), amd_unpack3(pix.s1), amd_unpack0(pix.s2), amd_unpack1(pix.s2), amd_unpack2(pix.s2));\n"
-		"    Gx = (tempf, (float8)(-2.0f), Gx);\n"
+		"    Gx = mad(tempf, (float8)(-2.0f), Gx);\n"
 		"    tempf = (float8)(amd_unpack1(pix.s1), amd_unpack2(pix.s1), amd_unpack3(pix.s1), amd_unpack0(pix.s2), amd_unpack1(pix.s2), amd_unpack2(pix.s2), amd_unpack3(pix.s2), amd_unpack0(pix.s3));\n"
-		"    Gx = (tempf, (float8)(2.0f), Gx);\n"
+		"    Gx = mad(tempf, (float8)(2.0f), Gx);\n"
 		"    // Filter row 2\n"
 		"    pix = vload4(0, lbufptr + (lstride >> 1));\n"
 		"    tempf = (float8)(amd_unpack3(pix.s0), amd_unpack0(pix.s1), amd_unpack1(pix.s1), amd_unpack2(pix.s1), amd_unpack3(pix.s1), amd_unpack0(pix.s2), amd_unpack1(pix.s2), amd_unpack2(pix.s2));\n"
@@ -1936,8 +1906,8 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 			"\n";
 	}
 	opencl_kernel_code +=
-						//Quantize the phase image
-		"				phase_img_R = phase_img_R >> 5;\n" 
+		//Quantize the phase image
+		"				phase_img_R = phase_img_R >> 5;\n"
 		"				phase_img_L = phase_img_L >> 5;\n"
 		"				/* Parent at the start of the seam set to control value */\n"
 		"				if (i == 0)\n"
@@ -2642,7 +2612,6 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"			else if(x_dir > y_dir)\n"
 		"			{\n"
 #if ENABLE_HORIZONTAL_SEAM
-		"				uint accum_offset = pref.s1 * equi_height;\n"
 		"\n"
 		"				int xe = (int)info.s3 - 1;\n"
 		"				min_x = xe;\n"
@@ -2684,6 +2653,11 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"					accum = vload4(0, (__global int *)&seam_accum_buf[min_path_start * 12]); \n"
 		"					p_x = (accum.s0 & 0x0000FFFF);\n"
 		"					p_y = ((accum.s0 & 0xFFFF0000) >> 16);\n"
+		"\n"
+		"					if ((p_y > min_y + 1) || (p_y < min_y - 1))\n"
+		"					{\n"
+		"					p_y = min_y - 1;\n"
+		"					}\n"
 		"\n"
 		"				}\n"
 		"\n"
@@ -3115,9 +3089,9 @@ static vx_status VX_CALLBACK seamfind_set_weights_opencl_codegen(
 	vx_uint32 debugFlags = 0;
 	int DRAW_SEAM = 0, VIEW_SCENE_CHANGE = 0, SHOW_ALL_SEAMS = 0;
 	ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)parameters[8], &debugFlags));
-	DRAW_SEAM         = (debugFlags >>  8) & 1;
-	VIEW_SCENE_CHANGE = (debugFlags >>  9) & 1;
-	SHOW_ALL_SEAMS    = (debugFlags >> 10) & 1;
+	DRAW_SEAM = (debugFlags >> 8) & 1;
+	VIEW_SCENE_CHANGE = (debugFlags >> 9) & 1;
+	SHOW_ALL_SEAMS = (debugFlags >> 10) & 1;
 	if (SHOW_ALL_SEAMS)
 		DRAW_SEAM = 1;
 
@@ -3140,11 +3114,8 @@ static vx_status VX_CALLBACK seamfind_set_weights_opencl_codegen(
 		"\n"
 		"__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n" // opencl_local_work[0]
 		"\n"
-		"void %s(\n" // opencl_kernel_function_name
-		"		 uint current_frame,\n"
-		"		 uint NumCam,\n"
-		"		 uint equi_width,\n"
-		"        uint equi_height,\n"
+		"void %s(uint current_frame,\n" // opencl_kernel_function_name
+		"		 uint NumCam, uint equi_width, uint equi_height,\n"
 		"        __global char * seam_valid_buf, uint seam_valid_buf_offset, uint valid_pix_num_items,\n"
 		"        __global char * path_buf, uint path_buf_offset, uint path_num_items,\n"
 		"		 __global char * seam_pref_buf, uint seam_pref_buf_offset, uint seam_pref_num_items,\n"
@@ -3182,7 +3153,7 @@ static vx_status VX_CALLBACK seamfind_set_weights_opencl_codegen(
 		"					uint overlap_ID = dim.s1 + (dim.s4 * equi_width);\n"
 		"					path = vload2(0, (__global short *)&path_buf[overlap_ID << 2]);\n"
 		"\n"
-		"					char i_val_start, j_val_start, i_val_end, j_val_end;\n"
+		"					uint i_val_start, j_val_start, i_val_end, j_val_end;\n"
 		"\n"
 		"					if (path.s1 == 255)\n"
 		"					{\n"
@@ -3281,7 +3252,7 @@ static vx_status VX_CALLBACK seamfind_set_weights_opencl_codegen(
 		"					uint overlap_ID = dim.s0 + (dim.s4 * equi_width);\n"
 		"					path = vload2(0, (__global short *)&path_buf[overlap_ID << 2]);\n"
 		"\n"
-		"					char i_val_start = 0, j_val_start = 0, i_val_end = 0, j_val_end = 0;\n"
+		"					uint i_val_start = 0, j_val_start = 0, i_val_end = 0, j_val_end = 0;\n"
 		"\n"
 		"					if (path.s1 == 255)\n"
 		"					{\n"
@@ -3722,7 +3693,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 		vx_int32 end_x = ((vx_int32)((180 + yawRightBorder + overlapInDegrees * 0.5f) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
 		if (end_x < start_x) {
 			// when region wraps from right to left, pick the larger of righside or leftside
-			if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+			if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 			else end_x = (vx_int32)eqrWidth;
 		}
 		vx_rectangle_t * overlapRect = &overlapRegion[max(camId, camIdToRight)][min(camId, camIdToRight)];
@@ -3741,7 +3712,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 				end_x = ((vx_int32)((180 + yawRightBorder) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
 				if (end_x < start_x) {
 					// when region wraps from right to left, pick the larger of righside or leftside
-					if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+					if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 					else end_x = (vx_int32)eqrWidth;
 				}
 				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
@@ -3759,16 +3730,16 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 			else {
 				// disable overlap between equator and top camera
 				overlapRectHoriz->start_x = overlapRectHoriz->end_x = 0;
-				// reduce the overlap top to default seam border
-				float veriticalGapInDegrees = topBotVerticalGapInDegree;
-				if (topBotVerticalGapInDegree < 0) {
-					veriticalGapInDegrees = 0;
-					if (camera_par[eqrCamIdTop].lens.r_crop > 0) {
-						veriticalGapInDegrees = camera_par[eqrCamIdTop].lens.hfov * camera_par[eqrCamIdTop].lens.r_crop / camera_par[eqrCamIdTop].lens.haw;
-					}
-				}
-				overlapRect->start_y = max(overlapRect->start_y, (vx_uint32)(veriticalGapInDegrees * eqrHeight / 180.0f));
 			}
+			// reduce the overlap top to default seam border
+			float veriticalGapInDegrees = topBotVerticalGapInDegree;
+			if (topBotVerticalGapInDegree < 0) {
+				veriticalGapInDegrees = 0;
+				if (camera_par[eqrCamIdTop].lens.r_crop > 0) {
+					veriticalGapInDegrees = camera_par[eqrCamIdTop].lens.hfov * camera_par[eqrCamIdTop].lens.r_crop / camera_par[eqrCamIdTop].lens.haw;
+				}
+			}
+			overlapRect->start_y = max(overlapRect->start_y, (vx_uint32)(veriticalGapInDegrees * eqrHeight / 180.0f));
 		}
 		if (eqrCamIdBot < numCamera) {
 			vx_rectangle_t *overlapRectHoriz = &overlapRegion[max(camId, eqrCamIdBot)][min(camId, eqrCamIdBot)];
@@ -3779,7 +3750,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 				end_x = ((vx_int32)((180 + yawRightBorder) * eqrWidth / 360.0f) + (vx_int32)eqrWidth) % (vx_int32)eqrWidth;
 				if (end_x < start_x) {
 					// when region wraps from right to left, pick the larger of righside or leftside
-					if (end_x > (vx_int32)eqrWidth - start_x) start_x = 0;
+					if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 					else end_x = (vx_int32)eqrWidth;
 				}
 				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
@@ -3797,16 +3768,16 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 			else {
 				// disable overlap between equator and bottom camera
 				overlapRectHoriz->start_x = overlapRectHoriz->end_x = 0;
-				// reduce the overlap bttom to default seam border
-				float veriticalGapInDegrees = topBotVerticalGapInDegree;
-				if (topBotVerticalGapInDegree < 0) {
-					veriticalGapInDegrees = 0;
-					if (camera_par[eqrCamIdBot].lens.r_crop > 0) {
-						veriticalGapInDegrees = camera_par[eqrCamIdBot].lens.hfov * camera_par[eqrCamIdBot].lens.r_crop / camera_par[eqrCamIdBot].lens.haw;
-					}
-				}
-				overlapRect->end_y = min(overlapRect->end_y, (vx_uint32)((180 - veriticalGapInDegrees) * eqrHeight / 180.0f));
 			}
+			// reduce the overlap bttom to default seam border
+			float veriticalGapInDegrees = topBotVerticalGapInDegree;
+			if (topBotVerticalGapInDegree < 0) {
+				veriticalGapInDegrees = 0;
+				if (camera_par[eqrCamIdBot].lens.r_crop > 0) {
+					veriticalGapInDegrees = camera_par[eqrCamIdBot].lens.hfov * camera_par[eqrCamIdBot].lens.r_crop / camera_par[eqrCamIdBot].lens.haw;
+				}
+			}
+			overlapRect->end_y = min(overlapRect->end_y, (vx_uint32)((180 - veriticalGapInDegrees) * eqrHeight / 180.0f));
 		}
 	}
 
@@ -3902,8 +3873,8 @@ static inline vx_status GenerateSeamFindBuffersModel(
 					const vx_uint32 * map = validPixelCamMap + start_x;
 					vx_uint32 y = start_y + 1;
 					for (; y < end_y - 1; y++)
-						if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
-							break;
+					if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
+						break;
 					if (y < end_y - 1)
 						break;
 				}
@@ -3911,8 +3882,8 @@ static inline vx_status GenerateSeamFindBuffersModel(
 					const vx_uint32 * map = validPixelCamMap + (end_x - 1);
 					vx_uint32 y = start_y + 1;
 					for (; y < end_y - 1; y++)
-						if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
-							break;
+					if ((map[y * eqrWidth] & overlapMaskBits) == overlapMaskBits)
+						break;
 					if (y < end_y - 1)
 						break;
 				}
@@ -3966,7 +3937,7 @@ static inline vx_status GenerateSeamFindBuffersModel(
 				else {
 					PRINTF("SEAM-HORIZONTAL %2d %2d (%4d,%4d)-(%4d,%4d) (%4dx%4d)\n", i, j, start_x, start_y, end_x, end_y, overlapWidth, overlapHeight);
 					// horizontal seam
-					vx_int16 SEAM_TYPE = HORIZONTAL_SEAM;
+					SEAM_TYPE = HORIZONTAL_SEAM;
 					horizontal_overlap++;
 					if (validTable) {
 						for (vx_uint32 y = start_y; y < end_y; y++) {
