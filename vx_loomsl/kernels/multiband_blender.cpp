@@ -233,7 +233,7 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 		"	wt_buf += (camera_id * wt_stride*%d);\n"
 		"	op_buf += (camera_id * op_stride*%d);\n"
 		"	if (outputValid){\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height1, height1, height1);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height1, height1, height1);
 	opencl_kernel_code = item;
 	if (in_format == VX_DF_IMAGE_RGBX) {
 		if (wt_format == VX_DF_IMAGE_U8){

@@ -25,8 +25,8 @@ THE SOFTWARE.
 #include "loom_shell.h"
 #include "loom_shell_util.h"
 #include <stdarg.h>
-#include <direct.h>
 #if _WIN32
+#include <direct.h>
 #include <Windows.h>
 #else
 #include <strings.h>

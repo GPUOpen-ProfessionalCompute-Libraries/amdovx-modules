@@ -233,7 +233,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 			"	uint2 offs = ((__global uint2 *)(exp_data+exp_data_offs))[grp_id];\n"
 			"	uint size = (uint)(pIn_stride*%d);\n"
 			"	uint wt_size = (uint)(pWt_stride*%d);\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one, height_one);
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one, height_one);
 		opencl_kernel_code = item;
 		opencl_kernel_code +=
 			"	int lx = get_local_id(0);\n"
@@ -309,7 +309,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 			"	__local uint  sumI[256], sumJ[256];\n"
 			"	uint2 offs = ((__global uint2 *)(exp_data+exp_data_offs))[grp_id];\n"
 			"	uint size = (uint)(pIn_stride*%d);\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one);
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one);
 		opencl_kernel_code = item;
 		opencl_kernel_code +=
 			"	int lx = get_local_id(0);\n"
@@ -724,7 +724,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"   if (grp_id < pExpData_num) {\n"
 				"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
 				"	float4 scalexy = (float4)(%f, %f, %f, %f); uint size_bg = bg_width *%d;\n"
-				, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
+				, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
 			opencl_kernel_code = item;
 			opencl_kernel_code +=
 				"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
@@ -800,7 +800,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"   if (grp_id < pExpData_num) {\n"
 				"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
 				"	float4 scalexy = (float4)(%f, %f, %f, %f); uint size_bg = bg_width*3*%d;\n"
-				, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
+				, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out, xscale, yscale, xoffset, yoffset, bg_height);
 			opencl_kernel_code = item;
 			opencl_kernel_code +=
 				"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
@@ -866,7 +866,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"	int grp_id = get_global_id(0)>>4;\n"
 			"   if (grp_id < pExpData_num) {\n"
 			"	uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
 		opencl_kernel_code = item;
 		opencl_kernel_code +=
 			"	uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"

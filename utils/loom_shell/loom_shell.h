@@ -27,7 +27,11 @@ THE SOFTWARE.
 #include <map>
 
 #include "live_stitch_api.h"
+#if __APPLE__
+#include <cl_ext.h>
+#else
 #include <CL/cl_ext.h>
+#endif
 
 #define VERSION          "0.9.4"
 #define SCRIPT_EXTENSION ".lss"

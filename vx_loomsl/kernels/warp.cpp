@@ -293,7 +293,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		"        __global char * warp_remap_buf, uint warp_remap_buf_offset, uint warp_remap_num_items,\n"
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
 		"        uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	if (bWriteU8Image) {
 		opencl_kernel_code +=
@@ -810,7 +810,7 @@ vx_status CalculateSmallestWarpBufferSizes(
 					paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
 			}
 			// each bit in validMaskFor8Pixels indicates that a warpMapEntry is needed for that camera
-			entryCount += __popcnt(validMaskFor8Pixels);
+			entryCount += GetOneBitCount(validMaskFor8Pixels);
 		}
 	}
 	*warpMapEntryCount = entryCount;

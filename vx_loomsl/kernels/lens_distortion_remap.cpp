@@ -22,8 +22,6 @@ THE SOFTWARE.
 
 #include "lens_distortion_remap.h"
 
-#pragma intrinsic(_BitScanReverse)
-
 //! \brief Function to Compute M.
 static void ComputeM(float * M, float th, float fi, float sy)
 {
@@ -414,11 +412,10 @@ vx_uint32 CalculateValidOverlapRegions(
 		for (vx_uint32 x_eqr = 0; x_eqr < (vx_uint32)eqrWidth; x_eqr++, pixelPosition++) {
 			vx_uint32 validCamMap = validPixelCamMap[pixelPosition];
 			// update each of valid and overlaped regions
-			validPixelOverlapCountMax = std::max(validPixelOverlapCountMax, __popcnt(validCamMap));
+			validPixelOverlapCountMax = std::max(validPixelOverlapCountMax, GetOneBitCount(validCamMap));
 			for (unsigned long camMapI = validCamMap; camMapI;) {
 				// get cam_i
-				unsigned long cam_i;
-				_BitScanReverse(&cam_i, camMapI);
+				vx_uint32 cam_i = GetOneBitPosition(camMapI);
 				camMapI &= ~(1 << cam_i);
 				// update overlapValid[cam_i][cam_i]
 				vx_rectangle_t * rect = &overlapValid[cam_i][cam_i];
@@ -427,8 +424,7 @@ vx_uint32 CalculateValidOverlapRegions(
 				rect->end_x = std::max(rect->end_x, x_eqr + 1);
 				rect->end_y = std::max(rect->end_y, y_eqr + 1);
 				for (unsigned long camMapJ = camMapI; camMapJ;) {
-					unsigned long cam_j;
-					_BitScanReverse(&cam_j, camMapJ);
+					vx_uint32 cam_j = GetOneBitPosition(camMapJ);
 					validCamOverlapInfo[cam_i] |= (1 << cam_j);
 					camMapJ &= ~(1 << cam_j);
 					// update overlapValid[cam_i][cam_j]
@@ -441,12 +437,11 @@ vx_uint32 CalculateValidOverlapRegions(
 			}
 			if (paddedPixelCamMap) {
 				vx_uint32 paddedCamMap = validCamMap | paddedPixelCamMap[pixelPosition];
-				paddedPixelOverlapCountMax = std::max(paddedPixelOverlapCountMax, __popcnt(paddedCamMap));
+				paddedPixelOverlapCountMax = std::max(paddedPixelOverlapCountMax, GetOneBitCount(paddedCamMap));
 				// update each of padded overlaped region
 				for (unsigned long camMapI = paddedCamMap; camMapI;) {
 					// get cam_i
-					unsigned long cam_i;
-					_BitScanReverse(&cam_i, camMapI);
+					vx_uint32 cam_i = GetOneBitPosition(camMapI);
 					camMapI &= ~(1 << cam_i);
 					// update overlapPadded[cam_i][cam_i]
 					vx_rectangle_t * rect = &overlapPadded[cam_i][cam_i];
@@ -455,8 +450,7 @@ vx_uint32 CalculateValidOverlapRegions(
 					rect->end_x = std::max(rect->end_x, x_eqr + 1);
 					rect->end_y = std::max(rect->end_y, y_eqr + 1);
 					for (unsigned long camMapJ = camMapI; camMapJ;) {
-						unsigned long cam_j;
-						_BitScanReverse(&cam_j, camMapJ);
+						vx_uint32 cam_j = GetOneBitPosition(camMapJ);
 						paddedCamOverlapInfo[cam_i] |= (1 << cam_j);
 						camMapJ &= ~(1 << cam_j);
 						// update overlapPadded[cam_i][cam_j]

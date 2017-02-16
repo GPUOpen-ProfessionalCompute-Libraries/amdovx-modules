@@ -28,7 +28,6 @@ find_package(OpenCL QUIET)
 
 include_directories(${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include ${CMAKE_SOURCE_DIR}/amdovx-modules/vx_loomsl)
 
-
 list(APPEND SOURCES
 	loom_shell_util.cpp
 	loom_shell.cpp
@@ -40,7 +39,7 @@ add_executable(loom_shell ${SOURCES})
 target_link_libraries(loom_shell vx_loomsl openvx)
 
 if (OpenCL_FOUND)
-	include_directories(${OpenCL_INCLUDE_DIRS})
+	include_directories(${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers)
 	target_link_libraries(loom_shell ${OpenCL_LIBRARIES})
 endif(OpenCL_FOUND)
 

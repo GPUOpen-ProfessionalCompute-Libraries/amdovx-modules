@@ -23,8 +23,6 @@ THE SOFTWARE.
 #define _CRT_SECURE_NO_WARNINGS
 #include "merge.h"
 
-#pragma intrinsic(_BitScanReverse)
-
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index)
 {
@@ -245,7 +243,7 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 		"  int gy = get_global_id(1);\n"
 		"  float weight_mul_factor = %f;\n" // wt_mul_factor
 		"  if ((gx < %d) && (gy < %d)) {\n" // work_items[0], work_items[1]
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, wt_mul_factor, work_items[0], work_items[1]);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, wt_mul_factor, work_items[0], work_items[1]);
 	opencl_kernel_code = item;
 
 	opencl_kernel_code +=
@@ -420,7 +418,7 @@ vx_status GenerateMergeBuffers(
 					paddedPixelCamMap[x + 4] | paddedPixelCamMap[x + 5] |
 					paddedPixelCamMap[x + 6] | paddedPixelCamMap[x + 7];
 			}
-			vx_uint32 count = __popcnt(validMaskFor8Pixels);
+			vx_uint32 count = GetOneBitCount(validMaskFor8Pixels);
 			vx_uint8 camId = 31;
 			vx_uint8 id[6] = { 31, 31, 31, 31, 31, 31 };
 			if (count == 1) {
@@ -447,9 +445,7 @@ vx_status GenerateMergeBuffers(
 				}
 			}
 			if (count == 1) {
-				unsigned long bitPos;
-				_BitScanReverse(&bitPos, validMaskFor8Pixels);
-				camId = (vx_uint8)bitPos;
+				camId = (vx_uint8)GetOneBitPosition(validMaskFor8Pixels);
 			}
 			else if (count >= 2) {
 				camId = (vx_uint8)(126 + count);

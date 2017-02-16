@@ -164,7 +164,7 @@ static vx_status VX_CALLBACK color_convert_opencl_codegen(
 		"  int gy = get_global_id(1);\n"
 		"  if ((gx < %d) && (gy < %d)) {\n" // work_items[0], work_items[1]
 		"    uint8 pRGB0, pRGB1;\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
 	opencl_kernel_code = item;
 
 	if (input_format == VX_DF_IMAGE_UYVY || input_format == VX_DF_IMAGE_YUYV) {

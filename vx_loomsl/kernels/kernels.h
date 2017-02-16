@@ -36,11 +36,13 @@ THE SOFTWARE.
 //////////////////////////////////////////////////////////////////////
 // common header files
 #include "live_stitch_api.h"
-#include <omp.h>
-#include <vector>
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
 #include <VX/vx_compatibility.h>
+#if !__APPLE__
+#include <omp.h>
+#endif
+#include <vector>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <algorithm>
@@ -55,6 +57,29 @@ THE SOFTWARE.
 #include <strings.h>
 #define _strnicmp strncasecmp
 #define _stricmp  strcasecmp
+#endif
+
+#if WIN32
+#pragma intrinsic(_BitScanReverse)
+static inline vx_uint32 GetOneBitPosition(vx_uint32 a)
+{
+	unsigned long index;
+	_BitScanReverse(&index, (unsigned long)a);
+	return (vx_uint32)index;
+}
+static inline vx_uint32 GetOneBitCount(vx_uint32 a)
+{
+	return __popcnt(a);
+}
+#else
+static inline vx_uint32 GetOneBitPosition(vx_uint32 a)
+{
+	return __builtin_ctz(a);
+}
+static inline vx_uint32 GetOneBitCount(vx_uint32 a)
+{
+	return __builtin_popcount(a);
+}
 #endif
 
 //////////////////////////////////////////////////////////////////////

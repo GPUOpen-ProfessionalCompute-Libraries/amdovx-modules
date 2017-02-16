@@ -24,7 +24,11 @@ THE SOFTWARE.
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #include "loom_shell_util.h"
+#if __APPLE__
+#include <cl_ext.h>
+#else
 #include <CL/cl_ext.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -52,7 +56,7 @@ int64_t GetClockCounter()
 	QueryPerformanceCounter(&v);
 	return v.QuadPart;
 #else
-	return chrono::high_resolution_clock::now().time_since_epoch().count();
+	return std::chrono::high_resolution_clock::now().time_since_epoch().count();
 #endif
 }
 
@@ -63,7 +67,7 @@ int64_t GetClockFrequency()
 	QueryPerformanceFrequency(&v);
 	return v.QuadPart;
 #else
-	return chrono::high_resolution_clock::period::den / chrono::high_resolution_clock::period::num;
+	return std::chrono::high_resolution_clock::period::den / std::chrono::high_resolution_clock::period::num;
 #endif
 }
 
@@ -106,7 +110,11 @@ static cl_command_queue GetCmdqCached(cl_mem mem)
 			cl_int err; cl_device_id device_id = nullptr;
 			err = clGetContextInfo(opencl_context, CL_CONTEXT_DEVICES, sizeof(device_id), &device_id, nullptr);
 			if (err) { Error("ERROR: clGetContextInfo(*,CL_CONTEXT_DEVICES) failed (%d)", err); return nullptr; }
-			cmdq = clCreateCommandQueueWithProperties(opencl_context, device_id, 0, &err);
+#if defined(CL_VERSION_2_0)
+			cmdq = clCreateCommandQueueWithProperties(opencl_context, device_id, NULL, &err);
+#else
+			cmdq = clCreateCommandQueue(opencl_context, device_id, 0, &err);
+#endif
 			if (!cmdq) { Error("ERROR: clCreateCommandQueueWithProperties: failed (%d)", err); return nullptr; }
 			// save the command-queue
 			globalClCtx2CmdqMap[opencl_context] = cmdq;
@@ -466,14 +474,16 @@ vx_status createOpenCLContext(const char * platform, const char * device, cl_con
 		}
 	}
 	if (!found) return Error("ERROR: specified platform '%s' doesn't exist in this system", platform);
-	// get platform name and check if DirectGMA can be is supported
+	// check if DirectGMA can be is supported
+	bool direct_gma_available = false;
+#if !__APPLE__
 	clEnqueueWaitSignalAMD_fn clEnqueueWaitSignalAMD = (clEnqueueWaitSignalAMD_fn)clGetExtensionFunctionAddressForPlatform(platform_id[platform_index], "clEnqueueWaitSignalAMD");
 	clEnqueueWriteSignalAMD_fn clEnqueueWriteSignalAMD = (clEnqueueWriteSignalAMD_fn)clGetExtensionFunctionAddressForPlatform(platform_id[platform_index], "clEnqueueWriteSignalAMD");
 	clEnqueueMakeBuffersResidentAMD_fn clEnqueueMakeBuffersResidentAMD = (clEnqueueMakeBuffersResidentAMD_fn)clGetExtensionFunctionAddressForPlatform(platform_id[platform_index], "clEnqueueMakeBuffersResidentAMD");
-	bool direct_gma_available = false;
 	if (clEnqueueWaitSignalAMD && clEnqueueWriteSignalAMD && clEnqueueMakeBuffersResidentAMD) {
 		direct_gma_available = true;
 	}
+#endif
 	Message("..OpenCL platform#%d: %s %s\n", platform_index, name, direct_gma_available ? "[DirectGMA-OK]" : "[DirectGMA-No]");
 	// get OpenCL device
 	cl_device_id device_id[16]; cl_uint num_device_id = 0;
@@ -851,23 +861,23 @@ vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint3
 					if (buffer_format == VX_DF_IMAGE_UYVY) {
 						for (vx_uint32 x = 0; x < width; x += 2, p += 4, q += 6) {
 							vx_int32 u = p[0] - 128, y0 = p[1], v = p[2] - 128, y1 = p[3];
-							q[0] = (unsigned char)max(0, min(255, y0 + (1.770f * u)));
-							q[1] = (unsigned char)max(0, min(255, y0 - (0.344f * u) - (0.714f * v)));
-							q[2] = (unsigned char)max(0, min(255, y0 + (1.403f * v)));
-							q[3] = (unsigned char)max(0, min(255, y1 + (1.770f * u)));
-							q[4] = (unsigned char)max(0, min(255, y1 - (0.344f * u) - (0.714f * v)));
-							q[5] = (unsigned char)max(0, min(255, y1 + (1.403f * v)));
+							q[0] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 + (1.770f * u)));
+							q[1] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 - (0.344f * u) - (0.714f * v)));
+							q[2] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 + (1.403f * v)));
+							q[3] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 + (1.770f * u)));
+							q[4] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 - (0.344f * u) - (0.714f * v)));
+							q[5] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 + (1.403f * v)));
 						}
 					}
 					else {
 						for (vx_uint32 x = 0; x < width; x += 2, p += 4, q += 6) {
 							vx_int32 u = p[1] - 128, y0 = p[0], v = p[3] - 128, y1 = p[2];
-							q[0] = (unsigned char)max(0, min(255, y0 + (1.770f * u)));
-							q[1] = (unsigned char)max(0, min(255, y0 - (0.344f * u) - (0.714f * v)));
-							q[2] = (unsigned char)max(0, min(255, y0 + (1.403f * v)));
-							q[3] = (unsigned char)max(0, min(255, y1 + (1.770f * u)));
-							q[4] = (unsigned char)max(0, min(255, y1 - (0.344f * u) - (0.714f * v)));
-							q[5] = (unsigned char)max(0, min(255, y1 + (1.403f * v)));
+							q[0] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 + (1.770f * u)));
+							q[1] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 - (0.344f * u) - (0.714f * v)));
+							q[2] = (unsigned char)std::max(0.0f, std::min(255.0f, y0 + (1.403f * v)));
+							q[3] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 + (1.770f * u)));
+							q[4] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 - (0.344f * u) - (0.714f * v)));
+							q[5] = (unsigned char)std::max(0.0f, std::min(255.0f, y1 + (1.403f * v)));
 						}
 					}
 					fwrite(buf, 1, width * 3, fp);

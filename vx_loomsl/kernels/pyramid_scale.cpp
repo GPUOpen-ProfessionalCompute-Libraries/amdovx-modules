@@ -257,7 +257,7 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 		"  int ly = lid >> 4;\n"
 		"  int lx = lid - (ly << 4);\n"
 		"  int height1 = %d;\n"
-		, opencl_local_work[0], opencl_kernel_function_name, ip_image_height_offs);
+		, (int)opencl_local_work[0], opencl_kernel_function_name, ip_image_height_offs);
 	opencl_kernel_code = item;
 
 	if (input_format == VX_DF_IMAGE_U8) {
@@ -727,7 +727,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		vx_uint32 num_cameras = 0;
 		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
 		ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &num_cameras));
-		if ((itemtype == VX_TYPE_UINT32)){
+		if (itemtype == VX_TYPE_UINT32){
 			status = VX_SUCCESS;
 		}
 		else {
@@ -742,7 +742,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		vx_uint32 num_cameras = 0;
 		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
 		ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &num_cameras));
-		if ((itemtype == VX_TYPE_UINT32)){
+		if (itemtype == VX_TYPE_UINT32){
 			status = VX_SUCCESS;
 		}
 		else {
@@ -963,7 +963,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 			"	op_buf += (camera_id * op_stride*%d);\n"
 			"	wt_buf += (camera_id * wt_stride*%d);\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1, height1);
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1, height1);
 		opencl_kernel_code = item;
 		if (wt_format == VX_DF_IMAGE_U8){
 			opencl_kernel_code +=
@@ -1008,7 +1008,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"	ip_buf += (camera_id * ip_stride*%d);\n"
 			"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 			"	op_buf += (camera_id * op_stride*%d);\n"
-			, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1);
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1);
 		opencl_kernel_code = item;
 	}
 
@@ -1467,7 +1467,7 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 		"		ip_buf += (camera_id * ip_stride*%d);\n"
 		"		ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 		"		op_buf += (camera_id * op_stride*%d);\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
 	opencl_kernel_code = item;
 
 	opencl_kernel_code +=
@@ -1874,7 +1874,7 @@ static vx_status VX_CALLBACK laplacian_reconstruct_opencl_codegen(
 		"		ip_buf += (camera_id * ip_stride*%d);\n"
 		"		ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 		"		op_buf += (camera_id * op_stride*%d);\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
 	opencl_kernel_code = item;
 
 	opencl_kernel_code +=

@@ -25,7 +25,7 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(OpenCL REQUIRED)
 
-include_directories (${OpenCL_INCLUDE_DIRS} ../../amdovx-core/openvx/include )
+include_directories (${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers ../../amdovx-core/openvx/include )
 
 list(APPEND SOURCES
 	kernels/alpha_blend.cpp

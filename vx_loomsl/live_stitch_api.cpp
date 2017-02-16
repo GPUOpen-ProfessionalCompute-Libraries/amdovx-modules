@@ -197,7 +197,7 @@ static stitch_log_callback_f g_live_stitch_log_message_callback = nullptr;
 //! \brief The macro for object creation error checking and reporting.
 #define ERROR_CHECK_ALLOC_(call) { void * obj = (call); if(!obj) { ls_printf("ERROR: memory allocation failed at " __FILE__ "#%d\n", __LINE__); return VX_ERROR_NOT_ALLOCATED; } }
 //! \brief The log callback.
-void ls_printf(char * format, ...)
+void ls_printf(const char * format, ...)
 {
 	char buffer[1024];
 	va_list args;
@@ -251,7 +251,7 @@ static vx_status DumpImage(vx_image img, const char * fileName)
 	fclose(fp);
 	vx_df_image format;
 	ERROR_CHECK_STATUS_(vxQueryImage(img, VX_IMAGE_FORMAT, &format, sizeof(format)));
-	printf("OK: Dump: Image %dx%d %4.4s image into %s\n", rect.end_x, rect.end_y, &format, fileName);
+	printf("OK: Dump: Image %dx%d %4.4s image into %s\n", rect.end_x, rect.end_y, (const char *)&format, fileName);
 	return VX_SUCCESS;
 }
 static vx_status DumpArray(vx_array arr, const char * fileName)
@@ -2847,8 +2847,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 				refNameList[(vx_reference)stitch->valid_mask_image] = "validMaskImage";
 			}
 		}
-		fprintf(fp, "data Img_input = image:%d,%d,%4.4s\n", stitch->camera_buffer_width, stitch->camera_buffer_height, &stitch->camera_buffer_format);
-		fprintf(fp, "data Img_output = image:%d,%d,%4.4s\n", stitch->output_buffer_width, stitch->output_buffer_height, &stitch->output_buffer_format);
+		fprintf(fp, "data Img_input = image:%d,%d,%4.4s\n", stitch->camera_buffer_width, stitch->camera_buffer_height, (const char *)&stitch->camera_buffer_format);
+		fprintf(fp, "data Img_output = image:%d,%d,%4.4s\n", stitch->output_buffer_width, stitch->output_buffer_height, (const char *)&stitch->output_buffer_format);
 		refNameList[(vx_reference)stitch->Img_input] = "Img_input";
 		refNameList[(vx_reference)stitch->Img_output] = "Img_output";
 		if (stitch->overlay_remap) {
@@ -2883,7 +2883,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_HEIGHT, &height, sizeof(height)));
 								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_FORMAT, &format, sizeof(format)));
 								char name[64]; sprintf(name, "img_%02d", genImageCount++);
-								fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, &format);
+								fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
 								refNameList[ref] = name;
 							}
 							else if (type == VX_TYPE_SCALAR) {
@@ -2924,7 +2924,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_WIDTH, &width, sizeof(width)));
 					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_HEIGHT, &height, sizeof(height)));
 					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_FORMAT, &format, sizeof(format)));
-					fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, &format);
+					fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
 				}
 				else if (type == VX_TYPE_SCALAR) {
 					vx_enum data_type; char value[1024] = { 0 };

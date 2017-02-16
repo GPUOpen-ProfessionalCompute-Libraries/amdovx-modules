@@ -544,11 +544,11 @@ vx_status CExpCompensator::DeInitialize()
 		if (m_IMat[i]) delete[] m_IMat[i];
 		if (m_AMat[i]) delete[] m_AMat[i];
 	}
-	if (m_block_gain_buf) delete m_block_gain_buf;
-	if (m_pblockgainInfo) delete m_pblockgainInfo;
-	delete m_NMat;
-	delete m_IMat;
-	delete m_AMat;
+	if (m_block_gain_buf) delete[] m_block_gain_buf;
+	if (m_pblockgainInfo) delete[] m_pblockgainInfo;
+	delete[] m_NMat;
+	delete[] m_IMat;
+	delete[] m_AMat;
 	return VX_SUCCESS;
 }
 
@@ -821,11 +821,11 @@ vx_status CExpCompensator::SolveForGains(vx_float32 alpha, vx_float32 beta, vx_u
 	*/
 	ERROR_CHECK_STATUS(vxTruncateArray(Gains_arr, 0));
 	ERROR_CHECK_STATUS(vxAddArrayItems(Gains_arr, m_numImages, gains, sizeof(float)));
-	delete gains;
+	delete[] gains;
 	for (i = 0; i < (int)num_images; i++){
-		delete m_AMat[i];
+		delete[] m_AMat[i];
 	}
-	delete m_AMat;
+	delete[] m_AMat;
 	return VX_SUCCESS;
 }
 
@@ -836,11 +836,11 @@ void CExpCompensator::solve_gauss(vx_float64 **A, vx_float32 *g, int num)
 
 	for (int i = 0; i < n; i++) {
 		// Search for maximum in this column
-		double maxEl = abs(A[i][i]);
+		double maxEl = fabs(A[i][i]);
 		int maxRow = i;
 		for (int k = i + 1; k<n; k++) {
-			if (abs(A[k][i]) > maxEl) {
-				maxEl = abs(A[k][i]);
+			if (fabs(A[k][i]) > maxEl) {
+				maxEl = fabs(A[k][i]);
 				maxRow = k;
 			}
 		}

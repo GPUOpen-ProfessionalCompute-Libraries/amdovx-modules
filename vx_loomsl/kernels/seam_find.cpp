@@ -832,7 +832,7 @@ static vx_status VX_CALLBACK seamfind_scene_detect_opencl_codegen(
 		"						__global char * seam_info_buf, uint seam_info_buf_offset, uint seam_info_num_items,\n"
 		"						__global char * seam_pref_buf, uint seam_pref_buf_offset, uint seam_pref_num_items,\n"
 		"						__global char * seam_scene_buf, uint seam_scene_buf_offset, uint seam_scene_num_items)\n"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	opencl_kernel_code +=
 		"{\n"
@@ -1468,7 +1468,7 @@ static vx_status VX_CALLBACK seamfind_cost_generate_opencl_codegen(
 		"    int lx = get_local_id(0);\n"
 		"    int ly = get_local_id(1);\n"
 		"    bool valid = (x < %d) && (y < %d);\n"	// width, height
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, width, height);
 	opencl_kernel_code = item;
 	opencl_kernel_code +=
 		"    ip_image_buf += ip_image_offset;\n"
@@ -1832,7 +1832,7 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 		"						__global char * seam_pref_buf, uint seam_pref_buf_offset, uint seam_pref_num_items,\n"
 		"						__global char * seam_info_buf, uint seam_info_buf_offset, uint seam_info_num_items,\n"
 		"						__global char * seam_accum_buf, uint seam_accum_buf_offset, uint seam_num_items)\n"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	opencl_kernel_code +=
 		"{\n"
@@ -2519,7 +2519,7 @@ static vx_status VX_CALLBACK seamfind_path_trace_opencl_codegen(
 		"						__global char * seam_accum_buf, uint seam_accum_buf_offset, uint seam_accum_num_items,\n"
 		"						__global char * seam_pref_buf, uint seam_pref_buf_offset, uint seam_pref_num_items,\n"
 		"						__global char * seam_path_buf, uint seam_path_buf_offset, uint seam_path_num_items)\n"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	opencl_kernel_code +=
 		"{\n"
@@ -3120,7 +3120,7 @@ static vx_status VX_CALLBACK seamfind_set_weights_opencl_codegen(
 		"        __global char * path_buf, uint path_buf_offset, uint path_num_items,\n"
 		"		 __global char * seam_pref_buf, uint seam_pref_buf_offset, uint seam_pref_num_items,\n"
 		"        uint weight_width, uint weight_height, __global uchar * weight_buf, uint weight_stride, uint weight_offset, uint flags)\n"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	opencl_kernel_code +=
 		"{\n"
@@ -3664,7 +3664,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 
 	// disable overlaps between top and bottom cameras (if they both exist)
 	if (eqrCamIdTop < numCamera && eqrCamIdBot < numCamera) {
-		vx_rectangle_t * overlapRect = &overlapRegion[max(eqrCamIdTop, eqrCamIdBot)][min(eqrCamIdTop, eqrCamIdBot)];
+		vx_rectangle_t * overlapRect = &overlapRegion[std::max(eqrCamIdTop, eqrCamIdBot)][std::min(eqrCamIdTop, eqrCamIdBot)];
 		overlapRect->start_x = overlapRect->end_x = 0;
 		overlapRect->start_y = overlapRect->end_y = 0;
 	}
@@ -3680,7 +3680,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 		for (vx_uint32 indexOfNeighbor = 0; indexOfNeighbor < eqrCamCount; indexOfNeighbor++) {
 			if (indexOfNeighbor != index && indexOfNeighbor != indexToLeft && indexOfNeighbor != indexToRight) {
 				vx_rectangle_t * overlapRect;
-				overlapRect = &overlapRegion[max(camId, camList[indexOfNeighbor].camId)][min(camId, camList[indexOfNeighbor].camId)];
+				overlapRect = &overlapRegion[std::max(camId, camList[indexOfNeighbor].camId)][std::min(camId, camList[indexOfNeighbor].camId)];
 				overlapRect->start_x = overlapRect->end_x = 0;
 				overlapRect->start_y = overlapRect->end_y = 0;
 			}
@@ -3696,15 +3696,15 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 			if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 			else end_x = (vx_int32)eqrWidth;
 		}
-		vx_rectangle_t * overlapRect = &overlapRegion[max(camId, camIdToRight)][min(camId, camIdToRight)];
-		overlapRect->start_x = max(overlapRect->start_x, (vx_uint32)start_x);
-		overlapRect->end_x = min(overlapRect->end_x, (vx_uint32)end_x);
+		vx_rectangle_t * overlapRect = &overlapRegion[std::max(camId, camIdToRight)][std::min(camId, camIdToRight)];
+		overlapRect->start_x = std::max(overlapRect->start_x, (vx_uint32)start_x);
+		overlapRect->end_x = std::min(overlapRect->end_x, (vx_uint32)end_x);
 		// update overlap with top and bottom cameras (if present)
 		float yawLeftBorder = camList[index].yaw > camList[indexToLeft].yaw ?
 			(camList[index].yaw + camList[indexToLeft].yaw) * 0.5f :
 			(camList[index].yaw + camList[indexToLeft].yaw - 360) * 0.5f;
 		if (eqrCamIdTop < numCamera) {
-			vx_rectangle_t * overlapRectHoriz = &overlapRegion[max(camId, eqrCamIdTop)][min(camId, eqrCamIdTop)];
+			vx_rectangle_t * overlapRectHoriz = &overlapRegion[std::max(camId, eqrCamIdTop)][std::min(camId, eqrCamIdTop)];
 			if (SEAM_COEQUSH_ENABLE > 1) {
 				// update overlap between equator and top camera
 				float pitchCenterToTop = (camera_par[camId].focal.pitch + camera_par[eqrCamIdTop].focal.pitch) * 0.5f;
@@ -3715,10 +3715,10 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 					if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 					else end_x = (vx_int32)eqrWidth;
 				}
-				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
-				overlapRectHoriz->end_x = min(overlapRectHoriz->end_x, (vx_uint32)end_x);
-				overlapRectHoriz->start_y = (vx_uint32)max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToTop - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
-				overlapRectHoriz->end_y = (vx_uint32)min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToTop + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
+				overlapRectHoriz->start_x = std::max(overlapRectHoriz->start_x, (vx_uint32)start_x);
+				overlapRectHoriz->end_x = std::min(overlapRectHoriz->end_x, (vx_uint32)end_x);
+				overlapRectHoriz->start_y = (vx_uint32)std::max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToTop - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
+				overlapRectHoriz->end_y = (vx_uint32)std::min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToTop + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
 				vx_uint32 width = overlapRectHoriz->end_x - overlapRectHoriz->start_x;
 				vx_uint32 height = overlapRectHoriz->end_y - overlapRectHoriz->start_y;
 				if (width < 2 * height) {
@@ -3739,10 +3739,10 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 					veriticalGapInDegrees = camera_par[eqrCamIdTop].lens.hfov * camera_par[eqrCamIdTop].lens.r_crop / camera_par[eqrCamIdTop].lens.haw;
 				}
 			}
-			overlapRect->start_y = max(overlapRect->start_y, (vx_uint32)(veriticalGapInDegrees * eqrHeight / 180.0f));
+			overlapRect->start_y = std::max(overlapRect->start_y, (vx_uint32)(veriticalGapInDegrees * eqrHeight / 180.0f));
 		}
 		if (eqrCamIdBot < numCamera) {
-			vx_rectangle_t *overlapRectHoriz = &overlapRegion[max(camId, eqrCamIdBot)][min(camId, eqrCamIdBot)];
+			vx_rectangle_t *overlapRectHoriz = &overlapRegion[std::max(camId, eqrCamIdBot)][std::min(camId, eqrCamIdBot)];
 			if (SEAM_COEQUSH_ENABLE > 1) {
 				// update overlap between equator and bottom camera
 				float pitchCenterToBot = (camera_par[camId].focal.pitch + camera_par[eqrCamIdBot].focal.pitch) * 0.5f;
@@ -3753,10 +3753,10 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 					if (end_x >(vx_int32)eqrWidth - start_x) start_x = 0;
 					else end_x = (vx_int32)eqrWidth;
 				}
-				overlapRectHoriz->start_x = max(overlapRectHoriz->start_x, (vx_uint32)start_x);
-				overlapRectHoriz->end_x = min(overlapRectHoriz->end_x, (vx_uint32)end_x);
-				overlapRectHoriz->start_y = (vx_uint32)max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToBot - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
-				overlapRectHoriz->end_y = (vx_uint32)min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToBot + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
+				overlapRectHoriz->start_x = std::max(overlapRectHoriz->start_x, (vx_uint32)start_x);
+				overlapRectHoriz->end_x = std::min(overlapRectHoriz->end_x, (vx_uint32)end_x);
+				overlapRectHoriz->start_y = (vx_uint32)std::max((vx_int32)overlapRectHoriz->start_y, (vx_int32)((90 - pitchCenterToBot - overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f + 1));
+				overlapRectHoriz->end_y = (vx_uint32)std::min((vx_int32)overlapRectHoriz->end_y, (vx_int32)((90 - pitchCenterToBot + overlapVertialInDegree * 0.5f) * eqrHeight / 180.0f));
 				vx_uint32 width = overlapRectHoriz->end_x - overlapRectHoriz->start_x;
 				vx_uint32 height = overlapRectHoriz->end_y - overlapRectHoriz->start_y;
 				if (width < 2 * height) {
@@ -3777,7 +3777,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 					veriticalGapInDegrees = camera_par[eqrCamIdBot].lens.hfov * camera_par[eqrCamIdBot].lens.r_crop / camera_par[eqrCamIdBot].lens.haw;
 				}
 			}
-			overlapRect->end_y = min(overlapRect->end_y, (vx_uint32)((180 - veriticalGapInDegrees) * eqrHeight / 180.0f));
+			overlapRect->end_y = std::min(overlapRect->end_y, (vx_uint32)((180 - veriticalGapInDegrees) * eqrHeight / 180.0f));
 		}
 	}
 
