@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include <direct.h>
 #include <Windows.h>
 #else
+#include <unistd.h>
 #include <strings.h>
 #define _strnicmp strncasecmp
 #define _stricmp  strcasecmp
