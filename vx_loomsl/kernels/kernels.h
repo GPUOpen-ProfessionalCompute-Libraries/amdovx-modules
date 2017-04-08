@@ -36,11 +36,13 @@ THE SOFTWARE.
 //////////////////////////////////////////////////////////////////////
 // common header files
 #include "live_stitch_api.h"
-#include <omp.h>
-#include <vector>
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
 #include <VX/vx_compatibility.h>
+#if !__APPLE__
+#include <omp.h>
+#endif
+#include <vector>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <algorithm>
@@ -55,6 +57,29 @@ THE SOFTWARE.
 #include <strings.h>
 #define _strnicmp strncasecmp
 #define _stricmp  strcasecmp
+#endif
+
+#if _WIN32
+#pragma intrinsic(_BitScanReverse)
+static inline vx_uint32 GetOneBitPosition(vx_uint32 a)
+{
+	unsigned long index;
+	_BitScanReverse(&index, (unsigned long)a);
+	return (vx_uint32)index;
+}
+static inline vx_uint32 GetOneBitCount(vx_uint32 a)
+{
+	return __popcnt(a);
+}
+#else
+static inline vx_uint32 GetOneBitPosition(vx_uint32 a)
+{
+	return __builtin_ctz(a);
+}
+static inline vx_uint32 GetOneBitCount(vx_uint32 a)
+{
+	return __builtin_popcount(a);
+}
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -124,8 +149,20 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Seam Finding kernel 4. Kernel name is "com.amd.loomsl.seamfind_set_weights".
 	AMDOVX_KERNEL_STITCHING_SEAMFIND_SET_WEIGHTS = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x011,
 
-	//! \brief The Seam Finding kernel. Kernel name is "com.amd.stitching.seamfind_analyze".
+	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.seamfind_analyze".
 	AMDOVX_KERNEL_STITCHING_SEAMFIND_ANALYZE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x012,
+
+	//! \brief The Exposure Comp Stage#1 kernel. Kernel name is "com.amd.loomsl.expcomp_compute_gainmatrix_rgb".
+	AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT_RGB = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x013,
+	
+	//! \brief The Seam Finding kernel 4. Kernel name is "com.amd.loomsl.chroma_key_mask_generation".
+	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MASK_GENERATION = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x015,
+
+	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.chroma_key_merge".
+	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x016,
+
+	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.color_convert".
+	AMDOVX_KERNEL_STITCHING_NOISE_FILTER = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017,
 
 	// TBD: remove
 
@@ -175,6 +212,9 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 * \param [in] input The input image.
 * \param [in] input The weight image.
 * \param [out] output The output image.
+* \param [out/optional] output The output U8 image containing the X plane of output RGBX
+* \param [in/optional] input The number of camera columns (uint32 scalar)
+* \param [in/optional] input The external alpha value (uint32 scalar)
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -231,6 +271,20 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompSolveForGainNode(vx_graph gra
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph, vx_image input, vx_array in_gains, vx_array in_offsets, 
 	vx_uint32 num_cam, vx_uint32 gain_width, vx_uint32 gain_height, vx_image output);
+
+/*! \brief [Graph] Creates a ExposureCompCalcErrorFnRGB node.
+* \param [in] graph      The reference to the graph.
+* \param [in] numCameras Scalar (uint32: number of cameras)
+* \param [in] input      Input image
+* \param [in] exp_data   Input Array of expdata.
+* \param [in] mask       Mask image.
+* \param [out] out_intensity     Output matrix for sum of overlapping pixels.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras,
+	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity);
+
 
 /*! \brief [Graph] Creates a stitchBlendMultiBandMerge node.
 * \param [in] graph         The reference to the graph.
@@ -302,7 +356,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
 
-/*! \brief [Graph] Creates a SeamFind Accumulate node K0 - GPU/CPU.
+/*! \brief [Graph] Creates a SeamFind Accumulate node K1 - GPU/CPU.
 * \param [in] graph The reference to the graph.
 * \param [in] current_frame The input scalar current frame.
 * \param [in] scene_threshold The input scalar threshold.
@@ -316,7 +370,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_grap
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSceneDetectNode(vx_graph graph, vx_scalar current_frame, vx_scalar scene_threshold,
 	vx_image input_image, vx_array seam_info, vx_array seam_pref, vx_array seam_scene_change);
 
-/*! \brief [Graph] Creates a SeamFind Cost Generate node - K1 - GPU.
+/*! \brief [Graph] Creates a SeamFind Cost Generate node - K2 - GPU.
 * \param [in] graph The reference to the graph.
 * \param [in] executeFlag The input scalar to bypass the execution of kernel.
 * \param [in] input_weight_image The input U8 weight image from Warp.
@@ -328,7 +382,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSceneDetectNode(vx_graph graph, v
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindCostGenerateNode(vx_graph graph, vx_scalar executeFlag,
 	vx_image input_weight_image, vx_image magnitude_image, vx_image phase_image);
 
-/*! \brief [Graph] Creates a SeamFind Cost Accumulate node - K2 - GPU.
+/*! \brief [Graph] Creates a SeamFind Cost Accumulate node - K3 - GPU.
 * \param [in] graph The reference to the graph.
 * \param [in] current_frame The Current Frame.
 * \param [in] output_width  The output image width.
@@ -347,7 +401,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindCostAccumulateNode(vx_graph graph
 	vx_uint32 output_width, vx_uint32 output_height, vx_image magnitude_img, vx_image phase_img,
 	vx_image mask_img, vx_array valid_seam, vx_array pref_seam, vx_array info_seam, vx_array accum_seam);
 
-/*! \brief [Graph] Creates a SeamFind Accumulate node K3_A - GPU/CPU.
+/*! \brief [Graph] Creates a SeamFind Accumulate node K4 - GPU/CPU.
 * \param [in] graph The reference to the graph.
 * \param [in] current_frame The Current Frame.
 * \param [in] weight_image  The input Weight Image
@@ -361,7 +415,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindCostAccumulateNode(vx_graph graph
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_scalar current_frame, vx_image weight_image, vx_array seam_info,
 	vx_array seam_accum, vx_array seam_pref, vx_array paths);
 
-/*! \brief [Graph] Creates a SeamFind Accumulate node K3_B - GPU.
+/*! \brief [Graph] Creates a SeamFind Accumulate node K5 - GPU.
 * \param [in] graph         The reference to the graph.
 * \param [in] current_frame The input Current Frame.
 * \param [in] NumCam        The input scalar number of cameras.
@@ -377,6 +431,54 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx_scalar current_frame, vx_uint32 NumCam,
 	vx_uint32 output_width, vx_uint32 output_height, vx_array seam_weight, vx_array seam_path,
 	vx_array seam_pref, vx_image weight_image, vx_uint32 flags);
+
+/*!\brief Function to create SeamFind Seam Analyze Node - CPU
+* \param [in] graph         The reference to the graph.
+* \param [in] current_frame The input Current Frame.
+* \param [in] seam_pref     The input array of seam preference.
+* \param [out] output       The output flag.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_scalar current_frame, vx_array seam_pref, vx_scalar flag);
+
+//////////////////////////////////////////////////////////////////////
+// Chroma Key Kernels
+//////////////////////////////////////////////////////////////////////
+
+/*! \brief [Graph] Creates a stitch Chroma Key Mask Generator Node- GPU/CPU.
+* \param [in] graph         The reference to the graph.
+* \param [in] ChromaKey		The input Chroma Key.
+* \param [in] ChromaKeyTol  The input Chroma Key tolerance.
+* \param [in] input_rgb_img The input stitched output image.
+* \param [out] output       The output mask image.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph, vx_uint32 ChromaKey, vx_uint32 ChromaKeyTol, vx_image input_rgb_img, vx_image output_mask_img);
+
+/*! \brief [Graph] Creates a stitch Chroma Key Merge Node- GPU/CPU.
+* \param [in] graph				The reference to the graph.
+* \param [in] input_rgb_img		The input stitched output image.
+* \param [in] input_chroma_img	The input Chroma image.
+* \param [in] input_mask_img	The input mask image.
+* \param [out] output			The output chorma merged image.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img);
+
+
+/*! \brief [Graph] Creates a stitch Noise Filter Node- GPU.
+* \param [in] graph				The reference to the graph.
+* \param [in] lambda			The input scalar lambda.
+* \param [in] input_rgb_img		The input camera image.
+* \param [in] input_rgb_img		The input delayed camera image.
+* \param [out] output			The output denoised image.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchNoiseFilterNode(vx_graph graph, vx_scalar lambda, vx_image input_rgb_img_1, vx_image input_rgb_img_2, vx_image denoised_image);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The utility functions

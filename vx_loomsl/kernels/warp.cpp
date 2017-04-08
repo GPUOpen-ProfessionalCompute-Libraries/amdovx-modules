@@ -117,6 +117,27 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 			}
 		}
 	}
+	else if (index == 8)
+	{ // object of SCALAR type (UINT8) for alpha_value
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT32) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: warp alpha_value scalar type should be a UINT32\n");
+			}
+			ref = avxGetNodeParamRef(node, 4);
+			vx_df_image input_format = VX_DF_IMAGE_VIRT;
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+			ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+			if (input_format != VX_DF_IMAGE_RGB) {
+				status = VX_ERROR_INVALID_PARAMETERS;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: warp doesn't support external alpha_value for non RGB input image format\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -268,6 +289,12 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		// read num_camera_columns
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_num_camera_columns, &num_camera_columns));
 	}
+	// Check if external alpha value specified
+	vx_scalar s_alpha_value = (vx_scalar)parameters[8];
+	if (s_alpha_value) {
+		// read alpha_value
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_num_camera_columns, &num_camera_columns));
+	}
 	// set kernel configuration
 	vx_uint32 work_items = (vx_uint32)arr_capacity << 1;
 	strcpy(opencl_kernel_function_name, "warp");
@@ -282,6 +309,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	opencl_local_buffer_size_in_bytes = 0;
 
 	// kernel header and reading
+	// TBD: remove the ifdefs once we reach a conclusion on which is a better approach for all hardwares
+#if 0		// DBG for Vega: This approach does not read when sx and sy are invalid
 	char item[8192];
 	sprintf(item,
 		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
@@ -293,7 +322,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		"        __global char * warp_remap_buf, uint warp_remap_buf_offset, uint warp_remap_num_items,\n"
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
 		"        uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset"
-		, opencl_local_work[0], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
 	opencl_kernel_code = item;
 	if (bWriteU8Image) {
 		opencl_kernel_code +=
@@ -305,11 +334,16 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			",\n"
 			"        uint num_camera_columns";
 	}
+	if (s_alpha_value) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint alpha";
+	}
 	sprintf(item,
 		")\n"
 		"{\n"
 		"  int gid = get_global_id(0);\n"
-		"  float4 f, mf; uint sx, sy, offset; __global uchar * pt; uint4 outpix;\n"
+		"  float4 f, mf; uint sx, sy, offset; uint4 outpix;\n"
 		"  uint QF = 3;\n"
 		"  uint QFB = (1 << QF) - 1; float QFM = 1.0f / (1 << QF);\n"
 		"  uint ip_image_height_offset = %d;\n" // ip_image_height_offs
@@ -328,6 +362,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		"  valid_pix_buf += valid_pix_buf_offset + ((gid >> 1) << 2);\n"
 		"  if (((gid >> 1) < valid_pix_num_items)) {\n"
 		"    uint pixelEntry = *(__global uint*) valid_pix_buf;\n"
+		"    if(pixelEntry == 0xffffffff) return;\n"
 		"    uint4 map = *(__global uint4 *) warp_remap_buf;\n"
 		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 8) & 0x7ff; uint op_y = (pixelEntry >> 19) & 0x1fff;\n";
 	if (num_camera_columns == 1)
@@ -364,17 +399,24 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 				"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
 				"    // pixel[0]\n"
 				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff;\n"
-				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    if(!(sx == 0xffff && sy == 0xffff)) { offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1; }\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
 			else
 			{
-				opencl_kernel_code +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
 			}
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
@@ -387,17 +429,24 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 				"    outpix.s0 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n"
 				"    // pixel[1]\n"
 				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff;\n"
-				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    if(!(sx == 0xffff && sy == 0xffff)) { offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1; }\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
 			else
 			{
-				opencl_kernel_code +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
 			}
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
@@ -410,17 +459,24 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 				"    outpix.s1 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n\n"
 				"    // pixel[2]\n"
 				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff;\n"
-				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    if(!(sx == 0xffff && sy == 0xffff)) { offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1; }\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
 			else
 			{
-				opencl_kernel_code +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
 			}
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
@@ -433,17 +489,24 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 				"    outpix.s2 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n\n"
 				"    // pixel[3]\n"
 				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff;\n"
-				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    if(!(sx == 0xffff && sy == 0xffff)) { offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1; }\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
 			else
 			{
-				opencl_kernel_code +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
 			}
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
@@ -460,7 +523,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			opencl_kernel_code +=
 				"    float mulFactor;\n"
 				"    // pixel[0]\n"
-				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff);\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
@@ -482,7 +546,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[1]\n"
-				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff);\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s3 *= mulFactor;\n"
@@ -506,7 +571,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[2]\n"
-				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff);\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
@@ -530,7 +596,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[3]\n"
-				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff);\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
@@ -562,46 +629,50 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		{
 			opencl_kernel_code +=
 				"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
+				"    bool isSrcInvalid;"
 				"    // pixel[0]\n"
-				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff;\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-				"    outpix.s0 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n";
+				"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
-				opencl_kernel_code += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
 #else
-				opencl_kernel_code += "    Yval.s0 = select(f.s3, 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
 #endif
 			}
 			opencl_kernel_code +=
 				"    // pixel[1]\n"
-				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff;\n"
+				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-				"    outpix.s1 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n";
+				"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
-				opencl_kernel_code += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
 #else
-				opencl_kernel_code += "    Yval.s1 = select(f.s3, 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
 #endif
 			}
 			opencl_kernel_code +=
 				"    // pixel[2]\n"
-				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff;\n"
+				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-				"    outpix.s2 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n";
+				"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
 				opencl_kernel_code += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, sx == 0xffff && sy == 0xffff);\n";
@@ -611,18 +682,19 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[3]\n"
-				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff;\n"
+				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-				"    outpix.s3 = select(amd_pack(f), invalidPix, sx == 0xffff && sy == 0xffff);\n";
+				"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 			if (bWriteU8Image) {
 #if WRITE_LUMA_AS_A
-				opencl_kernel_code += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
 #else
-				opencl_kernel_code += "    Yval.s3 = select(f.s3, 0.0f, sx == 0xffff && sy == 0xffff);\n";
+				opencl_kernel_code += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
 #endif
 			}
 		}
@@ -631,7 +703,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			opencl_kernel_code +=
 				"    float mulFactor;\n"
 				"    // pixel[0]\n"
-				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff)\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
@@ -646,7 +719,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[1]\n"
-				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff)\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 *= mulFactor;\n"
@@ -663,7 +737,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[2]\n"
-				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff)\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
@@ -680,7 +755,8 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			}
 			opencl_kernel_code +=
 				"    // pixel[3]\n"
-				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = select(1.0f, 0.0f, sx == 0xffff && sy == 0xffff)\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
 				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
 				"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 				"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
@@ -717,7 +793,498 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	opencl_kernel_code +=
 		"  }\n"
 		"}\n";
-
+#else	// DBG for Vega: This approach reads from sx=sy=0 when sx and sy are invalid
+	char item[8192];
+	sprintf(item,
+		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+		"__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n" // opencl_local_work[0]
+		"void %s(uint grayscale_compute_method,\n" // opencl_kernel_function_name
+		"        uint num_cameras,\n"
+		"        __global char * valid_pix_buf, uint valid_pix_buf_offset, uint valid_pix_num_items,\n"
+		"        __global char * warp_remap_buf, uint warp_remap_buf_offset, uint warp_remap_num_items,\n"
+		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
+		"        uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset"
+		, (int)opencl_local_work[0], opencl_kernel_function_name);
+	opencl_kernel_code = item;
+	if (bWriteU8Image) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint op_u8_width, uint op_u8_height, __global uchar * op_u8_buf, uint op_u8_stride, uint op_u8_offset";
+	}
+	if (s_num_camera_columns) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint num_camera_columns";
+	}
+	if (s_alpha_value) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint alpha";
+	}
+	sprintf(item,
+		")\n"
+		"{\n"
+		"  int gid = get_global_id(0);\n"
+		"  float4 f, mf; uint sx, sy, offset; uint4 outpix;\n"
+		"  uint QF = 3;\n"
+		"  uint QFB = (1 << QF) - 1; float QFM = 1.0f / (1 << QF);\n"
+		"  uint ip_image_height_offset = %d;\n" // ip_image_height_offs
+		"  uint op_image_height_offset = %d;\n" // op_image_height_offs
+		, ip_image_height_offs, op_image_height_offs);
+	opencl_kernel_code += item;
+	if (bWriteU8Image)
+	{
+		sprintf(item,
+			"  uint op_u8_image_height_offset = %d;\n" // op_image_height_offs
+			, op_image_height_offs);
+		opencl_kernel_code += item;
+	}
+	opencl_kernel_code +=
+		"  warp_remap_buf += warp_remap_buf_offset + (gid << 4);\n"
+		"  valid_pix_buf += valid_pix_buf_offset + ((gid >> 1) << 2);\n"
+		"  if (((gid >> 1) < valid_pix_num_items)) {\n"
+		"    uint pixelEntry = *(__global uint*) valid_pix_buf;\n"
+		"    if(pixelEntry == 0xffffffff) return;\n"
+		"    uint4 map = *(__global uint4 *) warp_remap_buf;\n"
+		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 8) & 0x7ff; uint op_y = (pixelEntry >> 19) & 0x1fff;\n";
+	if (num_camera_columns == 1)
+		opencl_kernel_code += "    ip_buf += ip_offset + (camera_id * ip_image_height_offset * ip_stride);\n";
+	else {
+		int shiftAmount = 0;
+		for (vx_uint32 i = 1; i < 6; i++) {
+			if (num_camera_columns == (1u << i)) {
+				shiftAmount = i;
+				break;
+			}
+		}
+		if (shiftAmount > 0)
+			sprintf(item, "    ip_buf += ip_offset + ((camera_id >> %d) * ip_image_height_offset * ip_stride);\n", shiftAmount);
+		else
+			sprintf(item, "    ip_buf += ip_offset + ((camera_id / %d) * ip_image_height_offset * ip_stride);\n", num_camera_columns);
+		opencl_kernel_code += item;
+	}
+	if (bWriteU8Image)
+	{
+		opencl_kernel_code += "    float4 Yval;\n";
+#if WRITE_LUMA_AS_A
+		opencl_kernel_code += "    float3 RGBToY = (float3)(0.2126f, 0.7152f, 0.0722f);\n";
+#endif
+	}
+	if (input_format == VX_DF_IMAGE_RGB)
+	{
+		opencl_kernel_code +=
+			"    uint3 px0, px1;\n"
+			"    __global uchar * pt;\n";
+		if (output_format == VX_DF_IMAGE_RGBX)
+		{
+			opencl_kernel_code +=
+				"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
+				"    bool isSrcInvalid;"
+				"    // pixel[0]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
+			else
+			{
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
+			}
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n"
+				"    // pixel[1]\n"
+				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
+			else
+			{
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
+			}
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
+				"    // pixel[2]\n"
+				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
+			else
+			{
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
+			}
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s2 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
+				"    // pixel[3]\n"
+				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
+			if (s_alpha_value)
+			{
+				opencl_kernel_code += "    f.s3 = (float) alpha;\n";
+			}
+			else
+			{
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
+				}
+			}
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n";
+		}
+		else // RGB
+		{
+			opencl_kernel_code +=
+				"    float mulFactor;\n"
+				"    // pixel[0]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s012 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
+#else
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "   Yval.s0 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    Yval.s0 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
+						"    Yval.s0 = sqrt(Yval.s0 * 0.3333333333f);\n";
+				}
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[1]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s3 *= mulFactor;\n"
+				"    outpix.s0 = amd_pack(f);\n"
+				"    f.s0 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s01 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
+#else
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "   Yval.s1 = (f.s3 + f.s0 + f.s1) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    Yval.s1 = mad(f.s3, f.s3, mad(f.s0, f.s0, f.s1 * f.s1));\n"
+						"    Yval.s1 = sqrt(Yval.s1 * 0.3333333333f);\n";
+				}
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[2]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s23 *= mulFactor;\n"
+				"    outpix.s1 = amd_pack(f);\n"
+				"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s0 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
+#else
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "   Yval.s2 = (f.s2 + f.s3 + f.s0) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    Yval.s2 = mad(f.s2, f.s2, mad(f.s3, f.s3, f.s0 * f.s0));\n"
+						"    Yval.s2 = sqrt(Yval.s2 * 0.3333333333f);\n";
+				}
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[3]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulfactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulfactor = 0.0f; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride)); px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s123 *= mulFactor;\n"
+				"    outpix.s2 = amd_pack(f);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
+#else
+				if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
+					opencl_kernel_code += "   Yval.s3 = (f.s1 + f.s2 + f.s3) * 0.3333333333f;\n";
+				else
+				{
+					opencl_kernel_code +=
+						"    Yval.s3 = mad(f.s1, f.s1, mad(f.s2, f.s2, f.s3 * f.s3));\n"
+						"    Yval.s3 = sqrt(Yval.s3 * 0.3333333333f);\n";
+				}
+#endif
+			}
+		}
+	}
+	else  // input_format RGBX
+	{
+		opencl_kernel_code +=
+			"    uint2 px0, px1;\n"
+			"    __global uchar * pt;\n";
+		if (output_format == VX_DF_IMAGE_RGBX)
+		{
+			opencl_kernel_code +=
+				"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
+				"    bool isSrcInvalid;"
+				"    // pixel[0]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
+				"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[1]\n"
+				"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
+				"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[2]\n"
+				"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
+				"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, sx == 0xffff && sy == 0xffff);\n";
+#else
+				opencl_kernel_code += "    Yval.s2 = select(f.s3, 0.0f, sx == 0xffff && sy == 0xffff);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[3]\n"
+				"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; isSrcInvalid = false;\n"
+				"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
+				"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
+#else
+				opencl_kernel_code += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
+#endif
+			}
+		}
+		else // RGB
+		{
+			opencl_kernel_code +=
+				"    float mulFactor;\n"
+				"    // pixel[0]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s012 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
+#else
+				opencl_kernel_code += "    Yval.s0 = mulfactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[1]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 *= mulFactor;\n"
+				"    outpix.s0 = amd_pack(f);\n"
+				"    f.s0 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s01 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
+#else
+				opencl_kernel_code += "    Yval.s1 = mulfactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[2]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s23 *= mulFactor;\n"
+				"    outpix.s1 = amd_pack(f);\n"
+				"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s0 *= mulFactor;\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
+#else
+				opencl_kernel_code += "    Yval.s2 = mulfactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
+#endif
+			}
+			opencl_kernel_code +=
+				"    // pixel[3]\n"
+				"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
+				"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
+				"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
+				"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s3 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
+				"    f.s123 *= mulFactor;\n"
+				"    outpix.s2 = amd_pack(f);\n";
+			if (bWriteU8Image) {
+#if WRITE_LUMA_AS_A
+				opencl_kernel_code += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
+#else
+				opencl_kernel_code += "    Yval.s3 = mulfactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
+#endif
+			}
+		}
+	}
+	if (output_format == VX_DF_IMAGE_RGBX)
+	{
+		opencl_kernel_code +=
+			"    op_buf += op_offset + ((camera_id * op_image_height_offset + op_y) * op_stride) + (op_x << 5) + ((gid & 1) << 4);\n"
+			"    *(__global uint4 *) op_buf = outpix;\n";
+	}
+	else
+	{
+		opencl_kernel_code +=
+			"    op_buf += op_offset + ((camera_id * op_image_height_offset + op_y) * op_stride) + (op_x * 24) + ((gid & 1) * 12);\n"
+			"    *(__global uint3 *) (op_buf +  0) = outpix.s012;\n";
+	}
+	if (bWriteU8Image)
+	{
+		opencl_kernel_code +=
+			"    op_u8_buf += op_u8_offset + ((camera_id * op_u8_image_height_offset + op_y) * op_u8_stride) + (op_x << 3) + ((gid & 1) << 2);\n"
+			"    *(__global uint *) op_u8_buf = amd_pack(Yval.s0123);\n";
+	}
+	opencl_kernel_code +=
+		"  }\n"
+		"}\n";
+#endif
+	if (s_num_camera_columns)	ERROR_CHECK_STATUS(vxReleaseScalar(&s_num_camera_columns));
+	if (s_alpha_value)			ERROR_CHECK_STATUS(vxReleaseScalar(&s_alpha_value));
+	
 	return VX_SUCCESS;
 }
 
@@ -734,7 +1301,7 @@ vx_status warp_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.warp",
 		AMDOVX_KERNEL_STITCHING_WARP,
 		warp_kernel,
-		8,
+		9,
 		warp_input_validator,
 		warp_output_validator,
 		nullptr,
@@ -756,6 +1323,7 @@ vx_status warp_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 8, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -810,9 +1378,11 @@ vx_status CalculateSmallestWarpBufferSizes(
 					paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
 			}
 			// each bit in validMaskFor8Pixels indicates that a warpMapEntry is needed for that camera
-			entryCount += __popcnt(validMaskFor8Pixels);
+			entryCount += GetOneBitCount(validMaskFor8Pixels);
 		}
 	}
+
+	entryCount = (entryCount + 63) & ~63;		// Make entry count next highest multiple of 64
 	*warpMapEntryCount = entryCount;
 
 	return VX_SUCCESS;
@@ -844,41 +1414,28 @@ vx_status GenerateWarpBuffers(
 			for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr += 8, pixelPosition += 8)
 			{
 				// get camera use mask for consecutive 8 pixels from current pixel position
-				vx_uint32 validMaskFor8Pixels =
-					validPixelCamMap[pixelPosition + 0] | validPixelCamMap[pixelPosition + 1] |
-					validPixelCamMap[pixelPosition + 2] | validPixelCamMap[pixelPosition + 3] |
-					validPixelCamMap[pixelPosition + 4] | validPixelCamMap[pixelPosition + 5] |
-					validPixelCamMap[pixelPosition + 6] | validPixelCamMap[pixelPosition + 7];
+				vx_uint32 validMask[8];
+				vx_uint32 validMaskFor8Pixels = 0;
 				if (paddedPixelCamMap) {
-					validMaskFor8Pixels |=
-						paddedPixelCamMap[pixelPosition + 0] | paddedPixelCamMap[pixelPosition + 1] |
-						paddedPixelCamMap[pixelPosition + 2] | paddedPixelCamMap[pixelPosition + 3] |
-						paddedPixelCamMap[pixelPosition + 4] | paddedPixelCamMap[pixelPosition + 5] |
-						paddedPixelCamMap[pixelPosition + 6] | paddedPixelCamMap[pixelPosition + 7];
+					for (vx_uint32 i = 0; i < 8; i++) {
+						validMask[i] = validPixelCamMap[pixelPosition + i] | paddedPixelCamMap[pixelPosition + i];
+						validMaskFor8Pixels |= validMask[i];
+					}
+				}
+				else {
+					for (vx_uint32 i = 0; i < 8; i++) {
+						validMask[i] = validPixelCamMap[pixelPosition + i];
+						validMaskFor8Pixels |= validMask[i];
+					}
 				}
 				if (validMaskFor8Pixels & camMapBit)
 				{
 					if (entryCount < mapTableSize)
 					{
 						// get mask to check if all pixels are valid and set validMap entry
-						vx_uint32 allValidMaskFor8Pixels;
-						if (paddedPixelCamMap) {
-							allValidMaskFor8Pixels =
-								(validPixelCamMap[pixelPosition + 0] & paddedPixelCamMap[pixelPosition + 0]) &
-								(validPixelCamMap[pixelPosition + 1] & paddedPixelCamMap[pixelPosition + 1]) &
-								(validPixelCamMap[pixelPosition + 2] & paddedPixelCamMap[pixelPosition + 2]) &
-								(validPixelCamMap[pixelPosition + 3] & paddedPixelCamMap[pixelPosition + 3]) &
-								(validPixelCamMap[pixelPosition + 4] & paddedPixelCamMap[pixelPosition + 4]) &
-								(validPixelCamMap[pixelPosition + 5] & paddedPixelCamMap[pixelPosition + 5]) &
-								(validPixelCamMap[pixelPosition + 6] & paddedPixelCamMap[pixelPosition + 6]) &
-								(validPixelCamMap[pixelPosition + 7] & paddedPixelCamMap[pixelPosition + 7]);
-						}
-						else {
-							allValidMaskFor8Pixels =
-								validPixelCamMap[pixelPosition + 0] & validPixelCamMap[pixelPosition + 1] &
-								validPixelCamMap[pixelPosition + 2] & validPixelCamMap[pixelPosition + 3] &
-								validPixelCamMap[pixelPosition + 4] & validPixelCamMap[pixelPosition + 5] &
-								validPixelCamMap[pixelPosition + 6] & validPixelCamMap[pixelPosition + 7];
+						vx_uint32 allValidMaskFor8Pixels = validMask[0];
+						for (vx_uint32 i = 1; i < 8; i++) {
+							allValidMaskFor8Pixels &= validMask[i];
 						}
 						StitchValidPixelEntry validEntry = { 0 };
 						validEntry.camId = camId;
@@ -890,14 +1447,25 @@ vx_status GenerateWarpBuffers(
 						const StitchCoord2dFloat * srcEntry = &camSrcMapCurrent[pixelPosition];
 						vx_uint16 * warpEntry = (vx_uint16 *)&warpMap[entryCount];
 						for (vx_uint32 i = 0; i < 8; i++, warpEntry += 2, srcEntry++) {
-							warpEntry[0] = (srcEntry->x < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->x * 8.0f + 0.5f + xSrcOffset);
-							warpEntry[1] = (srcEntry->y < 0.0f) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->y * 8.0f + 0.5f);
+							warpEntry[0] = !(validMask[i] & camMapBit) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->x * 8.0f + 0.5f + xSrcOffset);
+							warpEntry[1] = !(validMask[i] & camMapBit) ? (vx_uint16)0xffff : (vx_uint16)(srcEntry->y * 8.0f + 0.5f);
 						}
 					}
 					entryCount++;
 				}
 			}
 		}
+	}
+
+	while (entryCount < mapTableSize) {
+		vx_uint32 * validEntry = (vx_uint32 *) &validMap[entryCount];
+		*validEntry = 0xFFFFFFFF;
+
+		vx_uint16 * warpEntry = (vx_uint16 *)&warpMap[entryCount];
+		for (int i = 0; i < 16; i++)	
+			warpEntry[i] = (vx_uint16)0xffff;
+
+		entryCount++;
 	}
 	*mapEntryCount = entryCount;
 

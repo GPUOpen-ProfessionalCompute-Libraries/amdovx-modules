@@ -133,7 +133,7 @@ static vx_status VX_CALLBACK opencl_codegen(
 		"    *(__global uint3 *) (o0_buf + o0_offset + (gy * o0_stride) + (gx * 12)) = o0;\n"
 		"  }\n"
 		"}\n"
-		, opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
 	opencl_kernel_code = item;
 
 	return VX_SUCCESS;

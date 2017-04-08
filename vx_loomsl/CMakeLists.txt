@@ -23,12 +23,18 @@ project (vx_loomsl)
 
 set (CMAKE_CXX_STANDARD 11)
 
-find_package(OpenCL QUIET)
+# Get rid of warning
+if(POLICY CMP0054)
+	cmake_policy(SET CMP0054 OLD)
+endif()
 
-include_directories (${OpenCL_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include )
+find_package(OpenCL REQUIRED)
+
+include_directories (${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers ../../amdovx-core/openvx/include )
 
 list(APPEND SOURCES
 	kernels/alpha_blend.cpp
+	kernels/chroma_key.cpp
 	kernels/color_convert.cpp
 	kernels/exp_comp.cpp
 	kernels/exposure_compensation.cpp
@@ -36,6 +42,7 @@ list(APPEND SOURCES
 	kernels/lens_distortion_remap.cpp
 	kernels/merge.cpp
 	kernels/multiband_blender.cpp
+	kernels/noise_filter.cpp
 	kernels/pyramid_scale.cpp
 	kernels/seam_find.cpp
 	kernels/warp.cpp
@@ -44,7 +51,7 @@ list(APPEND SOURCES
 
 include_directories (. kernels)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
-
+target_link_libraries(${PROJECT_NAME} ${OpenCL_LIBRARIES} openvx)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")

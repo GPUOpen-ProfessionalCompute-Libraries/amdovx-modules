@@ -22,8 +22,6 @@ THE SOFTWARE.
 
 #include "lens_distortion_remap.h"
 
-#pragma intrinsic(_BitScanReverse)
-
 //! \brief Function to Compute M.
 static void ComputeM(float * M, float th, float fi, float sy)
 {
@@ -120,6 +118,62 @@ static inline float adobe_lens_fisheye_model(float th, float fr, float k1, float
 }
 
 //////////////////////////////////////////////////////////////////////
+// calculate padded region for the circular fisheye unwarpped image
+static void CalculatePaddedRegion(
+	vx_uint32 eqrWidth, vx_uint32 eqrHeight, // [in] output equirectangular dimensions
+	vx_uint32 camId,                         // [in] camera index
+	vx_uint32 * validPixelCamMap,            // [in] valid pixel camera index map: size: [eqrWidth * eqrHeight]
+	vx_uint32 paddingPixelCount,             // [in] padding pixels around valid region
+	vx_uint32 * paddedPixelCamMap            // [out] padded pixel camera index map: size: [eqrWidth * eqrHeight]
+	)
+{
+	vx_uint32 camMapBit = 1 << camId;
+	vx_uint32 loopPixels = (2 * paddingPixelCount) + 1;
+	// dilate using separable filter for (N x 1) & (1 x N)
+	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
+		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
+			vx_uint32 val = 0;
+			vx_int32 X = (vx_int32)x_eqr - paddingPixelCount;
+			// get the neighborhood of (x_eqr,y_eqr)
+			for (vx_uint32 i = 0; i < loopPixels; i++){
+				int pixel_location = (y_eqr * eqrWidth) + (X + i);
+				if (pixel_location >= 0 && pixel_location < (int)(eqrWidth * eqrHeight)){
+					val = validPixelCamMap[pixel_location] & camMapBit;
+				}
+				if (val) break;
+			}
+			// set padded pixel
+			if (val){
+				if (!(validPixelCamMap[pixelPosition] & camMapBit)){
+					paddedPixelCamMap[pixelPosition] |= camMapBit;
+				}
+			}
+		}
+	}
+	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
+		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
+			vx_uint32 val = 0;
+			vx_int32 Y = (vx_int32)y_eqr - paddingPixelCount;
+			// get the neighborhood of (x_eqr,y_eqr)
+			for (vx_uint32 j = 0; j < loopPixels; j++){
+				int pixel_location = ((Y + j) * eqrWidth) + x_eqr;
+				if (pixel_location >= 0 && pixel_location < (int)(eqrWidth * eqrHeight)){
+					val = validPixelCamMap[pixel_location] & camMapBit;
+				}
+				if (val) break;
+			}
+			// set padded pixel
+			if (val){
+				if (!(validPixelCamMap[pixelPosition] & camMapBit)){
+					paddedPixelCamMap[pixelPosition] |= camMapBit;
+				}
+			}
+		}
+	}
+	return;
+}
+
+//////////////////////////////////////////////////////////////////////
 // calculate lens distorion and warp maps using lens model
 static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 	vx_uint32 camWidth, vx_uint32 camHeight, // [in] individual camera dimensions
@@ -134,7 +188,8 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 	const float * M, const float * T, const float * f,
 	float k1, float k2, float k3, float k0, float du0, float dv0, float r_crop,
 	float left, float top, float right, float bottom,
-	float(&lens_model_f)(float th, float fr, float k1, float k2, float k3, float k0)
+	float(&lens_model_f)(float th, float fr, float k1, float k2, float k3, float k0),
+	camera_lens_type lens_type
 	)
 {
 	vx_uint32 camMapBit = 1 << camId;
@@ -159,12 +214,12 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 			Xt[2] /= nfactor;
 			float Y[3];
 			MatMul3x1(Y, M, Xt);
-			// only consider pixels within 180 degrees field of view
-			if (Y[2] > 0.0f) {
+			// only consider pixels within 180 degrees field of view for non-circular fisheye lens
+			if (Y[2] > 0.0f || lens_type == ptgui_lens_fisheye_circ) {
 				float ph = atan2f(Y[1], Y[0]);
-				float th = asinf(sqrtf(Y[0] * Y[0] + Y[1] * Y[1]));
+				float th = asinf(sqrtf(fmin(fmax(Y[0] * Y[0] + Y[1] * Y[1], 0.0f), 1.0f)));
 				float rd = lens_model_f(th, f[0], k1, k2, k3, k0);
-                float rr;
+				float rr;
 				x_src = f[1] * rd * cosf(ph);
 				y_src = f[1] * rd * sinf(ph);
 				rr = sqrtf(x_src*x_src + y_src*y_src);
@@ -172,7 +227,7 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 				y_src += center_y;
 
 				bool validCamIndex = false;
-				if (validPixelCamMap &&
+				if ((Y[2] > 0.0f) && validPixelCamMap &&
 					(x_src >= left && x_src <= rightMinus1) && (y_src >= top && y_src <= bottomMinus1) &&
 					(r_crop <= 0.0f || rr <= r_crop))
 				{
@@ -189,8 +244,11 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 					if (x_src < left) x_src = left - x_src; else if (x_src >= rightMinus1) x_src = right2Minus2 - x_src;
 					if (y_src < top) y_src = top - y_src; else if (y_src >= bottomMinus1) y_src = bottom2Minus2 - y_src;
 					// update camera map
-					paddedPixelCamMap[pixelPosition] |= camMapBit;
+					if (lens_type != ptgui_lens_fisheye_circ){
+						paddedPixelCamMap[pixelPosition] |= camMapBit;
+					}
 				}
+				else{ x_src = y_src = -1.0f; }
 				// pick default camera index
 				if (validCamIndex) {
 					vx_float32 zindicator = fabs(Y[2]);
@@ -202,10 +260,16 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 			}
 			// save source pixel coordinates, if requested
 			if (camSrcMap) {
+				if (x_src < left) x_src = left - x_src; else if (x_src >= rightMinus1) x_src = right2Minus2 - x_src;
+				if (y_src < top) y_src = top - y_src; else if (y_src >= bottomMinus1) y_src = bottom2Minus2 - y_src;
 				camSrcMap[pixelPosition].x = x_src;
 				camSrcMap[pixelPosition].y = y_src;
 			}
 		}
+	}
+	// calculate paddedPixelCamMap for circular fisheye lens
+	if (paddedPixelCamMap && (lens_type == ptgui_lens_fisheye_circ)){
+		CalculatePaddedRegion(eqrWidth, eqrHeight, camId, validPixelCamMap, paddingPixelCount, paddedPixelCamMap);
 	}
 }
 
@@ -275,28 +339,28 @@ vx_status CalculateLensDistortionAndWarpMaps(
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				left, top, right, bottom, ptgui_lens_rectilinear_model);
+				left, top, right, bottom, ptgui_lens_rectilinear_model, lens->lens_type);
 		}
 		else if (lens->lens_type == ptgui_lens_fisheye_ff || lens->lens_type == ptgui_lens_fisheye_circ) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				left, top, right, bottom, ptgui_lens_fisheye_model);
+				left, top, right, bottom, ptgui_lens_fisheye_model, lens->lens_type);
 		}
 		else if (lens->lens_type == adobe_lens_rectilinear) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				left, top, right, bottom, adobe_lens_rectilinear_model);
+				left, top, right, bottom, adobe_lens_rectilinear_model, lens->lens_type);
 		}
 		else if (lens->lens_type == adobe_lens_fisheye) {
 			CalculateLensDistortionAndWarpMapsUsingLensModel(camWidth, camHeight, eqrWidth, eqrHeight,
 				validPixelCamMap, paddingPixelCount, paddedPixelCamMap, &camSrcMap[cam * eqrWidth * eqrHeight],
 				internalBufferForCamIndex, defaultCamIndex,
 				cam, M, T, f, lens->k1, lens->k2, lens->k3, k0, lens->du0, lens->dv0, lens->r_crop,
-				left, top, right, bottom, adobe_lens_fisheye_model);
+				left, top, right, bottom, adobe_lens_fisheye_model, lens->lens_type);
 		}
 	}
 
@@ -350,11 +414,10 @@ vx_uint32 CalculateValidOverlapRegions(
 		for (vx_uint32 x_eqr = 0; x_eqr < (vx_uint32)eqrWidth; x_eqr++, pixelPosition++) {
 			vx_uint32 validCamMap = validPixelCamMap[pixelPosition];
 			// update each of valid and overlaped regions
-			validPixelOverlapCountMax = std::max(validPixelOverlapCountMax, __popcnt(validCamMap));
+			validPixelOverlapCountMax = std::max(validPixelOverlapCountMax, GetOneBitCount(validCamMap));
 			for (unsigned long camMapI = validCamMap; camMapI;) {
 				// get cam_i
-				unsigned long cam_i;
-				_BitScanReverse(&cam_i, camMapI);
+				vx_uint32 cam_i = GetOneBitPosition(camMapI);
 				camMapI &= ~(1 << cam_i);
 				// update overlapValid[cam_i][cam_i]
 				vx_rectangle_t * rect = &overlapValid[cam_i][cam_i];
@@ -363,8 +426,7 @@ vx_uint32 CalculateValidOverlapRegions(
 				rect->end_x = std::max(rect->end_x, x_eqr + 1);
 				rect->end_y = std::max(rect->end_y, y_eqr + 1);
 				for (unsigned long camMapJ = camMapI; camMapJ;) {
-					unsigned long cam_j;
-					_BitScanReverse(&cam_j, camMapJ);
+					vx_uint32 cam_j = GetOneBitPosition(camMapJ);
 					validCamOverlapInfo[cam_i] |= (1 << cam_j);
 					camMapJ &= ~(1 << cam_j);
 					// update overlapValid[cam_i][cam_j]
@@ -377,12 +439,11 @@ vx_uint32 CalculateValidOverlapRegions(
 			}
 			if (paddedPixelCamMap) {
 				vx_uint32 paddedCamMap = validCamMap | paddedPixelCamMap[pixelPosition];
-				paddedPixelOverlapCountMax = std::max(paddedPixelOverlapCountMax, __popcnt(paddedCamMap));
+				paddedPixelOverlapCountMax = std::max(paddedPixelOverlapCountMax, GetOneBitCount(paddedCamMap));
 				// update each of padded overlaped region
 				for (unsigned long camMapI = paddedCamMap; camMapI;) {
 					// get cam_i
-					unsigned long cam_i;
-					_BitScanReverse(&cam_i, camMapI);
+					vx_uint32 cam_i = GetOneBitPosition(camMapI);
 					camMapI &= ~(1 << cam_i);
 					// update overlapPadded[cam_i][cam_i]
 					vx_rectangle_t * rect = &overlapPadded[cam_i][cam_i];
@@ -391,8 +452,7 @@ vx_uint32 CalculateValidOverlapRegions(
 					rect->end_x = std::max(rect->end_x, x_eqr + 1);
 					rect->end_y = std::max(rect->end_y, y_eqr + 1);
 					for (unsigned long camMapJ = camMapI; camMapJ;) {
-						unsigned long cam_j;
-						_BitScanReverse(&cam_j, camMapJ);
+						vx_uint32 cam_j = GetOneBitPosition(camMapJ);
 						paddedCamOverlapInfo[cam_i] |= (1 << cam_j);
 						camMapJ &= ~(1 << cam_j);
 						// update overlapPadded[cam_i][cam_j]
