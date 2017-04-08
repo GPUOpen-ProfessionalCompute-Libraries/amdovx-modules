@@ -56,11 +56,11 @@ enum {
 	LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR      =    9,   // output scale factor: use 0.5 or 1.0 (default 1.0)
 	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
 	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
-	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
-	LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY       =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 0)
-	LIVE_STITCH_ATTR_SEAM_FREQUENCY           =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation.
-	LIVE_STITCH_ATTR_SEAM_QUALITY             =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 0)
-	LIVE_STITCH_ATTR_SEAM_STAGGER             =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames
+	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 1)
+	LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY       =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default -1)
+	LIVE_STITCH_ATTR_SEAM_FREQUENCY           =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation. (default 6000)
+	LIVE_STITCH_ATTR_SEAM_QUALITY             =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 1)
+	LIVE_STITCH_ATTR_SEAM_STAGGER             =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames (default 1)
 	LIVE_STITCH_ATTR_SEAM_LOCK                =   17,   // Seam lock (default: 0)
 	LIVE_STITCH_ATTR_SEAM_FLAGS               =   18,   // Seam flags (default: 0)
 	LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE      =   20,   // Seam find special case for circular fisheye on equator (default: enabled)
@@ -79,8 +79,22 @@ enum {
 	LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE =   34,   // LoomIO: overlay auxiliary data buffer size in bytes.
 	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE  =   35,   // LoomIO: display auxiliary data buffer size in bytes.
 	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C		  =	  36,   // exp-comp attribute: gain image num channels (default: 1)
+	LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE	  =	  37,   // exp-comp attribute: alpha value (variance of gain)
+	LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE		  =   38,   // exp-comp attribute: beta value (variance of mean intensity)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X		  =	  40,   // number of horizontal tiles in the output (default: 1)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y		  =   41,   // number of veritical tiles in the output (default: 1)
+	LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap  =   42,   // overlap pixel count (default: 0)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE =   43,   // tiled buffer default value (default: 0)
+	LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH     =   44,   // encoder buffer width (default: 3840)
+	LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT    =   45,   // encoder buffer height (default: 2160)
+	LIVE_STITCH_ATTR_CHROMA_KEY				  =	  50,   // chroma key enable: 0:OFF 1:ON (default:0)
+	LIVE_STITCH_ATTR_CHROMA_KEY_VALUE		  =   51,   // chroma key value: 0 - N (default: 8454016 - Green 0x80FF80)
+	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
+	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
+	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
 	// Dynamic LoomSL attributes
-	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change
+	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
+	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
 	// ... reserved for LoomSL internal attributes
 	LIVE_STITCH_ATTR_RESERVED_CORE_END        =  127,   // reserved first 128 attributes for LoomSL internal attributes
 	LIVE_STITCH_ATTR_RESERVED_EXT_BEGIN       =  128,   // start of reserved attributes for extensions
@@ -277,11 +291,13 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReinitialize(ls_context stitch);
 //     input_buffer   - input opencl buffer with images from all cameras
 //     overlay_buffer - overlay opencl buffer with all images
 //     output_buffer  - output opencl buffer for output equirectangular image
+//     chromaKey_buffer  - chroma key opencl buffer for equirectangular image
 //   Use of nullptr will return the control of previously set buffer
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer);
 
 //! \brief Schedule a frame
 //  - only one frame can be scheduled at a time
@@ -331,5 +347,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 //  - gain: image/block-level gains (depending on the exposure compensation mode)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetExpCompGains(ls_context stitch, size_t num_entries, vx_float32 * gains);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetExpCompGains(ls_context stitch, size_t num_entries, vx_float32 * gains);
+
+//! \brief set custom blend weights.
+//  - valid when seam find is not active
+//  - weights: array of weights in output_width * output_height * num_camera
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetBlendWeights(ls_context stitch, vx_uint8 * weights, size_t size);
 
 #endif //__LIVE_STITCH_API_H__

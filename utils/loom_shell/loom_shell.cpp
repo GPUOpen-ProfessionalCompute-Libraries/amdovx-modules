@@ -865,6 +865,35 @@ int CLoomShellParser::OnCommand()
 			Message("..lsSetOverlayBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
 		}
 	}
+	else if (!_stricmp(command, "lsSetChromaKeyBuffer")) {
+		// parse the command
+		vx_uint32 contextIndex = 0, bufIndex = 0;
+		bool useNull = false;
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetChromaKeyBuffer(ls[#],&buf[#]|NULL)";
+		SYNTAX_CHECK(ParseSkip(s, "("));
+		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
+		if (!_stricmp(s, ",null)")) {
+			useNull = true;
+		}
+		else {
+			SYNTAX_CHECK(ParseSkip(s, ",&"));
+			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
+			SYNTAX_CHECK(ParseSkip(s, ")"));
+		}
+		SYNTAX_CHECK(ParseEndOfLine(s));
+		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
+		// process the command
+		if (useNull) {
+			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], nullptr);
+			if (status) return Error("ERROR: lsSetChromaKeyBuffer(%s[%d],NULL) failed (%d)", name_ls, contextIndex, status);
+			Message("..lsSetChromaKeyBuffer: set NULL for %s[%d]\n", name_ls, contextIndex);
+		}
+		else {
+			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex]);
+			if (status) return Error("ERROR: lsSetChromaKeyBuffer(%s[%d],%s[%d]) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
+			Message("..lsSetChromaKeyBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
+		}
+	}
 	else if (!_stricmp(command, "setGlobalAttribute")) {
 		// parse the command
 		vx_uint32 attr_offset = 0; float value = 0;
@@ -1592,6 +1621,20 @@ int CLoomShellParser::OnCommand()
 			vx_status status = showExpCompGains(context_[contextIndex], num_entries);
 			if (status) return status;
 		}
+	}
+	else if (!_stricmp(command, "loadBlendWeights")) {
+		// parse the command
+		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: loadBlendWeights(context,\"blend-weights.raw\");";
+		SYNTAX_CHECK(ParseSkip(s, "("));
+		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
+		SYNTAX_CHECK(ParseEndOfLine(s));
+		// process the command
+		vx_status status = loadBlendWeights(context_[contextIndex], fileName);
+		if (status) return status;
 	}
 	else if (!_stricmp(command, "help")) {
 		Message("..help\n");

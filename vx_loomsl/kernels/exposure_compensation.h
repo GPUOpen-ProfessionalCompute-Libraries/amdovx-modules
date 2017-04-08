@@ -56,6 +56,7 @@ typedef struct {
 vx_status exposure_comp_calcErrorFn_publish(vx_context context);
 vx_status exposure_comp_solvegains_publish(vx_context context);
 vx_status exposure_comp_applygains_publish(vx_context context);
+vx_status exposure_comp_calcRGBErrorFn_publish(vx_context context);
 
 //////////////////////////////////////////////////////////////////////
 // Calculate buffer sizes and generate data in buffers for exposure compensation

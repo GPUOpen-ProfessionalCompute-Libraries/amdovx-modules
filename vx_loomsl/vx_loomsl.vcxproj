@@ -74,6 +74,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="kernels\alpha_blend.h" />
+    <ClInclude Include="kernels\chroma_key.h" />
     <ClInclude Include="kernels\color_convert.h" />
     <ClInclude Include="kernels\exposure_compensation.h" />
     <ClInclude Include="kernels\exp_comp.h" />
@@ -81,6 +82,7 @@
     <ClInclude Include="kernels\lens_distortion_remap.h" />
     <ClInclude Include="kernels\merge.h" />
     <ClInclude Include="kernels\multiband_blender.h" />
+    <ClInclude Include="kernels\noise_filter.h" />
     <ClInclude Include="kernels\pyramid_scale.h" />
     <ClInclude Include="kernels\seam_find.h" />
     <ClInclude Include="kernels\warp.h" />
@@ -88,6 +90,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kernels\alpha_blend.cpp" />
+    <ClCompile Include="kernels\chroma_key.cpp" />
     <ClCompile Include="kernels\color_convert.cpp" />
     <ClCompile Include="kernels\exposure_compensation.cpp" />
     <ClCompile Include="kernels\exp_comp.cpp" />
@@ -95,6 +98,7 @@
     <ClCompile Include="kernels\lens_distortion_remap.cpp" />
     <ClCompile Include="kernels\merge.cpp" />
     <ClCompile Include="kernels\multiband_blender.cpp" />
+    <ClCompile Include="kernels\noise_filter.cpp" />
     <ClCompile Include="kernels\pyramid_scale.cpp" />
     <ClCompile Include="kernels\seam_find.cpp" />
     <ClCompile Include="kernels\warp.cpp" />

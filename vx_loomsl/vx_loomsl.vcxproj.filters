@@ -57,6 +57,12 @@
     <ClInclude Include="kernels\exposure_compensation.h">
       <Filter>Header Files\kernels</Filter>
     </ClInclude>
+    <ClInclude Include="kernels\chroma_key.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
+    <ClInclude Include="kernels\noise_filter.h">
+      <Filter>Header Files\kernels</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kernels\warp.cpp">
@@ -93,6 +99,12 @@
       <Filter>Source Files\kernels</Filter>
     </ClCompile>
     <ClCompile Include="kernels\multiband_blender.cpp">
+      <Filter>Source Files\kernels</Filter>
+    </ClCompile>
+    <ClCompile Include="kernels\chroma_key.cpp">
+      <Filter>Source Files\kernels</Filter>
+    </ClCompile>
+    <ClCompile Include="kernels\noise_filter.cpp">
       <Filter>Source Files\kernels</Filter>
     </ClCompile>
   </ItemGroup>

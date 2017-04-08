@@ -21,6 +21,7 @@ THE SOFTWARE.
 */
 
 #include "kernels.h"
+#include "chroma_key.h"
 #include "color_convert.h"
 #include "warp.h"
 #include "seam_find.h"
@@ -29,6 +30,7 @@ THE SOFTWARE.
 #include "pyramid_scale.h"
 #include "merge.h"
 #include "alpha_blend.h"
+#include "noise_filter.h"
 
 #if _WIN32
 #include <Windows.h>
@@ -65,6 +67,12 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(seamfind_cost_accumulate_publish(context));
 	ERROR_CHECK_STATUS(seamfind_path_trace_publish(context));
 	ERROR_CHECK_STATUS(seamfind_set_weights_publish(context));
+	ERROR_CHECK_STATUS(seamfind_analyze_publish(context));
+	ERROR_CHECK_STATUS(exposure_comp_calcRGBErrorFn_publish(context));
+	ERROR_CHECK_STATUS(chroma_key_mask_generation_publish(context));
+	ERROR_CHECK_STATUS(chroma_key_merge_publish(context));
+	ERROR_CHECK_STATUS(noise_filter_publish(context));
+
 	return VX_SUCCESS;
 }
 
@@ -293,6 +301,29 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnNode(vx_graph grap
 }
 
 /**
+* \brief Function to create Calculate RGB Error Function node
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity)
+{
+	vx_scalar Num_Camera = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &numCameras);
+
+	vx_reference params[] = {
+		(vx_reference)Num_Camera,
+		(vx_reference)input,
+		(vx_reference)exp_data,
+		(vx_reference)mask,
+		(vx_reference)out_intensity,
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT_RGB,
+		params,
+		dimof(params));
+
+	vxReleaseScalar(&Num_Camera);
+	return node;
+}
+
+/**
 * \brief Function to create Calculate Gains node
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompSolveForGainNode(vx_graph graph, vx_float32 alpha, vx_float32 beta, vx_matrix in_intensity, vx_matrix in_count, vx_array out_gains)
@@ -467,6 +498,22 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindSetWeightsNode(vx_graph graph, vx
 	return node;
 }
 
+//*\brief Function to create SeamFind Seam Analyze Node - CPU
+VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_scalar current_frame, vx_array seam_pref, vx_scalar flag)
+{
+	vx_reference params[] = {
+		(vx_reference)current_frame,
+		(vx_reference)seam_pref,
+		(vx_reference)flag
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_SEAMFIND_ANALYZE,
+		params,
+		dimof(params));
+
+	return node;
+}
+
 /***********************************************************************************************************************************
 Stitch Multiband blending nodes.
 ************************************************************************************************************************************/
@@ -590,6 +637,66 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_grap
 
 	vxReleaseScalar(&numCam);
 	vxReleaseScalar(&array_offs);
+	return node;
+
+}
+
+/***********************************************************************************************************************************
+													Stitch CHROMA KEY
+************************************************************************************************************************************/
+VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph, vx_uint32 ChromaKey, vx_uint32 Tolerance, vx_image input_rgb_img, vx_image output_mask_img)
+{
+	vx_scalar CHROMA_KEY = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &ChromaKey);
+	vx_scalar TOLERANCE = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &Tolerance);
+
+	vx_reference params[] = {
+		(vx_reference)CHROMA_KEY,
+		(vx_reference)TOLERANCE,
+		(vx_reference)input_rgb_img,
+		(vx_reference)output_mask_img
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MASK_GENERATION,
+		params,
+		dimof(params));
+
+	vxReleaseScalar(&CHROMA_KEY);
+	vxReleaseScalar(&TOLERANCE);
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img)
+{
+	vx_reference params[] = {
+		(vx_reference)input_rgb_img,
+		(vx_reference)input_chroma_img,
+		(vx_reference)input_mask_img,
+		(vx_reference)output_merged_img
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE,
+		params,
+		dimof(params));
+
+	return node;
+}
+
+/***********************************************************************************************************************************
+Stitch Noise Filter
+************************************************************************************************************************************/
+VX_API_ENTRY vx_node VX_API_CALL stitchNoiseFilterNode(vx_graph graph, vx_scalar lambda, vx_image input_rgb_img_1, vx_image input_rgb_img_2, vx_image denoised_image)
+{
+	vx_reference params[] = {
+		(vx_reference)lambda,
+		(vx_reference)input_rgb_img_1,
+		(vx_reference)input_rgb_img_2,
+		(vx_reference)denoised_image
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_NOISE_FILTER,
+		params,
+		dimof(params));
+
 	return node;
 
 }

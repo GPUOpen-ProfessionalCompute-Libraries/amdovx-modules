@@ -36,6 +36,7 @@ enum {
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The valid pixel entry for 8 consecutive pixel locations.
+//  For dummy entries in the buffer for alignment to 32 items, the invalid items shall be (vx_uint32)0xFFFFFFFF
 typedef struct {
 	vx_uint32 camId     :  5; // destination buffer/camera ID
 	vx_uint32 reserved0 :  2; // reserved (shall be zero)

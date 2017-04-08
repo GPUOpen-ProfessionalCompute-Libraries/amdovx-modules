@@ -27,9 +27,6 @@ THE SOFTWARE.
 
 #define MAX_NUM_IMAGES_IN_STITCHED_OUTPUT	16
 #define USE_LUMA_VALUES_FOR_GAIN			1
-#define USE_R_VALUES_FOR_GAIN				0
-#define USE_G_VALUES_FOR_GAIN				0
-#define USE_B_VALUES_FOR_GAIN				0
 
 typedef struct _block_gain_info
 {
@@ -46,7 +43,7 @@ public:
 	virtual ~CExpCompensator();
 	virtual vx_status Process();
 	virtual vx_status ProcessBlockGains(vx_array ArrBlkGains);
-	virtual vx_status Initialize(vx_node node, vx_float32 alpha, vx_float32 beta, vx_array valid_roi, vx_image input, vx_image output, vx_array blockgain_arr = nullptr);
+	virtual vx_status Initialize(vx_node node, vx_float32 alpha, vx_float32 beta, vx_array valid_roi, vx_image input, vx_image output, vx_array blockgain_arr = nullptr, vx_int32 channel=-1);
 	virtual vx_status DeInitialize();
 	virtual vx_status SolveForGains(vx_float32 alpha, vx_float32 beta, vx_uint32 *IMat, vx_uint32 *NMat, vx_uint32 num_images, vx_array pGains, vx_uint32 rows, vx_uint32 cols);
 
@@ -56,19 +53,23 @@ protected:
 	vx_uint32	m_width, m_height, m_stride,m_stride_x;
 	vx_uint32   m_blockgainsStride;
 	vx_float32	m_alpha, m_beta;
+	vx_int32   m_channel;
 	vx_image	m_InputImage, m_OutputImage;
 	vx_array	m_valid_roi;
+	vx_int32	m_bUseRGBgains;
 	vx_rectangle_t m_pRoi_rect[MAX_NUM_IMAGES_IN_STITCHED_OUTPUT][MAX_NUM_IMAGES_IN_STITCHED_OUTPUT];	// assuming 
 	block_gain_info *m_pblockgainInfo;
-	vx_uint32 **m_NMat, **m_IMat;
+	vx_uint32 **m_NMat;
+	vx_float32  **m_IMat, **m_IMatG, **m_IMatB;
 	vx_float64 **m_AMat;
-	vx_float32 *m_Gains;
+	vx_float32 *m_Gains, *m_GainsG, *m_GainsB;
 	vx_rectangle_t mValidRect[MAX_NUM_IMAGES_IN_STITCHED_OUTPUT];
 	vx_float32 *m_block_gain_buf;       // for block based exposure control
 
 
 // functions
 	virtual vx_status CompensateGains();
+	virtual vx_status CompensateGainsRGB(vx_int32 ref_img);
 	virtual vx_status CompensateBlockGains();
 	virtual vx_status ApplyGains(void *in_base_addr);
 	virtual vx_status ApplyBlockGains(void *in_base_addr);

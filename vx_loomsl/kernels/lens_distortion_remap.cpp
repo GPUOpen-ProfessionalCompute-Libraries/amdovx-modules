@@ -129,7 +129,7 @@ static void CalculatePaddedRegion(
 {
 	vx_uint32 camMapBit = 1 << camId;
 	vx_uint32 loopPixels = (2 * paddingPixelCount) + 1;
-	// dialate using separable filter for (N x 1) & (1 x N)
+	// dilate using separable filter for (N x 1) & (1 x N)
 	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
 		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
 			vx_uint32 val = 0;
@@ -217,7 +217,7 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 			// only consider pixels within 180 degrees field of view for non-circular fisheye lens
 			if (Y[2] > 0.0f || lens_type == ptgui_lens_fisheye_circ) {
 				float ph = atan2f(Y[1], Y[0]);
-				float th = asinf(sqrtf(Y[0] * Y[0] + Y[1] * Y[1]));
+				float th = asinf(sqrtf(fmin(fmax(Y[0] * Y[0] + Y[1] * Y[1], 0.0f), 1.0f)));
 				float rd = lens_model_f(th, f[0], k1, k2, k3, k0);
 				float rr;
 				x_src = f[1] * rd * cosf(ph);
@@ -260,6 +260,8 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 			}
 			// save source pixel coordinates, if requested
 			if (camSrcMap) {
+				if (x_src < left) x_src = left - x_src; else if (x_src >= rightMinus1) x_src = right2Minus2 - x_src;
+				if (y_src < top) y_src = top - y_src; else if (y_src >= bottomMinus1) y_src = bottom2Minus2 - y_src;
 				camSrcMap[pixelPosition].x = x_src;
 				camSrcMap[pixelPosition].y = y_src;
 			}

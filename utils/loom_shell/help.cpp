@@ -121,6 +121,7 @@ void CLoomShellParser::help(bool detailed)
 	Message("        showExpCompGains(context,num_entries);\n");
 	Message("        loadExpCompGains(context,num_entries,\"gains.txt\");\n");
 	Message("        saveExpCompGains(context,num_entries,\"gains.txt\");\n");
+	Message("        loadBlendWeights(context,\"blend-weights.raw\");\n");
 	Message("    ~ miscellaneous\n");
 	Message("        help\n");
 	Message("        include \"script.lss\"\n");
@@ -226,7 +227,7 @@ void CLoomShellParser::help(bool detailed)
 		Message("    \n");
 		Message("    # create buffers for input and output\n");
 		Message("    cl_context opencl_context;\n");
-		Message("    cl_mem mem[2];\n");
+		Message("    cl_mem buf[2];\n");
 		Message("    lsGetOpenCLContext(context, &opencl_context);\n");
 		Message("    createBuffer(opencl_context, 3*1920*1080*16, &buf[0]);\n");
 		Message("    createBuffer(opencl_context, 3*3840*1920, &buf[1]);\n");
@@ -236,7 +237,7 @@ void CLoomShellParser::help(bool detailed)
 		Message("    \n");
 		Message("    # process camera inputs from buf[0] into stitched output in buf[1]\n");
 		Message("    lsSetCameraBuffer(context, &buf[0]);\n");
-		Message("    lsSetCameraBuffer(context, &buf[1]);\n");
+		Message("    lsSetOutputBuffer(context, &buf[1]);\n");
 		Message("    run(context, 1);\n");
 		Message("    \n");
 		Message("    # save the output\n");
