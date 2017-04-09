@@ -28,6 +28,10 @@ find_package (OpenCL)
 
 include_directories (include)
 
+set(VX_EXT_OPENCV_HEADERS
+    OpenCV_Tunnel.h OpenCV_VX_Functions.h publishkernels.h vx_ext_cv.h
+    )
+
 list (APPEND SOURCES 
 	OpenCV_absdiff.cpp
 	OpenCV_adaptiveThreshold.cpp
@@ -111,3 +115,19 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections")
 endif()
+
+set_target_properties(vx_ext_cv PROPERTIES
+				OUTPUT_NAME vx_ext_cv
+				DEBUG_POSTFIX "d"
+				)
+
+install(FILES
+  ${VX_EXT_OPENCV_HEADERS}
+  DESTINATION include 
+  )
+
+install ( TARGETS vx_ext_cv
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
+

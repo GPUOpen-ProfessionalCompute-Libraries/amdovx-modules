@@ -53,15 +53,13 @@ else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
+set_target_properties(loom_shell PROPERTIES
+				OUTPUT_NAME loom_shell
+				DEBUG_POSTFIX "d"
+				)
 
-
-
-
-
-
-
-
-
-
-
+install ( TARGETS loom_shell
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
 

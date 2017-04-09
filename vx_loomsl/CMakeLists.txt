@@ -62,3 +62,14 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
 endif()
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+				OUTPUT_NAME ${PROJECT_NAME}
+				DEBUG_POSTFIX "d"
+				)
+
+install ( TARGETS ${PROJECT_NAME}
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
+
