@@ -23,10 +23,11 @@ project (vx_ext_cv)
 
 set (CMAKE_CXX_STANDARD 11)
 
+find_package (OpenVX REQUIRED)
 find_package (OpenCV REQUIRED)
 find_package (OpenCL)
 
-include_directories (include)
+include_directories(${OpenCV_INCLUDE_DIRS} ${OpenVX_INCLUDE_DIRS})
 
 set(VX_EXT_OPENCV_HEADERS
     OpenCV_Tunnel.h OpenCV_VX_Functions.h publishkernels.h vx_ext_cv.h
@@ -98,10 +99,8 @@ list (APPEND SOURCES
 	)
 
 add_library(vx_ext_cv SHARED ${SOURCES})
-target_link_libraries(vx_ext_cv ${OpenVX_LIBRARY})
 
-include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES})
+target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES} ${OpenVX_LIBRARIES})
 target_compile_definitions(vx_ext_cv PUBLIC USE_OPENCV_CONTRIB=0)
 
 if (OpenCL_FOUND)
