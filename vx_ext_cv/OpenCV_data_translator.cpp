@@ -26,7 +26,7 @@ THE SOFTWARE.
 /************************************************************************************************************
 Converting CV Pyramid into an OpenVX Pyramid
 *************************************************************************************************************/
-int CV_to_VX_Pyramid(vx_pyramid pyramid_vx, vector<Mat> pyramid_cv)
+VX_API_ENTRY int VX_API_CALL CV_to_VX_Pyramid(vx_pyramid pyramid_vx, vector<cv::Mat> pyramid_cv)
 {
 	vx_status status = VX_SUCCESS;
 	vx_size Level_vx = 0; vx_uint32 width = 0; 	vx_uint32 height = 0; vx_int32 i;
@@ -41,7 +41,7 @@ int CV_to_VX_Pyramid(vx_pyramid pyramid_vx, vector<Mat> pyramid_cv)
 		{
 			vxAddLogEntry((vx_reference)pyramid_vx, VX_ERROR_INVALID_DIMENSION, "CV_to_VX_Pyramid ERROR: Pyramid Image Mismatch\n"); return VX_ERROR_INVALID_DIMENSION;
 		}
-		Mat* pyr_level;
+		cv::Mat* pyr_level;
 		pyr_level = &pyramid_cv[i];
 		CV_to_VX_Image(this_level, pyr_level);
 	}
@@ -51,7 +51,7 @@ int CV_to_VX_Pyramid(vx_pyramid pyramid_vx, vector<Mat> pyramid_cv)
 /************************************************************************************************************
 Converting VX matrix into an OpenCV Mat
 *************************************************************************************************************/
-int VX_to_CV_MATRIX(Mat** mat, vx_matrix matrix_vx)
+VX_API_ENTRY int VX_API_CALL VX_to_CV_MATRIX(cv::Mat ** mat, vx_matrix matrix_vx)
 {
 	vx_status status = VX_SUCCESS;
 	vx_size numRows = 0; vx_size numCols = 0; vx_enum type; int Type_CV = 0;
@@ -68,7 +68,7 @@ int VX_to_CV_MATRIX(Mat** mat, vx_matrix matrix_vx)
 		vxAddLogEntry((vx_reference)matrix_vx, VX_ERROR_INVALID_FORMAT, "VX_to_CV_MATRIX ERROR: Matrix type not Supported in this RELEASE\n"); return VX_ERROR_INVALID_FORMAT;
 	}
 
-	Mat * m_cv;	m_cv = new Mat((int)numRows, (int)numCols, Type_CV); vx_size mat_size = numRows * numCols;
+	cv::Mat  * m_cv;	m_cv = new cv::Mat((int)numRows, (int)numCols, Type_CV); vx_size mat_size = numRows * numCols;
 	float *dyn_matrix = new float[mat_size]; int z = 0;
 
 	STATUS_ERROR_CHECK(vxReadMatrix(matrix_vx, (void *)dyn_matrix));
@@ -85,7 +85,7 @@ int VX_to_CV_MATRIX(Mat** mat, vx_matrix matrix_vx)
 /************************************************************************************************************
 Converting VX Image into an OpenCV Mat
 *************************************************************************************************************/
-int VX_to_CV_Image(Mat** mat, vx_image image)
+VX_API_ENTRY int VX_API_CALL VX_to_CV_Image(cv::Mat ** mat, vx_image image)
 {
 	vx_status status = VX_SUCCESS;
 	vx_uint32 width = 0; vx_uint32 height = 0; vx_df_image format = VX_DF_IMAGE_VIRT; int CV_format = 0; vx_size planes = 0;
@@ -104,7 +104,7 @@ int VX_to_CV_Image(Mat** mat, vx_image image)
 		vxAddLogEntry((vx_reference)image, VX_ERROR_INVALID_FORMAT, "VX_to_CV_Image ERROR: Image type not Supported in this RELEASE\n"); return VX_ERROR_INVALID_FORMAT;
 	}
 	
-	Mat * m_cv;	m_cv = new Mat(height, width, CV_format); Mat *pMat = (Mat *)m_cv;
+	cv::Mat  * m_cv;	m_cv = new cv::Mat(height, width, CV_format); cv::Mat  *pMat = (cv::Mat  *)m_cv;
 	vx_rectangle_t rect; rect.start_x = 0; rect.start_y = 0; rect.end_x = width; rect.end_y = height; 
 
 	vx_uint8 *src[4] = { NULL, NULL, NULL, NULL }; vx_uint32 p; void *ptr = NULL;
@@ -132,7 +132,7 @@ int VX_to_CV_Image(Mat** mat, vx_image image)
 /************************************************************************************************************
 Converting CV Image into an OpenVX Image
 *************************************************************************************************************/
-int CV_to_VX_Image(vx_image image, Mat* mat)
+VX_API_ENTRY int VX_API_CALL CV_to_VX_Image(vx_image image, cv::Mat * mat)
 {
 	vx_status status = VX_SUCCESS; vx_uint32 width = 0; vx_uint32 height = 0; vx_size planes = 0;
 
@@ -140,7 +140,7 @@ int CV_to_VX_Image(vx_image image, Mat* mat)
 	STATUS_ERROR_CHECK(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
 	STATUS_ERROR_CHECK(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_PLANES, &planes, sizeof(planes)));
 
-	Mat *pMat = mat; vx_rectangle_t rect; rect.start_x = 0; rect.start_y = 0; rect.end_x = width; rect.end_y = height; 
+	cv::Mat  *pMat = mat; vx_rectangle_t rect; rect.start_x = 0; rect.start_y = 0; rect.end_x = width; rect.end_y = height; 
 
 	vx_uint8 *src[4] = { NULL, NULL, NULL, NULL }; vx_uint32 p; void *ptr = NULL;
 	vx_imagepatch_addressing_t addr[4] = { 0, 0, 0, 0 }; vx_uint32 y = 0u;
@@ -165,7 +165,7 @@ int CV_to_VX_Image(vx_image image, Mat* mat)
 /************************************************************************************************************
 sort function.
 *************************************************************************************************************/
-bool sortbysize_CV(const KeyPoint &lhs, const KeyPoint &rhs)
+bool sortbysize_CV(const cv::KeyPoint &lhs, const cv::KeyPoint &rhs)
 {
 	return lhs.size < rhs.size;
 }
@@ -173,7 +173,7 @@ bool sortbysize_CV(const KeyPoint &lhs, const KeyPoint &rhs)
 /************************************************************************************************************
 OpenCV Keypoints to OpenVX Keypoints
 *************************************************************************************************************/
-int CV_to_VX_keypoints(vector<KeyPoint> key_points, vx_array array)
+VX_API_ENTRY int VX_API_CALL CV_to_VX_keypoints(vector<cv::KeyPoint> key_points, vx_array array)
 {
 
 	vx_status status = VX_SUCCESS;
@@ -188,7 +188,7 @@ int CV_to_VX_keypoints(vector<KeyPoint> key_points, vx_array array)
 	//sort(key_points.begin(), key_points.end(), sortbysize_CV);
 	vx_size stride = 0; void *base = NULL; vx_size L = 0;
 
-	for (vector<KeyPoint>::const_iterator i = key_points.begin(); i != key_points.end(); ++i)
+	for (vector<cv::KeyPoint>::const_iterator i = key_points.begin(); i != key_points.end(); ++i)
 	{
 		X = key_points[j].pt.x;	Y = key_points[j].pt.y;
 		K_Size = key_points[j].size; K_Angle = key_points[j].angle; K_Response = key_points[j].response;
@@ -215,7 +215,7 @@ int CV_to_VX_keypoints(vector<KeyPoint> key_points, vx_array array)
 /************************************************************************************************************
 OpenCV Points to OpenVX Keypoints
 *************************************************************************************************************/
-int CVPoints2f_to_VX_keypoints(vector<Point2f> key_points, vx_array array)
+VX_API_ENTRY int VX_API_CALL CVPoints2f_to_VX_keypoints(vector<cv::Point2f> key_points, vx_array array)
 {
 	vx_status status = VX_SUCCESS;
 	vector<vx_keypoint_t> Keypoint_VX; float X, Y; int x, y, j = 0;
@@ -255,7 +255,7 @@ int CVPoints2f_to_VX_keypoints(vector<Point2f> key_points, vx_array array)
 /************************************************************************************************************
 OpenCV Descriptors to OpenVX Descriptors
 *************************************************************************************************************/
-int CV_DESP_to_VX_DESP(Mat mat, vx_array array, int stride)
+VX_API_ENTRY int VX_API_CALL CV_DESP_to_VX_DESP(cv::Mat  mat, vx_array array, int stride)
 {
 	vx_status status = VX_SUCCESS; vx_size size = 0;
 

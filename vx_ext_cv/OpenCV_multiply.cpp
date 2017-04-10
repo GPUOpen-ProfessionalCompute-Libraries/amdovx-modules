@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK CV_multiply_Kernel(vx_node node, const vx_reference
 	vx_scalar SCALE = (vx_scalar) parameters[3];
 	vx_scalar DTYPE = (vx_scalar) parameters[4];
 
-	Mat *mat_1, *mat_2, bl;
+	cv::Mat  *mat_1, *mat_2, bl;
 	vx_int32 value = 0;
 	int dtype;
 	vx_float32 value_f = 0;
@@ -144,7 +144,7 @@ static vx_status VX_CALLBACK CV_multiply_Kernel(vx_node node, const vx_reference
 	STATUS_ERROR_CHECK(vxReadScalarValue(SCALE, &value_f));	scale = value_f; 
 	STATUS_ERROR_CHECK(vxReadScalarValue(DTYPE, &value)); dtype = value; 
 
-	//Converting VX Image to OpenCV Mat 1
+	//Converting VX Image to OpenCV cv::Mat 1
 	STATUS_ERROR_CHECK(match_vx_image_parameters(image_1, image_2));
 	STATUS_ERROR_CHECK(match_vx_image_parameters(image_1, image_out)); 
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat_1, image_1));
@@ -153,7 +153,7 @@ static vx_status VX_CALLBACK CV_multiply_Kernel(vx_node node, const vx_reference
 	//Compute using OpenCV
 	cv::multiply(*mat_1, *mat_2, bl, scale, dtype);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

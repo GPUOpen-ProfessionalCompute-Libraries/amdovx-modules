@@ -113,7 +113,7 @@ static vx_status VX_CALLBACK CV_FAST_detector_Kernel(vx_node node, const vx_refe
 	vx_array array = (vx_array) parameters[1];
 	vx_scalar Threshold = (vx_scalar) parameters[2];
 	vx_scalar NonMAXSuppression = (vx_scalar) parameters[3];
-	Mat *mat, Img;
+	cv::Mat  *mat, Img;
 	vx_int32 value = 0;
 	vx_bool value_b, nonmax;
 	int threshold = 0;
@@ -126,7 +126,7 @@ static vx_status VX_CALLBACK CV_FAST_detector_Kernel(vx_node node, const vx_refe
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	vector<KeyPoint> key_points;
+	vector<cv::KeyPoint> key_points;
 	bool nonmax_bool = false;
 	if (nonmax == vx_true_e) nonmax_bool = true; else nonmax_bool = false;
 	cv::FAST(*mat, key_points, threshold, nonmax_bool);

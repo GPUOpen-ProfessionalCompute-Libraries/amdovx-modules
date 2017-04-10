@@ -97,7 +97,7 @@ static vx_status VX_CALLBACK CV_transpose_Kernel(vx_node node, const vx_referenc
 	vx_image image_in = (vx_image) parameters[0];
 	vx_image image_out = (vx_image) parameters[1];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 
 	//Validation
 	vx_uint32 width_in, height_in, width_out, height_out;
@@ -114,7 +114,7 @@ static vx_status VX_CALLBACK CV_transpose_Kernel(vx_node node, const vx_referenc
 	//Compute using OpenCV
 	cv::transpose(*mat, bl);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

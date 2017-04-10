@@ -170,7 +170,7 @@ static vx_status VX_CALLBACK CV_Scharr_Kernel(vx_node node, const vx_reference *
 	vx_scalar Delta = (vx_scalar) parameters[6];
 	vx_scalar Bordertype = (vx_scalar) parameters[7];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int ddepth, dx, dy, bordertype;
 	double scale, delta;
 	vx_int32 value = 0;
@@ -191,7 +191,7 @@ static vx_status VX_CALLBACK CV_Scharr_Kernel(vx_node node, const vx_reference *
 	//Compute using OpenCV
 	cv::Scharr(*mat, bl, ddepth, dx, dy, scale, delta, bordertype);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

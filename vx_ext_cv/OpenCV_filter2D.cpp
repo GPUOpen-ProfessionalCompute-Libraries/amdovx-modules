@@ -166,7 +166,7 @@ static vx_status VX_CALLBACK CV_filter2D_Kernel(vx_node node, const vx_reference
 	vx_scalar DELTA = (vx_scalar) parameters[6];
 	vx_scalar BORDER = (vx_scalar) parameters[7];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int ddepth, a_x = -1, a_y = -1, border = 4;
 	float delta = 0;
 	vx_int32 value = 0;
@@ -184,14 +184,14 @@ static vx_status VX_CALLBACK CV_filter2D_Kernel(vx_node node, const vx_reference
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	Point point;
+	cv::Point point;
 	point.x = a_x;
 	point.y = a_y;
-	Mat *kernel;
+	cv::Mat  *kernel;
 	STATUS_ERROR_CHECK(VX_to_CV_MATRIX(&kernel, KERNEL));
 	cv::filter2D(*mat, bl, ddepth, *kernel, point, delta, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

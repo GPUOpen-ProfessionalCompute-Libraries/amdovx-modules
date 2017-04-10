@@ -145,7 +145,7 @@ vx_status VX_CALLBACK CV_bilateralFilter_Kernel(vx_node node, const vx_reference
 	vx_scalar SIGMA_S = (vx_scalar) parameters[4];
 	vx_scalar BORDER = (vx_scalar) parameters[5];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int  d, Border;
 	float Sigma_Color, Sigma_Space;
 
@@ -165,7 +165,7 @@ vx_status VX_CALLBACK CV_bilateralFilter_Kernel(vx_node node, const vx_reference
 	//Compute using OpenCV
 	cv::bilateralFilter(*mat, bl, d, Sigma_Color, Sigma_Space, Border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

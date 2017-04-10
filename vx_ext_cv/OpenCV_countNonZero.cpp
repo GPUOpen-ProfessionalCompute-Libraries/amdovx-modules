@@ -87,7 +87,7 @@ static vx_status VX_CALLBACK CV_countNonZero_Kernel(vx_node node, const vx_refer
 	vx_status status = VX_SUCCESS;
 	vx_image image_in = (vx_image) parameters[0];
 	vx_scalar scalar = (vx_scalar) parameters[1];
-	Mat *mat;
+	cv::Mat  *mat;
 	int NonZero;
 
 	//Converting VX Image to OpenCV Mat

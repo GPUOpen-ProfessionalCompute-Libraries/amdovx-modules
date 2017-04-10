@@ -182,7 +182,7 @@ static vx_status VX_CALLBACK CV_Boxfilter_Kernel(vx_node node, const vx_referenc
 	vx_scalar NORM = (vx_scalar) parameters[7];
 	vx_scalar BORDER = (vx_scalar) parameters[8];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int ddepth, W, H, a_x = -1, a_y = -1, border = 4;
 
 	vx_int32 value = 0;
@@ -202,14 +202,14 @@ static vx_status VX_CALLBACK CV_Boxfilter_Kernel(vx_node node, const vx_referenc
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	Point point;
+	cv::Point point;
 	bool Normalized;
 	if (norm == vx_true_e) Normalized = true; else Normalized = false;
 	point.x = a_x;
 	point.y = a_y;
-	cv::boxFilter(*mat, bl, ddepth, Size(W, H), point, Normalized, border);
+	cv::boxFilter(*mat, bl, ddepth, cv::Size(W, H), point, Normalized, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

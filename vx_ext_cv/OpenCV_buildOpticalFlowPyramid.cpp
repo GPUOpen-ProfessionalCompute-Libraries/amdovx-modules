@@ -196,7 +196,7 @@ static vx_status VX_CALLBACK CV_buildOpticalFlowPyramid_Kernel(vx_node node, con
 	vx_scalar D_Border = (vx_scalar) parameters[7];
 	vx_scalar TRY_Reuse = (vx_scalar) parameters[8];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int W, H, WinSize, Pry_Border, derviBorder;
 	vx_bool WithDervi, try_reuse;
 	vx_int32 value = 0;
@@ -215,13 +215,13 @@ static vx_status VX_CALLBACK CV_buildOpticalFlowPyramid_Kernel(vx_node node, con
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	vector<Mat> pyramid_cv;
+	vector<cv::Mat> pyramid_cv;
 	bool WithDervi_b, try_reuse_b;
 	if (WithDervi == 1) WithDervi_b = true; else WithDervi_b = false;
 	if (try_reuse == 1) try_reuse_b = true; else try_reuse_b = false;
-	cv::buildOpticalFlowPyramid(*mat, pyramid_cv, Size(W, H), WinSize, WithDervi_b, Pry_Border, derviBorder, try_reuse_b);
+	cv::buildOpticalFlowPyramid(*mat, pyramid_cv, cv::Size(W, H), WinSize, WithDervi_b, Pry_Border, derviBorder, try_reuse_b);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Pyramid(pyramid_vx, pyramid_cv));
 
 	return status;

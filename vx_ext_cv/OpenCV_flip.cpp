@@ -109,7 +109,7 @@ static vx_status VX_CALLBACK CV_flip_Kernel(vx_node node, const vx_reference *pa
 	vx_image image_in = (vx_image)parameters[0];
 	vx_image image_out = (vx_image)parameters[1];
 	vx_scalar scalar = (vx_scalar)parameters[2];
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int FlipCode;
 
 	vx_int32 value = 0;
@@ -123,7 +123,7 @@ static vx_status VX_CALLBACK CV_flip_Kernel(vx_node node, const vx_reference *pa
 	//Compute using OpenCV
 	cv::flip(*mat, bl, FlipCode); //output image size should correspond to the right flip code
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

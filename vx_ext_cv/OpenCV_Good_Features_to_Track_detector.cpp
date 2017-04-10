@@ -176,7 +176,7 @@ static vx_status VX_CALLBACK CV_good_feature_detector_Kernel(vx_node node, const
 	vx_scalar USEHARRISDETECTOR = (vx_scalar) parameters[7];
 	vx_scalar K = (vx_scalar) parameters[8];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	int maxCorners, blockSize;
 	float qualityLevel, minDistance, k;
 	vx_float32 FloatValue = 0;
@@ -196,7 +196,7 @@ static vx_status VX_CALLBACK CV_good_feature_detector_Kernel(vx_node node, const
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	vector<Point2f> Points2;
+	vector<cv::Point2f> Points2;
 	bool useHarrisDetector;
 	if (useHarris == 1) useHarrisDetector = true; else useHarrisDetector = false;
 	cv::goodFeaturesToTrack(*mat, Points2, maxCorners, qualityLevel, minDistance, *mask_mat, blockSize, useHarrisDetector, k); ////Compute using OpenCV

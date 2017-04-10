@@ -109,7 +109,7 @@ static vx_status VX_CALLBACK CV_absdiff_Kernel(vx_node node, const vx_reference 
 	vx_image image_1 = (vx_image) parameters[0];
 	vx_image image_2 = (vx_image) parameters[1];
 	vx_image image_out = (vx_image) parameters[2];
-	Mat *mat_1, *mat_2, bl;
+	cv::Mat  *mat_1, *mat_2, bl;
 
 	//Converting VX Images to OpenCV Mat
 	STATUS_ERROR_CHECK(match_vx_image_parameters(image_1, image_2));
@@ -120,7 +120,7 @@ static vx_status VX_CALLBACK CV_absdiff_Kernel(vx_node node, const vx_reference 
 	//Compute using OpenCV
 	cv::absdiff(*mat_1, *mat_2, bl);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

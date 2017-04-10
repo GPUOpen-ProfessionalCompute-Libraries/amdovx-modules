@@ -121,7 +121,7 @@ static vx_status VX_CALLBACK CV_compare_Kernel(vx_node node, const vx_reference 
 	vx_image image_out = (vx_image) parameters[2];
 	vx_scalar CMPOP = (vx_scalar) parameters[3];
 
-	Mat *mat_1, *mat_2, bl;
+	cv::Mat  *mat_1, *mat_2, bl;
 	vx_int32 value = 0;
 	int cmpop;
 
@@ -137,7 +137,7 @@ static vx_status VX_CALLBACK CV_compare_Kernel(vx_node node, const vx_reference 
 	//Compute using OpenCV
 	cv::compare(*mat_1, *mat_2, bl, cmpop);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

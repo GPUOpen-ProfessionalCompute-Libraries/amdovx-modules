@@ -175,9 +175,9 @@ static vx_status VX_CALLBACK CV_SIFT_Compute_Kernel(vx_node node, const vx_refer
 	vx_scalar EdgeTHRESHOLD = (vx_scalar) parameters[7];
 	vx_scalar SIGMA = (vx_scalar) parameters[8];
 
-	Mat *mat, *mask_mat, Img;
-	std::vector<KeyPoint> key_points;
-	Mat Desp;
+	cv::Mat  *mat, *mask_mat, Img;
+	std::vector<cv::KeyPoint> key_points;
+	cv::Mat Desp;
 	vx_float32 FloatValue = 0;
 	vx_int32 value = 0;
 	float CTHRESHOLD, ETHRESHOLD, Sigma;
@@ -195,7 +195,7 @@ static vx_status VX_CALLBACK CV_SIFT_Compute_Kernel(vx_node node, const vx_refer
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	Ptr<Feature2D> sift = xfeatures2d::SIFT::create(NFEATURES, NOctaveLayers, CTHRESHOLD, ETHRESHOLD, Sigma);
+	cv::Ptr<cv::Feature2D> sift = xfeatures2d::SIFT::create(NFEATURES, NOctaveLayers, CTHRESHOLD, ETHRESHOLD, Sigma);
 	sift->detectAndCompute(*mat, *mask_mat, key_points, Desp);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints

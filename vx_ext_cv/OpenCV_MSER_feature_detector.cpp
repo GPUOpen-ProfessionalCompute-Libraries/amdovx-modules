@@ -207,8 +207,8 @@ static vx_status VX_CALLBACK CV_MSER_feature_detector_Kernel(vx_node node, const
 	vx_scalar MINMAR = (vx_scalar) parameters[10];
 	vx_scalar EDGEBLUR = (vx_scalar) parameters[11];
 
-	Mat *mat, *mask_mat, Img;
-	vector<KeyPoint> key_points;
+	cv::Mat  *mat, *mask_mat, Img;
+	vector<cv::KeyPoint> key_points;
 	int delta, min_area, max_area, max_evolution, edge_blur_size;
 	float max_variation, min_diversity, area_threshold, min_margin;
 	vx_float32 FloatValue = 0;
@@ -230,7 +230,7 @@ static vx_status VX_CALLBACK CV_MSER_feature_detector_Kernel(vx_node node, const
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	Ptr<Feature2D> mser = MSER::create(delta, min_area, max_area, max_variation, min_diversity, max_evolution, area_threshold, min_margin, edge_blur_size);
+	cv::Ptr<cv::Feature2D> mser = cv::MSER::create(delta, min_area, max_area, max_variation, min_diversity, max_evolution, area_threshold, min_margin, edge_blur_size);
 	mser->detect(*mat, key_points, *mask_mat);
 
 	//OpenCV 2.4.11 Call 

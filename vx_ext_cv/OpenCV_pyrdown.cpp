@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK CV_pyrdown_Kernel(vx_node node, const vx_reference 
 	vx_scalar S_height = (vx_scalar) parameters[3];
 	vx_scalar BORDER = (vx_scalar) parameters[4];
 
-	Mat *mat;
+	cv::Mat  *mat;
 	int W, H, border;
 	vx_int32 value = 0;
 
@@ -147,10 +147,10 @@ static vx_status VX_CALLBACK CV_pyrdown_Kernel(vx_node node, const vx_reference 
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	Mat bl(Size(W, H), CV_8U);//only CV_8U supported in this release
-	cv::pyrDown(*mat, bl, Size(W, H), border);
+	cv::Mat bl(cv::Size(W, H), CV_8U);//only CV_8U supported in this release
+	cv::pyrDown(*mat, bl, cv::Size(W, H), border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

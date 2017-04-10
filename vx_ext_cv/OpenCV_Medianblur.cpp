@@ -130,7 +130,7 @@ static vx_status VX_CALLBACK CV_MedianBlur_Kernel(vx_node node, const vx_referen
 	vx_image image_out = (vx_image) parameters[1];
 	vx_scalar scalar = (vx_scalar) parameters[2];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int Ksize;
 	vx_int32 value = 0;
 
@@ -144,7 +144,7 @@ static vx_status VX_CALLBACK CV_MedianBlur_Kernel(vx_node node, const vx_referen
 	//Compute using OpenCV
 	cv::medianBlur(*mat, bl, Ksize);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

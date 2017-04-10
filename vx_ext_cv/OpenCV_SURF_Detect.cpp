@@ -138,7 +138,7 @@ static vx_status VX_CALLBACK CV_SURF_Detect_Kernel(vx_node node, const vx_refere
 	vx_scalar nOctaves = (vx_scalar) parameters[4];
 	vx_scalar nOctaveLayers = (vx_scalar) parameters[5];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	vx_uint32 width = 0;
 	vx_uint32 height = 0;
 
@@ -158,8 +158,8 @@ static vx_status VX_CALLBACK CV_SURF_Detect_Kernel(vx_node node, const vx_refere
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	vector<KeyPoint> key_points;
-	Ptr<Feature2D> surf = xfeatures2d::SURF::create(HessianThreshold, NOctaves, NOctaveLayers);
+	vector<cv::KeyPoint> key_points;
+	cv::Ptr<cv::Feature2D> surf = xfeatures2d::SURF::create(HessianThreshold, NOctaves, NOctaveLayers);
 	surf->detect(*mat, key_points, *mask_mat);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints

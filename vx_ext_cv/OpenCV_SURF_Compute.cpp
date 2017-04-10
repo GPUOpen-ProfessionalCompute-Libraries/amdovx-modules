@@ -171,7 +171,7 @@ static vx_status VX_CALLBACK CV_SURF_Compute_Kernel(vx_node node, const vx_refer
 	vx_scalar EXTENDED = (vx_scalar) parameters[7];
 	vx_scalar UPRIGHT = (vx_scalar) parameters[8];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	vx_float32 FloatValue = 0;
 	vx_int32 value = 0;
 	vx_bool extend, upright, value_b;
@@ -193,9 +193,9 @@ static vx_status VX_CALLBACK CV_SURF_Compute_Kernel(vx_node node, const vx_refer
 	bool extended_B, upright_b;
 	if (extend == vx_true_e) extended_B = true; else extended_B = false;
 	if (upright == vx_true_e) upright_b = true; else upright_b = false;
-	vector<KeyPoint> key_points;
-	Mat Desp;
-	Ptr<Feature2D> surf = xfeatures2d::SURF::create(HessianThreshold, NOctaves, NOctaveLayers);
+	vector<cv::KeyPoint> key_points;
+	cv::Mat Desp;
+	cv::Ptr<cv::Feature2D> surf = xfeatures2d::SURF::create(HessianThreshold, NOctaves, NOctaveLayers);
 	surf->detectAndCompute(*mat, *mask_mat, key_points, Desp);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints

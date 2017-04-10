@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK CV_fastNlMeansDenoising_Kernel(vx_node node, const 
 	vx_scalar Template_WS = (vx_scalar) parameters[3];
 	vx_scalar Search_WS = (vx_scalar) parameters[4];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int search_ws, template_ws;
 	float h;
 	vx_float32 value_f = 0;
@@ -152,7 +152,7 @@ static vx_status VX_CALLBACK CV_fastNlMeansDenoising_Kernel(vx_node node, const 
 	//Compute using OpenCV
 	cv::fastNlMeansDenoising(*mat, bl, h, template_ws, search_ws);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;
