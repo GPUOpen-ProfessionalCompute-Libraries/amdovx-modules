@@ -28,6 +28,9 @@ THE SOFTWARE.
 // standard header files
 #ifndef VX_NOT_AVAILABLE
 #include <VX/vx.h>
+#if defined(VX_VERSION_1_1)
+#include <VX/vx_compatibility.h>
+#endif
 #if __APPLE__
 #include <opencl.h>
 #else

@@ -24,6 +24,7 @@ THE SOFTWARE.
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #include "loom_shell_util.h"
+#include <vx_ext_amd.h>
 #if __APPLE__
 #include <cl_ext.h>
 #else
@@ -728,15 +729,26 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 				unsigned short bmpHeader[54 / 2];
 				fread(bmpHeader, 1, sizeof(bmpHeader), fp);
 				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
+					if (fp != NULL)
+						fclose(fp);
 					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
 				}
 				vx_uint32 size = (bmpHeader[2] << 16) + bmpHeader[1] - bmpHeader[5];
 				if (bmpHeader[0] != 0x4d42 || bmpHeader[5] != 54 || bmpHeader[13] != 1 || bmpHeader[14] != 24 ||
 					((size != width * height * 3) && (size != (width * height * 3 + 1)) && (size != (width * height * 3 + 2))))
 				{
+					if (fp != NULL)
+						fclose(fp);
 					return Error("ERROR: The BMP format is not supported or dimensions doesn't match buffer size in %s\n", bmpFileName);
 				}
-				if (!buf) { buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3); }
+				if (!buf) { 
+					buf = new unsigned char[width * 3];
+					if (!buf) {
+						if (fp != NULL)
+							fclose(fp);
+						return Error("ERROR: new[%d] failed", width * 3);
+					}
+				}
 				for (vx_uint32 y = 0; y < height; y++) {
 					fread(buf, 1, width * 3, fp);
 					unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 3, *p = buf;
@@ -753,13 +765,19 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 				if (bmpHeader[5] == 122)
 					fread(&bmpHeader[54 / 2], 1, 122 - 54, fp);
 				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
+					if (fp != NULL)
+						fclose(fp);
 					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
 				}
 				vx_uint32 size = (bmpHeader[2] << 16) + bmpHeader[1] - bmpHeader[5];
 				if (bmpHeader[0] != 0x4d42 || bmpHeader[13] != 1 || bmpHeader[14] != 32 || (size != width * height * 4)) {
+					if (fp != NULL)
+						fclose(fp);
 					return Error("ERROR: The BMP format is not supported or dimensions doesn't match buffer size in %s\n", bmpFileName);
 				}
 				if ((bmpHeader[5] != 54 && bmpHeader[5] != 122) || (bmpHeader[5] == 122 && bmpHeader[27] != 0x00ff)) {
+					if (fp != NULL)
+						fclose(fp);
 					return Error("ERROR: The BMP format is not supported in %s\n", bmpFileName);
 				}
 				for (vx_uint32 y = 0; y < height; y++) {
@@ -932,7 +950,11 @@ vx_status loadBuffer(cl_mem mem, const char * fileName)
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
 	FILE * fp = fopen(fileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", fileName);
 	vx_uint32 n = (vx_uint32)fread(img, 1, size, fp);
-	if (n != size) return Error("ERROR: couldn't read %d bytes from %s", n, fileName);
+	if (n != size) {
+		if(fp !=NULL)
+			fclose(fp);
+		return Error("ERROR: couldn't read %d bytes from %s", n, fileName);
+	}
 	fclose(fp);
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
@@ -1023,10 +1045,18 @@ vx_status showExpCompGains(ls_context stitch, size_t num_entries)
 vx_status loadBlendWeights(ls_context stitch, const char * fileName)
 {
 	FILE * fp = fopen(fileName, "rb");
-	if (!fp) return Error("ERROR: unable to open: %s", fileName);
+	if (!fp) {
+		if (fp != NULL)
+			fclose(fp);
+		return Error("ERROR: unable to open: %s", fileName);
+	}
 	fseek(fp, 0, SEEK_END);  long size = ftell(fp); fseek(fp, 0, SEEK_SET);
 	vx_uint8 * buf = new vx_uint8[size];
-	if (!buf) return Error("ERROR: alloc(%d) failed", size);
+	if (!buf) {
+		if (fp != NULL)
+			fclose(fp);
+		return Error("ERROR: alloc(%d) failed", size);
+	}
 	fread(buf, 1, size, fp);
 	fclose(fp);
 	vx_status status = lsSetBlendWeights(stitch, buf, size);
