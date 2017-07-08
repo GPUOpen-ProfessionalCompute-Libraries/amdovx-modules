@@ -19,6 +19,6 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
 * Use CMake to configure and generate Makefile
 
 ## Build OpenCV extension module (vx_ext_cv)
-* Install [OpenCV 3.0](http://opencv.org/downloads.html).
+* Install [OpenCV 3.0](https://github.com/opencv/opencv/releases/tag/3.0.0).
 * Set OpenCV_DIR environment variable to OpenCV/build folder
 * Use amdovx-modules/vx_ext_cv/amd_ext_cv.sln
