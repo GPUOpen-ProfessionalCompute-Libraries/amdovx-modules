@@ -23,6 +23,7 @@ THE SOFTWARE.
 #define __LOOM_SHELL_UTIL_H__
 
 #include "live_stitch_api.h"
+#include <string.h>
 
 vx_status run(ls_context context, vx_uint32 frameCount);
 vx_status runParallel(ls_context * context, vx_uint32 contextCount, vx_uint32 frameCount);

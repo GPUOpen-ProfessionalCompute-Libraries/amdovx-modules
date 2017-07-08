@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include "merge.h"
 #include "alpha_blend.h"
 #include "noise_filter.h"
+#include "warp_eqr_to_aze.h"
+#include "lens_distortion_remap.h"
 
 #if _WIN32
 #include <Windows.h>
@@ -72,6 +74,11 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(chroma_key_mask_generation_publish(context));
 	ERROR_CHECK_STATUS(chroma_key_merge_publish(context));
 	ERROR_CHECK_STATUS(noise_filter_publish(context));
+	ERROR_CHECK_STATUS(warp_eqr_to_aze_publish(context));
+	ERROR_CHECK_STATUS(calc_lens_distortionwarp_map_publish(context));
+	ERROR_CHECK_STATUS(compute_default_camIdx_publish(context));
+	ERROR_CHECK_STATUS(extend_padding_dilate_publish(context));
+	//ERROR_CHECK_STATUS(extend_padding_vert_publish(context));
 
 	return VX_SUCCESS;
 }
@@ -697,6 +704,111 @@ VX_API_ENTRY vx_node VX_API_CALL stitchNoiseFilterNode(vx_graph graph, vx_scalar
 		params,
 		dimof(params));
 
+	return node;
+
+}
+
+/***********************************************************************************************************************************
+Stitch warp to sphere kernel
+************************************************************************************************************************************/
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpEqrToAzE(vx_graph graph, vx_image input_rgb, vx_array rad_lat_map, vx_image output_warped_rgb, vx_scalar a, vx_scalar b)
+{
+	vx_reference params[] = {
+		(vx_reference)input_rgb,
+		(vx_reference)rad_lat_map,
+		(vx_reference)output_warped_rgb,
+		(vx_reference)a,
+		(vx_reference)b
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_WARP_EQR_TO_AZE,
+		params,
+		dimof(params));
+
+	return node;
+
+}
+
+/***********************************************************************************************************************************
+stitchInitCalcCamWarpMaps node
+************************************************************************************************************************************/
+VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcCamWarpMaps(vx_graph graph, void *scalar_params, vx_array cam_params, vx_image valid_map, vx_image padding_map, vx_image src_coord_map, vx_array z_buffer_map)
+{
+	cam_warp_map_params *cam_warp = (cam_warp_map_params *)scalar_params;
+	vx_scalar scCamId = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &cam_warp->camId);
+	vx_scalar scLensType = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &cam_warp->lens_type);
+	vx_scalar scCamW = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &cam_warp->camWidth);
+	vx_scalar scCamH = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &cam_warp->camHeight);
+	vx_scalar scPadCnt = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &cam_warp->paddingPixelCount);
+	vx_reference params[] = {
+		(vx_reference)scCamId,
+		(vx_reference)scLensType,
+		(vx_reference)scCamW,
+		(vx_reference)scCamH,
+		(vx_reference)scPadCnt,
+		(vx_reference)cam_params,
+		(vx_reference)valid_map,
+		(vx_reference)padding_map,
+		(vx_reference)src_coord_map,
+		(vx_reference)z_buffer_map
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_INIT_CALC_CAMERA_VALID_MAP,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcDefCamIdxNode(vx_graph graph, vx_uint32 numCam, vx_uint32 out_width, vx_uint32 out_height, vx_array z_buffer_map, vx_image cam_idx_image)
+{
+	vx_scalar scNumCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &numCam);
+	vx_scalar scOutW = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &out_width);
+	vx_scalar scOutH = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &out_height);
+	vx_reference params[] = {
+		(vx_reference)scNumCam,
+		(vx_reference)scOutW,
+		(vx_reference)scOutH,
+		(vx_reference)z_buffer_map,
+		(vx_reference)cam_idx_image
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_INIT_COMPUTE_DEFAULT_CAMERA_IDX,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchInitExtendPadDilateNode(vx_graph graph, vx_uint32 paddingPixels, vx_image valid_map, vx_image padding_map)
+{
+	vx_scalar scNum = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &paddingPixels);
+	vx_reference params[] = {
+		(vx_reference)scNum,
+		(vx_reference)valid_map,
+		(vx_reference)padding_map
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_DILATE,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchInitPadVertNode(vx_graph graph, vx_uint32 paddingPixels, vx_uint32 out_W, vx_uint32 out_H, vx_image valid_map, vx_image padding_map)
+{
+	vx_scalar scNum = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &paddingPixels);
+	vx_scalar scWidth = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &out_W);
+	vx_scalar scHeight = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &out_H);
+	vx_reference params[] = {
+		(vx_reference)scNum,
+		(vx_reference)scWidth,
+		(vx_reference)scHeight,
+		(vx_reference)valid_map,
+		(vx_reference)padding_map
+	};
+	vx_node node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_VERT,
+		params,
+		dimof(params));
 	return node;
 
 }

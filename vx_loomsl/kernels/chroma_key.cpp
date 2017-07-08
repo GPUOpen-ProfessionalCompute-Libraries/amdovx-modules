@@ -40,7 +40,7 @@ static vx_status VX_CALLBACK chroma_key_mask_generation_input_validator(vx_node 
 		vx_enum type = 0;	vx_uint32 value = 0;
 		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &type, sizeof(type)));
 		ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &value));
-		if (value >= 0 && type == VX_TYPE_UINT32)
+		if (type == VX_TYPE_UINT32)
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar*)&ref));
 	}

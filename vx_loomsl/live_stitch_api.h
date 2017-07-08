@@ -26,11 +26,13 @@ THE SOFTWARE.
 
 //////////////////////////////////////////////////////////////////////
 // standard header files
+#ifndef VX_NOT_AVAILABLE
 #include <VX/vx.h>
 #if __APPLE__
 #include <opencl.h>
 #else
 #include <CL/cl.h>
+#endif
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -45,7 +47,7 @@ THE SOFTWARE.
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API 
 enum {
 	LIVE_STITCH_ATTR_PROFILER                 =    0,   // profiler attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_EXPCOMP                  =    1,   // exp-comp attribute: 0:OFF 1:Global 2:GlobalUser 4:BlockUser
+	LIVE_STITCH_ATTR_EXPCOMP                  =    1,   // exp-comp attribute: 0:OFF 1:Global 2:GlobalUser  4:BlockUser
 	LIVE_STITCH_ATTR_SEAMFIND                 =    2,   // seamfind attribute: 0:OFF 1:ON
 	LIVE_STITCH_ATTR_SEAM_REFRESH             =    3,   // seamfind seam refresh attribute: 0:OFF 1:ON
 	LIVE_STITCH_ATTR_SEAM_COST_SELECT         =    4,   // seamfind cost generate attribute: 0:OpenVX Sobel Mag/Phase 1:Optimized Sobel Mag/Phase
@@ -87,11 +89,14 @@ enum {
 	LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE =   43,   // tiled buffer default value (default: 0)
 	LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH     =   44,   // encoder buffer width (default: 3840)
 	LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT    =   45,   // encoder buffer height (default: 2160)
-	LIVE_STITCH_ATTR_CHROMA_KEY				  =	  50,   // chroma key enable: 0:OFF 1:ON (default:0)
+	LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y  =   46,   // encoder buffer stride_y (default: 2160)
+	LIVE_STITCH_ATTR_CHROMA_KEY				  =   50,   // chroma key enable: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_CHROMA_KEY_VALUE		  =   51,   // chroma key value: 0 - N (default: 8454016 - Green 0x80FF80)
 	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
 	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
+	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
+	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
 	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
@@ -145,6 +150,7 @@ typedef struct {
     float d;                // focus sphere radius in depth pixel units (default: 0.0 for infinity)
 } rig_params;
 
+
 //////////////////////////////////////////////////////////////////////
 //! \brief The log callback function
 typedef void(*stitch_log_callback_f)(const char * message);
@@ -158,6 +164,7 @@ typedef struct ls_context_t * ls_context;
 #define LIVE_STITCH_API_ENTRY extern "C"
 #endif
 
+#ifndef VX_NOT_AVAILABLE
 //! \brief Query the version of live stitch API implementation.
 //  - return version string
 LIVE_STITCH_API_ENTRY const char * VX_API_CALL lsGetVersion();
@@ -185,6 +192,7 @@ LIVE_STITCH_API_ENTRY ls_context VX_API_CALL lsCreateContext();
 //! \brief Release stitch context. The ls_context will be reset to NULL.
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch);
+#endif
 
 //! \brief Set the stitched output image buffer format and dimensions
 //  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV
@@ -257,6 +265,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputModule(ls_context stitch,
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayModule(ls_context stitch, const char * openvx_module, const char * kernelName, const char * kernelArguments);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetViewingModule(ls_context stitch, const char * openvx_module, const char * kernelName, const char * kernelArguments);
 
+#ifndef VX_NOT_AVAILABLE
 //! \brief Set the stride of OpenCL buffers.
 //  - Note that these function must be called before lsInitialize call if LoomIO plug-ins are not used and stride requires extra padding
 //  - return VX_SUCCESS or error code (see log messages for further details)
@@ -273,6 +282,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOpenCLContext(ls_context stitch
 //  - Note that these function must be called before lsInitialize call if application requires use of a its own OpenVX context
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOpenVXContext(ls_context stitch, vx_context openvx_context);
+#endif
 
 //! \brief initialize the stitch context.
 //  - shall be called after all the configuration parameters are set and before scheduling a frame for stitching
@@ -287,6 +297,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch);
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReinitialize(ls_context stitch);
 
+#ifndef VX_NOT_AVAILABLE
 //! \brief Set OpenCL buffers
 //     input_buffer   - input opencl buffer with images from all cameras
 //     overlay_buffer - overlay opencl buffer with all images
@@ -305,6 +316,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stit
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsScheduleFrame(ls_context stitch);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsWaitForCompletion(ls_context stitch);
+#endif
 
 //! \brief access to context specific attributes.
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API
@@ -324,11 +336,13 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetCameraModule(ls_context stitch,
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOutputModule(ls_context stitch, char * openvx_module, size_t openvx_module_size, char * kernelName, size_t kernelName_size, char * kernelArguments, size_t kernelArguments_size);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOverlayModule(ls_context stitch, char * openvx_module, size_t openvx_module_size, char * kernelName, size_t kernelName_size, char * kernelArguments, size_t kernelArguments_size);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetViewingModule(ls_context stitch, char * openvx_module, size_t openvx_module_size, char * kernelName, size_t kernelName_size, char * kernelArguments, size_t kernelArguments_size);
+#ifndef VX_NOT_AVAILABLE
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetCameraBufferStride(ls_context stitch, vx_uint32 * camera_buffer_stride_in_bytes);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOutputBufferStride(ls_context stitch, vx_uint32 * output_buffer_stride_in_bytes);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOverlayBufferStride(ls_context stitch, vx_uint32 * overlay_buffer_stride_in_bytes);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOpenCLContext(ls_context stitch, cl_context  * opencl_context);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetOpenVXContext(ls_context stitch, vx_context  * openvx_context);
+#endif
 
 //! \brief import configuration.
 //  - importType: "pts" - PtGui project (.pts text file)

@@ -43,6 +43,7 @@ THE SOFTWARE.
 #include <omp.h>
 #endif
 #include <vector>
+#include <string.h>
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <algorithm>
@@ -163,6 +164,21 @@ enum vx_kernel_stitching_amd_e {
 
 	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.color_convert".
 	AMDOVX_KERNEL_STITCHING_NOISE_FILTER = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017,
+
+	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.warp_eqr_to_aze".
+	AMDOVX_KERNEL_STITCHING_WARP_EQR_TO_AZE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x018,
+
+	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.calc_lens_distortionwarp_map".
+	AMDOVX_KERNEL_STITCHING_INIT_CALC_CAMERA_VALID_MAP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x019,
+
+	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.compute_default_camIdx".
+	AMDOVX_KERNEL_STITCHING_INIT_COMPUTE_DEFAULT_CAMERA_IDX = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01a,
+
+	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.extend_padding".
+	AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_DILATE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01b,
+
+	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.extend_padding_vert".
+	AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_VERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01c,
 
 	// TBD: remove
 
@@ -479,6 +495,25 @@ VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_ima
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchNoiseFilterNode(vx_graph graph, vx_scalar lambda, vx_image input_rgb_img_1, vx_image input_rgb_img_2, vx_image denoised_image);
+
+/*! \brief [Graph] Creates a stitch Equirectangular to Azimuthal Equidistant projection Node- GPU.
+* \param [in] graph					The reference to the graph.
+* \param [in] input_rgb				The input equirectangular image in RGB format.
+* \param [in] rad_lat_map			The input radius to latitude map array.
+* \param [out] output_warped_rgb	The output warped image in Azimuthal equidistant projection
+* \param [in/optional] a			The parameter a to control the scale of the projection
+* \param [in/optional] b			The parameter a to control the rotation of the projection
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpEqrToAzE(vx_graph graph, vx_image input_rgb, vx_array rad_lat_map, vx_image output_warped_rgb, vx_scalar a, vx_scalar b);
+
+//////////////////////////////////////////////////////////////////////
+//! \brief Nodes for Stitch Initialize
+VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcCamWarpMaps(vx_graph graph, void *scalar_params, vx_array cam_params, vx_image valid_map, vx_image padding_map, vx_image src_coord_map, vx_array z_buffer_map);
+VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcDefCamIdxNode(vx_graph graph, vx_uint32 numCam, vx_uint32 out_width, vx_uint32 out_height, vx_array z_buffer_map, vx_image cam_idx_image);
+VX_API_ENTRY vx_node VX_API_CALL stitchInitExtendPadDilateNode(vx_graph graph, vx_uint32 paddingPixels, vx_image valid_map, vx_image padding_map);
+//VX_API_ENTRY vx_node VX_API_CALL stitchInitPadVertNode(vx_graph graph, vx_uint32 paddingPixels, vx_uint32 out_W, vx_uint32 out_H, vx_image valid_map, vx_image padding_map);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The utility functions

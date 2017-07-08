@@ -46,8 +46,11 @@ list(APPEND SOURCES
 	kernels/pyramid_scale.cpp
 	kernels/seam_find.cpp
 	kernels/warp.cpp
+	kernels/warp_eqr_to_aze.cpp
+	kernels/initialize_setup_tables.cpp
 	live_stitch_api.cpp
-)
+	profiler.cpp
+	)
 
 include_directories (. kernels)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
@@ -57,5 +60,5 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
 else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
 endif()

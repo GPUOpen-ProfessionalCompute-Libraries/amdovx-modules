@@ -33,8 +33,50 @@ typedef struct {
 } StitchCoord2dFloat;
 
 //////////////////////////////////////////////////////////////////////
+typedef struct {
+	vx_uint32 camId;
+	vx_uint32 lens_type;
+	vx_uint32 camWidth;
+	vx_uint32 camHeight;
+	vx_uint32 eqrWidth;
+	vx_uint32 eqrHeight;
+	vx_uint32 paddingPixelCount;
+	vx_float32 F0, F1, TCam0, TCam1, TCam2;
+}cam_warp_map_params;
+
+// data for using GPU kernels
+typedef struct {
+	cam_warp_map_params params;
+	vx_graph graphInitialize;                       // OpenVX graph for stitch Init
+	vx_image ValidPixelMap;
+	vx_image PaddedPixMap;
+	vx_array CameraParamsArr;
+	vx_image SrcCoordMap;
+	vx_array CameraZBuffArr;
+	vx_image DefaultCamMap;
+	vx_node calc_warp_maps_node;
+	vx_node calc_default_idx_node, pad_dilate_node;
+	bool lens_fish_eye;
+	vx_uint32 paddingPixelCount;
+} StitchInitializeData;
+
+//////////////////////////////////////////////////////////////////////
+//! \brief The Calculate Camera Warp Parameters functions.
+vx_status CalculateCameraWarpParameters(
+	vx_uint32 numCamera,               // number of cameras
+	vx_uint32 camWidth, vx_uint32 camHeight, // [in] individual camera dimensions
+	const rig_params * rigParam,       // rig configuration
+	const camera_params * camParam,    // individual camera configuration
+	float * Mcam,                      // M matrices: one 3x3 per camera
+	float * Tcam,                      // T vector: one 3x1 per camera
+	float * fcam,                      // f vector: one 2x1 per camera
+	float * Mr                         // M matrix: 3x3 for the rig
+	);
+
+//////////////////////////////////////////////////////////////////////
 // calculate lens distorion and warp maps from rig and camera configuration
 vx_status CalculateLensDistortionAndWarpMaps(
+	StitchInitializeData *pInitData,		 // [in] data pointer for init
 	vx_uint32 numCamera,                     // [in] number of cameras
 	vx_uint32 camWidth, vx_uint32 camHeight, // [in] individual camera dimensions
 	vx_uint32 eqrWidth, vx_uint32 eqrHeight, // [in] output equirectangular dimensions
@@ -72,5 +114,13 @@ vx_status GenerateValidMaskImage(
 	vx_uint32  maskStride,                // [in] stride (in bytes) of mask image
 	vx_uint8 * maskBuf                    // [out] valid mask image buffer: size: [eqrWidth * eqrHeight * numCamera]
 	);
+
+// kernels
+//////////////////////////////////////////////////////////////////////
+//! \brief The kernel registration functions.
+vx_status calc_lens_distortionwarp_map_publish(vx_context context);
+vx_status compute_default_camIdx_publish(vx_context context);
+vx_status extend_padding_dilate_publish(vx_context context);
+//vx_status extend_padding_vert_publish(vx_context context);
 
 #endif //__LENS_DISTORTION_REMAP_H__

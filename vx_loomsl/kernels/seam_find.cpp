@@ -651,7 +651,7 @@ static vx_status VX_CALLBACK seamfind_scene_detect_input_validator(vx_node node,
 		vx_enum type = 0;	vx_uint32 value = 0;
 		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &type, sizeof(type)));
 		ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &value));
-		if (value >= 0 && type == VX_TYPE_UINT32)
+		if (type == VX_TYPE_UINT32)
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar*)&ref));
 	}
@@ -1137,9 +1137,9 @@ static vx_status VX_CALLBACK seamfind_scene_detect_kernel(vx_node node, const vx
 						if (input_ptr[cost_id_1] && input_ptr[cost_id_2])
 						{
 #if 1
-							current_seam_scene[i].segment[(f * 3) + g][k] = abs(input_ptr[cost_id_1]); //Check cost from one image
+							current_seam_scene[i].segment[(f * 3) + g][k] = /*abs*/(input_ptr[cost_id_1]); //Check cost from one image
 #else
-							current_seam_scene[i].segment[(f * 3) + g][k] = abs((input_ptr[cost_id_1] + input_ptr[cost_id_2]) / 2);//Check cost from two images
+							current_seam_scene[i].segment[(f * 3) + g][k] = /*abs*/((input_ptr[cost_id_1] + input_ptr[cost_id_2]) / 2);//Check cost from two images
 #endif
 						}
 					}
@@ -1206,9 +1206,9 @@ static vx_status VX_CALLBACK seamfind_scene_detect_kernel(vx_node node, const vx
 						if (input_ptr[cost_id_1] && input_ptr[cost_id_2])
 						{
 #if 1
-							current_seam_scene[i].segment[(f * 3) + g][k] = abs(input_ptr[cost_id_1]);//Check cost from one image
+							current_seam_scene[i].segment[(f * 3) + g][k] = /*abs*/(input_ptr[cost_id_1]);//Check cost from one image
 #else
-							current_seam_scene[i].segment[(f * 3) + g][k] = abs((input_ptr[cost_id_1] + input_ptr[cost_id_2]) / 2);//Check cost from two images
+							current_seam_scene[i].segment[(f * 3) + g][k] = /*abs*/((input_ptr[cost_id_1] + input_ptr[cost_id_2]) / 2);//Check cost from two images
 #endif
 						}
 					}
@@ -1332,10 +1332,6 @@ static vx_status VX_CALLBACK seamfind_cost_generate_input_validator(vx_node node
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: SeamFind doesn't support Cost image format: %4.4s\n", &input_format);
 		}
-		else if (input_width < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
-		else if (input_height < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
 		else
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
@@ -1613,10 +1609,6 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_input_validator(vx_node no
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: SeamFind doesn't support Cost image format: %4.4s\n", &input_format);
 		}
-		else if (input_width < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
-		else if (input_height < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
 		else
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
@@ -1634,11 +1626,6 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_input_validator(vx_node no
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: SeamFind doesn't support phase image format: %4.4s\n", &input_format);
 		}
-		else if (input_width < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
-
-		else if (input_height < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
 		else
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
@@ -1656,11 +1643,6 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_input_validator(vx_node no
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: SeamFind doesn't support Mask image format: %4.4s\n", &input_format);
 		}
-		else if (input_width < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
-
-		else if (input_height < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
 		else
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
@@ -2343,10 +2325,6 @@ static vx_status VX_CALLBACK seamfind_path_trace_input_validator(vx_node node, v
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: SeamFind doesn't support weight image format: %4.4s\n", &input_format);
 		}
-		else if (input_width < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
-		else if (input_height < 0)
-			status = VX_ERROR_INVALID_DIMENSION;
 		else
 			status = VX_SUCCESS;
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
@@ -3572,11 +3550,11 @@ vx_status CalculateLargestSeamFindBufferSizes(
 	vx_size * seamFindPathEntryCount        // [out] number of entries needed by seamFind path table
 	)
 {
-	*seamFindValidEntryCount = eqrHeight * numCamera * (numCamera - 1) / 2;
-	*seamFindWeightEntryCount = eqrWidth * eqrHeight * numCamera * (numCamera - 1) / 2;
-	*seamFindAccumEntryCount = eqrWidth * eqrHeight * numCamera * (numCamera - 1) / 2;
-	*seamFindPrefInfoEntryCount = numCamera * (numCamera - 1) / 2;
-	*seamFindPathEntryCount = eqrWidth * numCamera * (numCamera - 1) / 2;
+	*seamFindValidEntryCount = eqrHeight * ((numCamera * (numCamera - 1) )/ 2);
+	*seamFindWeightEntryCount = ((eqrWidth * eqrHeight) / 8) * ((numCamera * (numCamera - 1)) / 2);
+	*seamFindAccumEntryCount = ((eqrWidth * eqrHeight) / 8) * ((numCamera * (numCamera - 1)) / 2);
+	*seamFindPrefInfoEntryCount = ((numCamera * (numCamera - 1)) / 2);
+	*seamFindPathEntryCount = eqrWidth * ((numCamera * (numCamera - 1)) / 2);
 	return VX_SUCCESS;
 }
 

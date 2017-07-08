@@ -86,7 +86,9 @@
     <ClInclude Include="kernels\pyramid_scale.h" />
     <ClInclude Include="kernels\seam_find.h" />
     <ClInclude Include="kernels\warp.h" />
+    <ClInclude Include="kernels\warp_eqr_to_aze.h" />
     <ClInclude Include="live_stitch_api.h" />
+    <ClInclude Include="profiler.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="kernels\alpha_blend.cpp" />
@@ -94,6 +96,7 @@
     <ClCompile Include="kernels\color_convert.cpp" />
     <ClCompile Include="kernels\exposure_compensation.cpp" />
     <ClCompile Include="kernels\exp_comp.cpp" />
+    <ClCompile Include="kernels\initialize_setup_tables.cpp" />
     <ClCompile Include="kernels\kernels.cpp" />
     <ClCompile Include="kernels\lens_distortion_remap.cpp" />
     <ClCompile Include="kernels\merge.cpp" />
@@ -102,7 +105,9 @@
     <ClCompile Include="kernels\pyramid_scale.cpp" />
     <ClCompile Include="kernels\seam_find.cpp" />
     <ClCompile Include="kernels\warp.cpp" />
+    <ClCompile Include="kernels\warp_eqr_to_aze.cpp" />
     <ClCompile Include="live_stitch_api.cpp" />
+    <ClCompile Include="profiler.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -1033,7 +1033,7 @@ vx_status CExpCompensator::CompensateBlockGains()
 	block_gain_info * pBg = &m_pblockgainInfo[0];
 	int block_gain_buf_size = m_blockgainsStride* num_blocks_h;
 	// compute gain for each 32x32 block for all images and store in m_block_gain_buf
-	for (int blk = 0; pBg, blk < (int)(num_blocks_h*num_blocks_w); pBg++, blk++)
+	for (int blk = 0; pBg && blk < (int)(num_blocks_h*num_blocks_w); pBg++, blk++)
 	{
 		// generate augmented matrix[A/b] for solving gains
 		vx_uint32 N;

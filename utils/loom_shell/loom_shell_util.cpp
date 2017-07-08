@@ -918,13 +918,18 @@ vx_status loadBuffer(cl_mem mem, const char * fileName)
 
 vx_status saveBuffer(cl_mem mem, const char * fileName)
 {
+	bool append = false;
+	if (fileName[0] == '+') {
+		append = true;
+		fileName++;
+	}
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
 	vx_uint32 size = globalClMem2SizeMap[mem];
 	cl_int err;
 	unsigned char * img = (unsigned char *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, size, 0, NULL, NULL, &err);
 	if (err) return Error("ERROR: clEnqueueMapBuffer() failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
-	FILE * fp = fopen(fileName, "wb"); if (!fp) return Error("ERROR: unable to create: %s", fileName);
+	FILE * fp = fopen(fileName, append ? "ab" : "wb"); if (!fp) return Error("ERROR: unable to %s: %s", append ? "append" : "create", fileName);
 	fwrite(img, 1, size, fp);
 	fclose(fp);
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
