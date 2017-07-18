@@ -119,7 +119,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishTensorToImageConvertKernel(vx_context context) {
 
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.tensorToImage", VX_KERNEL_TENSOR_TO_IMAGE, host_kernel, 2, validateTensorToImageKernel, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.tensorToImage", VX_KERNEL_CONVERT_TENSOR_TO_IMAGE, host_kernel, 2, validateTensorToImageKernel, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -138,7 +138,7 @@ vx_status publishTensorToImageConvertKernel(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxCreateImageFromTensor(vx_graph graph, vx_tensor input, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_tensor input, vx_image output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -147,7 +147,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxCreateImageFromTensor(vx_graph graph, vx_tens
             (vx_reference)input,
             (vx_reference)output
         };
-        node = createNode(graph, VX_KERNEL_TENSOR_TO_IMAGE, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_CONVERT_TENSOR_TO_IMAGE, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
