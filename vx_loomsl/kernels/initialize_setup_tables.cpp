@@ -290,7 +290,7 @@ static vx_status VX_CALLBACK calc_lens_distortionwarp_map_opencl_codegen(
 			"	if( gx < vm_width && gy < vm_height){\n"
 			"	camera_z_value_buf += camera_z_value_buf_offs + ((gy*vm_width + gx)<<2);\n"
 			"	valid_pix_map += vm_offs + gy*vm_stride + (gx << 2);\n"
-			"	uint4 valid_pix_out = *(__global uint4 *)(valid_pix_map);\n"
+			"	uint4 valid_pix_out = (uint4) 0;\n"
 			"	for (int camId=0; camId < %d; camId++) {\n"
 			"		__global float * cam_params_cur = (__global float *)(cam_params + camId*128);\n"
 			"		float4 cam_ltrb = *(__global float4*)(cam_params_cur);\n"
