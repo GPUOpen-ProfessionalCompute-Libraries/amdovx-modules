@@ -69,9 +69,11 @@ vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * f
 vx_status saveExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 
 vx_status loadBlendWeights(ls_context stitch, const char * fileName);
+vx_status initializeBuffer(cl_mem mem, vx_uint32 size, cl_int pattern);
 
 vx_status ClearCmdqCache();
 int64_t GetClockFrequency();
 int64_t GetClockCounter();
+bool GetEnvVariable(const char * name, char * value, size_t valueSize);
 
 #endif // __LOOM_SHELL_UTIL_H__
