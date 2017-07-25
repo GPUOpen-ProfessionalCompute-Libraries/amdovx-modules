@@ -74,6 +74,22 @@ int64_t GetClockFrequency()
 #endif
 }
 
+bool GetEnvVariable(const char * name, char * value, size_t valueSize)
+{
+#if _WIN32
+	DWORD len = GetEnvironmentVariableA(name, value, (DWORD)valueSize);
+	value[valueSize - 1] = 0;
+	return (len > 0) ? true : false;
+#else
+	const char * v = getenv(name);
+	if (v) {
+		strncpy(value, v, valueSize);
+		value[valueSize - 1] = 0;
+	}
+	return v ? true : false;
+#endif
+}
+
 static void Message(const char * format, ...)
 {
 	va_list args;
@@ -125,6 +141,15 @@ static cl_command_queue GetCmdqCached(cl_mem mem)
 		}
 	}
 	return cmdq;
+}
+
+vx_status initializeBuffer(cl_mem mem, vx_uint32 size, cl_int pattern)
+{
+	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
+	cl_int status = clEnqueueFillBuffer(cmdq, mem, &pattern, sizeof(cl_int), 0, size, 0, NULL, NULL);
+	if (status) return status;
+
+	return VX_SUCCESS;
 }
 
 static vx_status ReleaseCmdqCached(cl_context opencl_context)
