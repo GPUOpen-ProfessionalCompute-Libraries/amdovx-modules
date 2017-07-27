@@ -26,7 +26,7 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(OpenCL QUIET)
 
-include_directories(${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include ${CMAKE_SOURCE_DIR}/amdovx-modules/vx_loomsl)
+include_directories(../../../amdovx-core/openvx/include ../../../amdovx-modules/vx_loomsl)
 
 list(APPEND SOURCES
 	loom_shell_util.cpp
