@@ -139,7 +139,6 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     kernel_h = weights_dims[2]; kernel_w = weights_dims[3];
     stride_w = (input_dims[3] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[3]) / output_dims[3];
     stride_h = (input_dims[2] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[2]) / output_dims[2];
-    std::cout << "Stride w and h in convolution is: " << stride_w <<  " " <<  stride_h << std::endl;
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
@@ -160,7 +159,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->weight_mem, sizeof(data->weight_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
-    
+
     //Workspace Size.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->conv_desc, data->output_desc, &data->workspace_size ));
     if (data->workspace_size > 0) {
@@ -182,6 +181,14 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,
                                                                     data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
     data->algo = perf.fwd_algo;
+
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "weights " << weights_dims[1] << weights_dims[0] << weights_dims[2] << weights_dims[3] << " ";
+    std::cout << "bias " << bias_dims[0] << " ";
+    std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
+    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 

@@ -161,6 +161,14 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     int algo_count;
     ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem, data->convdesc,
                                                                     data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
+    data->algo = perf.fwd_algo;
+
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "fullyconnected input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "weights " << weights_dims[1] << weights_dims[0] << weights_dims[2] << weights_dims[3] << " ";
+    std::cout << "bias " << bias_dims[0] << " ";
+    std::cout << "output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
 
     //add to node attribute.
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));

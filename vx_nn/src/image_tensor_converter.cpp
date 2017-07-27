@@ -92,6 +92,10 @@ static vx_status VX_CALLBACK opencl_codegen(
 
     vx_uint32 output_dim_size = output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3];
 
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "input_tensor_converter output" << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
+
     opencl_work_dim = 1;
     opencl_global_work[0] = output_dim_size;
 

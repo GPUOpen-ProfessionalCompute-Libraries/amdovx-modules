@@ -45,10 +45,14 @@ list(APPEND SOURCES
     src/batch_normalization_layer.cpp
     src/elementwise_layer.cpp
     src/concat_layer.cpp
-    src/split_layer.cpp
+    src/copy_layer.cpp
     src/slice_layer.cpp
     src/image_tensor_converter.cpp
     src/tensor_image_converter.cpp
+    src/tensor_add.cpp
+    src/tensor_subtract.cpp
+    src/tensor_multiply.cpp
+    src/tensor_convert_depth_node.cpp
 )
 
 include_directories (../../amdovx-core/openvx/include src)

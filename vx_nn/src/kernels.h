@@ -59,6 +59,11 @@ THE SOFTWARE.
     }
 #endif
 
+// Debug Print Dims : disabled unless enabled explicitly by setting DEBUG_PRINT_DIMS=1
+#ifndef ENABLE_DEBUG_PRINT_DIMS
+#define ENABLE_DEBUG_PRINT_DIMS 0
+#endif
+
 //////////////////////////////////////////////////////////////////////
 //! user kernels
 enum nn_additional_library
@@ -70,7 +75,7 @@ enum user_kernel_e
     VX_KERNEL_ELEMENTWISE_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x001,
     VX_KERNEL_BATCHNORMALISATION_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x002,
     VX_KERNEL_CONCAT_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x003,
-    VX_KERNEL_SPLIT_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
+    VX_KERNEL_COPY_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
     VX_KERNEL_SLICE_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x005,
     VX_KERNEL_CONVERT_IMAGE_TO_TENSOR = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
     VX_KERNEL_CONVERT_TENSOR_TO_IMAGE = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
@@ -104,10 +109,14 @@ vx_status publishDeconvolutionLayer(vx_context context);
 vx_status publishElementwiseLayer(vx_context context);
 vx_status publishBatchNormalizationLayer(vx_context context);
 vx_status publishConcatLayer(vx_context context);
-vx_status publishSplitLayer(vx_context context);
+vx_status publishCopyLayer(vx_context context);
 vx_status publishSliceLayer(vx_context context);
 vx_status publishImageToTensorConvertKernel(vx_context context);
 vx_status publishTensorToImageConvertKernel(vx_context context);
+vx_status publishTensorAdd(vx_context context);
+vx_status publishTensorSubtraction(vx_context context);
+vx_status publishTensorMultiply(vx_context context);
+vx_status publishTensorConvertDepth(vx_context context);
 
 
 //////////////////////////////////////////////////////////////////////

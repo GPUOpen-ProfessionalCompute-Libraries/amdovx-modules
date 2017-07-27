@@ -68,16 +68,16 @@ static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_r
         if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
         vx_size bias_dims[1];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+        if(bias_dims[0] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-    if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if(input_dims[1] != weights_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[1] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -147,6 +147,7 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[0], input_dims[1], input_dims[2], input_dims[3]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[1], weights_dims[0], weights_dims[2], weights_dims[3]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
 
@@ -182,6 +183,14 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,
                                                                     data->deconv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
     data->algo = perf.fwd_algo;
+
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "weights " << weights_dims[1] << weights_dims[0] << weights_dims[2] << weights_dims[3] << " ";
+    std::cout << "bias " << bias_dims[0] << " ";
+    std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
+    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
 
     //setting node attribute.
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
@@ -225,12 +234,12 @@ vx_status publishDeconvolutionLayer(vx_context context)
 }
 
 VX_API_ENTRY vx_node VX_API_CALL vxDeconvolutionLayer(vx_graph graph, vx_tensor inputs, vx_tensor weights, vx_tensor biases,
-                                                      const vx_nn_deconvolution_params_t *deconvolution_params, vx_size size_of_convolution_params, vx_tensor outputs)
+                                                      const vx_nn_deconvolution_params_t *deconvolution_params, vx_size size_of_deconvolution_params, vx_tensor outputs)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONV_PARAMS, deconvolution_params, size_of_convolution_params);
+        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONV_PARAMS, deconvolution_params, size_of_deconvolution_params);
         if(vxGetStatus((vx_reference)deconv_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)inputs,

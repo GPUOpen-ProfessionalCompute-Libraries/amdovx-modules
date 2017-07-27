@@ -112,10 +112,14 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishElementwiseLayer(context));
     ERROR_CHECK_STATUS(publishBatchNormalizationLayer(context));
     ERROR_CHECK_STATUS(publishConcatLayer(context));
-    ERROR_CHECK_STATUS(publishSplitLayer(context));
+    ERROR_CHECK_STATUS(publishCopyLayer(context));
     ERROR_CHECK_STATUS(publishSliceLayer(context));
     ERROR_CHECK_STATUS(publishImageToTensorConvertKernel(context));
     ERROR_CHECK_STATUS(publishTensorToImageConvertKernel(context));
+    ERROR_CHECK_STATUS(publishTensorAdd(context));
+    ERROR_CHECK_STATUS(publishTensorSubtraction(context));
+    ERROR_CHECK_STATUS(publishTensorMultiply(context));
+    ERROR_CHECK_STATUS(publishTensorConvertDepth(context));
     return VX_SUCCESS;
 }
 

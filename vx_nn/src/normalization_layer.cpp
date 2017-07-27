@@ -131,11 +131,16 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
         vx_context   vxContext = vxGetContext((vx_reference)node);
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
+        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size * sizeof(vx_float32), NULL, NULL);
         if (!data->workspace) {
             return VX_FAILURE;
         }
     }
+
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "lrn input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
     
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 

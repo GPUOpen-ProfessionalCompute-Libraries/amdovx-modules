@@ -155,6 +155,13 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     data->alpha = 1;
     data->beta = 0;
 
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "pooling input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "kernel " << kernel_height << " " << kernel_width << " ";
+    std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
+    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+#endif
+
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     return VX_SUCCESS;
 }

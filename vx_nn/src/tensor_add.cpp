@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
-struct ElementwiseLayerLocalData {
+struct TensorAddLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenTensorOp_t operation;
     double alpha1;
@@ -36,57 +36,51 @@ struct ElementwiseLayerLocalData {
     cl_mem output_mem;
 };
 
-
-
-static vx_status VX_CALLBACK validateElementwiseLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+static vx_status VX_CALLBACK validateTensorAddition(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
-    //check scalar types.
+    // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
 
-    //check tensor dims.
+    // check tensor dimensions
     vx_size num_dims;
-    vx_size input1_dims[4], input2_dims[4], output_dims[4];
+    vx_size input1_dims[4],input2_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type!= VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type!= VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, sizeof(input2_dims)));
 
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    if (type!= VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    if ((output_dims[3] != input1_dims[3]) && (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[2] != input1_dims[2]) && (input1_dims[2] != input2_dims[2])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[1] != input1_dims[1]) && (input1_dims[1] != input2_dims[1])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[0] != input1_dims[0]) && (input1_dims[0] != input2_dims[0])) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input1_dims[3] || output_dims[3] != input2_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[2] != input1_dims[2] || output_dims[2] != input2_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[1] != input1_dims[1] || output_dims[1] != input2_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[0] != input1_dims[0] || output_dims[0] != input2_dims[0]) return VX_ERROR_INVALID_DIMENSION;
 
-    //output tensor configuration.
+    // output tensor configuration
     type = VX_TYPE_FLOAT32;
     num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[3], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[3], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[3], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK processElementwiseLayer(vx_node node, const vx_reference * parameters, vx_uint32 num) {
-    ElementwiseLayerLocalData * data = NULL;
+static vx_status VX_CALLBACK processTensorAddition(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
+    TensorAddLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
@@ -97,9 +91,9 @@ static vx_status VX_CALLBACK processElementwiseLayer(vx_node node, const vx_refe
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
-
-    ElementwiseLayerLocalData * data = new ElementwiseLayerLocalData;
+static vx_status VX_CALLBACK initializeTensorAddition(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+    TensorAddLocalData * data = new TensorAddLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
@@ -107,7 +101,7 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
     vx_size input1_dims[4], input2_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, sizeof(input2_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input1));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input2));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));
@@ -116,28 +110,29 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
 
     //scaling parameters.
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &data->alpha1, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &data->alpha2, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &data->beta, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    data->alpha1 = 1;
+    data->alpha2 = 1;
+    data->beta = 0;
     data->operation = miopenTensorOpAdd;
 
     //input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input1_mem, sizeof(data->input1_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->input2_mem, sizeof(data->input2_mem)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "eltwise input1 " << input1_dims[0] << " " << input1_dims[1] << " " << input1_dims[2] << " " << input1_dims[3] << std::endl;
-    std::cout << "eltwise input2 " << input2_dims[0] << " " << input2_dims[1] << " " << input2_dims[2] << " " << input2_dims[3] << std::endl;
-    std::cout << "eltwise output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "tensor_add input1 " << input1_dims[0] << " " << input1_dims[1] << " " << input1_dims[2] << " " << input1_dims[3] << " ";
+    std::cout << "tensor_add input2 " << input2_dims[0] << " " << input2_dims[1] << " " << input2_dims[2] << " " << input2_dims[3] << " ";
+    std::cout << "tensor_add output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
 #endif
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
-    ElementwiseLayerLocalData * data = NULL;
+static vx_status VX_CALLBACK uninitializeTensorAddition(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+    TensorAddLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
@@ -146,10 +141,10 @@ static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx
     return VX_SUCCESS;
 }
 
-vx_status publishElementwiseLayer(vx_context context) {
-
+vx_status publishTensorAdd(vx_context context)
+{
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.elementwise_layer", VX_KERNEL_ELEMENTWISE_LAYER, processElementwiseLayer, 6, validateElementwiseLayer, initializeElementwiseLayer, uninitializeElementwiseLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.openvx.tensor_add", VX_KERNEL_TENSOR_ADD, processTensorAddition, 4, validateTensorAddition, initializeTensorAddition, uninitializeTensorAddition);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -160,9 +155,7 @@ vx_status publishElementwiseLayer(vx_context context) {
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
 
     // finalize and release kernel object
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -171,30 +164,23 @@ vx_status publishElementwiseLayer(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_float32 alpha1, vx_float32 alpha2, vx_float32 beta, vx_tensor output) {
+VX_API_ENTRY vx_node VX_API_CALL vxTensorAddNode(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_enum policy, vx_tensor output)
+{
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar s_alpha1 = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha1, sizeof(alpha1));
-        vx_scalar s_alpha2 = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha2, sizeof(alpha2));
-        vx_scalar s_beta = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &beta, sizeof(beta));
-
-
-        if (vxGetStatus((vx_reference)s_alpha1) == VX_SUCCESS &&
-                vxGetStatus((vx_reference)s_alpha2) == VX_SUCCESS &&
-                vxGetStatus((vx_reference)s_beta) == VX_SUCCESS) {
-
+        vx_scalar s_policy = vxCreateScalarWithSize(context, VX_TYPE_ENUM, &policy, sizeof(policy));
+        if (vxGetStatus((vx_reference)s_policy) == VX_SUCCESS)
+        {
             vx_reference params[] = {
                 (vx_reference)input1,
                 (vx_reference)input2,
-                (vx_reference)s_alpha1,
-                (vx_reference)s_alpha2,
-                (vx_reference)s_beta,
+                (vx_reference)s_policy,
                 (vx_reference)output
             };
-            node = createNode(graph, VX_KERNEL_ELEMENTWISE_LAYER, params, sizeof(params) / sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_TENSOR_ADD, params, sizeof(params) / sizeof(params[0]));
         }
     }
     return node;
-
 }
+
