@@ -123,8 +123,8 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     downscale_size_rounding = params.down_scale_size_rounding;
     overflow_policy = params.overflow_policy;
     rounding_policy = params.rounding_policy;
-    dilation_h = params.dilation_y;
-    dilation_w = params.dilation_x;
+    dilation_h = params.dilation_y + 1;
+    dilation_w = params.dilation_x + 1;
     miopenConvolutionMode_t mode = miopenConvolution;
 
     vx_size input_dims[4], weights_dims[4], output_dims[4],bias_dims[1];;

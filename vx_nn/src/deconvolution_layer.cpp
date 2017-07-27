@@ -123,8 +123,8 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     
     pad_h = params.padding_y;
     pad_w = params.padding_x;
-    a_h = params.a_y;
-    a_w = params.a_x;
+    a_h = params.a_y + 1;
+    a_w = params.a_x + 1;
     overflow_policy = params.overflow_policy;
     rounding_policy = params.rounding_policy;
 

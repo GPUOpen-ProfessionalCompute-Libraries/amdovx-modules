@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
 
     //fully connected to convolution conversion.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->convdesc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->convdesc, mode, 0, 0, 1, 1, 0, 0));
+    ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->convdesc, mode, 0, 0, 1, 1, 1, 1));
 
     //Memory Declaration.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
