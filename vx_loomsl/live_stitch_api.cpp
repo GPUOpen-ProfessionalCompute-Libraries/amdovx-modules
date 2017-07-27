@@ -362,7 +362,6 @@ static vx_status DumpReference(vx_reference ref, const char * fileName)
 static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32 height, vx_uint32 alignpixels, vx_df_image format, vx_enum mem_type)
 {
 	if (mem_type == VX_MEMORY_TYPE_OPENCL){
-		vx_image OImg = nullptr;
 		cl_context opencl_context = nullptr;
 		vx_imagepatch_addressing_t addr_in = { 0 };
 		void *ptr[1] = { nullptr };

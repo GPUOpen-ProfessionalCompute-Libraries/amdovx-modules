@@ -1093,8 +1093,8 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_size stride = 0;
 	void *base = NULL;
 	status = exp_comp->SolveForGains(alpha, beta, pIMat, pNMat, numCameras, arr, (vx_uint32)rows, (vx_uint32)columns);
-	delete pIMat;
-	delete pNMat;
+	delete[] pIMat;
+	delete[] pNMat;
 	delete exp_comp;
 	return status;
 }
