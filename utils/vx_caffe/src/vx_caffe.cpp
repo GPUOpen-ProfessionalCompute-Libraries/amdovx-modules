@@ -517,7 +517,7 @@ void writeGDF
             ofsGDF << "data " << node[3] <<"_eps =" << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
             ofsGDF << "data " << node[3] <<"_beta =" << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
             ofsGDF << "data " << node[3] <<"_gamma ="<< " scalar:VX_TYPE_FLOAT32," << gamma << std::endl;
-            ofsGDF << "node org.khronos.nn_extension.batch_norm_layer " << node[4] << " "
+            ofsGDF << "node com.amd.nn_extension.batch_norm_layer " << node[4] << " "
                    << node[3] << "_gamma "
                    << node[3] << "_beta "
                    << " " << node[3]
