@@ -357,14 +357,14 @@ void writeGDF
         for(size_t i = 4; i < node.size(); i++) {
             if(node[i] != "" && tensorCheck.find(node[i]) == tensorCheck.end()) {
                 auto&& dim = tensorMap[node[i]];
-                ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[0] << "," << dim[1] << "," << dim[2] << "," << dim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 tensorCheck[node[i]] = true;
             }
         }
         auto&& output = node[3];
         auto&& odim = tensorMap[output];
         if(!tensorCheck[output]) {
-            ofsGDF << "data " << output << " = tensor:4,{" << odim[0] << "," << odim[1] << "," << odim[2] << "," << odim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "directive " << output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
         }
         tensorCheck[output] = true;
@@ -380,7 +380,7 @@ void writeGDF
             ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
-            ofsGDF << "data " << weights << " = tensor:4,{" << dim[0] << "," << dim[1] << "," << dim[2] << "," << dim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "read " << weights << " weights/" << layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
@@ -405,7 +405,7 @@ void writeGDF
             ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
-            ofsGDF << "data " << weights << " = tensor:4,{" << dim[0] << "," << dim[1] << "," << dim[2] << "," << dim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "read " << weights << " weights/" << layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
@@ -457,7 +457,7 @@ void writeGDF
             ss >> k >> bias_term;
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
-            ofsGDF << "data " << weights << " = tensor:4,{" << dim[0] << "," << dim[1] << "," << dim[2] << "," << dim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "read " << weights << " weights/"<< layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
@@ -489,7 +489,6 @@ void writeGDF
                    << " " << node[3]
                    << std::endl;
             ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
-            //std::cout << "dim RelU output : " << odim[0] << " " << odim[1] << " " << odim[2] << " " << odim[3] << std::endl;
         }
         else if(type == "LRN") {
             int normalization_size;
@@ -540,7 +539,7 @@ void writeGDF
                 std::string out = node[3];
                 if(i < node.size()-1) {
                     out += "tmp_" + std::to_string(i-4);
-                    ofsGDF << "data " << out << " = tensor:4,{" << dim[0] << "," << dim[1] << "," << dim[2] << "," << dim[3] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    ofsGDF << "data " << out << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     tensorCheck[out] = true;
                 }
                 if(op == 1) {
@@ -633,7 +632,6 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter){
         const caffe::BlobProto& weights_blob = layer_parameter.blobs(0);
         int weightsize = weights_blob.data_size();
 
-        
         for(int i=0;i<weightsize;i++){
             float weight = weights_blob.data(i);
             fwrite(&weight,sizeof(float),1,fs_weights);
