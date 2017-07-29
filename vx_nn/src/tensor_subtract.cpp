@@ -100,9 +100,9 @@ static vx_status VX_CALLBACK opencl_codegen(
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "tensor_sub input1 " << input1_dims[0] << " " << input1_dims[1] << " " << input1_dims[2] << " " << input1_dims[3] << " ";
-    std::cout << "tensor_sub input2 " << input2_dims[0] << " " << input2_dims[1] << " " << input2_dims[2] << " " << input2_dims[3] << " ";
-    std::cout << "tensor_sub output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "tensor_sub input1 " << input1_dims[3] << " " << input1_dims[2] << " " << input1_dims[1] << " " << input1_dims[0] << " ";
+    std::cout << "tensor_sub input2 " << input2_dims[3] << " " << input2_dims[2] << " " << input2_dims[1] << " " << input2_dims[0] << " ";
+    std::cout << "tensor_sub output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     strcpy(opencl_kernel_function_name, "tensor_subtract");

@@ -69,16 +69,16 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
         if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
         vx_size bias_dims[1];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
-    if(input_dims[1] != weights_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[1] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -127,9 +127,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[0], input_dims[1], input_dims[2], input_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[0], weights_dims[1], weights_dims[2], weights_dims[3]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat,1, bias_dims[0], 1, 1));
 
     //fully connected to convolution conversion.
@@ -164,10 +164,10 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     data->algo = perf.fwd_algo;
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "fullyconnected input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
-    std::cout << "weights " << weights_dims[1] << weights_dims[0] << weights_dims[2] << weights_dims[3] << " ";
+    std::cout << "fullyconnected input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
+    std::cout << "weights " << weights_dims[3] << weights_dims[2] << weights_dims[1] << weights_dims[0] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
-    std::cout << "output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     //add to node attribute.

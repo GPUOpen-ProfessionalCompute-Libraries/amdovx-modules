@@ -90,8 +90,8 @@ static vx_status VX_CALLBACK opencl_codegen(
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "copy input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
-    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "copy input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
+    std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     strcpy(opencl_kernel_function_name, "copy_layer");
@@ -108,10 +108,10 @@ static vx_status VX_CALLBACK opencl_codegen(
     if (num_of_dims == 4) {
         char item[8192];
         sprintf(item,
-                "__kernel void copy_layer(__global float * in, uint in_offset, __global float * out, uint out1_offset) \n"
+                "__kernel void copy_layer(__global float * in, uint in_offset, uint4 in_stride,  __global float * out, uint out_offset, uint4 out_stride) \n"
                 "{ \n"
-                "     size_t id = get_global_id(0);"
-                "     out[id] = in[id];"
+                "     size_t id = get_global_id(0);\n"
+                "     out[id] = in[id];\n"
                 " }\n"
                 );
 

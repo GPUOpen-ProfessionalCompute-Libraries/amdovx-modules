@@ -68,8 +68,8 @@ static vx_status VX_CALLBACK validatePoolingLayer(vx_node node, const vx_referen
     if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if (output_dims[1] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[2] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -140,14 +140,14 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &pad_w, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &pad_h, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
-    stride_w = (input_dims[3] - kernel_width  + 2 * (pad_w) + output_dims[3]) / output_dims[3];
-    stride_h = (input_dims[2] - kernel_height + 2 * (pad_h)+output_dims[2]) / output_dims[2];
+    stride_w = (input_dims[0] - kernel_width  + 2 * (pad_w) + output_dims[0]) / output_dims[0];
+    stride_h = (input_dims[1] - kernel_height + 2 * (pad_h)+output_dims[1]) / output_dims[1];
 
     ERROR_CHECK_MIOPEN_STATUS(miopenSet2dPoolingDescriptor(data->pool_desc, data->mode, kernel_height, kernel_width, pad_h, pad_w, stride_h , stride_w));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->output_desc)));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[0], input_dims[1], input_dims[2], input_dims[3])));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3])));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
     
     //Declare Memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
@@ -156,10 +156,10 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     data->beta = 0;
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "pooling input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "pooling input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "kernel " << kernel_height << " " << kernel_width << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
-    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));

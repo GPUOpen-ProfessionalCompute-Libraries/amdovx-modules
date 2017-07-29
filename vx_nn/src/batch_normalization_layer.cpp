@@ -62,7 +62,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
         if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
         vx_size bias_dims[1];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if (bias_dims[0] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+        if (bias_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
     }
 
     if (parameters[1]) {
@@ -72,7 +72,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
         if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
         vx_size scale_dims[1];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, scale_dims, sizeof(scale_dims)));
-        if (scale_dims[0] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+        if (scale_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
     }
 
     //output tensor configuration.
@@ -112,9 +112,9 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bnScaleBiasMeanVarDesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[0], input_dims[1], input_dims[2], input_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bnScaleBiasMeanVarDesc, miopenFloat, 1, input_dims[1], 1, 1));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bnScaleBiasMeanVarDesc, miopenFloat, 1, input_dims[2], 1, 1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenDeriveBNTensorDescriptor(data->bnScaleBiasMeanVarDesc, data->input_desc, miopenBNSpatial));
 
     data->alpha = 1; data->beta = 0;
@@ -122,7 +122,7 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
     vx_context   vxContext = vxGetContext((vx_reference)node);
     cl_context context;
     ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-    vx_size size = 1 * input_dims[1] * 1 * 1 * sizeof(vx_float32);
+    vx_size size = 1 * input_dims[2] * 1 * 1 * sizeof(vx_float32);
     data->bnBias = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, NULL);
     data->bnScale = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, NULL);
     if (!data->bnBias && !data->bnScale) {
@@ -136,8 +136,8 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "batch_normalization input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
-    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "batch_normalization input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
+    std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));

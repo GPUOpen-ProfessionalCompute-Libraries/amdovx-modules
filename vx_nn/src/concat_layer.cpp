@@ -59,12 +59,12 @@ static vx_status VX_CALLBACK validateConcatLayer(vx_node node, const vx_referenc
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    if ((output_dims[3] != input1_dims[3]) && (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[2] != input1_dims[2]) && (input1_dims[2] != input2_dims[2])) return VX_ERROR_INVALID_DIMENSION;
     if ((output_dims[0] != input1_dims[0]) && (input1_dims[0] != input2_dims[0])) return VX_ERROR_INVALID_DIMENSION;
-    if ((input3_dims[3] != input4_dims[3]) && (input4_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
-    if ((input3_dims[2] != input4_dims[2]) && (input4_dims[2] != input2_dims[2])) return VX_ERROR_INVALID_DIMENSION;
+    if ((output_dims[1] != input1_dims[1]) && (input1_dims[1] != input2_dims[1])) return VX_ERROR_INVALID_DIMENSION;
+    if ((output_dims[3] != input1_dims[3]) && (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
     if ((input3_dims[0] != input4_dims[0]) && (input4_dims[0] != input2_dims[0])) return VX_ERROR_INVALID_DIMENSION;
+    if ((input3_dims[1] != input4_dims[1]) && (input4_dims[1] != input2_dims[1])) return VX_ERROR_INVALID_DIMENSION;
+    if ((input3_dims[3] != input4_dims[3]) && (input4_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
 
     //output tensor configuration.
     type = VX_TYPE_FLOAT32;
@@ -120,11 +120,11 @@ vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZER
     vx_uint32 input4_dim_size = input4_dims[0] * input4_dims[1] * input4_dims[2] * input4_dims[3];
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "concat input1 " << input1_dims[0] << " " << input1_dims[1] << " " << input1_dims[2] << " " << input1_dims[3] << std::endl;
-    std::cout << "concat input2 " << input2_dims[0] << " " << input2_dims[1] << " " << input2_dims[2] << " " << input2_dims[3] << std::endl;
-    std::cout << "concat input3 " << input3_dims[0] << " " << input3_dims[1] << " " << input3_dims[2] << " " << input3_dims[3] << std::endl;
-    std::cout << "concat input4 " << input4_dims[0] << " " << input4_dims[1] << " " << input4_dims[2] << " " << input4_dims[3] << std::endl;
-    std::cout << "concat output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "concat input1 " << input1_dims[3] << " " << input1_dims[2] << " " << input1_dims[1] << " " << input1_dims[0] << std::endl;
+    std::cout << "concat input2 " << input2_dims[3] << " " << input2_dims[2] << " " << input2_dims[1] << " " << input2_dims[0] << std::endl;
+    std::cout << "concat input3 " << input3_dims[3] << " " << input3_dims[2] << " " << input3_dims[1] << " " << input3_dims[0] << std::endl;
+    std::cout << "concat input4 " << input4_dims[3] << " " << input4_dims[2] << " " << input4_dims[1] << " " << input4_dims[0] << std::endl;
+    std::cout << "concat output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     vx_uint32 work_items[3] = { input1_dim_size ,  input2_dim_size , input3_dim_size };

@@ -70,10 +70,10 @@ static vx_status VX_CALLBACK validateElementwiseLayer(vx_node node, const vx_ref
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    if ((output_dims[3] != input1_dims[3]) && (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[2] != input1_dims[2]) && (input1_dims[2] != input2_dims[2])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output_dims[1] != input1_dims[1]) && (input1_dims[1] != input2_dims[1])) return VX_ERROR_INVALID_DIMENSION;
     if ((output_dims[0] != input1_dims[0]) && (input1_dims[0] != input2_dims[0])) return VX_ERROR_INVALID_DIMENSION;
+    if ((output_dims[1] != input1_dims[1]) && (input1_dims[1] != input2_dims[1])) return VX_ERROR_INVALID_DIMENSION;
+    if ((output_dims[2] != input1_dims[2]) && (input1_dims[2] != input2_dims[2])) return VX_ERROR_INVALID_DIMENSION;
+    if ((output_dims[3] != input1_dims[3]) && (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
 
     //output tensor configuration.
     type = VX_TYPE_FLOAT32;
@@ -111,9 +111,9 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input1));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input2));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, miopenFloat, input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, miopenFloat, input2_dims[0], input2_dims[1], input2_dims[2], input2_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, miopenFloat, input1_dims[3], input1_dims[2], input1_dims[1], input1_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, miopenFloat, input2_dims[3], input2_dims[2], input2_dims[1], input2_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
 
     //scaling parameters.
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &data->alpha1, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
@@ -127,9 +127,9 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "eltwise input1 " << input1_dims[0] << " " << input1_dims[1] << " " << input1_dims[2] << " " << input1_dims[3] << std::endl;
-    std::cout << "eltwise input2 " << input2_dims[0] << " " << input2_dims[1] << " " << input2_dims[2] << " " << input2_dims[3] << std::endl;
-    std::cout << "eltwise output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "eltwise input1 " << input1_dims[3] << " " << input1_dims[2] << " " << input1_dims[1] << " " << input1_dims[0] << std::endl;
+    std::cout << "eltwise input2 " << input2_dims[3] << " " << input2_dims[2] << " " << input2_dims[1] << " " << input2_dims[0] << std::endl;
+    std::cout << "eltwise output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
