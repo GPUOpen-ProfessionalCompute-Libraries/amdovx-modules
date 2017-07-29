@@ -67,16 +67,17 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
         if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
         vx_size bias_dims[1];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
-    if(input_dims[1] != weights_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[1] != weights_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+
+    if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -136,18 +137,18 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     vx_size stride_h, stride_w;
     vx_size kernel_h, kernel_w;
 
-    kernel_h = weights_dims[2]; kernel_w = weights_dims[3];
-    stride_w = (input_dims[3] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[3]) / output_dims[3];
-    stride_h = (input_dims[2] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[2]) / output_dims[2];
+    kernel_h = weights_dims[3]; kernel_w = weights_dims[2];
+    stride_w = (input_dims[0] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[0]) / output_dims[0];
+    stride_h = (input_dims[1] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[1]) / output_dims[1];
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[0], input_dims[1], input_dims[2], input_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[0], weights_dims[1], weights_dims[2], weights_dims[3]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[0], output_dims[1], output_dims[2], output_dims[3]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
 
     //Convolution Descriptor.
@@ -182,9 +183,12 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
                                                                     data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
     data->algo = perf.fwd_algo;
 
+
 #if ENABLE_DEBUG_PRINT_DIMS
+    if(!data->algo)  std::cout <<"Failure in finding the algorithm for forward path." << std::endl;
+    else std::cout << "Succesfully found an algorithm. " << std::endl;
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
-    std::cout << "weights " << weights_dims[1] << weights_dims[0] << weights_dims[2] << weights_dims[3] << " ";
+    std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
     std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;

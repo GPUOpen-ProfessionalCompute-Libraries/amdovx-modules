@@ -73,13 +73,13 @@ static vx_status VX_CALLBACK opencl_codegen(
         vx_uint32 num,                                 // [input] number of parameters
         bool opencl_load_function,                     // [input]  false: normal OpenCL kernel; true: reserved
         char opencl_kernel_function_name[64],          // [output] kernel_name for clCreateKernel()
-std::string& opencl_kernel_code,               // [output] string for clCreateProgramWithSource()
-std::string& opencl_build_options,             // [output] options for clBuildProgram()
-vx_uint32& opencl_work_dim,                    // [output] work_dim for clEnqueueNDRangeKernel()
-vx_size opencl_global_work[],                  // [output] global_work[] for clEnqueueNDRangeKernel()
-vx_size opencl_local_work[],                   // [output] local_work[] for clEnqueueNDRangeKernel()
-vx_uint32& opencl_local_buffer_usage_mask,     // [output] reserved: must be ZERO
-vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
+        std::string& opencl_kernel_code,               // [output] string for clCreateProgramWithSource()
+        std::string& opencl_build_options,             // [output] options for clBuildProgram()
+        vx_uint32& opencl_work_dim,                    // [output] work_dim for clEnqueueNDRangeKernel()
+        vx_size opencl_global_work[],                  // [output] global_work[] for clEnqueueNDRangeKernel()
+        vx_size opencl_local_work[],                   // [output] local_work[] for clEnqueueNDRangeKernel()
+        vx_uint32& opencl_local_buffer_usage_mask,     // [output] reserved: must be ZERO
+        vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
 )
 {
     //get tensor dimensions

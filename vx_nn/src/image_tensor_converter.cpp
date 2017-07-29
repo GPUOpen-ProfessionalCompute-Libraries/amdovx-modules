@@ -30,6 +30,9 @@ static vx_status VX_CALLBACK validateImageToTensorKernel(vx_node node, const vx_
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_HEIGHT, &height, sizeof(height)));
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    vx_enum flagsType;
+    ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &flagsType, sizeof(flagsType)));
+    if(flagsType != VX_TYPE_UINT32) return VX_ERROR_INVALID_TYPE;
 
     //check tensor dims.
     vx_enum type;
@@ -42,9 +45,10 @@ static vx_status VX_CALLBACK validateImageToTensorKernel(vx_node node, const vx_
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    if (width != output_dims[3])return VX_ERROR_INVALID_DIMENSION;
-    if (height != output_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[0] != 1) return VX_ERROR_INVALID_DIMENSION;
+
+    if (width != output_dims[0])return VX_ERROR_INVALID_DIMENSION;
+    if (height != output_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != 1) return VX_ERROR_INVALID_DIMENSION;
 
     //output tensor configuration.
     type = VX_TYPE_FLOAT32;
@@ -93,7 +97,7 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_uint32 output_dim_size = output_dims[0] * output_dims[1] * output_dims[2] * output_dims[3];
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "input_tensor_converter output" << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
+    std::cout << "input_tensor_converter output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
 #endif
 
     opencl_work_dim = 1;
@@ -103,18 +107,24 @@ static vx_status VX_CALLBACK opencl_codegen(
     opencl_local_buffer_usage_mask = 0;
     opencl_local_buffer_size_in_bytes = 0;
 
-    if (num_of_dims == 4) {
-        char item[8192];
-        sprintf(item,
-            "__kernel void image_to_tensor(uint i0_width, uint i0_height, __global uchar * in, uint i0_stride, uint i0_offset, __global float * out, uint out_offset) \n"
-            "{ \n"
-            "     size_t id = get_global_id(0);"
-            "     out[id] = in[id];"
-            " }\n"
-        );
+    // flags
+    vx_uint32 flags = 0;
+    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &flags, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
-        opencl_kernel_code = item;
-    }
+    char item[8192];
+    sprintf(item,
+        "__kernel void image_to_tensor(uint i0_width, uint i0_height, __global uchar * in, uint i0_stride, uint i0_offset, __global uchar * out, uint out_offset, uint4 stride, uint flip) \n"
+        "{ \n"
+        "     size_t id = get_global_id(0);\n"
+        "     size_t i = id / %d;\n" // C
+        "     size_t c = id - i * %d;\n" // C
+        "     size_t y = i / %d;\n" // W
+        "     size_t x = i - y * %d;\n" // W
+        "     *(__global float *)&out[out_offset + c * stride.s2 + y * stride.s1 + x * stride.s0] = in[i0_offset + y * i0_stride + x * 3 + %s c];\n"
+        " }\n",
+        (int)output_dims[2], (int)output_dims[2], (int)output_dims[0], (int)output_dims[0], (flags & 1) ? "2 -" : "");
+
+    opencl_kernel_code = item;
 
     return VX_SUCCESS;
 }
@@ -127,7 +137,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishImageToTensorConvertKernel(vx_context context) {
 
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.imageToTensor", VX_KERNEL_CONVERT_IMAGE_TO_TENSOR, host_kernel, 2, validateImageToTensorKernel, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.convert_image_to_tensor", VX_KERNEL_CONVERT_IMAGE_TO_TENSOR, host_kernel, 3, validateImageToTensorKernel, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -138,6 +148,7 @@ vx_status publishImageToTensorConvertKernel(vx_context context) {
     //set kernel parameters.
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
 
     //finalize and release kernel object.
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
