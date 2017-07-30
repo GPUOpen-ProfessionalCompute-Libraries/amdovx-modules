@@ -137,7 +137,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     vx_size stride_h, stride_w;
     vx_size kernel_h, kernel_w;
 
-    kernel_h = weights_dims[3]; kernel_w = weights_dims[2];
+    kernel_h = weights_dims[0]; kernel_w = weights_dims[1];
     stride_w = (input_dims[0] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[0]) / output_dims[0];
     stride_h = (input_dims[1] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[1]) / output_dims[1];
 

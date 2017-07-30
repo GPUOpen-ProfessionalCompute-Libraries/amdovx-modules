@@ -136,9 +136,9 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    kernel_h = weights_dims[2]; kernel_w = weights_dims[3];
-    stride_w = (output_dims[3] + 2 * pad_w - a_w - kernel_w) / (input_dims[3] - 1);
-    stride_h = (output_dims[2] + 2 * pad_h - a_h - kernel_h) / (input_dims[2] - 1);
+    kernel_h = weights_dims[1]; kernel_w = weights_dims[0];
+    stride_w = (output_dims[0] + 2 * pad_w - a_w - kernel_w) / (input_dims[0] - 1);
+    stride_h = (output_dims[1] + 2 * pad_h - a_h - kernel_h) / (input_dims[1] - 1);
 
     //input,weight,bias and output descriptor.
     //input, weight and output descriptors.

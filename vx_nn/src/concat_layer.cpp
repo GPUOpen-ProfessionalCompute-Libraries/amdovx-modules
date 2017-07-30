@@ -139,8 +139,8 @@ vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZER
     if (num_of_dims == 4) {
         char item[8192];
         sprintf(item,
-            "__kernel void concat_layer(__global float * in1, uint in1_offset, __global float * in2, uint in2_offset,"
-            " __global float * in3, uint in3_offset, __global float * in4 , uint in4_offset, __global float * out, uint out_offset) \n"
+            "__kernel void concat_layer(__global float * in1, uint in1_offset, uint4 in1_stride, __global float * in2, uint in2_offset, uint4 in2_stride,"
+            " __global float * in3, uint in3_offset, uint4 in3_stride, __global float * in4 , uint in4_offset, uint4 in4_stride, __global float * out, uint out_offset,uint4 out_stride) \n"
             "{ \n"
             "       size_t id = get_global_id(0);"
             "       size_t input1_size = %d; \n"
