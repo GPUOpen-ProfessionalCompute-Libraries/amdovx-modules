@@ -148,6 +148,8 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
 static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
     BatchNormLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    clReleaseMemObject(data->bnBias);
+    clReleaseMemObject(data->bnScale);
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

@@ -119,7 +119,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 
     //LRN Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateLRNDescriptor(&data->lrnDesc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->N, data->alpha, data->beta, 2));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->N, 0.0001, data->beta, 1));
 
     //Input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
@@ -139,6 +139,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "lrn input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
+    std::cout << "Alpha " << data->alpha << " Beta " << data->beta << " N " << data->N << " K " << 1 << std::endl;
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
     
@@ -151,6 +152,10 @@ static vx_status VX_CALLBACK uninitializeNormalizationLayer(vx_node node, const 
 {
     NormalizationLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    clReleaseMemObject(data->workspace);
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyLRNDescriptor(data->lrnDesc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

@@ -137,7 +137,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     vx_size stride_h, stride_w;
     vx_size kernel_h, kernel_w;
 
-    kernel_h = weights_dims[0]; kernel_w = weights_dims[1];
+    kernel_h = weights_dims[1]; kernel_w = weights_dims[0];
     stride_w = (input_dims[0] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[0]) / output_dims[0];
     stride_h = (input_dims[1] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[1]) / output_dims[1];
 
@@ -176,6 +176,8 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     data->alpha = 1;
     data->beta = 0;
 
+
+
     //Finding best Convolution Algorithm.
     miopenConvAlgoPerf_t perf;
     int algo_count;
@@ -185,8 +187,6 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    if(!data->algo)  std::cout <<"Failure in finding the algorithm for forward path." << std::endl;
-    else std::cout << "Succesfully found an algorithm. " << std::endl;
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
     std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
@@ -203,6 +203,12 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
 {
     ConvolutionLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    clReleaseMemObject(data->workspace);
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->conv_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->weight_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bias_desc));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

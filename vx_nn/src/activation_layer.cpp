@@ -143,6 +143,9 @@ static vx_status VX_CALLBACK uninitializeActivationLayer(vx_node node, const vx_
 {
     ActivationLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activationDesc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->inputDescriptor));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->outputDescriptor));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

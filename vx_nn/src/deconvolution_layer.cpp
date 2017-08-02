@@ -21,6 +21,8 @@ THE SOFTWARE.
 */
 
 #include "kernels.h"
+#include <vector>
+#include <unistd.h>
 
 struct DeconvolutionLayerLocalData {
     NeuralNetworkCommonHandle * handle;
@@ -38,7 +40,6 @@ struct DeconvolutionLayerLocalData {
     size_t workspace_size;
     miopenTensorDescriptor_t bias_desc;
     cl_mem bias_mem;
-
 };
 
 static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
@@ -90,15 +91,23 @@ static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_r
 
 static vx_status VX_CALLBACK processDeconvolutionLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
 {
-    DeconvolutionLayerLocalData * data = NULL;
+    DeconvolutionLayerLocalData * data= NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    miopenHandle_t handle = data->handle->miopen_handle;
 
-    //ConvolutionForward (Transpose convolutions)
+    cl_int err;
+    std::vector<float> wsf_buffer_init(data->workspace_size/4, 0);
+    err = clEnqueueWriteBuffer(data->handle->cmdq, data->workspace,CL_TRUE,0, data->workspace_size,wsf_buffer_init.data(),0, NULL,NULL);
+    if(err!=0){
+        std::cout << "Error in initializing buffer with error : " << err << std::endl;
+        return VX_FAILURE;
+    }
+
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
-                                                       data->weight_desc, data->weight_mem, data->deconv_desc, data->algo, &data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
+                                                       data->weight_desc,data->weight_mem,data->deconv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
     clFinish(data->handle->cmdq);
 
-    //Convolution Forward Bias (Transpose convolutions).
+    //Convolution Forward Bias.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
     clFinish(data->handle->cmdq);
@@ -117,44 +126,42 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     vx_nn_deconvolution_params_t params;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &params, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
-    vx_size pad_h, pad_w, a_h, a_w;
-    vx_size stride_h, stride_w, kernel_h, kernel_w;
+    vx_size pad_h, pad_w;
+    vx_size dilation_w, dilation_h;
     vx_enum overflow_policy, rounding_policy;
-    
-    pad_h = params.padding_y;
-    pad_w = params.padding_x;
-    a_h = params.a_y + 1;
-    a_w = params.a_x + 1;
+
+    pad_h = params.padding_y; pad_w = params.padding_x;
     overflow_policy = params.overflow_policy;
     rounding_policy = params.rounding_policy;
+    dilation_h = params.a_y + 1;
+    dilation_w = params.a_x + 1;
+    miopenConvolutionMode_t mode = miopenTranspose;
 
-    //inputs, weights, biases and outputs.
-    vx_size num_dims;
-    vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[1];
+    vx_size input_dims[4], weights_dims[4], output_dims[4],bias_dims[1];;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
 
+    vx_size stride_h, stride_w;
+    vx_size kernel_h, kernel_w;
     kernel_h = weights_dims[1]; kernel_w = weights_dims[0];
-    stride_w = (output_dims[0] + 2 * pad_w - a_w - kernel_w) / (input_dims[0] - 1);
-    stride_h = (output_dims[1] + 2 * pad_h - a_h - kernel_h) / (input_dims[1] - 1);
+    stride_w = (output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1)) / (input_dims[0] - 1);
+    stride_h = (output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1)) / (input_dims[1] - 1);
 
-    //input,weight,bias and output descriptor.
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[2], weights_dims[3], weights_dims[1], weights_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
 
     //Convolution Descriptor.
-    miopenConvolutionMode_t mode = miopenTranspose;
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->deconv_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->deconv_desc, mode, pad_h, pad_w, stride_h, stride_w, a_h, a_w));
+    ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->deconv_desc, mode, pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w));
 
     //Memory Declaration.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
@@ -163,15 +170,15 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
 
     //Workspace Size.
-    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->deconv_desc, data->output_desc, &data->workspace_size));
+    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->deconv_desc, data->output_desc, &data->workspace_size ));
     if (data->workspace_size > 0) {
         vx_context   vxContext = vxGetContext((vx_reference)node);
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size * sizeof(vx_float32), NULL, NULL);
-        if (!data->workspace) {
-            return VX_FAILURE;
-        }
+        cl_int err;
+        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, data->workspace_size * sizeof(vx_float32), NULL, &err);
+        if(err!=0) return VX_FAILURE;
+        if (!data->workspace) return VX_FAILURE;
     }
 
     data->alpha = 1;
@@ -184,24 +191,31 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
                                                                     data->deconv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
     data->algo = perf.fwd_algo;
 
+
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "conv input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
-    std::cout << "weights " << weights_dims[3] << weights_dims[2] << weights_dims[1] << weights_dims[0] << " ";
+    std::cout << "deconv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
-    std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
+    std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
 #endif
 
-    //setting node attribute.
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 
     return VX_SUCCESS;
+
 }
 
 static vx_status VX_CALLBACK uninitializeDeconvolutionLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
     DeconvolutionLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    clReleaseMemObject(data->workspace);
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->deconv_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->weight_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bias_desc));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;
@@ -234,12 +248,12 @@ vx_status publishDeconvolutionLayer(vx_context context)
 }
 
 VX_API_ENTRY vx_node VX_API_CALL vxDeconvolutionLayer(vx_graph graph, vx_tensor inputs, vx_tensor weights, vx_tensor biases,
-                                                      const vx_nn_deconvolution_params_t *deconvolution_params, vx_size size_of_deconvolution_params, vx_tensor outputs)
+                                                      const vx_nn_deconvolution_params_t *deconvolution_params, vx_size size_of_deconv_params, vx_tensor outputs)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONV_PARAMS, deconvolution_params, size_of_deconvolution_params);
+        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONV_PARAMS, deconvolution_params, size_of_deconv_params);
         if(vxGetStatus((vx_reference)deconv_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)inputs,
