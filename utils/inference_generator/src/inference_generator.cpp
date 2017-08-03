@@ -35,6 +35,11 @@ THE SOFTWARE.
 #define error(...) printf("ERROR: " __VA_ARGS__), exit(1)
 #define info(...)  printf("OK: " __VA_ARGS__)
 
+//Dump Layer Data : disabled unless enabled explicitly by setting ENABLE_DUMP_LAYER_DATA = 1
+#ifndef ENABLE_DUMP_LAYER_DATA
+    #define ENABLE_DUMP_LAYER_DATA 0
+#endif
+
 void getLayerParams
 (
         const caffe::LayerParameter& layer,
@@ -89,9 +94,12 @@ void getLayerParams
     }
     else if(layer.type() == "LRN") {
         const caffe::LRNParameter& lrn = layer.lrn_param();
+        const caffe::LRNParameter::NormRegion& norm_region = lrn.norm_region();
         params =       std::to_string(lrn.local_size())
                 + " " + std::to_string(lrn.alpha())
-                + " " + std::to_string(lrn.beta());
+                + " " + std::to_string(lrn.beta())
+                + " " + std::to_string(norm_region)
+                + " " + std::to_string(lrn.k());
     }
     else if(layer.type() == "BatchNorm") {
         const caffe::BatchNormParameter& norm = layer.batch_norm_param();
@@ -381,14 +389,14 @@ void writeGDF
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-            ofsGDF << "read " << weights << " weights/" << layer_name << ".f32" << std::endl;
+            ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                ofsGDF << "read " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+                ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
                 ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
                 tensorCheck[bias] = true;
             }
@@ -398,7 +406,9 @@ void writeGDF
                    << node[3] <<"_params"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }else if (type == "Deconvolution"){
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
@@ -406,14 +416,14 @@ void writeGDF
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-            ofsGDF << "read " << weights << " weights/" << layer_name << ".f32" << std::endl;
+            ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                ofsGDF << "read " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+                ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
                 ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
                 tensorCheck[bias] = true;
             }else{
@@ -427,7 +437,9 @@ void writeGDF
                    << node[3] <<"_params"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Pooling") {
             std::stringstream ss(params);
@@ -441,15 +453,17 @@ void writeGDF
             ofsGDF << "data " << node[3] <<"_pad_h = " << "scalar:VX_TYPE_SIZE," << pad_h << std::endl;
             ofsGDF << "data " << node[3] <<"_roundPolicy = " << " scalar:VX_TYPE_ENUM," << roundPolicy << std::endl;
             ofsGDF << "node org.khronos.nn_extension.pooling_layer " << node[4] << " "
-                   << node[3] <<"_type" << " "
-                   << node[3] <<"_kernel_w "
-                   << node[3] <<"_kernel_h "
-                   << node[3] <<"_pad_w "
-                   << node[3] <<"_pad_h "
-                   << node[3] <<"_roundPolicy"
+                   << node[3] << "_type" << " "
+                   << node[3] << "_kernel_w "
+                   << node[3] << "_kernel_h "
+                   << node[3] << "_pad_w "
+                   << node[3] << "_pad_h "
+                   << node[3] << "_roundPolicy"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "InnerProduct") {
             std::stringstream ss(params);
@@ -458,55 +472,67 @@ void writeGDF
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-            ofsGDF << "read " << weights << " weights/"<< layer_name << ".f32" << std::endl;
+            ofsGDF << "init " << weights << " weights/"<< layer_name << ".f32" << std::endl;
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                ofsGDF << "read " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+                ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
                 ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
                 tensorCheck[bias] = true;
             }
             ofsGDF << "data " << node[3] <<"_convertPolicy = " << " scalar:VX_TYPE_ENUM," << convertPolicy << std::endl;
             ofsGDF << "data " << node[3] <<"_roundPolicy =" << " scalar:VX_TYPE_ENUM,VX_" << roundPolicy << std::endl;
             ofsGDF << "node org.khronos.nn_extension.fully_connected_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
-                   << node[3] <<"_convertPolicy "
-                   << node[3] <<"_roundPolicy"
+                   << node[3] << "_convertPolicy "
+                   << node[3] << "_roundPolicy"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "ReLU") {
             ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_ACTIVATION_RELU" << std::endl;
             ofsGDF << "data " << node[3] << "_param_a =" << " scalar:VX_TYPE_FLOAT32,0" << std::endl;
             ofsGDF << "data " << node[3] << "_param_b =" << " scalar:VX_TYPE_FLOAT32,0" << std::endl;
             ofsGDF << "node org.khronos.nn_extension.activation_layer " << node[4] << " "
-                   << node[3] <<"_mode "
-                   << node[3] <<"_param_a "
-                   << node[3] <<"_param_b"
+                   << node[3] << "_mode "
+                   << node[3] << "_param_a "
+                   << node[3] << "_param_b"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "LRN") {
             int normalization_size;
-            float alpha, beta;
+            float alpha, beta, k;
+            std::string norm_region;
             std::stringstream ss(params);
-            ss >> normalization_size >> alpha >> beta;
-            ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_NORMALIZATION_SAME_MAP" << std::endl;
+            ss >> normalization_size >> alpha >> beta >> norm_region >> k;
+            std::string lrnType;
+            if(norm_region == "1") lrnType = "VX_NN_NORMALIZATION_SAME_MAP";
+            else lrnType = "VX_NN_NORMALIZATION_ACROSS_MAPS";
+            ofsGDF << "data " << node[3] << "_mode = " << " scalar:" << lrnType << std::endl;
             ofsGDF << "data " << node[3] << "_size = " << " scalar:VX_TYPE_SIZE," << normalization_size << std::endl;
             ofsGDF << "data " << node[3] << "_alpha =" << " scalar:VX_TYPE_FLOAT32," << alpha << std::endl;
             ofsGDF << "data " << node[3] << "_beta ="  << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
+            ofsGDF << "data " << node[3] << "_bias ="  << " scalar:VX_TYPE_FLOAT32," << k << std::endl;
             ofsGDF << "node org.khronos.nn_extension.normalization_layer " << node[4] << " "
-                   << node[3] <<"_mode "
-                   << node[3] <<"_size "
-                   << node[3]<<"_alpha "
-                   << node[3] <<"_beta"
-                   << " " << node[3]
+                   << node[3] << "_mode "
+                   << node[3] << "_size "
+                   << node[3] << "_alpha "
+                   << node[3] << "_beta "
+                   << node[3] << " "
+                   << node[3] << "_bias"
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "BatchNorm") {
             int use_global_stats;
@@ -521,7 +547,9 @@ void writeGDF
                    << node[3] << "_beta "
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Eltwise") {
             int op;
@@ -549,7 +577,9 @@ void writeGDF
                            << " " << out
                            << std::endl;
                     tmp = out;
-                    ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+                    #if ENABLE_DUMP_LAYER_DATA
+                        ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+                    #endif
                 }
                 else error("writeGDF: Eltwise op=%d not supported\n", op);
             }
@@ -559,11 +589,13 @@ void writeGDF
             ofsGDF << "data " << node[3] <<"_alpha = " << " scalar:VX_TYPE_FLOAT32," << alpha << std::endl;
             ofsGDF << "data " << node[3] <<"_beta = " << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
             ofsGDF << "node org.khronos.nn_extension.scale_layer " << node[4]
-                   << node[3] <<"_alpha "
-                   << node[3] <<"_beta"
+                   << node[3] << "_alpha "
+                   << node[3] << "_beta"
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Concat") {
             ofsGDF << "node com.amd.nn_extension.concat_layer" ;
@@ -571,28 +603,38 @@ void writeGDF
                 ofsGDF << " " << node[i];
             }
             ofsGDF << " " << node[3] << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Dropout") {
             //during inference dropout layer copies its input to output.
             ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Softmax") {
             ofsGDF << "node org.khronos.nn_extension.softmax_layer " << node[4]
                    << " " << node[3]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "Split") {
             ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else if(type == "SoftmaxWithLoss") {
             ofsGDF << "node org.khronos.nn_extension.softmax_layer " << node[4]
                    << " " << node[5]
                    << std::endl;
-            ofsGDF <<"write "<<node[3] << " out/"<<layer_name << ".f32" << std::endl;
+            #if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            #endif
         }
         else {
             ofsGDF << "# "
@@ -777,7 +819,7 @@ int main(int argc, char* argv[])
 {
     // check for command-line arguments
     if(argc < 2) {
-        printf("Usage: vx_caffe <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+        printf("Usage: inference_generator <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
         return -1;
     }
 
@@ -807,7 +849,7 @@ int main(int argc, char* argv[])
             return -1;
         }
     }else{
-        printf("Usage: vx_caffe <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+        printf("Usage: inference_generator <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
         return -1;
     }
 

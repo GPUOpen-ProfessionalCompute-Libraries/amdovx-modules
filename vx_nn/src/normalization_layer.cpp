@@ -29,7 +29,7 @@ struct NormalizationLayerLocalData {
     unsigned int N;
     double alpha;
     double beta;
-    double K;
+    double bias;
     miopenTensorDescriptor_t input_desc;
     cl_mem input_mem;
     miopenTensorDescriptor_t output_desc;
@@ -50,6 +50,10 @@ static vx_status VX_CALLBACK validateNormalizationLayer(vx_node node, const vx_r
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(parameters[6]) {
+        ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[6], VX_SCALAR_TYPE, &type, sizeof(type)));
+        if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    }
 
     // check tensor dimensions
     vx_size num_dims;
@@ -99,17 +103,25 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
     vx_nn_norm_type_e type;
+    vx_float32 alpha = 0, beta = 0, bias = 1;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[1], &type, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &data->N, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &data->alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &data->beta, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-
+    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &beta, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    if(parameters[6]){
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[6], &bias, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->mode = miopenLRNCrossChannel;
     if (type == VX_NN_NORMALIZATION_SAME_MAP) {
         data->mode = miopenLRNWithinChannel;
     }
     else if (type == VX_NN_NORMALIZATION_ACROSS_MAPS) {
         data->mode = miopenLRNCrossChannel;
     }
+
+    data->alpha = alpha;
+    data->beta  = beta;
+    data->bias  = bias;
 
     //Input and Output descriptors.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
@@ -119,7 +131,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 
     //LRN Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateLRNDescriptor(&data->lrnDesc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->N, 0.0001, data->beta, 1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->N, data->alpha, data->beta, data->bias));
 
     //Input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
@@ -139,10 +151,11 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "lrn input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
-    std::cout << "Alpha " << data->alpha << " Beta " << data->beta << " N " << data->N << " K " << 1 << std::endl;
+    std::cout << "LRN Mode : " << data->mode << std::endl;
+    std::cout << "Alpha " << data->alpha << " Beta " << data->beta << " N " << data->N << " K " << data->bias << std::endl;
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
-    
+
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 
     return VX_SUCCESS;
@@ -166,7 +179,7 @@ static vx_status VX_CALLBACK uninitializeNormalizationLayer(vx_node node, const 
 vx_status publishNormalizationLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.normalization_layer", VX_KERNEL_NORMALIZATION_LAYER, processNormalizationLayer, 6, validateNormalizationLayer, initializeNormalizationLayer, uninitializeNormalizationLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.normalization_layer", VX_KERNEL_NORMALIZATION_LAYER, processNormalizationLayer, 7, validateNormalizationLayer, initializeNormalizationLayer, uninitializeNormalizationLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -180,6 +193,7 @@ vx_status publishNormalizationLayer(vx_context context)
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
     // finalize and release kernel object
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
