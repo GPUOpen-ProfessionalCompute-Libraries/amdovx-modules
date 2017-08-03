@@ -24,9 +24,10 @@ project (loom_shell)
 
 set (CMAKE_CXX_STANDARD 11)
 
+find_package(OpenVX REQUIRED)
 find_package(OpenCL QUIET)
 
-include_directories(${CMAKE_SOURCE_DIR}/amdovx-core/openvx/include ${CMAKE_SOURCE_DIR}/amdovx-modules/vx_loomsl)
+include_directories(${CMAKE_SOURCE_DIR}/vx_loomsl ${OpenVX_INCLUDE_DIRS})
 
 list(APPEND SOURCES
 	loom_shell_util.cpp
@@ -36,7 +37,7 @@ list(APPEND SOURCES
 
 add_executable(loom_shell ${SOURCES})
 
-target_link_libraries(loom_shell vx_loomsl openvx)
+target_link_libraries(loom_shell vx_loomsl ${OpenVX_LIBRARIES})
 
 if (OpenCL_FOUND)
 	include_directories(${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers)
@@ -53,15 +54,13 @@ else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
+set_target_properties(loom_shell PROPERTIES
+				OUTPUT_NAME loom_shell
+				DEBUG_POSTFIX "d"
+				)
 
-
-
-
-
-
-
-
-
-
-
+install ( TARGETS loom_shell
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
 

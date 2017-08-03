@@ -23,10 +23,15 @@ project (vx_ext_cv)
 
 set (CMAKE_CXX_STANDARD 11)
 
+find_package (OpenVX REQUIRED)
 find_package (OpenCV REQUIRED)
 find_package (OpenCL)
 
-include_directories (include)
+include_directories(${OpenCV_INCLUDE_DIRS} ${OpenVX_INCLUDE_DIRS})
+
+set(VX_EXT_OPENCV_HEADERS
+    OpenCV_Tunnel.h OpenCV_VX_Functions.h publishkernels.h vx_ext_cv.h
+    )
 
 list (APPEND SOURCES 
 	OpenCV_absdiff.cpp
@@ -94,10 +99,8 @@ list (APPEND SOURCES
 	)
 
 add_library(vx_ext_cv SHARED ${SOURCES})
-target_link_libraries(vx_ext_cv ${OpenVX_LIBRARY})
 
-include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES})
+target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES} ${OpenVX_LIBRARIES})
 target_compile_definitions(vx_ext_cv PUBLIC USE_OPENCV_CONTRIB=0)
 
 if (OpenCL_FOUND)
@@ -111,3 +114,19 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections")
 endif()
+
+set_target_properties(vx_ext_cv PROPERTIES
+				OUTPUT_NAME vx_ext_cv
+				DEBUG_POSTFIX "d"
+				)
+
+install(FILES
+  ${VX_EXT_OPENCV_HEADERS}
+  DESTINATION include 
+  )
+
+install ( TARGETS vx_ext_cv
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
+

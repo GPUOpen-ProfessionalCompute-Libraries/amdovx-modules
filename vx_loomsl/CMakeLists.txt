@@ -28,9 +28,10 @@ if(POLICY CMP0054)
 	cmake_policy(SET CMP0054 OLD)
 endif()
 
+find_package (OpenVX REQUIRED)
 find_package(OpenCL REQUIRED)
 
-include_directories (${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers ../../amdovx-core/openvx/include )
+include_directories (${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers ${OpenVX_INCLUDE_DIRS} )
 
 list(APPEND SOURCES
 	kernels/alpha_blend.cpp
@@ -54,7 +55,7 @@ list(APPEND SOURCES
 
 include_directories (. kernels)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
-target_link_libraries(${PROJECT_NAME} ${OpenCL_LIBRARIES} openvx)
+target_link_libraries(${PROJECT_NAME} ${OpenCL_LIBRARIES} ${OpenVX_LIBRARIES})
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
@@ -62,3 +63,14 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
 endif()
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+				OUTPUT_NAME ${PROJECT_NAME}
+				DEBUG_POSTFIX "d"
+				)
+
+install ( TARGETS ${PROJECT_NAME}
+          RUNTIME DESTINATION bin
+          ARCHIVE DESTINATION lib
+          LIBRARY DESTINATION lib )
+

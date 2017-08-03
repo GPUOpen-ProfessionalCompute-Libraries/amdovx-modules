@@ -21,6 +21,8 @@
 cmake_minimum_required (VERSION 2.8)
 project (amdovx-modules)
 
-#add_subdirectory (vx_ext_cv)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
+
+add_subdirectory (vx_ext_cv)
 add_subdirectory (vx_loomsl)
 add_subdirectory (utils)
