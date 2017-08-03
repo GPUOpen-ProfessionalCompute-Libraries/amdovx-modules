@@ -208,11 +208,11 @@ static vx_status VX_CALLBACK CV_orb_compute_Kernel(vx_node node, const vx_refere
 	vx_scalar SCORETYPE = (vx_scalar) parameters[10];
 	vx_scalar PATCHSIZE = (vx_scalar) parameters[11];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	int nFeatures, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize;
 	float  ScaleFactor;
-	vector<KeyPoint> key_points;
-	Mat Desp;
+	vector<cv::KeyPoint> key_points;
+	cv::Mat Desp;
 	vx_int32 value = 0;
 	vx_float32 value_F = 0;
 
@@ -231,7 +231,7 @@ static vx_status VX_CALLBACK CV_orb_compute_Kernel(vx_node node, const vx_refere
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 	
 	//Compute using OpenCV
-	Ptr<Feature2D> orb = ORB::create(nFeatures, ScaleFactor, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize);
+	cv::Ptr<cv::Feature2D> orb = cv::ORB::create(nFeatures, ScaleFactor, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize);
 	orb->detectAndCompute(*mat, *mask_mat, key_points, Desp);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints

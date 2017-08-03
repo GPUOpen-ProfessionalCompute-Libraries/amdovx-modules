@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK CV_threshold_Kernel(vx_node node, const vx_referenc
 	vx_scalar MAXVAL = (vx_scalar) parameters[3];
 	vx_scalar TYPE = (vx_scalar) parameters[4];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int type;
 	float thresh, maxVal;
 	vx_float32 value_f = 0;
@@ -152,7 +152,7 @@ static vx_status VX_CALLBACK CV_threshold_Kernel(vx_node node, const vx_referenc
 	//Compute using OpenCV
 	cv::threshold(*mat, bl, thresh, maxVal, type);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

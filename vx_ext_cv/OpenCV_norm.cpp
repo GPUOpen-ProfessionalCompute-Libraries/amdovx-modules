@@ -100,7 +100,7 @@ static vx_status VX_CALLBACK CV_norm_Kernel(vx_node node, const vx_reference *pa
 	vx_scalar scalar = (vx_scalar) parameters[1];
 	vx_scalar scalar1 = (vx_scalar) parameters[2];
 
-	Mat *mat;
+	cv::Mat  *mat;
 	int Type;
 	vx_int32 value = 0;
 

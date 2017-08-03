@@ -158,7 +158,7 @@ static vx_status VX_CALLBACK CV_Gaussianblur_Kernel(vx_node node, const vx_refer
 	vx_scalar scalar_1 = (vx_scalar) parameters[5];
 	vx_scalar scalar_2 = (vx_scalar) parameters[6];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int W, H, Border;
 	float Sigma_X, Sigma_Y;
 	vx_int32 value = 0;
@@ -176,9 +176,9 @@ static vx_status VX_CALLBACK CV_Gaussianblur_Kernel(vx_node node, const vx_refer
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	cv::GaussianBlur(*mat, bl, Size(W, H), Sigma_X, Sigma_Y, Border);
+	cv::GaussianBlur(*mat, bl, cv::Size(W, H), Sigma_X, Sigma_Y, Border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

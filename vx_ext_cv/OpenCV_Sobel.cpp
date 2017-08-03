@@ -182,7 +182,7 @@ static vx_status VX_CALLBACK CV_Sobel_Kernel(vx_node node, const vx_reference *p
 	vx_scalar Delta = (vx_scalar) parameters[7];
 	vx_scalar Bordertype = (vx_scalar) parameters[8];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int ddepth, dx, dy, ksize, bordertype;
 	double scale, delta;
 	vx_int32 value = 0;
@@ -204,7 +204,7 @@ static vx_status VX_CALLBACK CV_Sobel_Kernel(vx_node node, const vx_reference *p
 	//Compute using OpenCV
 	cv::Sobel(*mat, bl, ddepth, dx, dy, ksize, scale, delta, bordertype);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

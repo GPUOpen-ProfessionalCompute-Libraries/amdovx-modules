@@ -133,7 +133,7 @@ static vx_status VX_CALLBACK CV_cornerMinEigenVal_Kernel(vx_node node, const vx_
 	vx_scalar KSIZE = (vx_scalar) parameters[3];
 	vx_scalar BORDER = (vx_scalar) parameters[4];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int blockSize, ksize, border;
 	vx_int32 value = 0;
 
@@ -149,7 +149,7 @@ static vx_status VX_CALLBACK CV_cornerMinEigenVal_Kernel(vx_node node, const vx_
 	//Compute using OpenCV
 	cv::cornerMinEigenVal(*mat, bl, blockSize, ksize, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

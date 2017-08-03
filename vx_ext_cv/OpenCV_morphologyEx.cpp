@@ -166,7 +166,7 @@ static vx_status VX_CALLBACK CV_morphologyEx_Kernel(vx_node node, const vx_refer
 	vx_scalar ITERATION = (vx_scalar) parameters[6];
 	vx_scalar BORDER = (vx_scalar) parameters[7];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int op, iteration;
 	int a_x = -1, a_y = -1, border = 4;
 	vx_int32 value = 0;
@@ -183,11 +183,11 @@ static vx_status VX_CALLBACK CV_morphologyEx_Kernel(vx_node node, const vx_refer
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	Mat *kernel;
+	cv::Mat  *kernel;
 	STATUS_ERROR_CHECK(VX_to_CV_MATRIX(&kernel, KERNEL));
-	cv::morphologyEx(*mat, bl, op, *kernel, Point(a_x, a_y), iteration, border);
+	cv::morphologyEx(*mat, bl, op, *kernel, cv::Point(a_x, a_y), iteration, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

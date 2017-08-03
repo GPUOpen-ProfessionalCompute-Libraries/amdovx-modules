@@ -158,7 +158,7 @@ static vx_status VX_CALLBACK CV_Laplacian_Kernel(vx_node node, const vx_referenc
 	vx_scalar DELTA = (vx_scalar) parameters[5];
 	vx_scalar BORDER = (vx_scalar) parameters[6];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int ddepth, ksize, Border;
 	float scale, delta;
 	vx_int32 value = 0;
@@ -178,7 +178,7 @@ static vx_status VX_CALLBACK CV_Laplacian_Kernel(vx_node node, const vx_referenc
 	//Compute using OpenCV
 	cv::Laplacian(*mat, bl, ddepth, ksize, scale, delta, Border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

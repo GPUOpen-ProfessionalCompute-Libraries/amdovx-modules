@@ -146,7 +146,7 @@ static vx_status VX_CALLBACK CV_Canny_Kernel(vx_node node, const vx_reference *p
 	vx_scalar APERSIZE = (vx_scalar) parameters[4];
 	vx_scalar L2GRAD = (vx_scalar) parameters[5];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 
 	float threshold1, threshold2;
 	int aperture_size;
@@ -169,7 +169,7 @@ static vx_status VX_CALLBACK CV_Canny_Kernel(vx_node node, const vx_reference *p
 	if (l2grad == vx_true_e) L2_Gradient = true; else L2_Gradient = false;
 	cv::Canny(*mat, bl, threshold1, threshold2, aperture_size, L2_Gradient);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

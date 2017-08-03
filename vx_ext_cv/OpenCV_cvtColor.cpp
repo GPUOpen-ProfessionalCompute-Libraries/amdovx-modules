@@ -107,7 +107,7 @@ static vx_status VX_CALLBACK CV_cvtColor_Kernel(vx_node node, const vx_reference
 	vx_image image_in = (vx_image) parameters[0];
 	vx_image image_out = (vx_image) parameters[1];
 	vx_scalar scalar = (vx_scalar) parameters[2];
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int CODE;
 	vx_int32 value = 0;
 
@@ -121,7 +121,7 @@ static vx_status VX_CALLBACK CV_cvtColor_Kernel(vx_node node, const vx_reference
 	//Compute using OpenCV
 	cv::cvtColor(*mat, bl, CODE);// CODE have to be checked with OpenCV, the frame work will not check for invalid code
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

@@ -30,6 +30,9 @@ THE SOFTWARE.
 #endif
 
 #include"VX/vx.h"
+#if defined(VX_VERSION_1_1)
+#include <VX/vx_compatibility.h>
+#endif
 #include"vx_ext_cv.h"
 
 #include<stdio.h>
@@ -40,22 +43,21 @@ THE SOFTWARE.
 #include<algorithm>
 #include<functional>
 
-using namespace cv;
 using namespace std;
 
 #define STATUS_ERROR_CHECK(call){vx_status status = call; if(status!= VX_SUCCESS) return status;} 
 #define PARAM_ERROR_CHECK(call){vx_status status = call; if(status!= VX_SUCCESS) goto exit;}
 #define MAX_KERNELS 100
 
-int VX_to_CV_Image(Mat**, vx_image);
-int VX_to_CV_MATRIX(Mat**, vx_matrix);
+VX_API_ENTRY int VX_API_CALL VX_to_CV_Image(cv::Mat**, vx_image);
+VX_API_ENTRY int VX_API_CALL VX_to_CV_MATRIX(cv::Mat**, vx_matrix);
 
-int CV_to_VX_Pyramid(vx_pyramid, vector<Mat>);
-int CV_to_VX_Image(vx_image, Mat*);
+VX_API_ENTRY int VX_API_CALL CV_to_VX_Pyramid(vx_pyramid, vector<cv::Mat>);
+VX_API_ENTRY int VX_API_CALL CV_to_VX_Image(vx_image, cv::Mat*);
 
-int CV_to_VX_keypoints(vector<KeyPoint>, vx_array);
-int CVPoints2f_to_VX_keypoints(vector<Point2f>, vx_array);
-int CV_DESP_to_VX_DESP(Mat, vx_array, int);
+VX_API_ENTRY int VX_API_CALL CV_to_VX_keypoints(vector<cv::KeyPoint>, vx_array);
+VX_API_ENTRY int VX_API_CALL CVPoints2f_to_VX_keypoints(vector<cv::Point2f>, vx_array);
+VX_API_ENTRY int VX_API_CALL CV_DESP_to_VX_DESP(cv::Mat, vx_array, int);
 
 int match_vx_image_parameters(vx_image, vx_image);
 

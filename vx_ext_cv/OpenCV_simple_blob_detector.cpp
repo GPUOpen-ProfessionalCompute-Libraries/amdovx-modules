@@ -101,15 +101,15 @@ static vx_status VX_CALLBACK CV_simple_blob_detector_Kernel(vx_node node, const 
 	vx_image image_in = (vx_image) parameters[0];
 	vx_array array = (vx_array) parameters[1];
 	vx_image mask = (vx_image) parameters[2];
-	vector<KeyPoint> key_points;
-	Mat *mat, *mask_mat, Img;
+	vector<cv::KeyPoint> key_points;
+	cv::Mat  *mat, *mask_mat, Img;
 
 	//Converting VX Image to OpenCV Mat
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//OpenCV Calls to Simple Blob Detector
-	Ptr<Feature2D> simple = SimpleBlobDetector::create();
+	cv::Ptr<cv::Feature2D> simple = cv::SimpleBlobDetector::create();
 	simple->detect(*mat, key_points, *mask_mat);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints
@@ -414,8 +414,8 @@ static vx_status VX_CALLBACK CV_simple_blob_detector_INITIALIZE_Kernel(vx_node n
 	vx_array array = (vx_array) parameters[1];
 	vx_image mask = (vx_image) parameters[2];
 
-	vector<KeyPoint> key_points;
-	Mat *mat, *mask_mat, Img;
+	vector<cv::KeyPoint> key_points;
+	cv::Mat  *mat, *mask_mat, Img;
 
 	vx_scalar THRESHOLDSTEP = (vx_scalar) parameters[3];
 	vx_scalar MINTHRESHOLD = (vx_scalar) parameters[4];
@@ -498,7 +498,7 @@ static vx_status VX_CALLBACK CV_simple_blob_detector_INITIALIZE_Kernel(vx_node n
 	params.minArea = minArea;
 	params.minConvexity = minConvexity;
 
-	Ptr<Feature2D> simple = SimpleBlobDetector::create(params);
+	cv::Ptr<cv::Feature2D> simple = cv::SimpleBlobDetector::create(params);
 	simple->detect(*mat, key_points, *mask_mat);
 
 	//Converting OpenCV Keypoints to OpenVX Keypoints

@@ -196,10 +196,10 @@ static vx_status VX_CALLBACK CV_orb_detector_Kernel(vx_node node, const vx_refer
 	vx_scalar SCORETYPE = (vx_scalar) parameters[9];
 	vx_scalar PATCHSIZE = (vx_scalar) parameters[10];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	int nFeatures, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize;
 	float  ScaleFactor;
-	vector<KeyPoint> key_points;
+	vector<cv::KeyPoint> key_points;
 	vx_int32 value = 0;
 	vx_float32 value_F = 0;
 
@@ -218,7 +218,7 @@ static vx_status VX_CALLBACK CV_orb_detector_Kernel(vx_node node, const vx_refer
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	Ptr<Feature2D> orb = ORB::create(nFeatures, ScaleFactor, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize);
+	cv::Ptr<cv::Feature2D> orb = cv::ORB::create(nFeatures, ScaleFactor, nLevels, edgeThreshold, firstLevel, WTA_K, scoreType, patchSize);
 	orb->detect(*mat, key_points, *mask_mat);
 
 	//OpenCV 2.4 Call

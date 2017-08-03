@@ -146,7 +146,7 @@ static vx_status VX_CALLBACK CV_cornerHarris_Kernel(vx_node node, const vx_refer
 	vx_scalar KSIZE = (vx_scalar) parameters[3];
 	vx_scalar K = (vx_scalar) parameters[4];
 	vx_scalar BORDER = (vx_scalar) parameters[5];
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int blocksize, ksize, border;
 	float  k;
 	vx_int32 value = 0;
@@ -165,7 +165,7 @@ static vx_status VX_CALLBACK CV_cornerHarris_Kernel(vx_node node, const vx_refer
 	//Compute using OpenCV
 	cv::cornerHarris(*mat, bl, blocksize, ksize, k, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

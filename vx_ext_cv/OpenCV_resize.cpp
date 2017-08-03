@@ -158,7 +158,7 @@ static vx_status VX_CALLBACK CV_resize_Kernel(vx_node node, const vx_reference *
 	vx_scalar FY = (vx_scalar) parameters[5];
 	vx_scalar INTER = (vx_scalar) parameters[6];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int interpolation;
 	int a_x = -1, a_y = -1;
 	float fx = 0, fy = 0;
@@ -183,9 +183,9 @@ static vx_status VX_CALLBACK CV_resize_Kernel(vx_node node, const vx_reference *
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	cv::resize(*mat, bl, Size(a_x, a_y), fx, fy, interpolation);
+	cv::resize(*mat, bl, cv::Size(a_x, a_y), fx, fy, interpolation);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

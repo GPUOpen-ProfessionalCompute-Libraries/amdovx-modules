@@ -146,7 +146,7 @@ static vx_status VX_CALLBACK CV_fastNlMeansDenoisingColored_Kernel(vx_node node,
 	vx_scalar H_COLOR = (vx_scalar) parameters[3];
 	vx_scalar Template_WS = (vx_scalar) parameters[4];
 	vx_scalar Search_WS = (vx_scalar) parameters[5];
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int search_ws, template_ws;
 	float h, h_color;
 	vx_float32 value_f = 0;
@@ -165,7 +165,7 @@ static vx_status VX_CALLBACK CV_fastNlMeansDenoisingColored_Kernel(vx_node node,
 	//Compute using OpenCV
 	cv::fastNlMeansDenoisingColored(*mat, bl, h, h_color, template_ws, search_ws);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

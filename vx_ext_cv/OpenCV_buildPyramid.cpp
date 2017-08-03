@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK CV_buildPyramid_Kernel(vx_node node, const vx_refer
 	vx_scalar scalar = (vx_scalar) parameters[2];
 	vx_scalar scalar1 = (vx_scalar) parameters[3];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int maxLevel, border;
 
 	vx_int32 value = 0;
@@ -147,10 +147,10 @@ static vx_status VX_CALLBACK CV_buildPyramid_Kernel(vx_node node, const vx_refer
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	vector<Mat> pyramid_cv;
+	vector<cv::Mat> pyramid_cv;
 	cv::buildPyramid(*mat, pyramid_cv, maxLevel, border);
 
-	//Converting OpenCV Vector Mat into VX Image
+	//Converting OpenCV Vector cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Pyramid(pyramid, pyramid_cv));
 
 	return status;

@@ -157,7 +157,7 @@ vx_status VX_CALLBACK CV_AddWeighted_Kernel(vx_node node, const vx_reference *pa
 	vx_image image_out = (vx_image) parameters[5];
 	vx_scalar Dtype = (vx_scalar) parameters[6];
 
-	Mat *mat_1, *mat_2, bl;
+	cv::Mat  *mat_1, *mat_2, bl;
 	double aplha, beta, gamma;
 	int dtype;
 	vx_float32 value = 0;
@@ -178,7 +178,7 @@ vx_status VX_CALLBACK CV_AddWeighted_Kernel(vx_node node, const vx_reference *pa
 	//Compute using OpenCV
 	cv::addWeighted(*mat_1, aplha, *mat_2, beta, gamma, bl, dtype);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;

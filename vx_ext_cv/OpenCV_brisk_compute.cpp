@@ -147,7 +147,7 @@ static vx_status VX_CALLBACK CV_brisk_compute_Kernel(vx_node node, const vx_refe
 	vx_scalar OCTAVES = (vx_scalar) parameters[5];
 	vx_scalar SCALE = (vx_scalar) parameters[6];
 
-	Mat *mat, *mask_mat, Img;
+	cv::Mat  *mat, *mask_mat, Img;
 	int thresh, octaves;
 	float patternscale;
 	vx_float32 FloatValue = 0;
@@ -163,9 +163,9 @@ static vx_status VX_CALLBACK CV_brisk_compute_Kernel(vx_node node, const vx_refe
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mask_mat, mask));
 
 	//Compute using OpenCV
-	vector<KeyPoint> key_points;
-	Mat desp;
-	Ptr<Feature2D> brisk = BRISK::create(thresh, octaves, patternscale);
+	vector<cv::KeyPoint> key_points;
+	cv::Mat desp;
+	cv::Ptr<cv::Feature2D> brisk = cv::BRISK::create(thresh, octaves, patternscale);
 	brisk->detectAndCompute(*mat, *mask_mat, key_points, desp);
 
 	//Converting OpenCV Keypoints/Descriptors to OpenVX Keypoints/Descriptors

@@ -176,7 +176,7 @@ static vx_status VX_CALLBACK CV_Blur_Kernel(vx_node node, const vx_reference *pa
 	vx_scalar A_Y = (vx_scalar) parameters[5];
 	vx_scalar BORDER = (vx_scalar) parameters[6];
 
-	Mat *mat, bl;
+	cv::Mat  *mat, bl;
 	int W, H, a_x, a_y, border;
 	vx_int32 value = 0;
 
@@ -192,12 +192,12 @@ static vx_status VX_CALLBACK CV_Blur_Kernel(vx_node node, const vx_reference *pa
 	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
 
 	//Compute using OpenCV
-	Point point;
+	cv::Point point;
 	point.x = a_x;
 	point.y = a_y;
-	cv::blur(*mat, bl, Size(W, H), point, border);
+	cv::blur(*mat, bl, cv::Size(W, H), point, border);
 
-	//Converting OpenCV Mat into VX Image
+	//Converting OpenCV cv::Mat into VX Image
 	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
 
 	return status;
