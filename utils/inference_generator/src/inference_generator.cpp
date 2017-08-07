@@ -40,6 +40,10 @@ THE SOFTWARE.
     #define ENABLE_DUMP_LAYER_DATA 0
 #endif
 
+#ifndef ENABLE_DIRECTIVE
+    #define ENABLE_DIRECTIVE 0
+#endif
+
 void getLayerParams
 (
         const caffe::LayerParameter& layer,
@@ -360,6 +364,7 @@ void writeGDF
         )
 {
     std::map<std::string,bool> tensorCheck;
+	ofsGDF << "import vx_nn" << std::endl;
     for(auto& node : net) {
         // create input/output tensor objects
         for(size_t i = 4; i < node.size(); i++) {
@@ -373,7 +378,9 @@ void writeGDF
         auto&& odim = tensorMap[output];
         if(!tensorCheck[output]) {
             ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+#if ENABLE_DIRECTIVE
             ofsGDF << "directive " << output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
         }
         tensorCheck[output] = true;
 
@@ -390,14 +397,18 @@ void writeGDF
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
-                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
                 tensorCheck[bias] = true;
             }
 
@@ -406,9 +417,9 @@ void writeGDF
                    << node[3] <<"_params"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
+#if ENABLE_DUMP_LAYER_DATA
                 ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#endif
         }else if (type == "Deconvolution"){
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
@@ -417,18 +428,25 @@ void writeGDF
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
-                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
                 tensorCheck[bias] = true;
             }else{
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
                 tensorCheck[bias] = true;
             }
 
@@ -473,14 +491,18 @@ void writeGDF
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             ofsGDF << "init " << weights << " weights/"<< layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
             tensorCheck[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
-                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
                 tensorCheck[bias] = true;
             }
             ofsGDF << "data " << node[3] <<"_convertPolicy = " << " scalar:VX_TYPE_ENUM," << convertPolicy << std::endl;
@@ -517,7 +539,7 @@ void writeGDF
             std::string lrnType;
             if(norm_region == "1") lrnType = "VX_NN_NORMALIZATION_SAME_MAP";
             else lrnType = "VX_NN_NORMALIZATION_ACROSS_MAPS";
-            ofsGDF << "data " << node[3] << "_mode = " << " scalar:" << lrnType << std::endl;
+            ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM," << lrnType << std::endl;
             ofsGDF << "data " << node[3] << "_size = " << " scalar:VX_TYPE_SIZE," << normalization_size << std::endl;
             ofsGDF << "data " << node[3] << "_alpha =" << " scalar:VX_TYPE_FLOAT32," << alpha << std::endl;
             ofsGDF << "data " << node[3] << "_beta ="  << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
