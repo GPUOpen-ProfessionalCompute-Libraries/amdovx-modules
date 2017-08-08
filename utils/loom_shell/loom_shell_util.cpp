@@ -52,6 +52,9 @@ static std::map<cl_context, cl_command_queue> globalClCtx2CmdqMap;
 static std::map<cl_mem, cl_command_queue> globalClMem2CmdqMap;
 static std::map<cl_mem, vx_uint32> globalClMem2SizeMap;
 
+//! \brief The macro for fread error checking and reporting.
+#define ERROR_CHECK_FREAD_(call,value) {size_t retVal = (call); if(retVal != (size_t)value) { Error("ERROR: fread call expected to return [ %d elements ] but returned [ %d elements ] at " __FILE__ "#%d\n", (int)value, (int)retVal, __LINE__); }  }
+
 int64_t GetClockCounter()
 {
 #if _WIN32
@@ -726,7 +729,7 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 			FILE * fp = fopen(bmpFileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", bmpFileName);
 			if (buffer_format == VX_DF_IMAGE_RGB) {
 				unsigned short bmpHeader[54 / 2];
-				fread(bmpHeader, 1, sizeof(bmpHeader), fp);
+				ERROR_CHECK_FREAD_(fread(bmpHeader, 1, sizeof(bmpHeader), fp), sizeof(bmpHeader));
 				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
 					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
 				}
@@ -738,7 +741,7 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 				}
 				if (!buf) { buf = new unsigned char[width * 3]; if (!buf) return Error("ERROR: new[%d] failed", width * 3); }
 				for (vx_uint32 y = 0; y < height; y++) {
-					fread(buf, 1, width * 3, fp);
+					ERROR_CHECK_FREAD_(fread(buf, 1, width * 3, fp), width * 3);
 					unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 3, *p = buf;
 					for (vx_uint32 x = 0; x < width; x++, p += 3, q += 3) {
 						q[0] = p[2];
@@ -749,9 +752,10 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 			}
 			else if (buffer_format == VX_DF_IMAGE_RGBX) {
 				unsigned short bmpHeader[122 / 2];
-				fread(bmpHeader, 1, 54, fp);
-				if (bmpHeader[5] == 122)
-					fread(&bmpHeader[54 / 2], 1, 122 - 54, fp);
+				ERROR_CHECK_FREAD_(fread(bmpHeader, 1, 54, fp),54);
+				if (bmpHeader[5] == 122){
+					ERROR_CHECK_FREAD_(fread(&bmpHeader[54 / 2], 1, 122 - 54, fp), 122 - 54);
+				}
 				if (width != (vx_uint32)bmpHeader[9] || height != (vx_uint32)bmpHeader[11]) {
 					return Error("ERROR: The BMP should be %dx%d: got %dx%d in %s\n", width, height, bmpHeader[9], bmpHeader[11], bmpFileName);
 				}
@@ -764,7 +768,7 @@ vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uin
 				}
 				for (vx_uint32 y = 0; y < height; y++) {
 					unsigned char * q = img + (row * height + height - 1 - y)*stride_in_bytes + column * width * 4;
-					fread(q, 1, width * 4, fp);
+					ERROR_CHECK_FREAD_(fread(q, 1, width * 4, fp),width*4);
 					if (bmpHeader[27] != 0x00ff) {
 						// convert BGRA to RGBA
 						for (vx_uint32 x = 0; x < width; x++) {
@@ -931,8 +935,7 @@ vx_status loadBuffer(cl_mem mem, const char * fileName)
 	if (err) return Error("ERROR: clEnqueueMapBuffer() failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
 	FILE * fp = fopen(fileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", fileName);
-	vx_uint32 n = (vx_uint32)fread(img, 1, size, fp);
-	if (n != size) return Error("ERROR: couldn't read %d bytes from %s", n, fileName);
+	ERROR_CHECK_FREAD_(fread(img, 1, size, fp),size);
 	fclose(fp);
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
@@ -1027,7 +1030,7 @@ vx_status loadBlendWeights(ls_context stitch, const char * fileName)
 	fseek(fp, 0, SEEK_END);  long size = ftell(fp); fseek(fp, 0, SEEK_SET);
 	vx_uint8 * buf = new vx_uint8[size];
 	if (!buf) return Error("ERROR: alloc(%d) failed", size);
-	fread(buf, 1, size, fp);
+	ERROR_CHECK_FREAD_(fread(buf, 1, size, fp),size);
 	fclose(fp);
 	vx_status status = lsSetBlendWeights(stitch, buf, size);
 	if (status) return Error("ERROR: lsSetBlendWeights(*,*,%d): failed (%d)\n", size, status);
