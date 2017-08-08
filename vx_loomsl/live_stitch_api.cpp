@@ -236,6 +236,8 @@ static stitch_log_callback_f g_live_stitch_log_message_callback = nullptr;
 #define ERROR_CHECK_TYPE_(call) { vx_enum type_ = (call); if(type_ == VX_TYPE_INVALID) { ls_printf("ERROR: OpenVX call failed with type = VX_TYPE_INVALID at " __FILE__ "#%d\n", __LINE__); return VX_ERROR_NOT_SUFFICIENT; }  }
 //! \brief The macro for object creation error checking and reporting.
 #define ERROR_CHECK_ALLOC_(call) { void * obj = (call); if(!obj) { ls_printf("ERROR: memory allocation failed at " __FILE__ "#%d\n", __LINE__); return VX_ERROR_NOT_ALLOCATED; } }
+//! \brief The macro for fread error checking and reporting.
+#define ERROR_CHECK_FREAD_(call,value) {size_t retVal = (call); if(retVal != (size_t)value) { ls_printf("ERROR: fread call expected to return [ %d elements ] but returned [ %d elements ] at " __FILE__ "#%d\n", (int)value, (int)retVal, __LINE__); return VX_FAILURE; }  }
 //! \brief The log callback.
 void ls_printf(const char * format, ...)
 {
@@ -268,7 +270,12 @@ static void VX_CALLBACK log_callback(vx_context context, vx_reference ref, vx_st
 //! \brief Dump utilities.
 vx_status DumpBuffer(const vx_uint8 * buf, vx_size size, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpBuffer: unable to create: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "wb"); 
+	if (!fp) { 
+		printf("ERROR: DumpBuffer: unable to create: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	fwrite(buf, size, 1, fp);
 	fclose(fp);
 	printf("OK: DumpBuffer: %d bytes into %s\n", (int)size, fileName);
@@ -276,10 +283,16 @@ vx_status DumpBuffer(const vx_uint8 * buf, vx_size size, const char * fileName)
 }
 vx_status DumpImage(vx_image img, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpImage: unable to create: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "wb"); 
+	if (!fp) { 
+		printf("ERROR: DumpImage: unable to create: %s\n", fileName);
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_df_image format = VX_DF_IMAGE_VIRT;
 	vx_size num_planes = 0;
 	vx_rectangle_t rectFull = { 0, 0, 0, 0 };
+	int stride_y;
 	ERROR_CHECK_STATUS(vxQueryImage(img, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 	ERROR_CHECK_STATUS(vxQueryImage(img, VX_IMAGE_ATTRIBUTE_PLANES, &num_planes, sizeof(num_planes)));
 	ERROR_CHECK_STATUS(vxQueryImage(img, VX_IMAGE_ATTRIBUTE_WIDTH, &rectFull.end_x, sizeof(rectFull.end_x)));
@@ -291,6 +304,7 @@ vx_status DumpImage(vx_image img, const char * fileName)
 		ERROR_CHECK_STATUS(vxAccessImagePatch(img, &rectFull, plane, &addr, (void **)&src, VX_READ_ONLY));
 		vx_size width = (addr.dim_x * addr.scale_x) / VX_SCALE_UNITY;
 		vx_size width_in_bytes = (format == VX_DF_IMAGE_U1_AMD) ? ((width + 7) >> 3) : (width * addr.stride_x);
+		stride_y = addr.stride_y;
 		for (vx_uint32 y = 0; y < addr.dim_y; y += addr.step_y){
 			vx_uint8 *srcp = (vx_uint8 *)vxFormatImagePatchAddress2d(src, 0, y, &addr);
 			fwrite(srcp, 1, width_in_bytes, fp);
@@ -298,12 +312,16 @@ vx_status DumpImage(vx_image img, const char * fileName)
 		ERROR_CHECK_STATUS(vxCommitImagePatch(img, &rectFull, plane, &addr, src));
 	}
 	fclose(fp);
-	printf("OK: Dump: Image %dx%d %4.4s image into %s\n", rectFull.end_x, rectFull.end_y, (const char *)&format, fileName);
+	printf("OK: Dump: Image %dx%d of stride %d %4.4s image into %s\n", rectFull.end_x, rectFull.end_y, stride_y, (const char *)&format, fileName);
 	return VX_SUCCESS;
 }
 vx_status DumpArray(vx_array arr, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpArray: unable to create: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "wb"); if (!fp) { 
+		printf("ERROR: DumpArray: unable to create: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_size numItems, itemSize;
 	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_ITEMSIZE, &itemSize, sizeof(itemSize)));
 	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_NUMITEMS, &numItems, sizeof(numItems)));
@@ -319,7 +337,12 @@ vx_status DumpArray(vx_array arr, const char * fileName)
 }
 static vx_status DumpMatrix(vx_matrix mat, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpMatrix: unable to create: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "wb"); 
+	if (!fp) { 
+		printf("ERROR: DumpMatrix: unable to create: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_size size;
 	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_SIZE, &size, sizeof(size)));
 	vx_uint8 * buf = new vx_uint8[size];
@@ -335,7 +358,12 @@ static vx_status DumpMatrix(vx_matrix mat, const char * fileName)
 }
 static vx_status DumpRemap(vx_remap remap, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "wb"); if (!fp) { printf("ERROR: DumpRemap: unable to create: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "wb"); 
+	if (!fp) { 
+		printf("ERROR: DumpRemap: unable to create: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_uint32 dstWidth, dstHeight;
 	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_WIDTH, &dstWidth, sizeof(dstWidth)));
 	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_HEIGHT, &dstHeight, sizeof(dstHeight)));
@@ -364,7 +392,6 @@ static vx_status DumpReference(vx_reference ref, const char * fileName)
 static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32 height, vx_uint32 alignpixels, vx_df_image format, vx_enum mem_type)
 {
 	if (mem_type == VX_MEMORY_TYPE_OPENCL){
-		vx_image OImg = nullptr;
 		cl_context opencl_context = nullptr;
 		vx_imagepatch_addressing_t addr_in = { 0 };
 		void *ptr[1] = { nullptr };
@@ -644,12 +671,17 @@ static vx_status quickSetupFilesLookup(ls_context stitch)
 	FILE * fp = fopen("StitchTableSizes.txt", "r");	
 	if (!fp) { stitch->SETUP_LOAD_FILES_FOUND = vx_false_e; }
 	else{ stitch->SETUP_LOAD_FILES_FOUND = vx_true_e; }
-
+	if (fp != NULL) fclose(fp);
 	return VX_SUCCESS;
 }
 static vx_status quickSetupDumpTableSizes(ls_context stitch)
 {
-	FILE * fp = fopen("StitchTableSizes.txt", "w+"); if (!fp) { printf("ERROR: quickSetupDumpTableSize: unable to create: StitchTableSizes.txt\n"); return VX_FAILURE; }
+	FILE * fp = fopen("StitchTableSizes.txt", "w+"); 
+	if (!fp) { 
+		ls_printf("ERROR: quickSetupDumpTableSize: unable to create: StitchTableSizes.txt\n"); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.blendOffsetTableSize); fprintf(fp, "\n");
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.expCompOverlapTableSize); fprintf(fp, "\n");
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.expCompValidTableSize); fprintf(fp, "\n");
@@ -707,7 +739,12 @@ static vx_status quickSetupDumpTables(ls_context stitch)
 }
 vx_status loadImage(vx_image img, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); if (!fp) { printf("ERROR: loadImage: unable to open: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "r"); 
+	if (!fp) {
+		ls_printf("ERROR: loadImage: unable to open: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp); 
+		return VX_FAILURE;
+	}
 	vx_df_image format = VX_DF_IMAGE_VIRT;
 	vx_size num_planes = 0;
 	vx_rectangle_t rectFull = { 0, 0, 0, 0 };
@@ -724,17 +761,21 @@ vx_status loadImage(vx_image img, const char * fileName)
 		vx_size width_in_bytes = (format == VX_DF_IMAGE_U1_AMD) ? ((width + 7) >> 3) : (width * addr.stride_x);
 		for (vx_uint32 y = 0; y < addr.dim_y; y += addr.step_y){
 			vx_uint8 *srcp = (vx_uint8 *)vxFormatImagePatchAddress2d(src, 0, y, &addr);
-			fread(srcp, 1, width_in_bytes, fp);
+			ERROR_CHECK_FREAD_(fread(srcp, 1, width_in_bytes, fp), width_in_bytes);
 		}
 		ERROR_CHECK_STATUS(vxCommitImagePatch(img, &rectFull, plane, &addr, src));
 	}
 	fclose(fp);
-	//printf("OK: Load: Image %dx%d %4.4s image from %s\n", rectFull.end_x, rectFull.end_y, (const char *)&format, fileName);
 	return VX_SUCCESS;
 }
 vx_status loadArray(vx_array arr, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); if (!fp) { printf("ERROR: loadArray: unable to open: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "r"); 
+	if (!fp) {
+		ls_printf("ERROR: loadArray: unable to open: %s\n", fileName);
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_size numItems, itemSize;
 	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_ITEMSIZE, &itemSize, sizeof(itemSize)));
 	ERROR_CHECK_STATUS_(vxQueryArray(arr, VX_ARRAY_CAPACITY, &numItems, sizeof(numItems)));
@@ -745,31 +786,39 @@ vx_status loadArray(vx_array arr, const char * fileName)
 	vx_uint8 * ptr;
 	vx_size stride;
 	ERROR_CHECK_STATUS_(vxMapArrayRange(arr, 0, numItems, &map_id, &stride, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0));
-	fread(ptr, itemSize, numItems, fp);
+	ERROR_CHECK_FREAD_(fread(ptr, itemSize, numItems, fp),numItems);
 	ERROR_CHECK_STATUS_(vxUnmapArrayRange(arr, map_id));
 	fclose(fp);
-	//printf("OK: Load: Array [%d][%d] from %s\n", (int)numItems, (int)itemSize, fileName);
 	return VX_SUCCESS;
 }
 static vx_status loadMatrix(vx_matrix mat, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); if (!fp) { printf("ERROR: loadMatrix: unable to read: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "r"); 
+	if (!fp) { 
+		ls_printf("ERROR: loadMatrix: unable to read: %s\n", fileName);
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_size size;
 	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_SIZE, &size, sizeof(size)));
 	vx_uint8 * buf = new vx_uint8[size];
 	ERROR_CHECK_STATUS_(vxCopyMatrix(mat, buf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-	fread(buf, size, 1, fp);
+	ERROR_CHECK_FREAD_(fread(buf, 4, size, fp),size);
 	delete[] buf;
 	fclose(fp);
 	vx_size rows, columns;
 	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_ROWS, &rows, sizeof(rows)));
 	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_COLUMNS, &columns, sizeof(columns)));
-	//printf("OK: Load: Matrix %dx%d (%d bytes) from %s\n", (int)rows, (int)columns, (int)size, fileName);
 	return VX_SUCCESS;
 }
 static vx_status loadRemap(vx_remap remap, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); if (!fp) { printf("ERROR: loadRemap: unable to read: %s\n", fileName); return VX_FAILURE; }
+	FILE * fp = fopen(fileName, "r"); 
+	if (!fp) { 
+		ls_printf("ERROR: loadRemap: unable to read: %s\n", fileName); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
 	vx_uint32 dstWidth, dstHeight;
 	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_WIDTH, &dstWidth, sizeof(dstWidth)));
 	ERROR_CHECK_STATUS_(vxQueryRemap(remap, VX_REMAP_DESTINATION_HEIGHT, &dstHeight, sizeof(dstHeight)));
@@ -777,11 +826,10 @@ static vx_status loadRemap(vx_remap remap, const char * fileName)
 		for (vx_uint32 x = 0; x < dstWidth; x++){
 			vx_float32 src_xy[2];
 			ERROR_CHECK_STATUS_(vxGetRemapPoint(remap, x, y, &src_xy[0], &src_xy[1]));
-			fread(src_xy, sizeof(src_xy), 1, fp);
+			ERROR_CHECK_FREAD_(fread(src_xy, sizeof(src_xy), 1, fp),1);
 		}
 	}
 	fclose(fp);
-	//printf("OK: load: Remap %dx%d from %s\n", dstWidth, dstHeight, fileName);
 	return VX_SUCCESS;
 }
 static vx_status loadReference(vx_reference ref, const char * fileName)
@@ -796,17 +844,31 @@ static vx_status loadReference(vx_reference ref, const char * fileName)
 }
 static vx_status quickSetupLoadTableSizes(ls_context stitch)
 {
-	FILE * fp = fopen("StitchTableSizes.txt", "r"); if (!fp) { printf("ERROR: quickSetupLoadTableSizes: unable to open: StitchTableSizes.txt\n"); return VX_FAILURE; }
-
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.blendOffsetTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.expCompOverlapTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.expCompValidTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindAccumTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindPathTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindPrefInfoTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindValidTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindWeightTableSize);
-	fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.warpTableSize);
+	FILE * fp = fopen("StitchTableSizes.txt", "r"); 
+	if (!fp) { 
+		ls_printf("ERROR: quickSetupLoadTableSizes: unable to open: StitchTableSizes.txt\n"); 
+		if (fp != NULL)	fclose(fp);
+		return VX_FAILURE;
+	}
+	int readValue = 0;
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.blendOffsetTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.expCompOverlapTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.expCompValidTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindAccumTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindPathTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindPrefInfoTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindValidTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.seamFindWeightTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.warpTableSize); 
+	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
 
 	return VX_SUCCESS;
 }
@@ -2742,8 +2804,12 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		char fileName[1024] = { 0 };
 		if (StitchGetEnvironmentVariable("LOOMIO_AUX_DUMP", fileName, sizeof(fileName))) {
 			stitch->loomioAuxDumpFile = fopen(fileName, "wb");
-			if (!stitch->loomioAuxDumpFile) { printf("ERROR: unable to create: %s\n", fileName); return VX_FAILURE; }
-			printf("OK: dumping auxiliary data into %s\n", fileName);
+			if (!stitch->loomioAuxDumpFile) { 
+				ls_printf("ERROR: unable to create: %s\n", fileName); 
+				if (stitch->loomioAuxDumpFile != NULL)	fclose(stitch->loomioAuxDumpFile);
+				return VX_FAILURE;
+			}
+			ls_printf("OK: dumping auxiliary data into %s\n", fileName);
 		}
 	}
 	PROFILER_STOP(LoomSL, InitializeGraph);
@@ -3322,6 +3388,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			fp = fopen(fileName, "w");
 			if (!fp) {
 				ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+				if (fp != NULL)	fclose(fp);
 				return VX_FAILURE;
 			}
 		}
@@ -3438,6 +3505,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			fp = fopen(fileName, "w");
 			if (!fp) {
 				ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+				if (fp != NULL)	fclose(fp);
 				return VX_FAILURE;
 			}
 		}
@@ -3545,6 +3613,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		FILE * fp = fopen(fileName, "w");
 		if (!fp) {
 			ls_printf("ERROR: lsExportConfiguration: unable to create: %s\n", fileName);
+			if (fp != NULL)	fclose(fp);
 			return VX_FAILURE;
 		}
 		vx_node nodeObjList[] = {
@@ -3878,11 +3947,12 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 		FILE * fp = fopen(fileName, "rb");
 		if (!fp) {
 			ls_printf("ERROR: lsImportConfiguration: unable to open: %s\n", fileName);
+			if (fp != NULL)	fclose(fp);
 			return VX_FAILURE;
 		}
 		fseek(fp, 0L, SEEK_END); long fileSize = ftell(fp); fseek(fp, 0L, SEEK_SET);
 		char * textBuf = new char[fileSize + 1];
-		fread(textBuf, 1, fileSize, fp);
+		ERROR_CHECK_FREAD_(fread(textBuf, 1, fileSize, fp),fileSize);
 		fclose(fp);
 		textBuf[fileSize] = 0;
 		for (const char * text = textBuf; *text; ) {
