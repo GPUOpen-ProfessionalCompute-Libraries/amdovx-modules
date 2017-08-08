@@ -689,7 +689,10 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter){
     FILE * fs_bias;
     fs_weights = fopen(fileName_weights.c_str(), "wb");
     fs_bias    = fopen(fileName_bias.c_str(),"wb");
-
+	if(!fs_weights || !fs_bias) {
+		printf("ERROR: unable to create dump files: make sure weights and bias folders are writable.\n");
+		exit(1);
+	} 
     int blob_size = layer_parameter.blobs_size();
     if(blob_size > 0) {
         //Extracting the weights.
