@@ -99,8 +99,8 @@ struct ls_context_t {
 	vx_uint32   camera_rgb_buffer_width;        // camera buffer width after color conversion
 	vx_uint32   camera_rgb_buffer_height;       // camera buffer height after color conversion
 	vx_uint32   num_overlays;                   // number of overlays
-	vx_uint32   num_overlay_rows;           // overlay buffer width
-	vx_uint32   num_overlay_columns;          // overlay buffer height
+	vx_uint32   num_overlay_rows;				// overlay buffer width
+	vx_uint32   num_overlay_columns;			// overlay buffer height
 	vx_uint32   overlay_buffer_width;           // overlay buffer width
 	vx_uint32   overlay_buffer_height;          // overlay buffer height
 	camera_params * overlay_par;                // individual overlay parameters
@@ -116,107 +116,109 @@ struct ls_context_t {
 	vx_uint32   overlay_buffer_stride_in_bytes; // stride of each row in overlay opencl buffer (optional)
 	vx_uint32   output_buffer_stride_in_bytes;  // stride of each row in output opencl buffer
 	// global options
-	vx_uint32  EXPO_COMP, SEAM_FIND;			// exposure comp seam find flags from environment variable
-	vx_uint32  SEAM_COST_SELECT;				// seam find cost generation flag from environment variable
-	vx_uint32  SEAM_REFRESH, SEAM_FLAGS;		// seamfind seam refresh flag from environment variable
-	vx_uint32  MULTIBAND_BLEND;                 // multiband blend flag from environment variable
-	vx_uint32  EXPO_COMP_GAINW, EXPO_COMP_GAINH; // exposure comp module gain image width and height
-	vx_uint32  EXPO_COMP_GAINC;					// exposure comp gain array number of channels
+	vx_uint32   EXPO_COMP, SEAM_FIND;           // exposure comp seam find flags from environment variable
+	vx_uint32   SEAM_COST_SELECT;               // seam find cost generation flag from environment variable
+	vx_uint32   SEAM_REFRESH, SEAM_FLAGS;       // seamfind seam refresh flag from environment variable
+	vx_uint32   MULTIBAND_BLEND;                // multiband blend flag from environment variable
+	vx_uint32   EXPO_COMP_GAINW, EXPO_COMP_GAINH;// exposure comp module gain image width and height
+	vx_uint32   EXPO_COMP_GAINC;                // exposure comp gain array number of gain values per camera. For mode 4, this should be 12 which is default if not specified.
 	// global OpenVX objects
-	bool context_is_external;                   // To avoid releaseing external OpenVX context
-	vx_context context;                         // OpenVX context
-	vx_graph graphStitch;                       // OpenVX graph for stitching
+	bool        context_is_external;            // To avoid releaseing external OpenVX context
+	vx_context  context;                        // OpenVX context
+	vx_graph    graphStitch;                    // OpenVX graph for stitching
 	// internal buffer sizes
-	ls_internal_table_size_info table_sizes;    // internal table sizes
-	vx_image rgb_input, rgb_output;
+	ls_internal_table_size_info table_sizes;	// internal table sizes
+	vx_image	rgb_input, rgb_output;			// internal images
 	// data objects
-	vx_remap overlay_remap;                     // remap table for overlay
-	vx_remap camera_remap;                      // remap table for camera (in simple stitch mode)
-	vx_image Img_input, Img_output, Img_overlay;
-	vx_image Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba;
-	vx_node InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode;
-	//Stitch Mode 2
-	vx_array ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array;
-	vx_matrix overlap_matrix, A_matrix;
-	vx_image RGBY1, RGBY2, weight_image, cam_id_image, group1_image, group2_image;
-	vx_node WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
-	vx_node nodeOverlayRemap, nodeOverlayBlend;
-	vx_float32 alpha, beta;                     // needed for expcomp
-	vx_int32 * A_matrix_initial_value;          // needed for expcomp
-	//Stitch SEAMFIND DATA OBJECTS
-	vx_array overlap_rect_array, seamfind_valid_array, seamfind_weight_array, seamfind_accum_array, seamfind_pref_array, seamfind_info_array, seamfind_path_array, seamfind_scene_array;
-	vx_image valid_mask_image, warp_luma_image, sobelx_image, sobely_image, sobel_magnitude_s16_image, sobel_magnitude_image, sobel_phase_image, seamfind_weight_image;
-	vx_node SobelNode, MagnitudeNode, PhaseNode, ConvertDepthNode, SeamfindStep1Node, SeamfindStep2Node, SeamfindStep3Node, SeamfindStep4Node, SeamfindStep5Node, SeamfindAnalyzeNode;
-	vx_scalar current_frame, scene_threshold, seam_cost_enable;
-	vx_int32  current_frame_value;
-	vx_uint32 scene_threshold_value, SEAM_FIND_TARGET;
-	//Stitch Multiband DATA objects
-	vx_int32 num_bands;
-	vx_array blend_offsets;
-	vx_image blend_mask_image;
+	vx_remap    overlay_remap;                  // remap table for overlay
+	vx_remap    camera_remap;                   // remap table for camera (in simple stitch mode)
+	vx_image    Img_input, Img_output, Img_overlay;
+	vx_image    Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba;
+	vx_node	    InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode;
+	vx_array    ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array;
+	vx_matrix   overlap_matrix, A_matrix;
+	vx_image    RGBY1, RGBY2, weight_image, cam_id_image, group1_image, group2_image;
+	vx_node     WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
+	vx_node     nodeOverlayRemap, nodeOverlayBlend;
+	vx_float32  alpha, beta;                    // needed for expcomp
+	vx_int32    * A_matrix_initial_value;       // needed for expcomp
+	// seamfind data & node elements
+	vx_array    overlap_rect_array, seamfind_valid_array, seamfind_weight_array, seamfind_accum_array, 
+				seamfind_pref_array, seamfind_info_array, seamfind_path_array, seamfind_scene_array;
+	vx_image    valid_mask_image, warp_luma_image, sobelx_image, sobely_image, sobel_magnitude_s16_image, 
+				sobel_magnitude_image, sobel_phase_image, seamfind_weight_image;
+	vx_node     SobelNode, MagnitudeNode, PhaseNode, ConvertDepthNode, SeamfindStep1Node, SeamfindStep2Node,
+				SeamfindStep3Node, SeamfindStep4Node, SeamfindStep5Node, SeamfindAnalyzeNode;
+	vx_scalar   current_frame, scene_threshold, seam_cost_enable;
+	vx_int32    current_frame_value;
+	vx_uint32   scene_threshold_value, SEAM_FIND_TARGET;
+	// multiband data elements
+	vx_int32    num_bands;
+	vx_array    blend_offsets;
+	vx_image    blend_mask_image;
 	StitchMultibandData * pStitchMultiband;
-	vx_size * multibandBlendOffsetIntoBuffer;
+	vx_size     * multibandBlendOffsetIntoBuffer;
 	// LoomIO support
-	vx_uint32 loomioOutputAuxSelection, loomioCameraAuxDataLength, loomioOverlayAuxDataLength, loomioOutputAuxDataLength;
-	vx_scalar cameraMediaConfig, overlayMediaConfig, outputMediaConfig, viewingMediaConfig;
-	vx_array loomioCameraAuxData, loomioOverlayAuxData, loomioOutputAuxData, loomioViewingAuxData;
-	vx_node nodeLoomIoCamera, nodeLoomIoOverlay, nodeLoomIoOutput, nodeLoomIoViewing;
+	vx_uint32   loomioOutputAuxSelection, loomioCameraAuxDataLength, loomioOverlayAuxDataLength, loomioOutputAuxDataLength;
+	vx_scalar   cameraMediaConfig, overlayMediaConfig, outputMediaConfig, viewingMediaConfig;
+	vx_array    loomioCameraAuxData, loomioOverlayAuxData, loomioOutputAuxData, loomioViewingAuxData;
+	vx_node     nodeLoomIoCamera, nodeLoomIoOverlay, nodeLoomIoOutput, nodeLoomIoViewing;
 	ls_loomio_info loomio_camera, loomio_output, loomio_overlay, loomio_viewing;
-	FILE * loomioAuxDumpFile;
+	FILE        * loomioAuxDumpFile;
 	// internal buffers for input camera lens models
-	vx_uint32 paddingPixelCount, overlapCount;
+	vx_uint32   paddingPixelCount, overlapCount;
 	StitchCoord2dFloat * camSrcMap;
-	vx_float32 * camIndexTmpBuf;
-	vx_uint8 * camIndexBuf;
-	vx_uint32 * validPixelCamMap, *paddedPixelCamMap;
+	vx_float32  * camIndexTmpBuf;
+	vx_uint8    * camIndexBuf;
+	vx_uint32   * validPixelCamMap, *paddedPixelCamMap;
 	vx_rectangle_t * overlapRectBuf;
 	vx_rectangle_t * overlapValid[LIVE_STITCH_MAX_CAMERAS], *overlapPadded[LIVE_STITCH_MAX_CAMERAS];
-	vx_uint32 validCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS], paddedCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS];
-	vx_int32 * overlapMatrixBuf;
+	vx_uint32   validCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS], paddedCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS];
+	vx_int32    * overlapMatrixBuf;
 	// internal buffers for overlay models
 	StitchCoord2dFloat * overlaySrcMap;
-	vx_uint32 * validPixelOverlayMap;
-	vx_float32 * overlayIndexTmpBuf;
-	vx_uint8 * overlayIndexBuf;
+	vx_uint32   * validPixelOverlayMap;
+	vx_float32  * overlayIndexTmpBuf;
+	vx_uint8    * overlayIndexBuf;
 	// internal buffers for frame encode
     #define MAX_TILE_IMG 16
-	vx_uint32   output_encode_buffer_width;				// buffer width after encode conversion
-	vx_uint32   output_encode_buffer_height;			// buffer height after encode conversion
-	vx_uint32   output_encode_tiles;					// total number of encode tiles
-	vx_uint32   num_encode_sections;				    // total number of encode sectional images
-	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];		// encode intermediate images
-	vx_image    encode_dst_imgs[MAX_TILE_IMG];			// encode intermediate images
-	vx_image	encodetileOutput[MAX_TILE_IMG];			// encode tile output NV12 images
-	vx_rectangle_t src_encode_tile_rect[MAX_TILE_IMG];	// src encode rectangles 
-	vx_rectangle_t dst_encode_tile_rect[MAX_TILE_IMG];	// dst encode rectangles 
-	vx_node encode_color_convert_nodes[MAX_TILE_IMG];	// nodes to color convert each of the sectional ROI images
-	// internal buffers for chroma key
-	vx_uint32  CHROMA_KEY;					// chroma key flag variable
-	vx_uint32  CHROMA_KEY_EED;				// chroma key flag variable
-	vx_image    chroma_key_input_img;		// chroma key input RGB intermediate images
-	vx_image    chroma_key_mask_img;		// chroma key U8 mask intermediate images
-	vx_image    chroma_key_input_RGB_img;		// intermediate images
-	vx_image    chroma_key_dilate_mask_img;		// chroma key U8 mask dilate intermediate images
-	vx_image    chroma_key_erode_mask_img;		// chroma key U8 mask dilate intermediate images
-	vx_node		chromaKey_mask_generation_node;	// nodes to generate chroma key mask
-	vx_node		chromaKey_dilate_node;	// nodes to dilate chroma key mask
-	vx_node		chromaKey_erode_node;	// nodes to erode chroma key mask
-	vx_node		chromaKey_merge_node;	// nodes to merge chroma input and stitch output
+	vx_uint32   output_encode_buffer_width;             // buffer width after encode conversion
+	vx_uint32   output_encode_buffer_height;            // buffer height after encode conversion
+	vx_uint32   output_encode_tiles;                    // total number of encode tiles
+	vx_uint32   num_encode_sections;                    // total number of encode sectional images
+	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];      // encode intermediate images
+	vx_image    encode_dst_imgs[MAX_TILE_IMG];          // encode intermediate images
+	vx_image    encodetileOutput[MAX_TILE_IMG];         // encode tile output NV12 images
+	vx_rectangle_t src_encode_tile_rect[MAX_TILE_IMG];  // src encode rectangles 
+	vx_rectangle_t dst_encode_tile_rect[MAX_TILE_IMG];  // dst encode rectangles 
+	vx_node     encode_color_convert_nodes[MAX_TILE_IMG];// nodes to color convert each of the sectional ROI images
+	// chroma key
+	vx_uint32   CHROMA_KEY;                             // chroma key flag variable
+	vx_uint32   CHROMA_KEY_EED;                         // chroma key flag variable
+	vx_image    chroma_key_input_img;                   // chroma key input RGB intermediate images
+	vx_image    chroma_key_mask_img;                    // chroma key U8 mask intermediate images
+	vx_image    chroma_key_input_RGB_img;               // intermediate images
+	vx_image    chroma_key_dilate_mask_img;             // chroma key U8 mask dilate intermediate images
+	vx_image    chroma_key_erode_mask_img;              // chroma key U8 mask dilate intermediate images
+	vx_node     chromaKey_mask_generation_node;         // nodes to generate chroma key mask
+	vx_node     chromaKey_dilate_node;                  // nodes to dilate chroma key mask
+	vx_node     chromaKey_erode_node;                   // nodes to erode chroma key mask
+	vx_node     chromaKey_merge_node;                   // nodes to merge chroma input and stitch output
 	// temporal filter
-	vx_uint32 NOISE_FILTER;			// temporal noise filter enable/disable environment variable
-	vx_float32 noiseFilterLambda;	// temporal noise filter variable
-	vx_scalar filterLambda;			// temporal noise filter scalar lambda variable from user
-	vx_delay noiseFilterImageDelay;	// temporal noise filter delay element
-	vx_image noiseFilterInput_image;// temporal noise filter delay input image
-	vx_node noiseFilterNode;		// temporal noise filter node
+	vx_uint32   NOISE_FILTER;                           // temporal noise filter enable/disable environment variable
+	vx_float32  noiseFilterLambda;                      // temporal noise filter variable
+	vx_scalar   filterLambda;                           // temporal noise filter scalar lambda variable from user
+	vx_delay    noiseFilterImageDelay;                  // temporal noise filter delay element
+	vx_image    noiseFilterInput_image;                 // temporal noise filter delay input image
+	vx_node     noiseFilterNode;                        // temporal noise filter node
 	// quick setup load
-	vx_uint32  SETUP_LOAD;				// quick setup load flag variable
-	vx_bool    SETUP_LOAD_FILES_FOUND;	// quick setup load files found flag variable
+	vx_uint32   SETUP_LOAD;                             // quick setup load flag variable
+	vx_bool     SETUP_LOAD_FILES_FOUND;                 // quick setup load files found flag variable
 	// data for Initialize tables
-	vx_uint32 FAST_INIT;
+	vx_uint32   FAST_INIT;
 	StitchInitializeData *stitchInitData;
 	// attributes
-	vx_float32 live_stitch_attr[LIVE_STITCH_ATTR_MAX_COUNT];
+	vx_float32  live_stitch_attr[LIVE_STITCH_ATTR_MAX_COUNT];
 };
 
 //////////////////////////////////////////////////////////////////////
