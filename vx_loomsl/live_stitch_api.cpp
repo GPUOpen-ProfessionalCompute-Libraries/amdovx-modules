@@ -1421,8 +1421,6 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 				_mm_store_si128(dst++, r0);
 				_mm_store_si128(dst++, r0);
 			}
-			//			for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
-//				ptr[i] = 0x80000000;
 			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->RGBY2, map_id));
 		}
 	}
@@ -2582,7 +2580,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 
 	/***********************************************************************************************************************************
-	Quick Stitch mode -> Simple stitch
+	Quick Stitch Mode -> Simple stitch
 	************************************************************************************************************************************/
 	if (stitch->stitching_mode == stitching_mode_quick_and_dirty)
 	{
@@ -2612,7 +2610,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_STATUS_(SyncInternalTables(stitch));
 	}
 	/***********************************************************************************************************************************
-	Normal Stitch mode -> Color Convert, Warp, Expo Comp & Merge
+	Normal Stitch Mode -> Full Stitch
 	************************************************************************************************************************************/
 	else if (stitch->stitching_mode == stitching_mode_normal)
 	{
