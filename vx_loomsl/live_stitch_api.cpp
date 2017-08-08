@@ -2892,11 +2892,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				ERROR_CHECK_STATUS_(vxQueryGraph(stitch->graphStitch, VX_GRAPH_ATTRIBUTE_AMD_PERFORMANCE_INTERNAL_PROFILE, fileName, 0));
 			}
 		}
-		// configuration
+
+		// release configurations
 		if (stitch->camera_par) delete[] stitch->camera_par;
 		if (stitch->overlay_par) delete[] stitch->overlay_par;
-		//Stitch Mode 1 Release
-		//Image
+
+		// release image objects
 		if (stitch->Img_input) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input));
 		if (stitch->Img_output) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_output));
 		if (stitch->Img_input_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input_rgb));
@@ -2904,43 +2905,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->Img_overlay) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay));
 		if (stitch->Img_overlay_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay_rgb));
 		if (stitch->Img_overlay_rgba) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay_rgba));
-		//Remap
-		if (stitch->overlay_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->overlay_remap));
-		if (stitch->camera_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->camera_remap));
-		//Node
-		if (stitch->InputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->InputColorConvertNode));
-		if (stitch->SimpleStitchRemapNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SimpleStitchRemapNode));
-		if (stitch->OutputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->OutputColorConvertNode));
-		if (stitch->nodeOverlayRemap) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayRemap));
-		if (stitch->nodeOverlayBlend) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayBlend));
-
-		//Stitch Mode 2 Release
-		//Image
 		if (stitch->RGBY1) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->RGBY1));
 		if (stitch->RGBY2) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->RGBY2));
 		if (stitch->weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->weight_image));
 		if (stitch->cam_id_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->cam_id_image));
 		if (stitch->group1_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->group1_image));
 		if (stitch->group2_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->group2_image));
-		//Matrix
-		if (stitch->overlap_matrix) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->overlap_matrix));
-		if (stitch->A_matrix) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->A_matrix));
-		if (stitch->A_matrix_initial_value) delete[] stitch->A_matrix_initial_value;
-		//Array
-		if (stitch->ValidPixelEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->ValidPixelEntry));
-		if (stitch->WarpRemapEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->WarpRemapEntry));
-		if (stitch->OverlapPixelEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->OverlapPixelEntry));
-		if (stitch->valid_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->valid_array));
-		if (stitch->gain_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->gain_array));
-		//Node
-		if (stitch->WarpNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->WarpNode));
-		if (stitch->ExpcompComputeGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompComputeGainNode));
-		if (stitch->ExpcompSolveGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompSolveGainNode));
-		if (stitch->ExpcompApplyGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompApplyGainNode));
-		if (stitch->MergeNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->MergeNode));
-
-		//Stitch SeamFind
-		//Image
 		if (stitch->valid_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->valid_mask_image));
 		if (stitch->warp_luma_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->warp_luma_image));
 		if (stitch->sobel_magnitude_s16_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_s16_image));
@@ -2949,15 +2919,58 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->sobel_magnitude_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_image));
 		if (stitch->sobel_phase_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_phase_image));
 		if (stitch->seamfind_weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->seamfind_weight_image));
-		//Array
+		if (stitch->blend_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->blend_mask_image));
+		if (stitch->blend_offsets) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->blend_offsets));
+		if (stitch->chroma_key_input_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_img));
+		if (stitch->chroma_key_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_mask_img));
+		if (stitch->chroma_key_dilate_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_dilate_mask_img));
+		if (stitch->chroma_key_erode_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_erode_mask_img));
+		if (stitch->chroma_key_input_RGB_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_RGB_img));
+		if (stitch->noiseFilterInput_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->noiseFilterInput_image));
+
+		// release scalar objects
+		if (stitch->current_frame) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->current_frame));
+		if (stitch->scene_threshold) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->scene_threshold));
+		if (stitch->seam_cost_enable) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->seam_cost_enable));
+		if (stitch->filterLambda) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->filterLambda));
+
+		// release remap objects
+		if (stitch->overlay_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->overlay_remap));
+		if (stitch->camera_remap) ERROR_CHECK_STATUS_(vxReleaseRemap(&stitch->camera_remap));
+
+		// release matrix
+		if (stitch->overlap_matrix) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->overlap_matrix));
+		if (stitch->A_matrix) ERROR_CHECK_STATUS_(vxReleaseMatrix(&stitch->A_matrix));
+		if (stitch->A_matrix_initial_value) delete[] stitch->A_matrix_initial_value;
+
+		// release arrays
+		if (stitch->ValidPixelEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->ValidPixelEntry));
+		if (stitch->WarpRemapEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->WarpRemapEntry));
+		if (stitch->OverlapPixelEntry) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->OverlapPixelEntry));
+		if (stitch->valid_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->valid_array));
+		if (stitch->gain_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->gain_array));
 		if (stitch->overlap_rect_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->overlap_rect_array));
 		if (stitch->seamfind_valid_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_valid_array));
 		if (stitch->seamfind_weight_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_weight_array));
 		if (stitch->seamfind_accum_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_accum_array));
-		if (stitch->seamfind_pref_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_pref_array));	
+		if (stitch->seamfind_pref_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_pref_array));
 		if (stitch->seamfind_path_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_path_array));
 		if (stitch->seamfind_scene_array) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->seamfind_scene_array));
-		//Node
+
+		// release delay element
+		if (stitch->noiseFilterImageDelay) ERROR_CHECK_STATUS_(vxReleaseDelay(&stitch->noiseFilterImageDelay));
+
+		// release node objects
+		if (stitch->InputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->InputColorConvertNode));
+		if (stitch->SimpleStitchRemapNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SimpleStitchRemapNode));
+		if (stitch->OutputColorConvertNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->OutputColorConvertNode));
+		if (stitch->nodeOverlayRemap) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayRemap));
+		if (stitch->nodeOverlayBlend) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeOverlayBlend));
+		if (stitch->WarpNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->WarpNode));
+		if (stitch->ExpcompComputeGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompComputeGainNode));
+		if (stitch->ExpcompSolveGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompSolveGainNode));
+		if (stitch->ExpcompApplyGainNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->ExpcompApplyGainNode));
+		if (stitch->MergeNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->MergeNode));
 		if (stitch->SobelNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SobelNode));
 		if (stitch->MagnitudeNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->MagnitudeNode));
 		if (stitch->PhaseNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->PhaseNode));
@@ -2968,42 +2981,11 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->SeamfindStep4Node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SeamfindStep4Node));
 		if (stitch->SeamfindStep5Node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SeamfindStep5Node));
 		if (stitch->SeamfindAnalyzeNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->SeamfindAnalyzeNode));
-		//Scalar
-		if (stitch->current_frame) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->current_frame));
-		if (stitch->scene_threshold) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->scene_threshold));
-		if (stitch->seam_cost_enable) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->seam_cost_enable));
-
-		// tile encode
-		if (stitch->num_encode_sections > 1){
-			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
-				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
-				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
-				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
-				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
-			}
-		}
-
-		// chroma key
-		if (stitch->chroma_key_input_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_img));
-		if (stitch->chroma_key_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_mask_img));
-		if (stitch->chroma_key_dilate_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_dilate_mask_img));
-		if (stitch->chroma_key_erode_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_erode_mask_img));
-		if (stitch->chroma_key_input_RGB_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_RGB_img));
 		if (stitch->chromaKey_mask_generation_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->chromaKey_mask_generation_node));
 		if (stitch->chromaKey_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->chromaKey_dilate_node));
 		if (stitch->chromaKey_erode_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->chromaKey_erode_node));
 		if (stitch->chromaKey_merge_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->chromaKey_merge_node));
-
-		// temporal noise filter
-		if (stitch->filterLambda) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->filterLambda));
-		if (stitch->noiseFilterImageDelay) ERROR_CHECK_STATUS_(vxReleaseDelay(&stitch->noiseFilterImageDelay));
-		if (stitch->noiseFilterInput_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->noiseFilterInput_image));
 		if (stitch->noiseFilterNode) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->noiseFilterNode));
-
-		//Image
-		if (stitch->blend_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->blend_mask_image));
-		if (stitch->blend_offsets) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->blend_offsets));
-		//Node
 		if (stitch->MULTIBAND_BLEND && stitch->pStitchMultiband){
 			for (int i = 0; i < stitch->num_bands; i++){
 				if (stitch->pStitchMultiband[i].BlendNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].BlendNode));
@@ -3020,7 +3002,8 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 			delete[] stitch->pStitchMultiband;
 			delete[] stitch->multibandBlendOffsetIntoBuffer;
 		}
-		// LoomIO
+
+		// release LoomIO objects
 		if (stitch->cameraMediaConfig) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->cameraMediaConfig));
 		if (stitch->overlayMediaConfig) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->overlayMediaConfig));
 		if (stitch->outputMediaConfig) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->outputMediaConfig));
@@ -3034,6 +3017,17 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->nodeLoomIoOutput) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeLoomIoOutput));
 		if (stitch->nodeLoomIoViewing) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeLoomIoViewing));
 
+		// release tiled image elements
+		if (stitch->num_encode_sections > 1){
+			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
+				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
+				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
+				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
+				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
+			}
+		}
+
+		// release fast GPU initialize elements
 		if (stitch->FAST_INIT){
 			if (stitch->stitchInitData){
 				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
@@ -3049,10 +3043,6 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 			}
 		}
 
-		//Graph & Context
-		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
-		if (stitch->context && !stitch->context_is_external) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
-
 		// release internal buffers
 		if (stitch->validPixelCamMap) { delete[] stitch->validPixelCamMap; stitch->validPixelCamMap = nullptr; }
 		if (stitch->paddedPixelCamMap) { delete[] stitch->paddedPixelCamMap; stitch->paddedPixelCamMap = nullptr; }
@@ -3066,9 +3056,6 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->overlayIndexTmpBuf) { delete[] stitch->overlayIndexTmpBuf; stitch->overlayIndexTmpBuf = nullptr; }
 		if (stitch->overlayIndexBuf) { delete[] stitch->overlayIndexBuf; stitch->overlayIndexBuf = nullptr; }
 
-
-		// TBD need complete cleanup to be reviewed
-
 		// debug aux dumps
 		if (stitch->loomioAuxDumpFile) {
 			fclose(stitch->loomioAuxDumpFile);
@@ -3076,6 +3063,11 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 
 		// clear the magic and destroy
 		stitch->magic = ~LIVE_STITCH_MAGIC;
+
+		//Graph & Context
+		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
+		if (stitch->context && !stitch->context_is_external) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
+
 		delete stitch;
 		*pStitch = nullptr;
 	}
