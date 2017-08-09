@@ -1568,6 +1568,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 	// create data objects needed by exposure comp kernel
 	if (stitch->EXPO_COMP) {
 		vx_enum StitchOverlapPixelEntryType, StitchExpCompCalcEntryType;
+		vx_float32 one = 1.0f; // initialize gain_array with default gains as one
 		ERROR_CHECK_TYPE_(StitchOverlapPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchOverlapPixelEntry)));
 		ERROR_CHECK_TYPE_(StitchExpCompCalcEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchExpCompCalcEntry)));
 		ERROR_CHECK_OBJECT_(stitch->valid_array = vxCreateArray(stitch->context, StitchExpCompCalcEntryType, stitch->table_sizes.expCompValidTableSize));
@@ -1586,9 +1587,14 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 			ERROR_CHECK_ALLOC_(stitch->A_matrix_initial_value = new vx_int32[stitch->num_cameras * stitch->num_cameras*3]());
 			ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->A_matrix, stitch->A_matrix_initial_value));
 		}
-		ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH*stitch->EXPO_COMP_GAINC));
-		vx_float32 one = 1.0f; // initialize gain_array with default gains as one
-		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINC *stitch->EXPO_COMP_GAINH, &one, 0));
+		else if (stitch->EXPO_COMP == 4){
+			ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH * 12));
+			ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW *stitch->EXPO_COMP_GAINH * 12, &one, 0));
+		}
+		else{
+			ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH*stitch->EXPO_COMP_GAINC));
+			ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINC *stitch->EXPO_COMP_GAINH, &one, 0));
+		}
 	}
 	// create data objects needed by seamfind kernel
 	if (stitch->SEAM_FIND) {
@@ -2650,7 +2656,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			stitch->EXPO_COMP_GAINW = 1;
 			stitch->EXPO_COMP_GAINH = 1;
 			stitch->EXPO_COMP_GAINC = (stitch->EXPO_COMP==2)? 3: 1;
-			if (stitch->EXPO_COMP == 3 || stitch->EXPO_COMP == 4) {
+			if (stitch->EXPO_COMP >= 3 ) {
 				stitch->EXPO_COMP_GAINW = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W]);
 				stitch->EXPO_COMP_GAINH = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H]);
 				stitch->EXPO_COMP_GAINC = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C]);

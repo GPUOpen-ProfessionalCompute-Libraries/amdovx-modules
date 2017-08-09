@@ -607,7 +607,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_global_work_update(
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
 	opencl_global_work[0] = arr_numitems*opencl_local_work[0];
 	if (sc_width)
-		opencl_global_work[1] = opencl_local_work[1]<<1;
+		opencl_global_work[1] = opencl_local_work[1];
 	else
 		opencl_global_work[1] = opencl_local_work[1];
 	return VX_SUCCESS;
@@ -674,12 +674,12 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	strcpy(opencl_kernel_function_name, "exposure_comp_apply_gains");
 	opencl_work_dim = 2;
 	opencl_local_work[0] = 16;
-	opencl_local_work[1] = 16;
+	opencl_local_work[1] = 32;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
 	// opencl kernel header and reading
 	char item[8192];
 	if (sc_width && sc_height){
-		opencl_global_work[1] = opencl_local_work[1] << 1;
+		opencl_global_work[1] = opencl_local_work[1];
 		vx_float32 xscale = 1.0f, yscale = 1.0f, xoffset = 0.0f, yoffset = 0.0f;
 		// calculate xscale and yscale for block_gain computation
 		if (bg_width >= 1){
@@ -844,6 +844,66 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_width));
 		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_height));
 	}
+	else if (num_gains == num_cam * 12) // if gain array gives color transform for R, G and B with bias offset
+	{
+		opencl_global_work[1] = opencl_local_work[1];
+		sprintf(item,
+			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+			"\n"
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n"
+			"\n"
+			"uint RGBTran(uint rgbx, float4 r4, float4 g4, float4 b4) {\n"
+			"  float4 fin, fout;\n"
+			"  fin = amd_unpack(rgbx);\n"
+			"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
+			"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
+			"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
+			"  fout.s3 = fin.s3;\n"
+			"  return amd_pack(fout);\n"
+			"}\n"
+			"\n"
+			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+			"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+			"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+			"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+			"{\n"
+			"  int grp_id = get_global_id(0)>>4;\n"
+			"  if (grp_id < pExpData_num) {\n"
+			"    uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+			"    uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+			"    pG_buf += pG_offs; int cam_id = offs.s0&0x3f;\n"
+			"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
+			"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n"
+			"    int  lx = get_local_id(0);\n"
+			"    int  ly = get_local_id(1);\n"
+			"    int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+			"    int   gy = ly + ((offs.s0 >> 18) << 1);\n"
+			"    pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+			"    pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
+			"    uchar4 offs4 = as_uchar4(offs.s1); \n"
+			"    if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+			"      uint8 r0, r1;\n"
+			"      r0 =  *(__global uint8 *)pIn_buf;\n"
+			"      r0.s0 = RGBTran(r0.s0, r4, g4 , b4);\n"
+			"      r0.s1 = RGBTran(r0.s1, r4, g4 , b4);\n"
+			"      r0.s2 = RGBTran(r0.s2, r4, g4 , b4);\n"
+			"      r0.s3 = RGBTran(r0.s3, r4, g4 , b4);\n"
+			"      r0.s4 = RGBTran(r0.s4, r4, g4 , b4);\n"
+			"      r0.s5 = RGBTran(r0.s5, r4, g4 , b4);\n"
+			"      r0.s6 = RGBTran(r0.s6, r4, g4 , b4);\n"
+			"      r0.s7 = RGBTran(r0.s7, r4, g4 , b4);\n"
+			"      *(__global uint8 *)(pOut_buf) = r0;\n"
+			"    }\n"
+			"  }\n"
+			"}\n"
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
+		opencl_kernel_code = item;
+	}
 	else
 	{
 		opencl_global_work[1] = opencl_local_work[1];
@@ -884,14 +944,13 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"	int  lx = get_local_id(0);\n"
 			"	int  ly = get_local_id(1);\n"
 			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
-			"   int   gy = ly + (offs.s0 >> 18) ;\n"
-			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24((gy<<1), (int)pIn_stride, (gx<<5));\n"
-			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24((gy<<1), (int)pOut_stride, (gx<<5));\n"
+			"   int   gy = ly + ((offs.s0 >> 18) << 1);\n"
+			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
 			"   uchar4 offs4 = as_uchar4(offs.s1); \n"
-			"   if (((lx<<3) < (int)offs4.s2) && (ly*2 < (int)offs4.s3)) {\n"
-			"	uint8 r0, r1; float4 f4;\n"
+			"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+			"	uint8 r0; float4 f4;\n"
 			"	r0 =  *(__global uint8 *)pIn_buf;\n"
-			"	r1 =  *(__global uint8 *)(pIn_buf+pIn_stride);\n"
 			"	f4 = amd_unpack(r0.s0)*g4; r0.s0 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s1)*g4; r0.s1 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s2)*g4; r0.s2 = amd_pack(f4); \n"
@@ -900,16 +959,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"	f4 = amd_unpack(r0.s5)*g4; r0.s5 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s6)*g4; r0.s6 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s7)*g4; r0.s7 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s0)*g4; r1.s0 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s1)*g4; r1.s1 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s2)*g4; r1.s2 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s3)*g4; r1.s3 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s4)*g4; r1.s4 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s5)*g4; r1.s5 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s6)*g4; r1.s6 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s7)*g4; r1.s7 = amd_pack(f4); \n"
 			"	*(__global uint8 *)(pOut_buf) = r0;\n"
-			"	*(__global uint8 *)(pOut_buf+pOut_stride) = r1;\n"
 			"}\n"
 		"}\n"
 	"}\n";
