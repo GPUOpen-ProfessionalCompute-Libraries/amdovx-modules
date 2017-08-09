@@ -542,7 +542,7 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"      int loffset = ly * lstride + (lx << 5);\n"
 			"      int gybase = (gy<<1) + ly - 1;\n"
 			"      goffset.s0 = (gx<<3) + (lx << 5) - 16; goffset.s1 = goffset.s0 + 16 ; \n"
-			"      goffset.s0 = select(goffset.s0, (int)(ip_width-16), goffset.s0<0);\n"
+			"      goffset.s0 = select(goffset.s0, (int)((ip_width-4)<<2), goffset.s0<0);\n"
 			"     *(__local uint4 *)(lbuf + loffset)       = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase)));\n"
 			"     *(__local uint4 *)(lbuf + loffset + 16)  = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase)));\n"
 			"      loffset += (lstride << 4);\n"
@@ -948,7 +948,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"{\n"
 			"	int grp_id = get_global_id(0)>>4, lx = get_local_id(0), ly = get_global_id(1);\n"
 			"	pG_buf += (pG_offs + (arr_offs<<3));\n"
-			"	//if (grp_id < num_groups) {\n"
+			"	if (grp_id < pG_num) {\n"
 			"	int size_x = get_local_size(0) - 1; \n"
 			"	uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
 			"	uint camera_id = offs.x & 0x1f; int gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); int gy = (offs.x >> 19);\n"
@@ -1139,6 +1139,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"     }\n"
 			"   }\n"
 			" }\n"
+			" }\n"
 			"}\n";
 			}
 			else
@@ -1156,6 +1157,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"       *(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
 			"     }\n"
 			"   }\n"
+			" }\n"
 			" }\n"
 			"}\n";
 			}
@@ -1193,6 +1195,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 		"       *(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
 		"     }\n"
 		"   }\n"
+		" }\n"
 		" }\n"
 		"}\n";
 	}
