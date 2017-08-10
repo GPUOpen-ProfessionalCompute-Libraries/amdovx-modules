@@ -674,12 +674,12 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	strcpy(opencl_kernel_function_name, "exposure_comp_apply_gains");
 	opencl_work_dim = 2;
 	opencl_local_work[0] = 16;
-	opencl_local_work[1] = 32;
+	opencl_local_work[1] = 16;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
+	opencl_global_work[1] = 32;
 	// opencl kernel header and reading
 	char item[8192];
 	if (sc_width && sc_height){
-		opencl_global_work[1] = opencl_local_work[1];
 		vx_float32 xscale = 1.0f, yscale = 1.0f, xoffset = 0.0f, yoffset = 0.0f;
 		// calculate xscale and yscale for block_gain computation
 		if (bg_width >= 1){
@@ -846,7 +846,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	}
 	else if (num_gains == num_cam * 12) // if gain array gives color transform for R, G and B with bias offset
 	{
-		opencl_global_work[1] = opencl_local_work[1];
 		sprintf(item,
 			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
 			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
@@ -906,7 +905,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	}
 	else
 	{
-		opencl_global_work[1] = opencl_local_work[1];
 		sprintf(item,
 			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
 			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
