@@ -49,7 +49,7 @@ static vx_status VX_CALLBACK noise_filter_input_validator(vx_node node, vx_uint3
 	{ // image of format RGB
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
-		if (format == VX_DF_IMAGE_RGB) {
+		if (format == VX_DF_IMAGE_RGB || format == VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_SUCCESS;
 		}
 		else {
@@ -60,22 +60,23 @@ static vx_status VX_CALLBACK noise_filter_input_validator(vx_node node, vx_uint3
 	}
 	if (index == 2)
 	{ // image of format RGB
-		vx_df_image format = VX_DF_IMAGE_VIRT;
+		vx_df_image format2 = VX_DF_IMAGE_VIRT, format1 = VX_DF_IMAGE_VIRT;
 		vx_uint32 width1 = 0, width2 = 0, height1 = 0, height2 = 0;
-		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format2, sizeof(format2)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width2, sizeof(width2)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height2, sizeof(height2)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 		ref = avxGetNodeParamRef(node, 1);
+		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format1, sizeof(format1)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width1, sizeof(width1)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height1, sizeof(height1)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (format == VX_DF_IMAGE_RGB) {
+		if (format1 == format2) {
 			status = VX_SUCCESS;
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: noise_filter doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: noise_filter doesn't support input image format: %4.4s\n", &format2);
 		}
 		if (!((width1 == width2) && (height1 == height2))) {
 			status = VX_ERROR_INVALID_DIMENSION;
@@ -118,9 +119,9 @@ static vx_status VX_CALLBACK noise_filter_output_validator(vx_node node, vx_uint
 			output_width = input_width;
 			output_height = input_height;
 		}
-		if (output_format != VX_DF_IMAGE_RGB) {
+		if (output_format != input_format) {
 			// pick RGB as default
-			output_format = VX_DF_IMAGE_RGBX;
+			output_format = input_format;
 		}
 		// set output image meta data
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
@@ -159,6 +160,7 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 {
 	// get image configurations
 	vx_uint32 width = 0, height = 0;
+	vx_df_image format = VX_DF_IMAGE_VIRT;
 	vx_float32 lambda = 0.0f;
 	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);
 	ERROR_CHECK_OBJECT(scalar);
@@ -168,6 +170,7 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// set kernel configuration
@@ -181,6 +184,17 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 
 	// kernel header and reading
 	char item[8192];
+	opencl_kernel_code =
+		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n";
+	if (format == VX_DF_IMAGE_RGB) { 
+		opencl_kernel_code += Create_Amd_unpack();
+	}
+	else{ //VX_DF_IMAGE_RGB4_AMD
+		opencl_kernel_code += Create_Amd_unpack15();
+		opencl_kernel_code += Create_Amd_pack15();
+	}
+
 	sprintf(item,
 		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
 		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
@@ -198,19 +212,40 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
 		"  if ((gx < %d) && (gy < %d)) {\n" // work_items[0], work_items[1]
-		"    uint3 pix0 = *(__global uint3 *) (ip0_buf + ip0_offset + (gy * ip0_stride) + (gx * 12));\n"
-		"    uint3 pix1 = *(__global uint3 *) (ip1_buf + ip1_offset + (gy * ip1_stride) + (gx * 12));\n"
-		"    uint3 outpix;\n"
-		"    float4 f;\n"
-		"    float oneMinusLambda = 1.0f - lambda;"
-		"    f = mad(amd_unpack(pix0.s0), (float4)lambda, amd_unpack(pix1.s0) * (float4)oneMinusLambda);  outpix.s0 = amd_pack(f);\n"
-		"    f = mad(amd_unpack(pix0.s1), (float4)lambda, amd_unpack(pix1.s1) * (float4)oneMinusLambda);  outpix.s1 = amd_pack(f);\n"
-		"    f = mad(amd_unpack(pix0.s2), (float4)lambda, amd_unpack(pix1.s2) * (float4)oneMinusLambda);  outpix.s2 = amd_pack(f);\n"
-		"    *(__global uint3 *) (op_buf + op_offset + (gy * op_stride) + (gx * 12)) = outpix;\n"
-		"  }\n"
-		"}\n"
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
 	opencl_kernel_code = item;
+	if (format == VX_DF_IMAGE_RGB){
+		opencl_kernel_code +=
+			"    uint3 pix0 = *(__global uint3 *) (ip0_buf + ip0_offset + (gy * ip0_stride) + (gx * 12));\n"
+			"    uint3 pix1 = *(__global uint3 *) (ip1_buf + ip1_offset + (gy * ip1_stride) + (gx * 12));\n"
+			"    uint3 outpix;\n"
+			"    float4 f;\n"
+			"    float oneMinusLambda = 1.0f - lambda;"
+			"    f = mad(amd_unpack(pix0.s0), (float4)lambda, amd_unpack(pix1.s0) * (float4)oneMinusLambda);  outpix.s0 = amd_pack(f);\n"
+			"    f = mad(amd_unpack(pix0.s1), (float4)lambda, amd_unpack(pix1.s1) * (float4)oneMinusLambda);  outpix.s1 = amd_pack(f);\n"
+			"    f = mad(amd_unpack(pix0.s2), (float4)lambda, amd_unpack(pix1.s2) * (float4)oneMinusLambda);  outpix.s2 = amd_pack(f);\n"
+			"    *(__global uint3 *) (op_buf + op_offset + (gy * op_stride) + (gx * 12)) = outpix;\n"
+			"  }\n"
+			"}\n";
+	}
+	else{ //VX_DF_IMAGE_RGB4_AMD
+		opencl_kernel_code +=
+			"    uint4 pix0A = *(__global uint4 *) (ip0_buf + ip0_offset + (gy * ip0_stride) + (gx * 24));\n"
+			"    uint2 pix0B = *(__global uint2 *) (ip0_buf + ip0_offset + (gy * ip0_stride) + (gx * 24) + 16);\n"
+			"    uint4 pix1A = *(__global uint4 *) (ip1_buf + ip1_offset + (gy * ip1_stride) + (gx * 24));\n"
+			"    uint2 pix1B = *(__global uint2 *) (ip1_buf + ip1_offset + (gy * ip1_stride) + (gx * 24) + 16);\n"
+			"    uint4 outpixA;\n"
+			"    uint2 outpixB;\n"
+			"    float4 f;\n"
+			"    float oneMinusLambda = 1.0f - lambda;"
+			"    f = mad(amd_unpack15(pix0A.s0,pix0A.s1), (float4)lambda, amd_unpack15(pix1A.s0,pix1A.s1) * (float4)oneMinusLambda); outpixA.s0 = amd_pack15(f.s0,f.s1); outpixA.s1 = amd_pack15(f.s2,f.s3);\n"
+			"    f = mad(amd_unpack15(pix0A.s2,pix0A.s3), (float4)lambda, amd_unpack15(pix1A.s2,pix1A.s3) * (float4)oneMinusLambda); outpixA.s2 = amd_pack15(f.s0,f.s1); outpixA.s3 = amd_pack15(f.s2,f.s3);\n"
+			"    f = mad(amd_unpack15(pix0B.s0,pix0B.s1), (float4)lambda, amd_unpack15(pix1B.s0,pix1B.s1) * (float4)oneMinusLambda); outpixB.s0 = amd_pack15(f.s0,f.s1); outpixB.s1 = amd_pack15(f.s2,f.s3);\n"
+			"    *(__global uint4 *) (op_buf + op_offset + (gy * op_stride) + (gx * 24)) = outpixA;\n"
+			"    *(__global uint2 *) (op_buf + op_offset + (gy * op_stride) + (gx * 24) + 16) = outpixB;\n"
+			"  }\n"
+			"}\n";
+	}
 	return VX_SUCCESS;
 }
 
@@ -249,4 +284,30 @@ vx_status noise_filter_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
 
 	return VX_SUCCESS;
+}
+
+std::string Create_Amd_unpack(){
+	std::string output =
+		"float4 amd_unpack(uint src)\n"
+		"{\n"
+		"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+		"}\n";
+	return output;
+}
+std::string Create_Amd_unpack15(){
+	std::string output =
+		"float4 amd_unpack15(uint src0, uint src1)\n"
+		"{\n"
+		"  return (float4)((src0 & 0x7fff), (src0 >> 16), (src1 & 0x7fff), (src1 >> 16));\n"
+		"}\n";
+	return output;
+}
+std::string Create_Amd_pack15(){
+	std::string output =
+		"uint amd_pack15(float src0, float src1)\n"
+		"{\n"
+		"  return ( ( ( (uint) clamp(src1,0.0f,32767.0f))<<16) + (uint) clamp(src0,0.0f,32767.0f) );\n"
+		"}\n"
+		"\n";
+	return output;
 }

@@ -28,6 +28,102 @@ THE SOFTWARE.
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The kernel registration functions.
-vx_status color_convert_publish(vx_context context);
+vx_status color_convert_general_publish(vx_context context); // for UYVY, YUYV, V210, V216
+vx_status color_convert_from_NV12_publish(vx_context context); // for NV12 input
+vx_status color_convert_from_IYUV_publish(vx_context context); // for IYUV input
+vx_status color_convert_to_NV12_publish(vx_context context); // for NV12 output
+vx_status color_convert_to_IYUV_publish(vx_context context); // for IYUV output
+
+//////////////////////////////////////////////////////////////////////
+// Define functions to create OpenCL code
+// Input Color Conversions  ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string GetColorConversionTableForYUVInput(vx_color_space_e input_color_space);
+std::string GetRangeConversionTableFor8bitTo8bit(vx_channel_range_e input_channel_range);
+//Input Range Conversion ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string GetRangeConversionTableFor8bitTo15bit(vx_channel_range_e input_channel_range);
+std::string GetRangeConversionTableFor10bitTo8bit(vx_channel_range_e input_channel_range);
+std::string GetRangeConversionTableFor10bitTo15bit(vx_channel_range_e input_channel_range);
+std::string GetRangeConversionTableFor16bitTo8bit(vx_channel_range_e input_channel_range);
+std::string GetRangeConversionTableFor16bitTo15bit(vx_channel_range_e input_channel_range);
+// Output Color and Range Conversion ------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string GetColorRangeConversionTableFor8bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+std::string GetColorRangeConversionTableFor8bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+std::string GetColorRangeConversionTableFor8bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+std::string GetColorRangeConversionTableFor15bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+std::string GetColorRangeConversionTableFor15bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+std::string GetColorRangeConversionTableFor15bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
+// Read input from buffer -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string Read2x8PixelsFrom422buffer8bit();
+std::string Read2x8PixelsFromYbufferAndUVbuffer();
+std::string Read2x8PixelsFromYbufferAndUbufferAndVbuffer();
+std::string Read1x6PixelsFrom422buffer();
+std::string Read2x8PixelsFrom422buffer16bit();
+std::string Read2x8PixelsFromRGBbuffer8bit();
+std::string Read2x8PixelsFromRGBbuffer16bit();
+// Do Color Conversion --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string ConvertUYVYtoRGB2();
+std::string ConvertUYVYtoRGBX();
+std::string ConvertUYVYtoRGB4();
+std::string ConvertUYVYtoRGB6();
+std::string ConvertYUYVtoRGB2();
+std::string ConvertYUYVtoRGBX();
+std::string ConvertYUYVtoRGB4();
+std::string ConvertYUYVtoRGB6();
+std::string ConvertNV12toRGB2();
+std::string ConvertNV12toRGBX();
+std::string ConvertNV12toRGB4();
+std::string ConvertNV12toRGB6();
+std::string ConvertIYUVtoRGB2();
+std::string ConvertIYUVtoRGBX();
+std::string ConvertIYUVtoRGB4();
+std::string ConvertIYUVtoRGB6();
+std::string ConvertV210toRGB2();
+std::string ConvertV210toRGBX();
+std::string ConvertV210toRGB4();
+std::string ConvertV210toRGB6();
+std::string ConvertV216toRGB2();
+std::string ConvertV216toRGBX();
+std::string ConvertV216toRGB4();
+std::string ConvertV216toRGB6();
+std::string ConvertRGB2toUYVY();
+std::string ConvertRGB2toYUYV();
+std::string ConvertRGB2toNV12();
+std::string ConvertRGB2toIYUV();
+std::string ConvertRGB2toV216();
+std::string ReadAndConvertRGB2toV210();
+std::string ConvertRGB4toUYVY();
+std::string ConvertRGB4toYUYV();
+std::string ConvertRGB4toNV12();
+std::string ConvertRGB4toIYUV();
+std::string ConvertRGB4toV216();
+std::string ReadAndConvertRGB4toV210();
+// Write output to buffer ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string Write2x8PixelsToRGB2buffer();
+std::string Write1x4PixelsToRGB2buffer();
+std::string Write2x8PixelsToRGBXbuffer();
+std::string Write1x4PixelsToRGBXbuffer();
+std::string Write2x8PixelsToRGB4buffer();
+std::string Write1x4PixelsToRGB4buffer();
+std::string Write2x8PixelsToRGB6buffer();
+std::string Write1x4PixelsToRGB6buffer();
+std::string Write1x6PixelsToRGB2buffer();
+std::string Write1x6PixelsToRGBXbuffer();
+std::string Write1x6PixelsToRGB4buffer();
+std::string Write1x6PixelsToRGB6buffer();
+std::string Write2x8PixelsTo422buffer8bit();
+std::string Write1x4PixelsTo422bufferUYVY();
+std::string Write1x4PixelsTo422bufferYUYV();
+std::string Write2x8PixelsToYbufferAndUVbuffer();
+std::string Write2x8PixelsToYbufferAndUbufferAndVbuffer();
+std::string Write1x6PixelsTo422buffer();
+std::string Write2x8PixelsTo422buffer16bit();
+std::string Write1x4PixelsTo422buffer16bit();
+//Define help functions for 10 and 16 bit -------------------------------------------------------------------------------------------------------------------------------------------------------
+std::string Create_amd_unpack16();
+std::string Create_amd_unpackAB();
+std::string Create_amd_unpack10();
+std::string Create_amd_pack15();
+std::string Create_amd_pack16();
+std::string Create_amd_pack10();
 
 #endif //__COLOR_CONVERT_H__

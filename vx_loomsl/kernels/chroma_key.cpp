@@ -51,7 +51,7 @@ static vx_status VX_CALLBACK chroma_key_mask_generation_input_validator(vx_node 
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width_img, sizeof(width_img)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height_img, sizeof(height_img)));
-		if (format != VX_DF_IMAGE_RGB)
+		if (format != VX_DF_IMAGE_RGB && format != VX_DF_IMAGE_RGB4_AMD)
 			status = VX_ERROR_INVALID_FORMAT;
 		else if (width_img < 0)
 			status = VX_ERROR_INVALID_DIMENSION;
@@ -157,8 +157,10 @@ static vx_status VX_CALLBACK chroma_key_mask_generation_opencl_codegen(
 	// get input and output image configurations
 	vx_image input_image = (vx_image)parameters[2];
 	vx_uint32 input_width = 0, input_height = 0;
+	vx_df_image format = VX_DF_IMAGE_VIRT;
 	ERROR_CHECK_STATUS(vxQueryImage(input_image, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
 	ERROR_CHECK_STATUS(vxQueryImage(input_image, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
+	ERROR_CHECK_STATUS(vxQueryImage(input_image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 
 	// set kernel configuration
 	vx_uint32 work_items = (vx_uint32)(input_width*input_height);
@@ -206,15 +208,26 @@ static vx_status VX_CALLBACK chroma_key_mask_generation_opencl_codegen(
 		"		// convert RGB to yuv space key\n"
 		"		int cb_key = (int)round(128 + -0.168736*Red_g - 0.331264*Green_g + 0.5*Blue_g); ;\n"
 		"		int cr_key = (int)round(128 + 0.5*Red_g - 0.418688*Green_g - 0.081312*Blue_g);;\n"
-		"\n"
-		"		uchar3 RGB_pixel = 0;\n"
-		"		uint RGB_img = *(__global uint *)&ip_rgb_buf[gid * 3];\n"
-		"		// get RGB values from the pixel\n"
-		"		RGB_pixel.s0 = (uchar)(RGB_img & 0x000000FF);RGB_pixel.s1 = (uchar)((RGB_img & 0x0000FF00)>> 8); RGB_pixel.s2 = (uchar)((RGB_img & 0x00FF0000)>> 16);\n"
+		"\n";
+	if (format == VX_DF_IMAGE_RGB){
+		opencl_kernel_code +=
+			"		uchar3 RGB_pixel = 0;\n"
+			"		uint RGB_img = *(__global uint *)&ip_rgb_buf[gid * 3];\n"
+			"		// get RGB values from the pixel\n"
+			"		RGB_pixel.s0 = (uchar)(RGB_img & 0x000000FF);RGB_pixel.s1 = (uchar)((RGB_img & 0x0000FF00)>> 8); RGB_pixel.s2 = (uchar)((RGB_img & 0x00FF0000)>> 16);\n";
+	}
+	else{ //VX_DF_IMAGE_RGB4_AMD
+		opencl_kernel_code +=
+			"		uchar3 RGB_pixel = 0;\n"
+			"		uint2 RGB_img = *(__global uint2 *)&ip_rgb_buf[gid * 6];\n"
+			"		// get RGB values from the pixel\n"
+			"		RGB_pixel.s0 = (uchar)((RGB_img.s0 & 0x7F80)>>7);RGB_pixel.s1 = (uchar)((RGB_img.s0 & 0x07F800000)>> 23); RGB_pixel.s2 = (uchar)((RGB_img.s1 & 0x7F80)>>7);\n";
+	}
+	opencl_kernel_code +=
 		"\n"
 		"		// convert RGB to yuv space pixel\n"
-		"		int cb_p = (int)round(128 + -0.168736*RGB_pixel.s0 - 0.331264*RGB_pixel.s1 + 0.5*RGB_pixel.s2); ;\n"
-		"		int cr_p = (int)round(128 + 0.5*RGB_pixel.s0 - 0.418688*RGB_pixel.s1 - 0.081312*RGB_pixel.s2);;\n"
+		"		int cb_p = (int)round(128 + -0.168736*RGB_pixel.s0 - 0.331264*RGB_pixel.s1 + 0.5*RGB_pixel.s2);\n"
+		"		int cr_p = (int)round(128 + 0.5*RGB_pixel.s0 - 0.418688*RGB_pixel.s1 - 0.081312*RGB_pixel.s2);\n"
 		"\n"
 		"		// check for chroma key and set mask\n"
 		"		float mask = 0;\n"

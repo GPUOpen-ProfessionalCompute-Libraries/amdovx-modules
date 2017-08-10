@@ -90,17 +90,17 @@ static inline vx_uint32 GetOneBitCount(vx_uint32 a)
 //////////////////////////////////////////////////////////////////////
 //! \brief The additional image formats supported by stitching module
 enum vx_df_image_amd_stitching_e {
-	VX_DF_IMAGE_Y210_AMD = VX_DF_IMAGE('Y', '2', '1', '0'),  // AGO image with YUV 4:2:2 10-bit (Y210)
-	VX_DF_IMAGE_Y212_AMD = VX_DF_IMAGE('Y', '2', '1', '2'),  // AGO image with YUV 4:2:2 12-bit (Y212)
-	VX_DF_IMAGE_Y216_AMD = VX_DF_IMAGE('Y', '2', '1', '6'),  // AGO image with YUV 4:2:2 16-bit (Y216)
+	VX_DF_IMAGE_V210_AMD = VX_DF_IMAGE('V', '2', '1', '0'),  // AGO image with YUV 4:2:2 10-bit (V210)
+	VX_DF_IMAGE_V216_AMD = VX_DF_IMAGE('V', '2', '1', '6'),  // AGO image with YUV 4:2:2 16-bit (V216)
 	VX_DF_IMAGE_RGB4_AMD = VX_DF_IMAGE('R', 'G', 'B', '4'),  // AGO image with RGB-48 16bit per channel (RGB4)
+	VX_DF_IMAGE_RGB6_AMD = VX_DF_IMAGE('R', 'G', 'B', '6'),  // AGO image with RGBX-64 16bit per channel (RGB6)
 };
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The list of kernels in the stitching library.
 enum vx_kernel_stitching_amd_e {
-	//! \brief The Color Convert with optional 2x2 scale down function kernel. Kernel name is "com.amd.loomsl.color_convert".
-	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
+	//! \brief The Color Convert with optional 2x2 scale down function kernel. Kernel name is "com.amd.loomsl.color_convert_general".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
 
 	//! \brief The Warp function kernel. Kernel name is "com.amd.loomsl.warp".
 	AMDOVX_KERNEL_STITCHING_WARP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x002,
@@ -162,7 +162,7 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.chroma_key_merge".
 	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x016,
 
-	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.color_convert".
+	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.noise_filter".
 	AMDOVX_KERNEL_STITCHING_NOISE_FILTER = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017,
 
 	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.warp_eqr_to_aze".
@@ -179,6 +179,18 @@ enum vx_kernel_stitching_amd_e {
 
 	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.extend_padding_vert".
 	AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_VERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01c,
+
+	//! \brief The Color Convert with optional 2x2 scale down function kernel for NV12 input. Kernel name is "com.amd.loomsl.color_convert_from_NV12".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12 = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01d,
+
+	//! \brief The Color Convert with optional 2x2 scale down function kernel for IYUV input. Kernel name is "com.amd.loomsl.color_convert_from_IYUV".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01e,
+
+	//! \brief The Color Convert function kernel for NV12 output. Kernel name is "com.amd.loomsl.color_convert_to_NV12".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12 = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01f,
+
+	//! \brief The Color Convert function kernel for IYUV output. Kernel name is "com.amd.loomsl.color_convert_to_IYUV".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x020,
 
 	// TBD: remove
 
@@ -210,15 +222,19 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 * \param [in] input The input computation method type.
 * \param [in] input The input scalar number of cameras.
 * \param [in] input The input array of StitchValidPixel.
-* \param [in] input The input array of StitchWarpRemap
+* \param [in] input The input array of StitchWarpRemap.
 * \param [in] input The input image.
 * \param [out] output The output image.
-* \param [in] num_camera_columns The number of camera columns (optional)
+* \param [out] outputLuma The luma output image, which can be used by seamfind.
+* \param [in] num_camera_columns The number of camera columns (optional).
+* \param [in] alpha_value The alpha value writte in the a channel of RGBA or RGB6 (optional).
+* \param [in] flags The flags used for the kernel, e.g. for interpolation method (0: bilinear, 1: bicubic) (optional).
+* \param [out] outputExpComp The output image for exposure compensation, which contains invalid flags.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam,
-	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns);
+	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns, vx_uint8 alpha_value, vx_uint8 flags, vx_image outputExpComp);
 
 /*! \brief [Graph] Creates a Stitch Merge node.
 * \param [in] graph The reference to the graph.
@@ -356,7 +372,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
+	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output, vx_uint8 flag);
 
 /*! \brief [Graph] Creates a stitchMultiBandLaplacianReconstruct node.
 * \param [in] graph The reference to the graph.

@@ -30,4 +30,10 @@ THE SOFTWARE.
 //! \brief The kernel registration functions.
 vx_status noise_filter_publish(vx_context context);
 
+//////////////////////////////////////////////////////////////////////
+// Define functions to create OpenCL code
+std::string Create_Amd_unpack();
+std::string Create_Amd_unpack15();
+std::string Create_Amd_pack15();
+
 #endif //__NOISE_FILTER_H__

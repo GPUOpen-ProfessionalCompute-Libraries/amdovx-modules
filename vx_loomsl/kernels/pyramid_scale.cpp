@@ -72,13 +72,13 @@ static vx_status VX_CALLBACK half_scale_gaussian_input_validator(vx_node node, v
 		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
 	}
 	if (index == 3)
-	{ // image of format U008 or RGBX
+	{ // image of format U008, S16, RGBX, RGB6, RGB4
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		vx_uint32 width = 0, height = 0;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
-		if (format == VX_DF_IMAGE_RGBX || format == VX_DF_IMAGE_U8 || format == VX_DF_IMAGE_S16 ) {
+		if (format == VX_DF_IMAGE_RGBX || format == VX_DF_IMAGE_U8 || format == VX_DF_IMAGE_S16 || format == VX_DF_IMAGE_RGB6_AMD || format == VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_SUCCESS;
 		}
 		else {
@@ -124,12 +124,28 @@ static vx_status VX_CALLBACK half_scale_gaussian_output_validator(vx_node node, 
 		if (output_height < (input_height + 1) >> 1) {
 			output_height = (input_height + 1) >> 1;
 		}
-		if ((output_format != VX_DF_IMAGE_U8) && (output_format != VX_DF_IMAGE_S16) && (output_format != VX_DF_IMAGE_RGBX)) {
+		if ((output_format != VX_DF_IMAGE_U8) && (output_format != VX_DF_IMAGE_S16) && (output_format != VX_DF_IMAGE_RGBX) && (output_format != VX_DF_IMAGE_RGB6_AMD)) {
 			output_format = input_format;
 		}
 		if ((input_format == VX_DF_IMAGE_S16) && (output_format != VX_DF_IMAGE_S16)){
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s\n", &output_format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s for input image format %4.4s\n", &output_format, &input_format);
+		}
+		else if ((input_format == VX_DF_IMAGE_U8) && (output_format != VX_DF_IMAGE_S16) && (output_format != VX_DF_IMAGE_U8)){
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s for input image format %4.4s\n", &output_format, &input_format);
+		}
+		else if ((input_format == VX_DF_IMAGE_RGBX) && (output_format != VX_DF_IMAGE_RGBX)){
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s for input image format %4.4s\n", &output_format, &input_format);
+		}
+		else if ((input_format == VX_DF_IMAGE_RGB6_AMD) && (output_format != VX_DF_IMAGE_RGB6_AMD)){
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s for input image format %4.4s\n", &output_format, &input_format);
+		}
+		else if ((input_format == VX_DF_IMAGE_RGB4_AMD) && (output_format != VX_DF_IMAGE_RGB4_AMD)){
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: half_scale_gaussian doesn't support output image format: %4.4s for input image format %4.4s\n", &output_format, &input_format);
 		}
 		else
 		{
@@ -171,14 +187,24 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_global_work_update(
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &arr_offset));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
 	ERROR_CHECK_OBJECT(arr);
-//	printf("ArrOff: %d\n", arr_offset);
 	StitchBlendValidEntry *pBlendArr = nullptr;
 	vx_size stride_blend_arr = sizeof(StitchBlendValidEntry);
 	ERROR_CHECK_STATUS(vxAccessArrayRange(arr, arr_offset-1, arr_offset, &stride_blend_arr, (void **)&pBlendArr, VX_READ_ONLY));
 	arr_numitems = *((vx_uint32 *)pBlendArr);
 	ERROR_CHECK_STATUS(vxCommitArrayRange(arr, arr_offset - 1, arr_offset, pBlendArr));
 	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
-	opencl_global_work[0] = ((arr_numitems << 8) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 3);				// input image
+	vx_df_image input_format = VX_DF_IMAGE_VIRT;
+	ERROR_CHECK_OBJECT(image);
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+	if (input_format == VX_DF_IMAGE_RGB6_AMD || input_format == VX_DF_IMAGE_RGB4_AMD)
+	{
+		opencl_global_work[0] = ((arr_numitems << 9) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	}
+	else{
+		opencl_global_work[0] = ((arr_numitems << 8) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	}
 	return VX_SUCCESS;
 }
 
@@ -231,19 +257,53 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 	vx_uint32 work_items = (vx_uint32)arr_capacity;
 	strcpy(opencl_kernel_function_name, "half_scale_gaussian");
 	opencl_work_dim = 1;
-	opencl_local_work[0] = 256;
-	opencl_global_work[0] = ((work_items << 8) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	if (input_format == VX_DF_IMAGE_RGB6_AMD || input_format == VX_DF_IMAGE_RGB4_AMD)
+	{
+		opencl_local_work[0] = 128;
+		opencl_global_work[0] = ((work_items << 9) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	}
+	else{
+		opencl_local_work[0] = 256;
+		opencl_global_work[0] = ((work_items << 8) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+	}
+	printf("work:%d", opencl_global_work[0]);
 
 	// kernel header and reading
 	char item[8192];
-	sprintf(item,
+	opencl_kernel_code =
 		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-		"float4 amd_unpack(uint src)\n"
-		"{\n"
-		"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
-		"}\n"
-		"\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n";
+	if (input_format == VX_DF_IMAGE_RGB6_AMD)
+	{
+		opencl_kernel_code +=
+			"float4 amd_unpack(uint src0, uint src1)\n"
+			"{\n"
+			"  return (float4)((float)(src0 & 0x7fff), (float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff),(float)((src1 >> 16) & 0x7fff));\n"
+			"}\n"
+			"\n";
+	}
+	else if(input_format == VX_DF_IMAGE_RGB4_AMD){
+			opencl_kernel_code +=
+				"float3 amd_unpackA(uint src0, uint src1)\n"
+				"{\n"
+				"  return (float3)((float)(src0 & 0x7fff), (float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff));\n"
+				"}\n"
+				"float3 amd_unpackB(uint src0, uint src1)\n"
+				"{\n"
+				"  return (float3)((float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff), (float)((src1 >> 16) & 0x7fff));\n"
+				"}\n"
+				"\n";
+	}
+	else // VX_DF_IMAGE_RGBX
+	{
+		opencl_kernel_code +=
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n"
+			"\n";
+	}
+	sprintf(item,
 		"__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n" // opencl_local_work[0]
 		"void %s(uint num_cameras,\n"
 		"         uint arr_offs,\n"
@@ -251,38 +311,88 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n" // opencl_kernel_function_name
 		"        uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset)\n"
 		"{\n"
-		"  int gid = get_global_id(0);\n"
-		"  int grp_id = gid >> 8;\n"
-		"  int lid = get_local_id(0);\n"
-		"  int ly = lid >> 4;\n"
-		"  int lx = lid - (ly << 4);\n"
 		"  int height1 = %d;\n"
 		, (int)opencl_local_work[0], opencl_kernel_function_name, ip_image_height_offs);
-	opencl_kernel_code = item;
+	opencl_kernel_code += item;
 
-	if (input_format == VX_DF_IMAGE_U8) {
+	if (input_format != VX_DF_IMAGE_RGB6_AMD && input_format != VX_DF_IMAGE_RGB4_AMD)
+	{
 		opencl_kernel_code +=
-			"  __local uchar lbuf[5040];    // Each 16x16 would load 144x35 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+			"  int gid = get_global_id(0);\n"
+			"  int grp_id = gid >> 8;\n"
+			"  int lid = get_local_id(0);\n"
+			"  int ly = lid >> 4;\n"
+			"  int lx = lid - (ly << 4);\n";	
+		if (input_format == VX_DF_IMAGE_U8) {
+			opencl_kernel_code +=		
+				"  __local uchar lbuf[5040];    // Each 16x16 would load 144x35 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+		}
+		else if (input_format == VX_DF_IMAGE_S16){
+			opencl_kernel_code +=
+				"  __local uchar lbuf[4760<<1];    // Each 16x16 would load 136x35*2 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+		}
+		else if (input_format == VX_DF_IMAGE_RGBX) {
+			opencl_kernel_code +=
+				"  __local uchar lbuf[4760 << 2];    // Each 16x16 would load 136x35*4 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+		}
+		opencl_kernel_code +=
+			"  if(grp_id < valid_pix_num_items)\n"
+			"  {\n"
+			"    valid_pix_buf += valid_pix_buf_offset + ((grp_id + arr_offs) << 3);\n";			// each entry is 8 bytes
 	}
-	else if (input_format == VX_DF_IMAGE_S16){
+	else if(input_format == VX_DF_IMAGE_RGB6_AMD){ 
 		opencl_kernel_code +=
-			"  __local uchar lbuf[4760<<1];    // Each 16x16 would load 136x35*2 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+			"  int gid = get_global_id(0);\n"
+			"  int grp_id = gid >> 7;\n"
+			"  int lid = get_local_id(0);\n"
+			"  int ly = lid >> 4;\n"
+			"  int lx = lid - (ly << 4);\n"
+			"  __local uchar lbuf[1292 << 3];    // Each 16x8 would load 68x19*8 bytes = 10KB  into LDS, 2 row padding on top and 1 row padding on  bottom and 2 pixel padding on the left and right and 4x2 input per workitem\n"
+			"  if((grp_id>>2) < valid_pix_num_items)\n"
+			"  {\n"
+			"    valid_pix_buf += valid_pix_buf_offset + (((grp_id>>2) + arr_offs) << 3);\n";			// each entry is 8 bytes;
 	}
-	else if (input_format == VX_DF_IMAGE_RGBX) {
+	else{ //VX_DF_IMAGE_RGB4_AMD
 		opencl_kernel_code +=
-			"  __local uchar lbuf[4760 << 2];    // Each 16x16 would load 136x35*4 bytes into LDS, 2 row padding on top and bottom and 4 pixel padding on the left and right\n";
+			"  int gid = get_global_id(0);\n"
+			"  int grp_id = gid >> 7;\n"
+			"  int lid = get_local_id(0);\n"
+			"  int ly = lid >> 4;\n"
+			"  int lx = lid - (ly << 4);\n"
+			"  __local uchar lbuf[7752];    // Each 16x8 would load 68x19*6 bytes = 7752 B  into LDS, 2 row padding on top and 1 row padding on  bottom and 2 pixel padding on the left and right and 4x2 input per workitem\n"
+			"  if((grp_id>>2) < valid_pix_num_items)\n"
+			"  {\n"
+			"    valid_pix_buf += valid_pix_buf_offset + (((grp_id>>2) + arr_offs) << 3);\n";			// each entry is 8 bytes;
 	}
 	opencl_kernel_code +=
-		"  if(grp_id < valid_pix_num_items)\n"
-		"  {\n"
-		"    valid_pix_buf += valid_pix_buf_offset + ((grp_id + arr_offs) << 3) ;\n"			// each entry is 8 bytes
 		"    uint2 wgInfo = *(__global uint2 * ) valid_pix_buf;\n"
-		"    bool outputValid = (lx <= ((wgInfo.s1 & 0xFF) >> 2)) && (ly <= ((wgInfo.s1 >> 8) & 0xFF)) ? true : false;\n"
 		"    int camId = wgInfo.s0 & 0x1F;\n"
 		"    int gx = (wgInfo.s0 >> 5) & 0x3FFF;\n"
 		"    int gy = (wgInfo.s0 >> 19) & 0x1FFF;\n"
 		"    int border = (wgInfo.s1 >> 30)&0x3;\n";
-		if (input_format == VX_DF_IMAGE_U8) {
+	if (input_format == VX_DF_IMAGE_RGB6_AMD || input_format == VX_DF_IMAGE_RGB4_AMD) {
+		opencl_kernel_code +=
+			"    bool outputValid = true;\n"
+			"    if(grp_id & 0x1){\n"
+			"      gy+=8;\n"
+			"      outputValid = (outputValid) && ((ly+8) <= ((wgInfo.s1 >> 8) & 0xFF)) ? true : false; \n"
+			"    }\n"
+			"    else{\n"
+			"      outputValid = (outputValid) && ((ly) <= ((wgInfo.s1 >> 8) & 0xFF)) ? true : false; \n"
+			"    }\n"
+			"    if(grp_id & 0x2){\n"
+			"      gx+=32;\n"
+			"      outputValid = (((lx>>1)+8) <= ((wgInfo.s1 & 0xFF) >> 2)) && (outputValid) ? true : false; \n"
+			"    }\n"
+			"    else{\n"
+			"      outputValid = ((lx>>1) <= ((wgInfo.s1 & 0xFF) >> 2)) && (outputValid) ? true : false; \n"
+			"    }\n";
+	}
+	else{
+		opencl_kernel_code +=
+			"    bool outputValid = (lx <= ((wgInfo.s1 & 0xFF) >> 2)) && (ly <= ((wgInfo.s1 >> 8) & 0xFF)) ? true : false;\n";
+	}
+	if (input_format == VX_DF_IMAGE_U8) {
 		if (output_format == VX_DF_IMAGE_U8){
 			sprintf(item,
 				"    op_buf += op_offset + ((gy + ly + (camId * %d)) * op_stride) + (lx << 2) + gx;\n"	// op_image_height_offs
@@ -321,10 +431,10 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"      *(__local uint2 *)(lbuf + loffset) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * max(0, gybase)));\n"
 			"      *(__local uint2 *)(lbuf + loffset + 16*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * (gybase+16)));\n"
 			"      if (ly < 3) {\n"
-			"        *(__local uint2 *)(lbuf + loffset + 32*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * min(height1-1, gybase+32)));\n"
+			"        *(__local uint2 *)(lbuf + loffset + 32*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * min(height1-2, gybase+32)));\n"
 			"      }\n"
 			"      if (lid < 35) {\n"
-			"		 gybase = max(0, min(height1-1, ((gy<<1) + lid - 1)));\n"
+			"		 gybase = max(0, min(height1-2, ((gy<<1) + lid - 1)));\n"
 			"		 goffset = (gx<<1) + 120; goffset = select(goffset, 0, goffset>(ip_width-8));\n"
 			"        *(__local uint2 *)(lbuf + (lid * 144) + 128) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * gybase));\n"
 			"		 goffset += 8; goffset = select(goffset, 0, goffset>(ip_width-8));\n"
@@ -398,23 +508,23 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"    sum.s0 += (float)(L0.s0 & 0xffff); sum.s1 += (float)(L0.s0 >> 16); sum.s2 += (float)(L0.s1 & 0xffff); sum.s3 += (float)(L0.s1 >> 16);\n";
 		if (output_format == VX_DF_IMAGE_U8){
 			opencl_kernel_code +=
-			"    sum = sum * (float4)0.00390625f;\n"  // todo:: do
-			"    if (outputValid) {\n"
-			"      *(__global uint *) op_buf = amd_pack(sum);\n"
-			"    }\n"
-			"  }\n"
-			"}\n";
-			}
-			else
-			{
+				"    sum = sum * (float4)0.00390625f;\n"  // todo:: do
+				"    if (outputValid) {\n"
+				"      *(__global uint *) op_buf = amd_pack(sum);\n"
+				"    }\n"
+				"  }\n"
+				"}\n";
+		}
+		else //VX_DF_IMAGE_S16
+		{
 			opencl_kernel_code +=
-			"    sum = sum * (float4)0.5f;\n"  // multiply by 128 to increase precision while storing
-			"    if (outputValid) {\n"
-			"      *(__global short4 *) op_buf = convert_short4_sat_rte(sum);\n"
-			"    }\n"
-			"  }\n"
-			"}\n";
-			}
+				"    sum = sum * (float4)0.501945465686f;\n"  // 1/256 * 32767/255
+				"    if (outputValid) {\n"
+				"      *(__global short4 *) op_buf = convert_short4_sat_rte(sum);\n"
+				"    }\n"
+				"  }\n"
+				"}\n";
+		}
 	}
 	else if (input_format == VX_DF_IMAGE_S16) {
 			sprintf(item,
@@ -658,6 +768,7 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"    v.s0 = (float)(L1.s0 & 0xFFFF); v.s1 = (float)(L1.s0 >> 16); v.s2 = (float)(L1.s1 & 0xFFFF); v.s3 = (float)(L1.s1 >> 16); sum2 = mad(v, (float4)(4.0f), sum2);\n"
 			"    v.s0 = (float)(L1.s2 & 0xFFFF); v.s1 = (float)(L1.s2 >> 16); v.s2 = (float)(L1.s3 & 0xFFFF); v.s3 = (float)(L1.s3 >> 16); sum3 = mad(v, (float4)(4.0f), sum3);\n"
 			"    lbuf_ptr += lstride;\n"
+			"    L0 = vload4(0, (__local uint *) lbuf_ptr); L1 = vload4(0, (__local uint *) &lbuf_ptr[16]);\n"
 			"    v.s0 = (float)(L0.s0 & 0xFFFF); v.s1 = (float)(L0.s0 >> 16); v.s2 = (float)(L0.s1 & 0xFFFF); v.s3 = (float)(L0.s1 >> 16); sum0 += v;\n"
 			"    v.s0 = (float)(L0.s2 & 0xFFFF); v.s1 = (float)(L0.s2 >> 16); v.s2 = (float)(L0.s3 & 0xFFFF); v.s3 = (float)(L0.s3 >> 16); sum1 += v;\n"
 			"    v.s0 = (float)(L1.s0 & 0xFFFF); v.s1 = (float)(L1.s0 >> 16); v.s2 = (float)(L1.s1 & 0xFFFF); v.s3 = (float)(L1.s1 >> 16); sum2 += v;\n"
@@ -670,7 +781,283 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"  }\n"
 			"}\n";
 	}
-	
+	else if (input_format == VX_DF_IMAGE_RGB6_AMD) {
+		sprintf(item,
+			"    op_buf += op_offset + ((gy + ly + (camId * %d)) * op_stride) + (lx << 4) + (gx << 3);\n"	// op_image_height_offs
+			"    __global uchar * gbuf = ip_buf + ip_offset + (((gy << 1) + 1 + (camId * %d)) * ip_stride) + (gx << 4);\n"  // ip_image_height_offs
+			"    int lstride = 68 << 3;\n"
+			, op_image_height_offs, ip_image_height_offs);
+		opencl_kernel_code += item;
+		opencl_kernel_code +=
+			"    if (!border)\n"
+			"    { // loading 68x19x8 bytes into LDS using 16x8 workgroup\n"
+			"      int loffset = ly * lstride + (lx << 5);\n"
+			"      int goffset = (ly - 2) * ip_stride + (lx << 5) - 16; //2 rows on top, 2 coloms right\n"
+			"      *(__local uint8 *)(lbuf + loffset) = vload8(0, (__global uint *)(gbuf + goffset));\n"
+			"      loffset += (lstride << 3);  goffset += (ip_stride << 3);\n"
+			"      *(__local uint8 *)(lbuf + loffset) = vload8(0, (__global uint *)(gbuf + goffset));\n"
+			"      if (ly < 3) {\n"
+			"        loffset += (lstride << 3);  goffset += (ip_stride << 3);\n"
+			"        *(__local uint8 *)(lbuf + loffset) = vload8(0, (__global uint *)(gbuf + goffset));\n"
+			"      }\n"
+			"      if (lid < 19) {\n"
+			"        *(__local uint8 *)(lbuf + (lid * lstride) + (64 << 3)) = vload8(0, (__global uint *)(gbuf + ((lid - 2) * (int)ip_stride) + (64 << 3) - 16));\n"
+			"      }\n"
+			"    }else\n"
+			"    {\n"
+			"      int2 goffset; \n"
+			"      gbuf = ip_buf + ip_offset + (camId*height1)*ip_stride;\n"
+			"      int loffset = ly * lstride + (lx << 5);\n"
+			"      int gybase = (gy<<1) + ly - 1;\n"
+			"      goffset.s0 = (gx<<4) + (lx << 5) - 16; goffset.s1 = goffset.s0 + 16 ; \n"
+			"      goffset.s0 = select(goffset.s0, (int)((ip_width<<3)-16), goffset.s0<0);\n"
+			"     *(__local uint4 *)(lbuf + loffset)       = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase))); //load from other side\n"
+			"     *(__local uint4 *)(lbuf + loffset + 16)  = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase)));\n"
+			"      loffset += (lstride << 3);\n"
+			"     *(__local uint4 *)(lbuf + loffset)       = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * (gybase + 8))); //load from other side\n"
+			"     *(__local uint4 *)(lbuf + loffset + 16)  = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * (gybase + 8)));\n"
+			"      if (ly < 3) {\n"
+			"        loffset += (lstride << 3);\n"
+			"        gybase = min(height1-1, gybase+16);\n"
+			"	     *(__local uint4 *)(lbuf + loffset)       = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase)); //load from other side\n"
+			"        *(__local uint4 *)(lbuf + loffset + 16)  = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase));\n"
+			"      }\n"
+			"      if (lid < 19) {\n"
+			"        gybase = max(0, min(height1-1, ((gy<<1) + lid - 1)));\n"
+			"        goffset.s0 = (gx<<4) + (62<<3); goffset.s1 = goffset.s0 + 16;\n"
+			"        goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip_width-2)<<3));\n"
+			"        *(__local uint4 *)(lbuf + (lid * lstride) + (64 << 3)) = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase));\n"
+			"        *(__local uint4 *)(lbuf + (lid * lstride) + (66 << 3)) = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase));\n"
+			"      }\n"
+			"    }\n"
+			"    barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"    // Horizontal filtering\n"
+			"    __local uchar * lbuf_ptr = lbuf + (ly * lstride) + (lx << 5);\n"
+			"    float4 sum0, sum1, v;\n"
+			"    uint8 L0 = vload8(0, (__local uint *) &lbuf_ptr[0]);\n"
+			"    uint8 L1 = vload8(0, (__local uint *) &lbuf_ptr[32]);\n"
+			"    v = amd_unpack(L0.s2,L0.s3);                                                 sum0 = v;\n"
+			"    v = amd_unpack(L0.s4,L0.s5);                                                 sum0 = mad(v, (float4)(4.0f), sum0);\n"
+			"    v = amd_unpack(L0.s6,L0.s7);            sum0 = mad(v, (float4)(6.0f), sum0); sum1 = v;\n"
+			"    v = amd_unpack(L1.s0,L1.s1);            sum0 = mad(v, (float4)(4.0f), sum0); sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"    v = amd_unpack(L1.s2,L1.s3); sum0 += v; sum1 = mad(v, (float4)(6.0f), sum1);\n"
+			"    v = amd_unpack(L1.s4,L1.s5);            sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"    v = amd_unpack(L1.s6,L1.s7); sum1 += v;\n"			
+			"    L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"    L0.s2 = (uint)sum0.s2; L0.s3 = (uint)sum0.s3;\n"
+			"    L0.s4 = (uint)sum1.s0; L0.s5 = (uint)sum1.s1;\n"
+			"    L0.s6 = (uint)sum1.s2; L0.s7 = (uint)sum1.s3;\n"			
+			"    *(__local uint8 *) lbuf_ptr = L0;\n"
+			"    L0 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 3) ]);\n"
+			"    L1 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 3) + 32]);\n"
+			"    v = amd_unpack(L0.s2,L0.s3);                                                 sum0 = v;\n"
+			"    v = amd_unpack(L0.s4,L0.s5);                                                 sum0 = mad(v, (float4)(4.0f), sum0);\n"
+			"    v = amd_unpack(L0.s6,L0.s7);            sum0 = mad(v, (float4)(6.0f), sum0); sum1 = v;\n"
+			"    v = amd_unpack(L1.s0,L1.s1);            sum0 = mad(v, (float4)(4.0f), sum0); sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"    v = amd_unpack(L1.s2,L1.s3); sum0 += v; sum1 = mad(v, (float4)(6.0f), sum1);\n"
+			"    v = amd_unpack(L1.s4,L1.s5);            sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"    v = amd_unpack(L1.s6,L1.s7); sum1 += v;\n"
+			"    L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"    L0.s2 = (uint)sum0.s2; L0.s3 = (uint)sum0.s3;\n"
+			"    L0.s4 = (uint)sum1.s0; L0.s5 = (uint)sum1.s1;\n"
+			"    L0.s6 = (uint)sum1.s2; L0.s7 = (uint)sum1.s3;\n"
+			"    *(__local uint8 *) &lbuf_ptr[lstride << 3] = L0;\n"
+			"    if (ly < 3) {\n"
+			"      L0 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 4) ]);\n"
+			"      L1 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 4) + 32]);\n"
+			"      v = amd_unpack(L0.s2,L0.s3);                                                 sum0 = v;\n"
+			"      v = amd_unpack(L0.s4,L0.s5);                                                 sum0 = mad(v, (float4)(4.0f), sum0);\n"
+			"      v = amd_unpack(L0.s6,L0.s7);            sum0 = mad(v, (float4)(6.0f), sum0); sum1 = v;\n"
+			"      v = amd_unpack(L1.s0,L1.s1);            sum0 = mad(v, (float4)(4.0f), sum0); sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"      v = amd_unpack(L1.s2,L1.s3); sum0 += v; sum1 = mad(v, (float4)(6.0f), sum1);\n"
+			"      v = amd_unpack(L1.s4,L1.s5);            sum1 = mad(v, (float4)(4.0f), sum1);\n"
+			"      v = amd_unpack(L1.s6,L1.s7); sum1 += v;\n"
+			"      L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"      L0.s2 = (uint)sum0.s2; L0.s3 = (uint)sum0.s3;\n"
+			"      L0.s4 = (uint)sum1.s0; L0.s5 = (uint)sum1.s1;\n"
+			"      L0.s6 = (uint)sum1.s2; L0.s7 = (uint)sum1.s3;\n"
+			"      *(__local uint8 *) &lbuf_ptr[lstride << 4] = L0;\n"
+			"    }\n"
+			"    barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"    // Vertical filtering\n"
+			"    lbuf_ptr += (ly * lstride);\n"
+			"    L0 = vload8(0, (__local uint *) lbuf_ptr);\n"
+			"    sum0 = convert_float4(L0.s0123);\n"
+			"    sum1 = convert_float4(L0.s4567);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0 = vload8(0, (__local uint *) lbuf_ptr);\n"
+			"    sum0 = mad(convert_float4(L0.s0123), (float4)(4.0f), sum0);\n"
+			"    sum1 = mad(convert_float4(L0.s4567), (float4)(4.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0 = vload8(0, (__local uint *) lbuf_ptr);\n"
+			"    sum0 = mad(convert_float4(L0.s0123), (float4)(6.0f), sum0);\n"
+			"    sum1 = mad(convert_float4(L0.s4567), (float4)(6.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0 = vload8(0, (__local uint *) lbuf_ptr);\n"
+			"    sum0 = mad(convert_float4(L0.s0123), (float4)(4.0f), sum0);\n"
+			"    sum1 = mad(convert_float4(L0.s4567), (float4)(4.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0 = vload8(0, (__local uint *) lbuf_ptr);\n"
+			"    sum0 += convert_float4(L0.s0123);\n"
+			"    sum1 += convert_float4(L0.s4567);\n"
+			"    sum0 *= (float4)0.00390625f; sum1 *= (float4)0.00390625f;\n"
+			"    L1.s0 = (((uint)sum0.s1) << 16) + (uint)sum0.s0; L1.s1 = (((uint)sum0.s3) << 16) + (uint)sum0.s2;\n"
+			"    L1.s2 = (((uint)sum1.s1) << 16) + (uint)sum1.s0; L1.s3 = (((uint)sum1.s3) << 16) + (uint)sum1.s2;\n"
+			"    if (outputValid) {\n"
+			"      *(__global uint4 *) op_buf = L1.s0123;\n"
+			"    }\n"
+			"  }\n"
+			"}\n";
+	}
+	else if (input_format == VX_DF_IMAGE_RGB4_AMD) {
+		sprintf(item,
+			"    op_buf += op_offset + ((gy + ly + (camId * %d)) * op_stride) + (lx * 12) + (gx * 6);\n"	// op_image_height_offs
+			"    __global uchar * gbuf = ip_buf + ip_offset + (((gy << 1) + 1 + (camId * %d)) * ip_stride) + (gx * 12);\n"  // ip_image_height_offs
+			"    int lstride = 408;//68*6\n"
+			, op_image_height_offs, ip_image_height_offs);
+		opencl_kernel_code += item;
+		opencl_kernel_code +=
+			"    if (!border)\n"
+			"    { // loading 68x19x6 bytes into LDS using 16x8 workgroup\n"
+			"      int loffset = ly * lstride + (lx * 24);\n"
+			"      int goffset = (ly - 2) * ip_stride + (lx * 24) - 12; //2 rows on top, 2 coloms right\n"
+			"      *(__local uint4 *)(lbuf + loffset)      = vload4(0, (__global uint *)(gbuf + goffset));\n"
+			"      *(__local uint2 *)(lbuf + loffset + 16) = vload2(0, (__global uint *)(gbuf + goffset + 16));\n"
+			"      loffset += (lstride << 3);  goffset += (ip_stride << 3);\n"
+			"      *(__local uint4 *)(lbuf + loffset)      = vload4(0, (__global uint *)(gbuf + goffset));\n"
+			"      *(__local uint2 *)(lbuf + loffset + 16) = vload2(0, (__global uint *)(gbuf + goffset + 16));\n"
+			"      if (ly < 3) {\n"
+			"        loffset += (lstride << 3);  goffset += (ip_stride << 3);\n"
+			"      *(__local uint4 *)(lbuf + loffset)      = vload4(0, (__global uint *)(gbuf + goffset));\n"
+			"      *(__local uint2 *)(lbuf + loffset + 16) = vload2(0, (__global uint *)(gbuf + goffset + 16));\n"
+			"      }\n"
+			"      if (lid < 19) {\n"
+			"        *(__local uint4 *)(lbuf + (lid * lstride) + (384))      = vload4(0, (__global uint *)(gbuf + ((lid - 2) * (int)ip_stride) + (384) - 12));//64*6 = 384\n"
+			"        *(__local uint2 *)(lbuf + (lid * lstride) + (384) + 16) = vload2(0, (__global uint *)(gbuf + ((lid - 2) * (int)ip_stride) + (384) - 12 + 16));//64*6 = 384\n"
+			"      }\n"
+			"    }else\n"
+			"    {\n"
+			"      int2 goffset; \n"
+			"      gbuf = ip_buf + ip_offset + (camId*height1)*ip_stride;\n"
+			"      int loffset = ly * lstride + (lx *24);\n"
+			"      int gybase = (gy<<1) + ly - 1;\n"
+			"      goffset.s0 = (gx * 12) + (lx * 24) - 12; goffset.s1 = goffset.s0 + 12 ; \n"
+			"      goffset.s0 = select(goffset.s0, (int)((ip_width*6)-12), goffset.s0<0);\n"
+			"     *(__local uint2 *)(lbuf + loffset)       = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase))); //load from other side\n"
+			"     *(__local uint  *)(lbuf + loffset + 8)   = *(__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase) + 8 ); //load from other side\n"
+			"     *(__local uint  *)(lbuf + loffset + 12)  = *(__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase));\n"
+			"     *(__local uint2 *)(lbuf + loffset + 16)  = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase) + 4));\n"
+			"      loffset += (lstride << 3);\n"
+			"     *(__local uint2 *)(lbuf + loffset)       = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * (gybase + 8))); //load from other side\n"
+			"     *(__local uint  *)(lbuf + loffset + 8)   = *(__global uint *)(gbuf + goffset.s0 + ip_stride * (gybase + 8) + 8 ); //load from other side\n"
+			"     *(__local uint  *)(lbuf + loffset + 12)  = *(__global uint *)(gbuf + goffset.s1 + ip_stride * (gybase + 8));\n"
+			"     *(__local uint2 *)(lbuf + loffset + 16)  = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * (gybase + 8) + 4));\n"
+			"      if (ly < 3) {\n"
+			"        loffset += (lstride << 3);\n"
+			"        gybase = min(height1-1, gybase+16);\n"
+			"        *(__local uint2 *)(lbuf + loffset)       = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase)); //load from other side\n"
+			"        *(__local uint  *)(lbuf + loffset + 8)   = *(__global uint *)(gbuf + goffset.s0 + ip_stride * gybase + 8 ); //load from other side\n"
+			"        *(__local uint  *)(lbuf + loffset + 12)  = *(__global uint *)(gbuf + goffset.s1 + ip_stride * gybase);\n"
+			"        *(__local uint2 *)(lbuf + loffset + 16)  = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase + 4));\n"
+			"      }\n"
+			"      if (lid < 19) {\n"
+			"        gybase = max(0, min(height1-1, ((gy<<1) + lid - 1)));\n"
+			"        goffset.s0 = (gx*12) + (62*6); goffset.s1 = goffset.s0 + 12;\n"
+			"        goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip_width-2)*6));\n"
+			"        *(__local uint2 *)(lbuf + (lid * lstride) + (64 * 6))     = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase));\n"
+			"        *(__local uint  *)(lbuf + (lid * lstride) + (64 * 6) + 8) = *(__global uint *)(gbuf + goffset.s0 + ip_stride * gybase + 8);\n"
+			"        *(__local uint  *)(lbuf + (lid * lstride) + (66 * 6))     = *(__global uint *)(gbuf + goffset.s1 + ip_stride * gybase);\n"
+			"        *(__local uint2 *)(lbuf + (lid * lstride) + (66 * 6) + 4) = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase + 4));\n"
+			"      }\n"
+			"    }\n"
+			"    barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"    // Horizontal filtering\n"
+			"    __local uchar * lbuf_ptr = lbuf + (ly * lstride) + (lx * 24);\n"
+			"    float3 sum0, sum1, v;\n"
+			"    uint8 L0 = vload8(0, (__local uint *) &lbuf_ptr[0]);\n"
+			"    uint4 L1 = vload4(0, (__local uint *) &lbuf_ptr[32]);\n"
+			"    v = amd_unpackB(L0.s1,L0.s2);                                                 sum0 = v;\n"
+			"    v = amd_unpackA(L0.s3,L0.s4);                                                 sum0 = mad(v, (float3)(4.0f), sum0);\n"
+			"    v = amd_unpackB(L0.s4,L0.s5);            sum0 = mad(v, (float3)(6.0f), sum0); sum1 = v;\n"
+			"    v = amd_unpackA(L0.s6,L0.s7);            sum0 = mad(v, (float3)(4.0f), sum0); sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"    v = amd_unpackB(L0.s7,L1.s0); sum0 += v; sum1 = mad(v, (float3)(6.0f), sum1);\n"
+			"    v = amd_unpackA(L1.s1,L1.s2);            sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"    v = amd_unpackB(L1.s2,L1.s3); sum1 += v;\n"
+			"    L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"    L0.s2 = (uint)sum0.s2;\n"
+			"    L0.s3 = (uint)sum1.s0; L0.s4 = (uint)sum1.s1;\n"
+			"    L0.s5 = (uint)sum1.s2; \n"
+			"    *(__local uint4 *) lbuf_ptr = L0.s0123;\n"
+			"    *(__local uint2 *) &lbuf_ptr[16] = L0.s45;\n"
+			"    L0 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 3) ]);\n"
+			"    L1 = vload4(0, (__local uint *) &lbuf_ptr[(lstride << 3) + 32]);\n"
+			"    v = amd_unpackB(L0.s1,L0.s2);                                                 sum0 = v;\n"
+			"    v = amd_unpackA(L0.s3,L0.s4);                                                 sum0 = mad(v, (float3)(4.0f), sum0);\n"
+			"    v = amd_unpackB(L0.s4,L0.s5);            sum0 = mad(v, (float3)(6.0f), sum0); sum1 = v;\n"
+			"    v = amd_unpackA(L0.s6,L0.s7);            sum0 = mad(v, (float3)(4.0f), sum0); sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"    v = amd_unpackB(L0.s7,L1.s0); sum0 += v; sum1 = mad(v, (float3)(6.0f), sum1);\n"
+			"    v = amd_unpackA(L1.s1,L1.s2);            sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"    v = amd_unpackB(L1.s2,L1.s3); sum1 += v;\n"
+			"    L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"    L0.s2 = (uint)sum0.s2;\n"
+			"    L0.s3 = (uint)sum1.s0; L0.s4 = (uint)sum1.s1;\n"
+			"    L0.s5 = (uint)sum1.s2; \n"
+			"    *(__local uint4 *) &lbuf_ptr[lstride << 3] = L0.s0123;\n"
+			"    *(__local uint2 *) &lbuf_ptr[(lstride << 3) + 16] = L0.s45;\n"
+			"    if (ly < 3) {\n"
+			"      L0 = vload8(0, (__local uint *) &lbuf_ptr[(lstride << 4) ]);\n"
+			"      L1 = vload4(0, (__local uint *) &lbuf_ptr[(lstride << 4) + 32]);\n"
+			"      v = amd_unpackB(L0.s1,L0.s2);                                                 sum0 = v;\n"
+			"      v = amd_unpackA(L0.s3,L0.s4);                                                 sum0 = mad(v, (float3)(4.0f), sum0);\n"
+			"      v = amd_unpackB(L0.s4,L0.s5);            sum0 = mad(v, (float3)(6.0f), sum0); sum1 = v;\n"
+			"      v = amd_unpackA(L0.s6,L0.s7);            sum0 = mad(v, (float3)(4.0f), sum0); sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"      v = amd_unpackB(L0.s7,L1.s0); sum0 += v; sum1 = mad(v, (float3)(6.0f), sum1);\n"
+			"      v = amd_unpackA(L1.s1,L1.s2);            sum1 = mad(v, (float3)(4.0f), sum1);\n"
+			"      v = amd_unpackB(L1.s2,L1.s3); sum1 += v;\n"
+			"      L0.s0 = (uint)sum0.s0; L0.s1 = (uint)sum0.s1;\n"
+			"      L0.s2 = (uint)sum0.s2;\n"
+			"      L0.s3 = (uint)sum1.s0; L0.s4 = (uint)sum1.s1;\n"
+			"      L0.s5 = (uint)sum1.s2; \n"
+			"      *(__local uint4 *) &lbuf_ptr[lstride << 4] = L0.s0123;\n"
+			"      *(__local uint2 *) &lbuf_ptr[(lstride << 4) + 16] = L0.s45; \n"
+			"    }\n"
+			"    barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"    // Vertical filtering\n"
+			"    lbuf_ptr += (ly * lstride);\n"
+			"    L0.s0123 = vload4(0, (__local uint *) lbuf_ptr);\n"
+			"    L0.s45 = vload2(0, (__local uint *) (lbuf_ptr + 16));\n"
+			"    sum0 = convert_float3(L0.s012);\n"
+			"    sum1 = convert_float3(L0.s345);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0.s0123 = vload4(0, (__local uint *) lbuf_ptr);\n"
+			"    L0.s45 = vload2(0, (__local uint *) (lbuf_ptr + 16));\n"
+			"    sum0 = mad(convert_float3(L0.s012), (float3)(4.0f), sum0);\n"
+			"    sum1 = mad(convert_float3(L0.s345), (float3)(4.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0.s0123 = vload4(0, (__local uint *) lbuf_ptr);\n"
+			"    L0.s45 = vload2(0, (__local uint *) (lbuf_ptr + 16));\n"
+			"    sum0 = mad(convert_float3(L0.s012), (float3)(6.0f), sum0);\n"
+			"    sum1 = mad(convert_float3(L0.s345), (float3)(6.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0.s0123 = vload4(0, (__local uint *) lbuf_ptr);\n"
+			"    L0.s45 = vload2(0, (__local uint *) (lbuf_ptr + 16));\n"
+			"    sum0 = mad(convert_float3(L0.s012), (float3)(4.0f), sum0);\n"
+			"    sum1 = mad(convert_float3(L0.s345), (float3)(4.0f), sum1);\n"
+			"    lbuf_ptr += lstride;\n"
+			"    L0.s0123 = vload4(0, (__local uint *) lbuf_ptr);\n"
+			"    L0.s45 = vload2(0, (__local uint *) (lbuf_ptr + 16));\n"
+			"    sum0 += convert_float3(L0.s012);\n"
+			"    sum1 += convert_float3(L0.s345);\n"
+			"    sum0 *= (float3)0.00390625f; sum1 *= (float3)0.00390625f;\n"
+			"    L1.s0 = (((uint)sum0.s1) << 16) + (uint)sum0.s0; L1.s1 = (((uint)sum1.s0) << 16) + (uint)sum0.s2;\n"
+			"    L1.s2 = (((uint)sum1.s2) << 16) + (uint)sum1.s1;\n"
+			"    if (outputValid) {\n"
+			"      *(__global uint2 *) op_buf = L1.s01;\n"
+			"      *(__global uint *) (op_buf+8) = L1.s2;\n"
+			"    }\n"
+			"  }\n"
+			"}\n";
+	}
 	return VX_SUCCESS;
 }
 
@@ -752,7 +1139,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
 	}
 	else if (index == 2)
-	{ // image of format RGBX
+	{ // image of format RGBX or RGB6 or RGB4
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -760,7 +1147,7 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX) {
+		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB6_AMD && input_format != VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: upscale_gaussian image %d should be an image of RGBX type\n", index);
 		}
@@ -769,7 +1156,16 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		}
 	}
 	else if (index == 3)
-	{ // image of format RGBX 
+	{ // image of same format as input 2
+		//Load format, width and height of first image to compare
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
+		ERROR_CHECK_OBJECT(image);
+		vx_uint32 width = 0, height = 0;
+		vx_df_image format = VX_DF_IMAGE_VIRT;
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -777,9 +1173,13 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX) {
+		if (input_format != format) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: upscale_gaussian image %d should be an image of RGB2 type\n", index);
+		}
+		else if ((((input_width)*2) != width) || (((input_height)*2) != height)) {
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: merge invalid input image dimensions %dx%d for second image do not match input image dimensions %dx%d\n", input_width, input_height, width, height);
 		}
 		else {
 			status = VX_SUCCESS;
@@ -801,16 +1201,32 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_input_validator(vx_node n
 	else if (index == 5)
 	{ // image object of U008 type
 		if (ref){
-			vx_df_image format = VX_DF_IMAGE_VIRT;
-			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
-			if (format == VX_DF_IMAGE_U8) {
-				status = VX_SUCCESS;
-			}
-			else {
+			//Load format, width and height of first image to compare
+			vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
+			ERROR_CHECK_OBJECT(image);
+			vx_uint32 width = 0, height = 0;
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+
+			//Load format and dimension of input
+			vx_uint32 input_width = 0, input_height = 0;
+			vx_df_image input_format = VX_DF_IMAGE_VIRT;
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+			ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+			if (input_format != VX_DF_IMAGE_U8 && input_format != VX_DF_IMAGE_S16)
+			{
 				status = VX_ERROR_INVALID_TYPE;
 				vxAddLogEntry((vx_reference)node, status, "ERROR: weight image should be an image of U008 type\n");
 			}
-			ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+			else if (((input_width) != width) || ((input_height) != height)) {
+				status = VX_ERROR_INVALID_DIMENSION;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: merge invalid input weight image dimensions %dx%d do not match input image dimensions %dx%d\n", input_width, input_height, width, height);
+			}
+			else {
+				status = VX_SUCCESS;
+			}
 		}
 		status = VX_SUCCESS;
 	}
@@ -890,12 +1306,12 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 	ERROR_CHECK_OBJECT(scalar);
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &numCam));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 6);				// output image
-	vx_df_image out_format = VX_DF_IMAGE_VIRT;
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 2);				// output image
+	vx_df_image format = VX_DF_IMAGE_VIRT;
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
-	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &out_format, sizeof(out_format)));
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 	vx_array wg_offsets = (vx_array)avxGetNodeParamRef(node, 4);
 	ERROR_CHECK_STATUS(vxQueryArray(wg_offsets, VX_ARRAY_ATTRIBUTE_CAPACITY, &wg_num, sizeof(wg_num)));
@@ -925,19 +1341,43 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 		height1 = (vx_uint32)(height / numCam);
 		InHeight1 = (vx_uint32)(InHeight1 / numCam);
 	}
-	//printf("UGS: Height1: %d Inheight1: %d\n", height1, InHeight1);
+
 
 	char item[8192];
-	if (weight_image){
-		sprintf(item,
-			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-			"\n"
+	opencl_kernel_code =
+		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+		"\n";
+	if (format == VX_DF_IMAGE_RGBX){
+		opencl_kernel_code +=
 			"float3 amd_unpack_3(uint src)\n"
 			"{\n"
 			"	return (float3)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src));\n"
 			"}\n"
-			"\n"
+			"\n";
+	}
+	else if (format == VX_DF_IMAGE_RGB6_AMD){
+		opencl_kernel_code +=
+			"float3 amd_unpack_3(uint src0, uint src1)\n"
+			"{\n"
+			"	return (float3)(clamp((float)(src0 & 0x7fff),0.0f,32767.0f), clamp((float)((src0 >> 16) & 0x7fff),0.0f,32767.0f), clamp((float)(src1 & 0x7fff),0.0f,32767.0f));\n"
+			"}\n"
+			"\n";
+	}
+	else if (format == VX_DF_IMAGE_RGB4_AMD){
+		opencl_kernel_code +=
+			"float3 amd_unpackA(uint src0, uint src1)\n"
+			"{\n"
+			"  return (float3)(clamp((float)(src0 & 0x7fff),0.0f,32767.0f), clamp((float)((src0 >> 16) & 0x7fff),0.0f,32767.0f), clamp((float)(src1 & 0x7fff),0.0f,32767.0f));\n"
+			"}\n"
+			"float3 amd_unpackB(uint src0, uint src1)\n"
+			"{\n"
+			"  return (float3)(clamp((float)((src0 >> 16) & 0x7fff),0.0f,32767.0f), clamp((float)(src1 & 0x7fff),0.0f,32767.0f), clamp((float)((src1 >> 16) & 0x7fff),0.0f,32767.0f));\n"
+			"}\n"
+			"\n";
+	}
+	if (weight_image){
+		sprintf(item,
 			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
 			"void %s(uint num_cam, uint arr_offs, \n"
 			"	uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset, \n"
@@ -945,199 +1385,457 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			"	__global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
 			"	uint wt_width, uint wt_height, __global uchar * wt_buf, uint wt_stride, uint wt_offset,\n"
 			"   uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset)\n"
-			"{\n"
-			"	int grp_id = get_global_id(0)>>4, lx = get_local_id(0), ly = get_global_id(1);\n"
-			"	pG_buf += (pG_offs + (arr_offs<<3));\n"
-			"	if (grp_id < pG_num) {\n"
-			"	int size_x = get_local_size(0) - 1; \n"
-			"	uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
-			"	uint camera_id = offs.x & 0x1f; int gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); int gy = (offs.x >> 19);\n"
-			"	if (!get_group_id(1) | (get_group_id(1) && (gy+8 < %d))) {\n"
-			"	gy += (ly<<1);\n"
-			"   bool outputValid = (lx*4 <= (offs.y & 0xFF)) && (ly*2 <= ((offs.y >> 8)&0xFF));\n"
-			"	int border = (offs.y >> 30) & 0x3;\n"
-			"	int ybound = %d;\n"
-			"	ip_buf += ip_offset + mad24(gy, (int)ip_stride, gx<<2);\n"
-			"	op_buf  += op_offset + mad24(gy, (int)op_stride, gx*6);\n"
-			"	ip_buf += (camera_id * ip_stride*%d);\n"
-			"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
-			"	op_buf += (camera_id * op_stride*%d);\n"
-			"	wt_buf += (camera_id * wt_stride*%d);\n"
-			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1, height1);
-		opencl_kernel_code = item;
-		if (wt_format == VX_DF_IMAGE_U8){
-			opencl_kernel_code +=
-			"	wt_buf += wt_offset + mad24(gy, (int)wt_stride, gx);\n";
-		}
-		else
-		{
-			opencl_kernel_code +=
-			"	wt_buf += wt_offset + mad24(gy, (int)wt_stride, gx<<1);\n";
-		}
+			"{\n", (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
+		opencl_kernel_code += item;
 	}
-	else
-	{
+	else{
 		sprintf(item,
-			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-			"\n"
-			"float3 amd_unpack_3(uint src)\n"
-			"{\n"
-			"	return (float3)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src));\n"
-			"}\n"
-			"\n"
 			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
 			"void %s(uint num_cam, uint arr_offs, \n"
-			"	uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset, \n"
-			" 	uint ip1_width, uint ip1_height, __global uchar * ip1_buf, uint ip1_stride, uint ip1_offset,\n"
-			"	 __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+			"   uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset, \n"
+			"   uint ip1_width, uint ip1_height, __global uchar * ip1_buf, uint ip1_stride, uint ip1_offset,\n"
+			"   __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
 			"   uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset)\n"
-			"{\n"
-			"	int grp_id = get_global_id(0)>>4, lx = get_local_id(0), ly = get_global_id(1);\n"
-			"	pG_buf += (pG_offs + (arr_offs<<3));\n"
-			"	int size_x = get_local_size(0) - 1; \n"
-			"	uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
-			"	uint camera_id = offs.x & 0x1f; int gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); uint gy = (offs.x >> 19);\n"
-			"	if (!get_group_id(1) | (get_group_id(1) && (gy+8 < %d))) {\n"
-			"	gy += (ly<<1);\n"
-			"   bool outputValid = (lx*4 <= (offs.y & 0xFF)) && (ly*2 <= ((offs.y >> 8)&0xFF));\n"
-			"	int border = (offs.y >> 30)&0x3;\n"
-			"	int ybound = %d;\n"
-			"	ip_buf += ip_offset + mad24(gy, (int)ip_stride, gx<<2);\n"
-			"	op_buf  += op_offset + mad24(gy, (int)op_stride, gx*6);\n"
-			"	ip_buf += (camera_id * ip_stride*%d);\n"
-			"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
-			"	op_buf += (camera_id * op_stride*%d);\n"
-			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height1, (InHeight1 - 1), height1, InHeight1, height1);
-		opencl_kernel_code = item;
+			"{\n", (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
+		opencl_kernel_code += item;
 	}
-
-	opencl_kernel_code +=
-		"	// load from src2 (for upscale) to LDS\n"
-		"   ly = ly & 3;\n"
-		"	__local uint lsSrc[36*6];\n"
-		"	__local short lsVert[64*6*3];\n"
-		"	int loffset = mad24(ly, (int)36, (lx<<1)); \n"
-		"	int2 loffs2  = (int2)((loffset + 4*36), 4*ip1_stride);\n"
-		"  if (!border){\n"
-		"   ip1_buf += mad24(gy>>1, (int)ip1_stride, gx<<1);\n"
-		"  	ip1_buf -= (ip1_stride + 8);\n"
-		"  	if (!lx){\n"
-		"  		*(__local uint2 *)(lsSrc+loffset) = vload2(0, (global uint *)ip1_buf);	\n"
-		"  	}\n"
-		"  	*(__local uint2 *)(lsSrc+loffset+2) = vload2(1, (global uint *)ip1_buf);\n"
-		"  	if (lx == size_x){\n"
-		"  		*(__local uint2 *)(lsSrc+loffset+4) = vload2(2, (global uint *)ip1_buf);	\n"
-		"  	}\n"
-		"  	if (ly < 2){\n"
-		"  		if (!lx){\n"
-		"  			*(__local uint2 *)(lsSrc+loffs2.x) = vload2(0, (global uint *)(ip1_buf+loffs2.y));	\n"
-		"  		}\n"
-		"  		*(__local uint2 *)(lsSrc+loffs2.x+2) =  vload2(1, (global uint *)(ip1_buf+loffs2.y));\n"
-		"  		if (lx == size_x){\n"
-		"  			*(__local uint2 *)(lsSrc+loffs2.x+4) =  vload2(2, (global uint *)(ip1_buf+loffs2.y));\n"
-		"  		}\n"
-		"  	}\n"
-		"  }else\n"
-		"  {\n"
-		"    int gybase = (gy>>1) - 1;\n"
-		"    int3 goffset = (int3)((gx<<1) - 8, (gx<<1), (gx<<1)+8);  \n"
-		"    __global uchar *gbuf = ip1_buf + ip1_stride*max(0, min(ybound, gybase));\n"
-		"  	 if (!lx){\n"
-		"		goffset.s0 = select(goffset.s0, (int)((ip1_width-2)<<2), goffset.s0<0);\n"
-		"  		*(__local uint2 *)(lsSrc+loffset) = vload2(0, (global uint *)(gbuf + goffset.s0));	\n"
-		"  	 }\n"
-		"    goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip1_width-2)<<2));\n"
-		"    *(__local uint2 *)(lsSrc+loffset+2)  = vload2(0, (global uint *)(gbuf + goffset.s1));\n"
-		"    if (lx == size_x){\n"
-		"      goffset.s2 = select(goffset.s2, 0, goffset.s2>((ip1_width-2)<<2));\n"
-		"      *(__local uint2 *)(lsSrc+loffset+4)  = vload2(0, (__global uint *)(gbuf + goffset.s2));\n"
-		"    }\n"
-		"    if (ly < 2){\n"
-		"      gbuf = ip1_buf + ip1_stride * min(ybound,(gybase+4));\n"
-		"  	   if (!lx){\n"
-		"  		 *(__local uint2 *)(lsSrc+loffs2.x) = vload2(0, (global uint *)(gbuf + goffset.s0));	\n"
-		"  	   }\n"
-		"      *(__local uint2 *)(lsSrc+loffs2.x+2)  = vload2(0, (global uint *)(gbuf + goffset.s1));\n"
-		"      if (lx == size_x){\n"
-		"         *(__local uint2 *)(lsSrc+loffs2.x+4)  = vload2(0, (__global uint *)(gbuf + goffset.s2));\n"
-		"      }\n"
-		"    }\n"
-		"  }\n"
-		"	barrier(CLK_LOCAL_MEM_FENCE);\n"
-		"	uint lvoffset = ly * 64 + (lx << 2); \n"
-		"	__local short *pVertFilt = &lsVert[lvoffset*3];\n"
-		"	__local short *pVertFilt2 = pVertFilt + 256*3;	 //4*64\n"
-		"	// do horizontal filter pass\n"
-		"   {\n"
-		"     uint4 pix0 = *(__local uint4 *)(lsSrc + loffset); uint pix1 = lsSrc[loffset+4];\n"
-		"     float3 f0, f1, f2;\n"
-		"     short8 filt_pix0; short4 filt_pix1;\n"
-		"     f0 = amd_unpack_3(pix0.s1); f1 = amd_unpack_3(pix0.s2); f2 = amd_unpack_3(pix0.s3);\n"
-		"     filt_pix0.s012 = convert_short3(mad(f1, (float3)6.0f, f0 + f2));\n"
-		"     filt_pix0.s345 = convert_short3(4.0f * (f1 + f2));\n"
-		"     f0 = amd_unpack_3(pix1);\n"
-		"     f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
-		"     filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
-		"     filt_pix1.s123 = convert_short3(4.0f * (f2 + f0));\n"
-		"     *(__local short8 *)&pVertFilt[0] = filt_pix0; *(__local short4 *)&pVertFilt[8] = filt_pix1;\n"
-		"   }\n"
-		"   if (ly < 2)\n"
-		"   {\n"
-		"     uint4 pix0 = *(__local uint4 *)(lsSrc + loffs2.x); uint pix1 = lsSrc[loffs2.x+4];\n"
-		"     float3 f0, f1, f2;\n"
-		"     short8 filt_pix0; short4 filt_pix1;\n"
-		"     f0 = amd_unpack_3(pix0.s1); f1 = amd_unpack_3(pix0.s2); f2 = amd_unpack_3(pix0.s3);\n"
-		"     filt_pix0.s012 = convert_short3(mad(f1, (float3)6.0f, f0 + f2));\n"
-		"     filt_pix0.s345 = convert_short3(4.0f * (f1 + f2));\n"
-		"     f0 = amd_unpack_3(pix1);\n"
-		"     f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
-		"     filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
-		"     filt_pix1.s123 = convert_short3(4.0f * (f2 + f0));\n"
-		"     *(__local short8 *)&pVertFilt2[0] = filt_pix0; *(__local short4 *)&pVertFilt2[8] = filt_pix1;\n"
-		"   }\n"
-		"	barrier(CLK_LOCAL_MEM_FENCE);\n";
-	if (weight_image){
+	sprintf(item,
+		"	int grp_id = get_global_id(0)>>4, lx = get_local_id(0), ly = get_global_id(1);\n"
+		"	pG_buf += (pG_offs + (arr_offs<<3));\n"
+		"	if (grp_id < pG_num) {\n"
+		"	int size_x = get_local_size(0) - 1; \n"
+		"	uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
+		"	uint camera_id = offs.x & 0x1f; int gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); int gy = (offs.x >> 19);\n"
+		"	if (!get_group_id(1) | (get_group_id(1) && (gy+8 < %d))) {\n"
+		"	gy += (ly<<1);\n"
+		"	bool outputValid = (lx*4 <= (offs.y & 0xFF)) && (ly*2 <= ((offs.y >> 8)&0xFF));\n"
+		"	int border = (offs.y >> 30) & 0x3;\n"
+		"	int ybound = %d;\n"
+		"	op_buf  += op_offset + mad24(gy, (int)op_stride, gx*6);\n"
+		"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
+		"	op_buf += (camera_id * op_stride*%d);\n"
+		,  height1, (InHeight1 - 1), InHeight1, height1);
+	opencl_kernel_code += item;
+	if (format == VX_DF_IMAGE_RGBX){
+		sprintf(item,
+			"	ip_buf += ip_offset + mad24(gy, (int)ip_stride, gx<<2) + (camera_id * ip_stride*%d);\n", height1);
+	}
+	else if(format == VX_DF_IMAGE_RGB6_AMD){ // VX_DF_IMAGE_RGB6_AMD
+		sprintf(item,
+			"	ip_buf += ip_offset + mad24(gy, (int)ip_stride, gx<<3) + (camera_id * ip_stride*%d);\n", height1);
+	}
+	else{ // VX_DF_IMAGE_RGB4_AMD
+		sprintf(item,
+			"	ip_buf += ip_offset + mad24(gy, (int)ip_stride, gx*6) + (camera_id * ip_stride*%d);\n", height1);
+	}
+	opencl_kernel_code += item;
+	if (wt_format == VX_DF_IMAGE_U8){
+		sprintf(item,
+			"	wt_buf += (camera_id * wt_stride*%d);\n"
+			"	wt_buf += wt_offset + mad24(gy, (int)wt_stride, gx);\n", height1);
+		opencl_kernel_code += item;
+	}
+	else if (wt_format == VX_DF_IMAGE_S16){
+		sprintf(item,
+			"	wt_buf += (camera_id * wt_stride*%d);\n"
+			"	wt_buf += wt_offset + mad24(gy, (int)wt_stride, gx<<1);\n", height1);
+		opencl_kernel_code += item;
+	}		
+	if (format == VX_DF_IMAGE_RGBX){
 		opencl_kernel_code +=
+			"	// load from src2 (for upscale) to LDS\n"
+			"	ly = ly & 3;\n"
+			"	__local uint lsSrc[36*6];\n"
+			"	__local short lsVert[64*6*3];\n"
+			"	int loffset = mad24(ly, (int)36, (lx<<1)); \n"
+			"	int2 loffs2  = (int2)((loffset + 4*36), 4*ip1_stride);\n"
+			"	if (!border){\n"
+			"		ip1_buf += mad24(gy>>1, (int)ip1_stride, gx<<1);\n"
+			"		ip1_buf -= (ip1_stride + 8);\n"
+			"		if (!lx){\n"
+			"			*(__local uint2 *)(lsSrc+loffset) = vload2(0, (global uint *)ip1_buf);	\n"
+			"		}\n"
+			"		*(__local uint2 *)(lsSrc+loffset+2) = vload2(1, (global uint *)ip1_buf);\n"
+			"		if (lx == size_x){\n"
+			"			*(__local uint2 *)(lsSrc+loffset+4) = vload2(2, (global uint *)ip1_buf);	\n"
+			"		}\n"
+			"		if (ly < 2){\n"
+			"			if (!lx){\n"
+			"				*(__local uint2 *)(lsSrc+loffs2.x) = vload2(0, (global uint *)(ip1_buf+loffs2.y));	\n"
+			"			}\n"
+			"			*(__local uint2 *)(lsSrc+loffs2.x+2) =  vload2(1, (global uint *)(ip1_buf+loffs2.y));\n"
+			"			if (lx == size_x){\n"
+			"				*(__local uint2 *)(lsSrc+loffs2.x+4) =  vload2(2, (global uint *)(ip1_buf+loffs2.y));\n"
+			"			}\n"
+			"		}\n"
+			"	}else{\n"
+			"		int gybase = (gy>>1) - 1;\n"
+			"		int3 goffset = (int3)((gx<<1) - 8, (gx<<1), (gx<<1)+8);  \n"
+			"		__global uchar *gbuf = ip1_buf + ip1_stride*max(0, min(ybound, gybase));\n"
+			"		if (!lx){\n"
+			"			goffset.s0 = select(goffset.s0, (int)((ip1_width-2)<<2), goffset.s0<0);\n"
+			"			*(__local uint2 *)(lsSrc+loffset) = vload2(0, (global uint *)(gbuf + goffset.s0));	\n"
+			"		}\n"
+			"		goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip1_width-2)<<2));\n"
+			"		*(__local uint2 *)(lsSrc+loffset+2)  = vload2(0, (global uint *)(gbuf + goffset.s1));\n"
+			"		if (lx == size_x){\n"
+			"			goffset.s2 = select(goffset.s2, 0, goffset.s2>((ip1_width-2)<<2));\n"
+			"			*(__local uint2 *)(lsSrc+loffset+4)  = vload2(0, (__global uint *)(gbuf + goffset.s2));\n"
+			"		}\n"
+			"		if (ly < 2){\n"
+			"			gbuf = ip1_buf + ip1_stride * min(ybound,(gybase+4));\n"
+			"			if (!lx){\n"
+			"				*(__local uint2 *)(lsSrc+loffs2.x) = vload2(0, (global uint *)(gbuf + goffset.s0));	\n"
+			"			}\n"
+			"			*(__local uint2 *)(lsSrc+loffs2.x+2)  = vload2(0, (global uint *)(gbuf + goffset.s1));\n"
+			"			if (lx == size_x){\n"
+			"				*(__local uint2 *)(lsSrc+loffs2.x+4)  = vload2(0, (__global uint *)(gbuf + goffset.s2));\n"
+			"			}\n"
+			"		}\n"
+			"	}\n"
+			"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"	uint lvoffset = ly * 64 + (lx << 2); \n"
+			"	__local short *pVertFilt = &lsVert[lvoffset*3];\n"
+			"	__local short *pVertFilt2 = pVertFilt + 256*3;	 //4*64\n"
+			"	// do horizontal filter pass\n"
+			"	{\n"
+			"		uint4 pix0 = *(__local uint4 *)(lsSrc + loffset); uint pix1 = lsSrc[loffset+4];\n"
+			"		float3 f0, f1, f2;\n"
+			"		short8 filt_pix0; short4 filt_pix1;\n"
+			"		f0 = amd_unpack_3(pix0.s1); f1 = amd_unpack_3(pix0.s2); f2 = amd_unpack_3(pix0.s3);\n"
+			"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+			"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+			"		f0 = amd_unpack_3(pix1);\n"
+			"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+			"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+			"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+			"		*(__local short8 *)&pVertFilt[0] = filt_pix0; *(__local short4 *)&pVertFilt[8] = filt_pix1;\n"
+			"	}\n"
+			"	if (ly < 2)\n"
+			"	{\n"
+			"		uint4 pix0 = *(__local uint4 *)(lsSrc + loffs2.x); uint pix1 = lsSrc[loffs2.x+4];\n"
+			"		float3 f0, f1, f2;\n"
+			"		short8 filt_pix0; short4 filt_pix1;\n"
+			"		f0 = amd_unpack_3(pix0.s1); f1 = amd_unpack_3(pix0.s2); f2 = amd_unpack_3(pix0.s3);\n"
+			"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+			"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+			"		f0 = amd_unpack_3(pix1);\n"
+			"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+			"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+			"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+			"		*(__local short8 *)&pVertFilt2[0] = filt_pix0; *(__local short4 *)&pVertFilt2[8] = filt_pix1;\n"
+			"	}\n"
+			"	barrier(CLK_LOCAL_MEM_FENCE);\n"
 			"	// do vertical filtering for 4\n"
-			"   {\n"
-			"     short8 tmp_8; short4 tmp_4;\n"
-			"     float3 tmp;\n"
-			"     float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
-			"     tmp_8 = *(__local short8 *)&pVertFilt[0]; tmp_4 = *(__local short4 *)&pVertFilt[8];\n"
-			"     row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
-			"     tmp_8 = *(__local short8 *)&pVertFilt[3*64]; tmp_4 = *(__local short4 *)&pVertFilt[3*64 + 8];\n"
-			"     row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
-			"     row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
-			"     tmp_8 = *(__local short8 *)&pVertFilt[3*128]; tmp_4 = *(__local short4 *)&pVertFilt[3*128 + 8];\n"
-			"     row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
-			"     row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
-			"     row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;"
-			"     row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;"
-			"     uint4 px = *(__global uint4 *)ip_buf;"
-			"     tmp = amd_unpack_3(px.s0); row0_8.s012 = tmp - row0_8.s012;\n"
-			"     tmp = amd_unpack_3(px.s1); row0_8.s345 = tmp - row0_8.s345;\n"
-			"     tmp = amd_unpack_3(px.s2); row0_8.s67  = tmp.s01 - row0_8.s67; row0_4.s0 = tmp.s2 - row0_4.s0;\n"
-			"     tmp = amd_unpack_3(px.s3); row0_4.s123 = tmp - row0_4.s123;\n"
-			"     px = *(__global uint4 *)(ip_buf + ip_stride);"
-			"     tmp = amd_unpack_3(px.s0); row1_8.s012 = tmp - row1_8.s012;\n"
-			"     tmp = amd_unpack_3(px.s1); row1_8.s345 = tmp - row1_8.s345;\n"
-			"     tmp = amd_unpack_3(px.s2); row1_8.s67  = tmp.s01 - row1_8.s67; row1_4.s0 = tmp.s2 - row1_4.s0;\n"
-			"     tmp = amd_unpack_3(px.s3); row1_4.s123 = tmp - row1_4.s123;\n";
+			"	{\n"
+			"		short8 tmp_8; short4 tmp_4;\n"
+			"		float3 tmp;\n"
+			"		float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[0]; tmp_4 = *(__local short4 *)&pVertFilt[8];\n"
+			"		row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[3*64]; tmp_4 = *(__local short4 *)&pVertFilt[3*64 + 8];\n"
+			"		row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
+			"		row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[3*128]; tmp_4 = *(__local short4 *)&pVertFilt[3*128 + 8];\n"
+			"		row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
+			"		row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
+			"		row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
+			"		row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
+			"		uint4 px = *(__global uint4 *)ip_buf;\n"
+			"		tmp = amd_unpack_3(px.s0); row0_8.s012 = tmp - row0_8.s012;\n"
+			"		tmp = amd_unpack_3(px.s1); row0_8.s345 = tmp - row0_8.s345;\n"
+			"		tmp = amd_unpack_3(px.s2); row0_8.s67  = tmp.s01 - row0_8.s67; row0_4.s0 = tmp.s2 - row0_4.s0;\n"
+			"		tmp = amd_unpack_3(px.s3); row0_4.s123 = tmp - row0_4.s123;\n"
+			"		px = *(__global uint4 *)(ip_buf + ip_stride);\n"
+			"		tmp = amd_unpack_3(px.s0); row1_8.s012 = tmp - row1_8.s012;\n"
+			"		tmp = amd_unpack_3(px.s1); row1_8.s345 = tmp - row1_8.s345;\n"
+			"		tmp = amd_unpack_3(px.s2); row1_8.s67  = tmp.s01 - row1_8.s67; row1_4.s0 = tmp.s2 - row1_4.s0;\n"
+			"		tmp = amd_unpack_3(px.s3); row1_4.s123 = tmp - row1_4.s123;\n"
+			"		row0_8*=(float8)128.498039216;\n"
+			"		row0_4*=(float4)128.498039216;\n"
+			"		row1_8*=(float8)128.498039216;\n"
+			"		row1_4*=(float4)128.498039216;\n";
+	}
+	else{ //VX_DF_IMAGE_RGB6_AMD or VX_DF_IMAGE_RGB4_AMD
+		if (format == VX_DF_IMAGE_RGB6_AMD){
+			opencl_kernel_code +=
+				"	// load from src2 (for upscale) to LDS\n"
+				"	ly = ly & 3;\n"
+				"	__local uint lsSrc[36*6*2];\n"
+				"	__local short lsVert[64*6*3];\n"
+				"	int loffset = mad24(ly, (int)(36*2), (lx<<2)); \n"
+				"	int2 loffs2  = (int2)((loffset + 2*4*36), 4*ip1_stride);\n"
+				"	if (!border){\n"
+				"		ip1_buf += mad24(gy>>1, (int)ip1_stride, gx<<2);\n"
+				"		ip1_buf -= (ip1_stride + 16);\n"
+				"		if (!lx){\n"
+				"			*(__local uint4 *)(lsSrc+loffset) = vload4(0, (global uint *)ip1_buf);	\n"
+				"		}\n"
+				"		*(__local uint4 *)(lsSrc+loffset+4) = vload4(1, (global uint *)ip1_buf);\n"
+				"		if (lx == size_x){\n"
+				"			*(__local uint4 *)(lsSrc+loffset+8) = vload4(2, (global uint *)ip1_buf);	\n"
+				"		}\n"
+				"		if (ly < 2){\n"
+				"			if (!lx){\n"
+				"				*(__local uint4 *)(lsSrc+loffs2.x) = vload4(0, (global uint *)(ip1_buf+loffs2.y));	\n"
+				"			}\n"
+				"			*(__local uint4 *)(lsSrc+loffs2.x+4) =  vload4(1, (global uint *)(ip1_buf+loffs2.y));\n"
+				"			if (lx == size_x){\n"
+				"				*(__local uint4 *)(lsSrc+loffs2.x+8) =  vload4(2, (global uint *)(ip1_buf+loffs2.y));\n"
+				"			}\n"
+				"		}\n"
+				"	}else\n"
+				"	{\n"
+				"		int gybase = (gy>>1) - 1;\n"
+				"		int3 goffset = (int3)((gx<<2) - 16, (gx<<2), (gx<<2)+16);  \n"
+				"		__global uchar *gbuf = ip1_buf + ip1_stride*max(0, min(ybound, gybase));\n"
+				"		if (!lx){\n"
+				"			goffset.s0 = select(goffset.s0, (int)((ip1_width-2)<<3), goffset.s0<0);\n"
+				"			*(__local uint4 *)(lsSrc+loffset) = vload4(0, (global uint *)(gbuf + goffset.s0));	\n"
+				"		}\n"
+				"		goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip1_width-2)<<3));\n"
+				"		*(__local uint4 *)(lsSrc+loffset+4)  = vload4(0, (global uint *)(gbuf + goffset.s1));\n"
+				"		if (lx == size_x){\n"
+				"			goffset.s2 = select(goffset.s2, 0, goffset.s2>((ip1_width-2)<<3));\n"
+				"			*(__local uint4 *)(lsSrc+loffset+8)  = vload4(0, (__global uint *)(gbuf + goffset.s2));\n"
+				"		}\n"
+				"		if (ly < 2){\n"
+				"			gbuf = ip1_buf + ip1_stride * min(ybound,(gybase+4));\n"
+				"			if (!lx){\n"
+				"				*(__local uint4 *)(lsSrc+loffs2.x) = vload4(0, (global uint *)(gbuf + goffset.s0));	\n"
+				"			}\n"
+				"			*(__local uint4 *)(lsSrc+loffs2.x+4)  = vload4(0, (global uint *)(gbuf + goffset.s1));\n"
+				"			if (lx == size_x){\n"
+				"				*(__local uint4 *)(lsSrc+loffs2.x+8)  = vload4(0, (__global uint *)(gbuf + goffset.s2));\n"
+				"			}\n"
+				"		}\n"
+				"	}\n"
+				"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+				"	uint lvoffset = ly * 64 + (lx << 2); \n"
+				"	__local short *pVertFilt = &lsVert[lvoffset*3];\n"
+				"	__local short *pVertFilt2 = pVertFilt + 256*3;	 //4*64\n"
+				"	// do horizontal filter pass\n"
+				"	{\n"
+				"		uint8 pix0 = *(__local uint8 *)(lsSrc + loffset); \n"
+				"		uint2 pix1 = *(__local uint2 *)(lsSrc + loffset + 8);\n"
+				"		float3 f0, f1, f2;\n"
+				"		short8 filt_pix0; short4 filt_pix1;\n"
+				"		f0 = amd_unpack_3(pix0.s2,pix0.s3)*0.125f; f1 = amd_unpack_3(pix0.s4,pix0.s5)*0.125f; f2 = amd_unpack_3(pix0.s6,pix0.s7)*0.125f; //Scale to stay within 15bit\n"
+				"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+				"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+				"		f0 = amd_unpack_3(pix1.s0 , pix1.s1)*0.125f;\n"
+				"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+				"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+				"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+				"		*(__local short8 *)&pVertFilt[0] = filt_pix0; *(__local short4 *)&pVertFilt[8] = filt_pix1;\n"
+				"	}\n"
+				"	if (ly < 2)\n"
+				"	{\n"
+				"		uint8 pix0 = *(__local uint8 *)(lsSrc + loffs2.x);\n"
+				"		uint2 pix1 = *(__local uint2 *)(lsSrc + loffs2.x + 8);\n"
+				"		float3 f0, f1, f2;\n"
+				"		short8 filt_pix0; short4 filt_pix1;\n"
+				"		f0 = amd_unpack_3(pix0.s2,pix0.s3)*0.125f; f1 = amd_unpack_3(pix0.s4,pix0.s5)*0.125f; f2 = amd_unpack_3(pix0.s6,pix0.s7)*0.125f; //Scale to stay within 15bit\n"
+				"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+				"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+				"		f0 = amd_unpack_3(pix1.s0,pix1.s1)*0.125f;\n"
+				"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+				"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+				"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+				"		*(__local short8 *)&pVertFilt2[0] = filt_pix0; *(__local short4 *)&pVertFilt2[8] = filt_pix1;\n"
+				"	}\n";
+		}
+		else{ //VX_DF_IMAGE_RGB4_AMD
+			opencl_kernel_code +=
+				"	// load from src2 (for upscale) to LDS\n"
+				"	ly = ly & 3;\n"
+				"	__local uint lsSrc[324];//36x6*6 Bytes \n"
+				"	__local short lsVert[64*6*3];\n"
+				"	int loffset = mad24(ly, (int)(54), (lx*3)); //36*1.5\n"
+				"	int2 loffs2  = (int2)((loffset + 4*54), 4*ip1_stride);\n"
+				"	if (!border){\n"
+				"		ip1_buf += mad24(gy>>1, (int)ip1_stride, gx*3);\n"
+				"		ip1_buf -= (ip1_stride + 12);\n"
+				"		if (!lx){\n"
+				"			*(__local uint *)(lsSrc+loffset)     =*(global uint *)(ip1_buf);	    \n"
+				"			*(__local uint *)(lsSrc+loffset + 1) =*(global uint *)(ip1_buf + 4);	\n"
+				"			*(__local uint *)(lsSrc+loffset + 2) =*(global uint *)(ip1_buf + 8);	\n"
+				"		}\n"
+				"		*(__local uint *)(lsSrc+loffset + 3) =*(global uint *)(ip1_buf + 12);	\n"
+				"		*(__local uint *)(lsSrc+loffset + 4) =*(global uint *)(ip1_buf + 16);	\n"
+				"		*(__local uint *)(lsSrc+loffset + 5) =*(global uint *)(ip1_buf + 20);	\n"
+				"		if (lx == size_x){\n"
+				"			*(__local uint *)(lsSrc+loffset + 6) =*(global uint *)(ip1_buf + 24);	\n"
+				"			*(__local uint *)(lsSrc+loffset + 7) =*(global uint *)(ip1_buf + 28);	\n"
+				"			*(__local uint *)(lsSrc+loffset + 8) =*(global uint *)(ip1_buf + 32);	\n"
+				"		}\n"
+				"		if (ly < 2){\n"
+				"			if (!lx){\n"
+				"				*(__local uint *)(lsSrc+loffs2.x)     = *(global uint *)(ip1_buf+loffs2.y    );	\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 1) = *(global uint *)(ip1_buf+loffs2.y + 4);	\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 2) = *(global uint *)(ip1_buf+loffs2.y + 8);	\n"
+				"			}\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 3) = *(global uint *)(ip1_buf+loffs2.y + 12);	\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 4) = *(global uint *)(ip1_buf+loffs2.y + 16);	\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 5) = *(global uint *)(ip1_buf+loffs2.y + 20);	\n"
+				"			if (lx == size_x){\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 6) = *(global uint *)(ip1_buf+loffs2.y + 24);	\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 7) = *(global uint *)(ip1_buf+loffs2.y + 28);	\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 8) = *(global uint *)(ip1_buf+loffs2.y + 32);	\n"
+				"			}\n"
+				"		}\n"
+				"	}else\n"
+				"	{\n"
+				"		int gybase = (gy>>1) - 1;\n"
+				"		int3 goffset = (int3)((gx*3) - 12, (gx*3), (gx*3)+12);  \n"
+				"		__global uchar *gbuf = ip1_buf + ip1_stride*max(0, min(ybound, gybase));\n"
+				"		if (!lx){\n"
+				"			goffset.s0 = select(goffset.s0, (int)((ip1_width-2)*6), goffset.s0<0);\n"
+				"			*(__local uint *)(lsSrc+loffset)     = *(global uint *)(gbuf + goffset.s0);	    \n"
+				"			*(__local uint *)(lsSrc+loffset + 1) = *(global uint *)(gbuf + goffset.s0 + 4);	\n"
+				"			*(__local uint *)(lsSrc+loffset + 2) = *(global uint *)(gbuf + goffset.s0 + 8);	\n"
+				"		}\n"
+				"		goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip1_width-2)*6));\n"
+				"		*(__local uint *)(lsSrc+loffset + 3)  = *(global uint *)(gbuf + goffset.s1);\n"
+				"		*(__local uint *)(lsSrc+loffset + 4)  = *(global uint *)(gbuf + goffset.s1 + 4);\n"
+				"		*(__local uint *)(lsSrc+loffset + 5)  = *(global uint *)(gbuf + goffset.s1 + 8);\n"
+				"		if (lx == size_x){\n"
+				"			goffset.s2 = select(goffset.s2, 0, goffset.s2>((ip1_width-2)*6));\n"
+				"			*(__local uint *)(lsSrc+loffset + 6)  = *(global uint *)(gbuf + goffset.s2);\n"
+				"			*(__local uint *)(lsSrc+loffset + 7)  = *(global uint *)(gbuf + goffset.s2 + 4);\n"
+				"			*(__local uint *)(lsSrc+loffset + 8)  = *(global uint *)(gbuf + goffset.s2 + 8);\n"
+				"		}\n"
+				"		if (ly < 2){\n"
+				"			gbuf = ip1_buf + ip1_stride * min(ybound,(gybase+4));\n"
+				"			if (!lx){\n"
+				"				*(__local uint *)(lsSrc+loffs2.x)     = *(global uint *)(gbuf + goffset.s0);	\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 1) = *(global uint *)(gbuf + goffset.s0 + 4);\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 2) = *(global uint *)(gbuf + goffset.s0 + 8);\n"
+				"			}\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 3) = *(global uint *)(gbuf + goffset.s1);\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 4) = *(global uint *)(gbuf + goffset.s1 + 4);\n"
+				"			*(__local uint *)(lsSrc+loffs2.x + 5) = *(global uint *)(gbuf + goffset.s1 + 8);\n"
+				"			if (lx == size_x){\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 6) = *(global uint *)(gbuf + goffset.s2);\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 7) = *(global uint *)(gbuf + goffset.s2 + 4);\n"
+				"				*(__local uint *)(lsSrc+loffs2.x + 8) = *(global uint *)(gbuf + goffset.s2 + 8);\n"
+				"			}\n"
+				"		}\n"
+				"	}\n"
+				"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+				"	uint lvoffset = ly * 64 + (lx * 3); \n"
+				"	__local short *pVertFilt = &lsVert[(ly * 64 + (lx << 2))*3];\n"
+				"	__local short *pVertFilt2 = pVertFilt + 256*3;	 //4*64\n"
+				"	// do horizontal filter pass\n"
+				"	{\n"
+				"		//uint8 pix0 = *(__local uint8 *)(lsSrc + loffset); \n"
+				"		uint8 pix0; \n"
+				"		pix0.s0 = *(__local uint *)(lsSrc + loffset); \n"
+				"		pix0.s1 = *(__local uint *)(lsSrc + loffset + 1); \n"
+				"		pix0.s2 = *(__local uint *)(lsSrc + loffset + 2); \n"
+				"		pix0.s3 = *(__local uint *)(lsSrc + loffset + 3); \n"
+				"		pix0.s4 = *(__local uint *)(lsSrc + loffset + 4); \n"
+				"		pix0.s5 = *(__local uint *)(lsSrc + loffset + 5); \n"
+				"		pix0.s6 = *(__local uint *)(lsSrc + loffset + 6); \n"
+				"		pix0.s7 = *(__local uint *)(lsSrc + loffset + 7); \n"
+				"		float3 f0, f1, f2;\n"
+				"		short8 filt_pix0; short4 filt_pix1;\n"
+				"		f0 = amd_unpackB(pix0.s1,pix0.s2)*0.125f; f1 = amd_unpackA(pix0.s3,pix0.s4)*0.125f; f2 = amd_unpackB(pix0.s4,pix0.s5)*0.125f; //Scale to stay within 15bit\n"
+				"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+				"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+				"		f0 = amd_unpackA(pix0.s6 , pix0.s7)*0.125f;\n"
+				"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+				"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+				"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+				"		*(__local short8 *)&pVertFilt[0] = filt_pix0; *(__local short4 *)&pVertFilt[8] = filt_pix1;\n"
+				"	}\n"
+				"	if (ly < 2)\n"
+				"	{\n"
+				"		//uint8 pix0 = *(__local uint8 *)(lsSrc + loffs2.x);\n"
+				"		uint8 pix0; \n"
+				"		pix0.s0 = *(__local uint *)(lsSrc + loffs2.x); \n"
+				"		pix0.s1 = *(__local uint *)(lsSrc + loffs2.x + 1); \n"
+				"		pix0.s2 = *(__local uint *)(lsSrc + loffs2.x + 2); \n"
+				"		pix0.s3 = *(__local uint *)(lsSrc + loffs2.x + 3); \n"
+				"		pix0.s4 = *(__local uint *)(lsSrc + loffs2.x + 4); \n"
+				"		pix0.s5 = *(__local uint *)(lsSrc + loffs2.x + 5); \n"
+				"		pix0.s6 = *(__local uint *)(lsSrc + loffs2.x + 6); \n"
+				"		pix0.s7 = *(__local uint *)(lsSrc + loffs2.x + 7); \n"
+				"		float3 f0, f1, f2;\n"
+				"		short8 filt_pix0; short4 filt_pix1;\n"
+				"		f0 = amd_unpackB(pix0.s1,pix0.s2)*0.125f; f1 = amd_unpackA(pix0.s3,pix0.s4)*0.125f; f2 = amd_unpackB(pix0.s4,pix0.s5)*0.125f; //Scale to stay within 15bit\n"
+				"		filt_pix0.s012 = convert_short3_sat_rte(mad(f1, (float3)6.0f, f0 + f2));\n"
+				"		filt_pix0.s345 = convert_short3_sat_rte(4.0f * (f1 + f2));\n"
+				"		f0 = amd_unpackA(pix0.s6,pix0.s7)*0.125f;\n"
+				"		f1 = mad(f2, (float3)6.0f, f1 + f0);\n"
+				"		filt_pix0.s6 = (short)f1.s0; filt_pix0.s7 = (short)f1.s1; filt_pix1.s0 = (short)f1.s2;\n"
+				"		filt_pix1.s123 = convert_short3_sat_rte(4.0f * (f2 + f0));\n"
+				"		*(__local short8 *)&pVertFilt2[0] = filt_pix0; *(__local short4 *)&pVertFilt2[8] = filt_pix1;\n"
+				"	}\n";
+		}
+		opencl_kernel_code +=
+			"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"	// do vertical filtering for 4\n"
+			"	{\n"
+			"		short8 tmp_8; short4 tmp_4;\n"
+			"		float3 tmp;\n"
+			"		float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[0]; tmp_4 = *(__local short4 *)&pVertFilt[8];\n"
+			"		row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[3*64]; tmp_4 = *(__local short4 *)&pVertFilt[3*64 + 8];\n"
+			"		row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
+			"		row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
+			"		tmp_8 = *(__local short8 *)&pVertFilt[3*128]; tmp_4 = *(__local short4 *)&pVertFilt[3*128 + 8];\n"
+			"		row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
+			"		row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
+			"		row0_8 *= (float8)0.125f; row0_4 *= (float4)0.125f;\n"
+			"		row1_8 *= (float8)0.125f; row1_4 *= (float4)0.125f;\n";
+		if (format == VX_DF_IMAGE_RGB6_AMD){
+			opencl_kernel_code +=
+				"		uint8 px = *(__global uint8 *)ip_buf;\n"
+				"		tmp = amd_unpack_3(px.s0,px.s1); row0_8.s012 = tmp - row0_8.s012;\n"
+				"		tmp = amd_unpack_3(px.s2,px.s3); row0_8.s345 = tmp - row0_8.s345;\n"
+				"		tmp = amd_unpack_3(px.s4,px.s5); row0_8.s67  = tmp.s01 - row0_8.s67; row0_4.s0 = tmp.s2 - row0_4.s0;\n"
+				"		tmp = amd_unpack_3(px.s6,px.s7); row0_4.s123 = tmp - row0_4.s123;\n"
+				"		px = *(__global uint8 *)(ip_buf + ip_stride);\n"
+				"		tmp = amd_unpack_3(px.s0,px.s1); row1_8.s012 = tmp - row1_8.s012;\n"
+				"		tmp = amd_unpack_3(px.s2,px.s3); row1_8.s345 = tmp - row1_8.s345;\n"
+				"		tmp = amd_unpack_3(px.s4,px.s5); row1_8.s67  = tmp.s01 - row1_8.s67; row1_4.s0 = tmp.s2 - row1_4.s0;\n"
+				"		tmp = amd_unpack_3(px.s6,px.s7); row1_4.s123 = tmp - row1_4.s123;\n";
+		}
+		else{ //VX_DF_IMAGE_RGB4_AMD
+			opencl_kernel_code +=
+				"		uint4 px0 = *(__global uint4 *)ip_buf;\n"
+				"		uint2 px1 = *(__global uint2 *)(ip_buf+16);\n"
+				"		tmp = amd_unpackA(px0.s0,px0.s1); row0_8.s012 = tmp - row0_8.s012;\n"
+				"		tmp = amd_unpackB(px0.s1,px0.s2); row0_8.s345 = tmp - row0_8.s345;\n"
+				"		tmp.s01 = (float2)(clamp((float)(px0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((px0.s3 >> 16) & 0x7fff),0.0f,32767.0f)); row0_8.s67  = tmp.s01 - row0_8.s67;\n"
+				"		tmp.s2  = clamp((float)(px1.s0 & 0x7fff),0.0f,32767.0f); row0_4.s0 = tmp.s2 - row0_4.s0;\n"
+				"		tmp = amd_unpackB(px1.s0,px1.s1); row0_4.s123 = tmp - row0_4.s123;\n"
+				"		px0 = *(__global uint4 *)(ip_buf + ip_stride);\n"
+				"		px1 = *(__global uint2 *)(ip_buf + ip_stride + 16);\n"
+				"		tmp = amd_unpackA(px0.s0,px0.s1); row1_8.s012 = tmp - row1_8.s012;\n"
+				"		tmp = amd_unpackB(px0.s1,px0.s2); row1_8.s345 = tmp - row1_8.s345;\n"
+				"		tmp.s01 = (float2)(clamp((float)(px0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((px0.s3 >> 16) & 0x7fff),0.0f,32767.0f)); row1_8.s67  = tmp.s01 - row1_8.s67;\n"
+				"		tmp.s2  = clamp((float)(px1.s0 & 0x7fff),0.0f,32767.0f); row1_4.s0 = tmp.s2 - row1_4.s0;\n"
+				"		tmp = amd_unpackB(px1.s0,px1.s1); row1_4.s123 = tmp - row1_4.s123;\n";
+		}
+	}
+	if (weight_image){
 		if (wt_format == VX_DF_IMAGE_U8){
 			opencl_kernel_code +=
-			"     if (outputValid) {\n"
-			"	    uint wt_in, wt_in1; \n"
-			"		wt_in  = *(__global uint *)(wt_buf);\n"
-			"		wt_in1  = *(__global uint *)(wt_buf+wt_stride);\n"
-			"		row0_8  *= (float8)((float3)amd_unpack0(wt_in), (float3)amd_unpack1(wt_in), (float2)amd_unpack2(wt_in)); row0_8 *= (float8)0.0627451f;\n"
-			"		row0_4  *= (float4)((float)amd_unpack2(wt_in), (float3)amd_unpack3(wt_in)); row0_4 *= (float4)0.0627451f; \n"
-			"		row1_8  *= (float8)((float3)amd_unpack0(wt_in1), (float3)amd_unpack1(wt_in1), (float2)amd_unpack2(wt_in1)); row1_8 *= (float8)0.0627451f;\n"
-			"		row1_4  *= (float4)((float)amd_unpack2(wt_in1), (float3)amd_unpack3(wt_in1)); row1_4 *= (float4)0.0627451f;\n"
-			"       *(__global short8 *)op_buf = convert_short8_sat_rte(row0_8); *(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
-			"       *(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
-			"     }\n"
-			"   }\n"
+			"		if (outputValid) {\n"
+			"			uint wt_in, wt_in1; \n"
+			"			wt_in  = *(__global uint *)(wt_buf);\n"
+			"			wt_in1  = *(__global uint *)(wt_buf+wt_stride);\n"
+			"			row0_8  *= (float8)((float3)amd_unpack0(wt_in), (float3)amd_unpack1(wt_in), (float2)amd_unpack2(wt_in)); row0_8 *= (float8)0.00392156827f;\n" //new: 1/255 old:0.0627451 = 16/255
+			"			row0_4  *= (float4)((float)amd_unpack2(wt_in), (float3)amd_unpack3(wt_in)); row0_4 *= (float4)0.00392156827f; \n"
+			"			row1_8  *= (float8)((float3)amd_unpack0(wt_in1), (float3)amd_unpack1(wt_in1), (float2)amd_unpack2(wt_in1)); row1_8 *= (float8)0.00392156827f;\n"
+			"			row1_4  *= (float4)((float)amd_unpack2(wt_in1), (float3)amd_unpack3(wt_in1)); row1_4 *= (float4)0.00392156827f;\n"
+			"			*(__global short8 *)op_buf = convert_short8_sat_rte(row0_8); *(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
+			"			*(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
+			"		}\n"
+			"	}\n"
 			" }\n"
 			" }\n"
 			"}\n";
@@ -1145,18 +1843,18 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 			else
 			{
 				opencl_kernel_code +=
-			"    if (outputValid) {\n"
-			"	    short4 wt_in, wt_in1; \n"
-			"		wt_in  = *(__global short4 *)(wt_buf);\n"
-			"		wt_in1  = *(__global short4 *)(wt_buf+wt_stride);\n"
-			"		row0_8  *= (float8)((float3)wt_in.s0, (float3)wt_in.s1, (float2)wt_in.s2); row0_8 *= (float8)0.000490196f;\n"
-			"		row0_4  *= (float4)((float)wt_in.s2, (float3)wt_in.s3); row0_4 *= (float4)0.000490196f; \n"
-			"		row1_8  *= (float8)((float3)wt_in1.s0, (float3)wt_in1.s1, (float2)wt_in1.s2); row1_8 *= (float8)0.000490196f;\n"
-			"		row1_4  *= (float4)((float)wt_in1.s2, (float3)wt_in1.s3); row1_4 *= (float4)0.000490196f;\n"
-			"       *(__global short8 *)op_buf = convert_short8_sat_rte(row0_8); *(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
-			"       *(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
-			"     }\n"
-			"   }\n"
+			"		if (outputValid) {\n"
+			"			short4 wt_in, wt_in1; \n"
+			"			wt_in  = *(__global short4 *)(wt_buf);\n"
+			"			wt_in1  = *(__global short4 *)(wt_buf+wt_stride);\n"
+			"			row0_8  *= (float8)((float3)wt_in.s0, (float3)wt_in.s1, (float2)wt_in.s2); row0_8 *= (float8)0.000030518509476f;\n" //new: 1/32767 old:0.0627451 = 16/32767
+			"			row0_4  *= (float4)((float)wt_in.s2, (float3)wt_in.s3); row0_4 *= (float4)0.000030518509476f; \n"
+			"			row1_8  *= (float8)((float3)wt_in1.s0, (float3)wt_in1.s1, (float2)wt_in1.s2); row1_8 *= (float8)0.000030518509476f;\n"
+			"			row1_4  *= (float4)((float)wt_in1.s2, (float3)wt_in1.s3); row1_4 *= (float4)0.000030518509476f;\n"
+			"			*(__global short8 *)op_buf = convert_short8_sat_rte(row0_8); *(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
+			"			*(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
+			"		}\n"
+			"	}\n"
 			" }\n"
 			" }\n"
 			"}\n";
@@ -1165,36 +1863,14 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 	else
 	{
 		opencl_kernel_code +=
-		"	// do vertical filtering for 4\n"
-		"   {\n"
-		"     short8 tmp_8; short4 tmp_4;\n"
-		"     float3 tmp;\n"
-		"     float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
-		"     tmp_8 = *(__local short8 *)&pVertFilt[0]; tmp_4 = *(__local short4 *)&pVertFilt[8];\n"
-		"     row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
-		"     tmp_8 = *(__local short8 *)&pVertFilt[3*64]; tmp_4 = *(__local short4 *)&pVertFilt[3*64 + 8];\n"
-		"     row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
-		"     row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
-		"     tmp_8 = *(__local short8 *)&pVertFilt[3*128]; tmp_4 = *(__local short4 *)&pVertFilt[3*128 + 8];\n"
-		"     row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
-		"     row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
-		"     row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;"
-		"     row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;"
-		"     uint4 px = *(__global uint4 *)ip_buf;"
-		"     tmp = amd_unpack_3(px.s0); row0_8.s012 = tmp - row0_8.s012;\n"
-		"     tmp = amd_unpack_3(px.s1); row0_8.s345 = tmp - row0_8.s345;\n"
-		"     tmp = amd_unpack_3(px.s2); row0_8.s67  = tmp.s01 - row0_8.s67; row0_4.s0 = tmp.s2 - row0_4.s0;\n"
-		"     tmp = amd_unpack_3(px.s3); row0_4.s123 = tmp - row0_4.s123;\n"
-		"     px = *(__global uint4 *)(ip_buf + ip_stride);"
-		"     tmp = amd_unpack_3(px.s0); row1_8.s012 = tmp - row1_8.s012;\n"
-		"     tmp = amd_unpack_3(px.s1); row1_8.s345 = tmp - row1_8.s345;\n"
-		"     tmp = amd_unpack_3(px.s2); row1_8.s67  = tmp.s01 - row1_8.s67; row1_4.s0 = tmp.s2 - row1_4.s0;\n"
-		"     tmp = amd_unpack_3(px.s3); row1_4.s123 = tmp - row1_4.s123;\n"
-		"     if (outputValid) {\n"
-		"       *(__global short8 *)op_buf = convert_short8_sat_rte(row0_8); *(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
-		"       *(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8); *(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
-		"     }\n"
-		"   }\n"
+		"		if (outputValid) {\n"
+		"			*(__global short8 *)op_buf = convert_short8_sat_rte(row0_8);\n"
+		"			*(__global short4 *)(op_buf + 16) = convert_short4_sat_rte(row0_4);\n"
+		"			*(__global short8 *)(op_buf + op_stride) = convert_short8_sat_rte(row1_8);\n"
+		"			*(__global short4 *)(op_buf + op_stride + 16) = convert_short4_sat_rte(row1_4);\n"
+		"		}\n"
+		"	}\n"
+		"}\n"
 		" }\n"
 		" }\n"
 		"}\n";
@@ -1342,6 +2018,19 @@ static vx_status VX_CALLBACK upscale_gaussian_add_input_validator(vx_node node, 
 		}
 		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
 	}
+	else if (index == 6)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: upscale_gaussian_add flags scalar type should be a UINT8\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -1360,8 +2049,10 @@ static vx_status VX_CALLBACK upscale_gaussian_add_output_validator(vx_node node,
 		image = (vx_image)avxGetNodeParamRef(node, index);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
+		vx_df_image output_format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 		if (width != input_width)
 			width = input_width;
@@ -1370,10 +2061,14 @@ static vx_status VX_CALLBACK upscale_gaussian_add_output_validator(vx_node node,
 			height = input_height;
 		}
 		// set output image meta data
-		vx_df_image format = VX_DF_IMAGE_RGB4_AMD;
+		if (output_format != VX_DF_IMAGE_RGB4_AMD && output_format != VX_DF_IMAGE_RGBX && output_format != VX_DF_IMAGE_RGB6_AMD)
+		{ // pick default output format RGB
+			output_format = VX_DF_IMAGE_RGB4_AMD;
+
+		}
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
-		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		status = VX_SUCCESS;
 	}
 	return status;
@@ -1410,6 +2105,14 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 	vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
 	)
 {
+	// Check if last iteration
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[6];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool clamp_output = (flags & 1) ? true : false;
+
 	vx_size		wg_num;
 	vx_uint32   numCam = 0;
 	vx_uint32 height1, Inheight1;
@@ -1439,6 +2142,7 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &Inheight1, sizeof(Inheight1)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+
 	height1 = height; 
 	if (numCam){
 		height1 = (vx_uint32)(height / numCam);
@@ -1454,7 +2158,15 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 		" 	uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
 		" 	uint ip1_width, uint ip1_height, __global uchar * ip1_buf, uint ip1_stride, uint ip1_offset,\n"
 		"	__global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
-		"   uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset)\n"
+		"   uint op_width, uint op_height, __global uchar * op_buf, uint op_stride, uint op_offset", (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
+	opencl_kernel_code = item;
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
+	sprintf(item,
+		")\n"
 		"{\n"
 		"	int grp_id = get_global_id(0)>>3, lx = get_local_id(0), ly = get_global_id(1);\n"
 		"	pG_buf += (pG_offs + (arr_offs<<3));\n"
@@ -1466,18 +2178,30 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 		"		int border = (offs.y >> 30) & 0x3;\n"
 		"		int height1 = %d;\n"
 		"		ip_buf += ip_offset + mad24(gy, ip_stride, gx*6);\n"
-		"		op_buf  += op_offset + mad24(gy, op_stride, gx*6);\n"
 		"		ip_buf += (camera_id * ip_stride*%d);\n"
 		"		ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 		"		op_buf += (camera_id * op_stride*%d);\n"
-		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
-	opencl_kernel_code = item;
-
+		, Inheight1 - 1, height1, Inheight1, height1);
+	opencl_kernel_code += item;
+	if (out_format == VX_DF_IMAGE_RGB4_AMD){	
+		opencl_kernel_code +=
+			"		op_buf  += op_offset + mad24(gy, op_stride, gx*6);\n";
+	}
+	else if (out_format == VX_DF_IMAGE_RGBX)
+	{
+		opencl_kernel_code +=
+			"		op_buf  += op_offset + mad24(gy, op_stride, gx<<2);\n";
+	}
+	else //out_format == VX_DF_IMAGE_RGB6_AMD
+	{
+		opencl_kernel_code +=
+			"		op_buf  += op_offset + mad24(gy, op_stride, gx<<3);\n";
+	}
 	opencl_kernel_code +=
-		"		ly &= 3;\n"
+		"		ly = ly & 3;\n"
 		"		// load src2 (for upscale) to LDS\n"
 		"		__local short lsSrc[104*6];\n"
-		"		__local short lsVert[64*6*3];\n"
+		"		__local float lsVert[64*6*3];\n"
 		"		int loffset = mad24(ly, (int)104, lx*12); \n"
 		"		int2 loffs2  = (int2)((loffset + 416), 4*ip1_stride);\n"
 		"		if (!border){\n"
@@ -1528,85 +2252,194 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 		"			}\n"
 		"		}\n"
 		"		barrier(CLK_LOCAL_MEM_FENCE);\n"
-		"		uint lvoffset = ly * 64 + (lx<<3); \n"
-		"		__local short *pLSrc = (__local short *)(lsSrc +loffset);\n"
-		"		__local short *pVertFilt = &lsVert[lvoffset*3];\n"
-		"		__local short *pVertFilt2 = pVertFilt + 256*3; //4*64 \n"
+		"		uint lvoffset = ly * 64 + (lx << 3); \n"
+		"		__local short *pLSrc = (__local short *)(lsSrc + loffset);\n"
+		"		__local float *pVertFilt = &lsVert[lvoffset*3];\n"
+		"		__local float *pVertFilt2 = pVertFilt + 768; //256*3 \n"
+		"       float8 filtpix_8; float4 filtpix_4;\n"
 		"		// do horizontal filter pass\n"
-		"		{\n"
-		"       short16 pix = vload16(0, pLSrc); short4 pix_4 = vload4(0, (pLSrc+16));\n"
-		"       short8 filtpix_8;\n"
-		"       short4 filtpix_4;\n"
-		"       filtpix_8.s012 = ((short3)6 * pix.s456) + pix.s123 + pix.s789; filtpix_8.s345 = (short3)4 * (pix.s456 + pix.s789);\n"
-		"       filtpix_8.s67 = ((short2)6 * pix.s78) + pix.s45 + pix.sAB; filtpix_4.s0 = ((short)6 * pix.s9) + pix.s6 + pix.sC; filtpix_4.s123 = (short3)4 * (pix.s789 + pix.sABC);\n"
-		"       *(__local short8 *)pVertFilt = filtpix_8; *(__local short4 *)(pVertFilt + 8) = filtpix_4;\n"
-		"       pix.s01234567 = pix.s6789ABCD; pix.s89 = pix.sEF; pix.sABCD = pix_4;\n"
-		"       filtpix_8.s012 = ((short3)6 * pix.s456) + pix.s123 + pix.s789; filtpix_8.s345 = (short3)4 * (pix.s456 + pix.s789);\n"
-		"       filtpix_8.s67 = ((short2)6 * pix.s78) + pix.s45 + pix.sAB; filtpix_4.s0 = ((short)6 * pix.s9) + pix.s6 + pix.sC; filtpix_4.s123 = (short3)4 * (pix.s789 + pix.sABC);\n"
-		"       *(__local short8 *)(pVertFilt + 12) = filtpix_8; *(__local short4 *)(pVertFilt + 20) = filtpix_4;\n"
-		"		}\n"
-		"		if (ly < 2){\n"
-		"			pLSrc =  (__local short *)(lsSrc + loffs2.x);\n"
-		"			short16 pix = vload16(0, pLSrc); short4 pix_4 = vload4(0, (pLSrc+16));\n"
-		"			short8 filtpix_8;\n"
-		"			short4 filtpix_4;\n"
-		"			filtpix_8.s012 = ((short3)6 * pix.s456) + pix.s123 + pix.s789; filtpix_8.s345 = (short3)4 * (pix.s456 + pix.s789);\n"
-		"			filtpix_8.s67 = ((short2)6 * pix.s78) + pix.s45 + pix.sAB; filtpix_4.s0 = ((short)6 * pix.s9) + pix.s6 + pix.sC; filtpix_4.s123 = (short3)4 * (pix.s789 + pix.sABC);\n"
-		"			*(__local short8 *)pVertFilt2 = filtpix_8; *(__local short4 *)(pVertFilt2 + 8) = filtpix_4;\n"
-		"			pix.s01234567 = pix.s6789ABCD; pix.s89 = pix.sEF; pix.sABCD = pix_4;\n"
-		"			filtpix_8.s012 = ((short3)6 * pix.s456) + pix.s123 + pix.s789; filtpix_8.s345 = (short3)4 * (pix.s456 + pix.s789);\n"
-		"			filtpix_8.s67 = ((short2)6 * pix.s78) + pix.s45 + pix.sAB; filtpix_4.s0 = ((short)6 * pix.s9) + pix.s6 + pix.sC; filtpix_4.s123 = (short3)4 * (pix.s789 + pix.sABC);\n"
-		"			*(__local short8 *)(pVertFilt2 + 12) = filtpix_8; *(__local short4 *)(pVertFilt2 + 20) = filtpix_4;\n"
-		"		}\n"
+		"	{\n"
+		"       short16 spix = vload16(0, pLSrc); short4 spix_4 = vload4(0, (pLSrc+16));\n"
+		"       float16 pix = convert_float16((short16)(spix.s12345678, spix.s9ABC, spix.sDEF, spix_4.s0)) ;\n"
+		"       float2 pix_2 = convert_float2((short2)spix_4.s12);\n"
+		"       filtpix_8.s012 = ((float3)6.0f * pix.s345) + pix.s012 + pix.s678; filtpix_8.s345 = (float3)4.0f * (pix.s345 + pix.s678);\n"
+		"       filtpix_8.s67 = ((float2)6.0f * pix.s67) + pix.s34 + pix.s9A; filtpix_4.s0 = (float)((6.0f * pix.s8) + pix.s5 + pix.sB); filtpix_4.s123 = (float3)4.0f * (pix.s678 + pix.s9AB);\n"
+		"       *(__local float8 *)pVertFilt = filtpix_8; *(__local float4 *)(pVertFilt + 8) = filtpix_4;\n"
+		"       pix.s01234567 = pix.s6789ABCD; pix.s89 = pix.sEF; pix.sAB = pix_2;\n"
+		"       filtpix_8.s012 = ((float3)6.0f * pix.s345) + pix.s012 + pix.s678; filtpix_8.s345 = (float3)4.0f * (pix.s345 + pix.s678);\n"
+		"       filtpix_8.s67 = ((float2)6.0f * pix.s67) + pix.s34 + pix.s9A; filtpix_4.s0 = (float)((6.0f * pix.s8) + pix.s5 + pix.sB); filtpix_4.s123 = (float3)4.0f * (pix.s678 + pix.s9AB);\n"
+		"       *(__local float8 *)(pVertFilt + 12) = filtpix_8; *(__local float4 *)(pVertFilt + 20) = filtpix_4;\n"
+		"    }\n"
+		"    if (ly < 2){\n"
+		"        pLSrc =  (__local short *)(lsSrc + loffs2.x);\n"
+		"        short16 spix = vload16(0, pLSrc); short4 spix_4 = vload4(0, (pLSrc+16));\n"
+		"        float16 pix = convert_float16((short16)(spix.s12345678, spix.s9ABC, spix.sDEF, spix_4.s0)) ;\n"
+		"        float2 pix_2 = convert_float2((short2)spix_4.s12);\n"
+		"        filtpix_8.s012 = ((float3)6.0f * pix.s345) + pix.s012 + pix.s678; filtpix_8.s345 = (float3)4.0f * (pix.s345 + pix.s678);\n"
+		"        filtpix_8.s67 = ((float2)6.0f * pix.s67) + pix.s34 + pix.s9A; filtpix_4.s0 = (float)((6.0f * pix.s8) + pix.s5 + pix.sB); filtpix_4.s123 = (float3)4.0f * (pix.s678 + pix.s9AB);\n"
+		"        *(__local float8 *)pVertFilt2 = filtpix_8; *(__local float4 *)(pVertFilt2 + 8) = filtpix_4;\n"
+		"        pix.s01234567 = pix.s6789ABCD; pix.s89 = pix.sEF; pix.sAB = pix_2;\n"
+		"        filtpix_8.s012 = ((float3)6.0f * pix.s345) + pix.s012 + pix.s678; filtpix_8.s345 = (float3)4.0f * (pix.s345 + pix.s678);\n"
+		"        filtpix_8.s67 = ((float2)6.0f * pix.s67) + pix.s34 + pix.s9A; filtpix_4.s0 = (float)((6.0f * pix.s8) + pix.s5 + pix.sB); filtpix_4.s123 = (float3)4.0f * (pix.s678 + pix.s9AB);\n"
+		"        *(__local float8 *)(pVertFilt2 + 12) = filtpix_8; *(__local float4 *)(pVertFilt2 + 20) = filtpix_4;\n"
+		"    }\n"
 		"		barrier(CLK_LOCAL_MEM_FENCE);\n"
-		"		// do vertical filtering for 8 \n"
-		"		__local short *pV0 = pVertFilt; \n"
-		"		__local short *pV1 = pVertFilt + 64*3; \n"
-		"		__local short *pV2 = pVertFilt + 128*3;\n"
-		"       short8 tmp_8; short4 tmp_4; \n"
-		"       float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
-		"       tmp_8 = *(__local short8 *)&pV0[0]; tmp_4 = *(__local short4 *)&pV0[8];\n"
-		"       row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
-		"       tmp_8 = *(__local short8 *)&pV1[0]; tmp_4 = *(__local short4 *)&pV1[8];\n"
-		"       row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
-		"       row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
-		"       tmp_8 = *(__local short8 *)&pV2[0]; tmp_4 = *(__local short4 *)&pV2[8]; \n"
-		"       row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
-		"       row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
+		"		// do vertical filtering for 8 pixels\n"
+		"		__local float *pV0 = pVertFilt;\n"
+		"		__local float *pV1 = pVertFilt + 64*3;\n"
+		"		__local float *pV2 = pVertFilt + 128*3;\n"
+		"       float8 row0_8, row1_8; float4 row0_4, row1_4;\n";
+	if (out_format == VX_DF_IMAGE_RGB4_AMD){
+		opencl_kernel_code +=
+			"       short8 tmp_8; short4 tmp_4; \n";
+	}
+	else if (out_format == VX_DF_IMAGE_RGBX){
+		opencl_kernel_code +=
+			"       uint4 op_pix0, op_pix1;";
+	}
+	else{ //VX_DF_IMAGE_RGB6_AMD
+		opencl_kernel_code +=
+			"       uint8 op_pix0, op_pix1;";
+	}
+	opencl_kernel_code +=
+		"       row0_8 = *(__local float8 *)&pV0[0]; row0_4 = *(__local float4 *)&pV0[8];\n"
+		"       filtpix_8 = *(__local float8 *)&pV1[0]; filtpix_4 = *(__local float4 *)&pV1[8];\n"
+		"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+		"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+		"       filtpix_8 = *(__local float8 *)&pV2[0]; filtpix_4 = *(__local float4 *)&pV2[8]; \n"
+		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+		"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
 		"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
 		"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
-		"       tmp_8 = *(__global short8 *)(ip_buf); tmp_4 = *(__global short4 *)(ip_buf + 16);\n"
-		"       tmp_8 += convert_short8(row0_8); tmp_4 += convert_short4(row0_4);\n"
-		"       if (outputValid) {\n"
-		"         *(__global short8 *)(op_buf) = tmp_8; *(__global short4 *)(op_buf + 16) = tmp_4;\n"
-		"       }\n"
-		"       tmp_8 = *(__global short8 *)(ip_buf + ip_stride); tmp_4 = *(__global short4 *)(ip_buf + ip_stride + 16);\n"
-		"       tmp_8 += convert_short8(row1_8); tmp_4 += convert_short4(row1_4);\n"
-		"       if (outputValid) {\n"
-		"         *(__global short8 *)(op_buf + op_stride) = tmp_8; *(__global short4 *)(op_buf + op_stride + 16) = tmp_4;\n"
-		"       }\n"
-		"       tmp_8 = *(__local short8 *)&pV0[12]; tmp_4 = *(__local short4 *)&pV0[20];\n"
-		"       row0_8 = convert_float8(tmp_8); row0_4 = convert_float4(tmp_4);\n"
-		"       tmp_8 = *(__local short8 *)&pV1[12]; tmp_4 = *(__local short4 *)&pV1[20];\n"
-		"       row0_8 = mad(convert_float8(tmp_8), (float8)(6.0f), row0_8); row0_4 = mad(convert_float4(tmp_4), (float4)(6.0f), row0_4);\n"
-		"       row1_8 = 4.0f * convert_float8(tmp_8); row1_4 = 4.0f * convert_float4(tmp_4);\n"
-		"       tmp_8 = *(__local short8 *)&pV2[12]; tmp_4 = *(__local short4 *)&pV2[20]; \n"
-		"       row0_8 += convert_float8(tmp_8); row0_4 += convert_float4(tmp_4);\n"
-		"       row1_8 = mad(convert_float8(tmp_8), (float8)(4.0f), row1_8); row1_4 = mad(convert_float4(tmp_4), (float4)(4.0f), row1_4);\n"
+		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 16));\n"
+		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 16));\n"
+		"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n";
+	if (out_format == VX_DF_IMAGE_RGB4_AMD){
+		if (clamp_output){
+			opencl_kernel_code +=
+				"       row0_8 = clamp(row0_8,0.0f,32767.0f); row0_4 = clamp(row0_4,0.0f,32767.0f);\n"
+				"       row1_8 = clamp(row1_8,0.0f,32767.0f); row1_4 = clamp(row1_4,0.0f,32767.0f);\n";
+		}
+		//else{
+		//	opencl_kernel_code +=
+		//		"       row0_8 = clamp(row0_8,-32767.0f,32767.0f); row0_4 = clamp(row0_4,-32767.0f,32767.0f);\n"
+		//		"       row1_8 = clamp(row1_8,-32767.0f,32767.0f); row1_4 = clamp(row1_4,-32767.0f,32767.0f);\n";
+		//}
+		opencl_kernel_code +=
+			"       tmp_8 = convert_short8_sat_rte(row0_8); tmp_4 = convert_short4_sat_rte(row0_4);\n"
+			"       if (outputValid) {\n"
+			"         *(__global short8 *)(op_buf) = tmp_8; *(__global short4 *)(op_buf + 16) = tmp_4;\n"
+			"       }\n"
+			"       tmp_8 = convert_short8_sat_rte(row1_8); tmp_4 = convert_short4_sat_rte(row1_4);\n"
+			"       if (outputValid) {\n"
+			"         *(__global short8 *)(op_buf + op_stride) = tmp_8; *(__global short4 *)(op_buf + op_stride + 16) = tmp_4;\n"
+			"       }\n";
+	}
+	else if (out_format == VX_DF_IMAGE_RGBX){
+		opencl_kernel_code +=
+			"       row0_8 *= (float8)0.0078125f; row0_4 *= (float4)0.007782219916379f;\n" //new: 255/32767 old: 1/16=0.0625
+			"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
+			"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
+			"       row1_8 *= (float8)0.0078125f; row1_4 *= (float4)0.007782219916379f;\n" //new: 255/32767 old: 1/16=0.0625
+			"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
+			"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint4 *)(op_buf) = op_pix0; *(__global uint4 *)(op_buf + op_stride) = op_pix1;\n"
+			"       }\n";
+	}
+	else{ //VX_DF_IMAGE_RGB6_AMD
+		opencl_kernel_code +=
+			"       op_pix0.s0 = (clamp((uint)row0_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s1 = 0x7fff0000 + clamp((uint)row0_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix0.s2 = (clamp((uint)row0_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix0.s3 = 0x7fff0000 + clamp((uint)row0_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix0.s4 = (clamp((uint)row0_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix0.s5 = 0x7fff0000 + clamp((uint)row0_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s6 = (clamp((uint)row0_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row0_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix0.s7 = 0x7fff0000 + clamp((uint)row0_4.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s0 = (clamp((uint)row1_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s1 = 0x7fff0000 + clamp((uint)row1_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix1.s2 = (clamp((uint)row1_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s3 = 0x7fff0000 + clamp((uint)row1_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix1.s4 = (clamp((uint)row1_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix1.s5 = 0x7fff0000 + clamp((uint)row1_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s6 = (clamp((uint)row1_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row1_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix1.s7 = 0x7fff0000 + clamp((uint)row1_4.s3, (uint)0, (uint)32767);\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint8 *)(op_buf) = op_pix0; *(__global uint8 *)(op_buf + op_stride) = op_pix1;\n"
+			"       }\n";
+	}
+	opencl_kernel_code +=
+		"       row0_8 = *(__local float8 *)&pV0[12]; row0_4 = *(__local float4 *)&pV0[20];\n"
+		"       filtpix_8 = *(__local float8 *)&pV1[12]; filtpix_4 = *(__local float4 *)&pV1[20];\n"
+		"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+		"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+		"       filtpix_8 = *(__local float8 *)&pV2[12]; filtpix_4 = *(__local float4 *)&pV2[20]; \n"
+		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+		"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
 		"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
 		"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
-		"       tmp_8 = *(__global short8 *)(ip_buf + 24); tmp_4 = *(__global short4 *)(ip_buf + 40);\n"
-		"       tmp_8 += convert_short8_sat_rte(row0_8); tmp_4 += convert_short4_sat_rte(row0_4);\n"
-		"       if (outputValid) {\n"
-		"         *(__global short8 *)(op_buf + 24) = tmp_8; *(__global short4 *)(op_buf + 40) = tmp_4;\n"
-		"       }\n"
-		"       tmp_8 = *(__global short8 *)(ip_buf + ip_stride + 24); tmp_4 = *(__global short4 *)(ip_buf + ip_stride + 40);\n"
-		"       tmp_8 += convert_short8_sat_rte(row1_8); tmp_4 += convert_short4_sat_rte(row1_4);\n"
-		"       if (outputValid) {\n"
-		"         *(__global short8 *)(op_buf + op_stride + 24) = tmp_8; *(__global short4 *)(op_buf + op_stride + 40) = tmp_4;\n"
-		"       }\n"
-		"	}\n"
-		"}\n";
+		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 40));\n"
+		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 40));\n"
+		"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n";
+	if (out_format == VX_DF_IMAGE_RGB4_AMD){
+		if (clamp_output){
+			opencl_kernel_code +=
+				"       row0_8 = clamp(row0_8,0.0f,32767.0f); row0_4 = clamp(row0_4,0.0f,32767.0f);\n"
+				"       row1_8 = clamp(row1_8,0.0f,32767.0f); row1_4 = clamp(row1_4,0.0f,32767.0f);\n";
+		}
+		opencl_kernel_code +=
+			"       tmp_8 = convert_short8_sat_rte(row0_8); tmp_4 = convert_short4_sat_rte(row0_4);\n"
+			"       if (outputValid) {\n"
+			"         *(__global short8 *)(op_buf + 24) = tmp_8; *(__global short4 *)(op_buf + 40) = tmp_4;\n"
+			"       }\n"
+			"       tmp_8 = convert_short8_sat_rte(row1_8); tmp_4 = convert_short4_sat_rte(row1_4);\n"
+			"       if (outputValid) {\n"
+			"         *(__global short8 *)(op_buf + op_stride + 24) = tmp_8; *(__global short4 *)(op_buf + op_stride + 40) = tmp_4;\n"
+			"       }\n"
+			"	}\n"
+			"}\n";
+	}
+	else if (out_format == VX_DF_IMAGE_RGBX){
+		opencl_kernel_code += 
+			"       row0_8 *= (float8)0.0078125f; row0_4 *= (float4)0.007782219916379f;\n" //new: 255/32767 old: 1/16+0.0625
+			"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
+			"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
+			"       row1_8 *= (float8)0.0078125f; row1_4 *= (float4)0.007782219916379f;\n" //new: 255/32767 old: 1/16+0.0625
+			"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
+			"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint4 *)(op_buf + 16) = op_pix0; *(__global uint4 *)(op_buf + op_stride + 16) = op_pix1;\n"
+			"       }\n"
+			"	}\n"
+			"}\n";
+	}
+	else{ //VX_DF_IMAGE_RGB6_AMD
+		opencl_kernel_code +=
+			"       op_pix0.s0 = (clamp((uint)row0_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s1 = 0x7fff0000 + clamp((uint)row0_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix0.s2 = (clamp((uint)row0_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix0.s3 = 0x7fff0000 + clamp((uint)row0_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix0.s4 = (clamp((uint)row0_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix0.s5 = 0x7fff0000 + clamp((uint)row0_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s6 = (clamp((uint)row0_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row0_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix0.s7 = 0x7fff0000 + clamp((uint)row0_4.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s0 = (clamp((uint)row1_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s1 = 0x7fff0000 + clamp((uint)row1_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix1.s2 = (clamp((uint)row1_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s3 = 0x7fff0000 + clamp((uint)row1_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix1.s4 = (clamp((uint)row1_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix1.s5 = 0x7fff0000 + clamp((uint)row1_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s6 = (clamp((uint)row1_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row1_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix1.s7 = 0x7fff0000 + clamp((uint)row1_4.s3, (uint)0, (uint)32767);\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint8 *)(op_buf + 32) = op_pix0; *(__global uint8 *)(op_buf + op_stride + 32) = op_pix1;\n"
+			"       }\n"
+			"	}\n"
+			"}\n";
+	}
 	return VX_SUCCESS;
 }
 
@@ -1646,7 +2479,7 @@ vx_status upscale_gaussian_add_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.upscale_gaussian_add",
 		AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD,
 		upscale_gaussian_add_kernel,
-		6,
+		7,
 		upscale_gaussian_add_input_validator,
 		upscale_gaussian_add_output_validator,
 		nullptr,
@@ -1665,7 +2498,8 @@ vx_status upscale_gaussian_add_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED)); 
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
@@ -1758,7 +2592,7 @@ static vx_status VX_CALLBACK laplacian_reconstruct_output_validator(vx_node node
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
 	if (index == 5)
-	{ // image of format RGBX of pyramid image
+	{ // image of format RGBX or RGB6 of pyramid image
 		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 input_width = 0, input_height = 0;
@@ -1768,8 +2602,10 @@ static vx_status VX_CALLBACK laplacian_reconstruct_output_validator(vx_node node
 		image = (vx_image)avxGetNodeParamRef(node, index);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
+		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 		if (width != input_width)
 			width = input_width;
@@ -1778,7 +2614,10 @@ static vx_status VX_CALLBACK laplacian_reconstruct_output_validator(vx_node node
 			height = input_height;
 		}
 		// set output image meta data
-		vx_df_image format = VX_DF_IMAGE_RGBX;
+		if ((format != VX_DF_IMAGE_RGBX) && (format != VX_DF_IMAGE_RGB6_AMD)){
+			// pick RGBX as default
+			format = VX_DF_IMAGE_RGBX;
+		}
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -1841,7 +2680,7 @@ static vx_status VX_CALLBACK laplacian_reconstruct_opencl_codegen(
 	opencl_work_dim = 2;
 	opencl_local_work[0] = 8;
 	opencl_local_work[1] = 4;
-	opencl_global_work[0] = wg_num*opencl_local_work[0];
+	opencl_global_work[0] = wg_num*opencl_local_work[0]; 
 	opencl_global_work[1] = opencl_local_work[1]<<1;
 	image = (vx_image)avxGetNodeParamRef(node, 3);				// input image
 	ERROR_CHECK_OBJECT(image);
@@ -1873,13 +2712,21 @@ static vx_status VX_CALLBACK laplacian_reconstruct_opencl_codegen(
 		"		int border = (offs.y >> 30) & 0x3;\n"
 		"		int height1 = %d;\n"
 		"		ip_buf += ip_offset + mad24(gy, ip_stride, gx*6);\n"
-		"		op_buf  += op_offset + mad24(gy, op_stride, gx*4);\n"
 		"		ip_buf += (camera_id * ip_stride*%d);\n"
 		"		ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
 		"		op_buf += (camera_id * op_stride*%d);\n"
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, Inheight1 - 1, height1, Inheight1, height1);
 	opencl_kernel_code = item;
-
+	if (out_format == VX_DF_IMAGE_RGBX)
+	{
+		opencl_kernel_code +=
+			"		op_buf  += op_offset + mad24(gy, op_stride, gx<<2);\n";
+	}
+	else //out_format == VX_DF_IMAGE_RGB6_AMD
+	{
+		opencl_kernel_code +=
+			"		op_buf  += op_offset + mad24(gy, op_stride, gx<<3);\n";
+	}
 	opencl_kernel_code +=
 		"		ly = ly & 3;\n"
 		"		// load src2 (for upscale) to LDS\n"
@@ -1971,55 +2818,131 @@ static vx_status VX_CALLBACK laplacian_reconstruct_opencl_codegen(
 		"		__local float *pV0 = pVertFilt;\n"
 		"		__local float *pV1 = pVertFilt + 64*3;\n"
 		"		__local float *pV2 = pVertFilt + 128*3;\n"
-		"       float8 row0_8, row1_8; float4 row0_4, row1_4;\n"
-		"       uint4 op_pix0, op_pix1;"
-		"       row0_8 = *(__local float8 *)&pV0[0]; row0_4 = *(__local float4 *)&pV0[8];\n"
-		"       filtpix_8 = *(__local float8 *)&pV1[0]; filtpix_4 = *(__local float4 *)&pV1[8];\n"
-		"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
-		"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
-		"       filtpix_8 = *(__local float8 *)&pV2[0]; filtpix_4 = *(__local float4 *)&pV2[8]; \n"
-		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
-		"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
-		"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
-		"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
-		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 16));\n"
-		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
-		"       row0_8 *= (float8)0.0625f; row0_4 *= (float4)0.0625f;\n"
-		"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
-		"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
-		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 16));\n"
-		"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
-		"       row1_8 *= (float8)0.0625f; row1_4 *= (float4)0.0625f;\n"
-		"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
-		"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
-		"       if (outputValid) {\n"
-		"         *(__global uint4 *)(op_buf) = op_pix0; *(__global uint4 *)(op_buf + op_stride) = op_pix1;\n"
-		"       }\n"
-		"       //tmp_8 = *(__local short8 *)&pV0[12]; tmp_4 = *(__local short4 *)&pV0[20];\n"
-		"       row0_8 = *(__local float8 *)&pV0[12]; row0_4 = *(__local float4 *)&pV0[20];\n"
-		"       filtpix_8 = *(__local float8 *)&pV1[12]; filtpix_4 = *(__local float4 *)&pV1[20];\n"
-		"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
-		"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
-		"       filtpix_8 = *(__local float8 *)&pV2[12]; filtpix_4 = *(__local float4 *)&pV2[20]; \n"
-		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
-		"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
-		"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
-		"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
-		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 40));\n"
-		"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
-		"       row0_8 *= (float8)0.0625f; row0_4 *= (float4)0.0625f;\n"
-		"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
-		"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
-		"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 40));\n"
-		"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
-		"       row1_8 *= (float8)0.0625f; row1_4 *= (float4)0.0625f;\n"
-		"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
-		"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
-		"       if (outputValid) {\n"
-		"         *(__global uint4 *)(op_buf + 16) = op_pix0; *(__global uint4 *)(op_buf + op_stride + 16) = op_pix1;\n"
-		"       }\n"
-		"	}\n"
-		"}\n";
+		"       float8 row0_8, row1_8; float4 row0_4, row1_4;\n";
+	if (out_format == VX_DF_IMAGE_RGBX)
+	{
+		opencl_kernel_code +=
+			"       uint4 op_pix0, op_pix1;"
+			"       row0_8 = *(__local float8 *)&pV0[0]; row0_4 = *(__local float4 *)&pV0[8];\n"
+			"       filtpix_8 = *(__local float8 *)&pV1[0]; filtpix_4 = *(__local float4 *)&pV1[8];\n"
+			"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+			"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+			"       filtpix_8 = *(__local float8 *)&pV2[0]; filtpix_4 = *(__local float4 *)&pV2[8]; \n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
+			"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
+			"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 16));\n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row0_8 *= (float8)0.0078125f; row0_4 *= (float4)0.0078125f;\n" //new: 1/128 old: 1/16=0.0625
+			"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
+			"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 16));\n"
+			"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
+			"       row1_8 *= (float8)0.0078125f; row1_4 *= (float4)0.0078125f;\n" //new: 1/128 old: 1/16=0.0625
+			"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
+			"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint4 *)(op_buf) = op_pix0; *(__global uint4 *)(op_buf + op_stride) = op_pix1;\n"
+			"       }\n"
+			"       //tmp_8 = *(__local short8 *)&pV0[12]; tmp_4 = *(__local short4 *)&pV0[20];\n"
+			"       row0_8 = *(__local float8 *)&pV0[12]; row0_4 = *(__local float4 *)&pV0[20];\n"
+			"       filtpix_8 = *(__local float8 *)&pV1[12]; filtpix_4 = *(__local float4 *)&pV1[20];\n"
+			"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+			"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+			"       filtpix_8 = *(__local float8 *)&pV2[12]; filtpix_4 = *(__local float4 *)&pV2[20]; \n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
+			"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
+			"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 40));\n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row0_8 *= (float8)0.0078125f; row0_4 *= (float4)0.0078125f;\n" //new: 1/128 old: 1/16+0.0625
+			"       op_pix0.s0 = amd_pack((float4)(row0_8.s0, row0_8.s1, row0_8.s2, 255.0f)); op_pix0.s1 = amd_pack((float4)(row0_8.s3, row0_8.s4, row0_8.s5, 255.0f));\n"
+			"       op_pix0.s2 = amd_pack((float4)(row0_8.s6, row0_8.s7, row0_4.s0, 255.0f)); op_pix0.s3 = amd_pack((float4)(row0_4.s1, row0_4.s2, row0_4.s3, 255.0f));\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 40));\n"
+			"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
+			"       row1_8 *= (float8)0.0078125f; row1_4 *= (float4)0.0078125f;\n" //new: 1/128 old: 1/16+0.0625
+			"       op_pix1.s0 = amd_pack((float4)(row1_8.s0, row1_8.s1, row1_8.s2, 255.0f)); op_pix1.s1 = amd_pack((float4)(row1_8.s3, row1_8.s4, row1_8.s5, 255.0f));\n"
+			"       op_pix1.s2 = amd_pack((float4)(row1_8.s6, row1_8.s7, row1_4.s0, 255.0f)); op_pix1.s3 = amd_pack((float4)(row1_4.s1, row1_4.s2, row1_4.s3, 255.0f));\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint4 *)(op_buf + 16) = op_pix0; *(__global uint4 *)(op_buf + op_stride + 16) = op_pix1;\n"
+			"       }\n"
+			"	}\n"
+			"}\n";
+	}
+	else //Output format == VX_DF_IMAGE_RGB6_AMD
+	{
+		opencl_kernel_code +=
+			"       uint8 op_pix0, op_pix1;"
+			"       row0_8 = *(__local float8 *)&pV0[0]; row0_4 = *(__local float4 *)&pV0[8];\n"
+			"       filtpix_8 = *(__local float8 *)&pV1[0]; filtpix_4 = *(__local float4 *)&pV1[8];\n"
+			"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+			"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+			"       filtpix_8 = *(__local float8 *)&pV2[0]; filtpix_4 = *(__local float4 *)&pV2[8]; \n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
+			"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
+			"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 16));\n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       op_pix0.s0 = (clamp((uint)row0_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s1 = 0x7fff0000 + clamp((uint)row0_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix0.s2 = (clamp((uint)row0_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix0.s3 = 0x7fff0000 + clamp((uint)row0_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix0.s4 = (clamp((uint)row0_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix0.s5 = 0x7fff0000 + clamp((uint)row0_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s6 = (clamp((uint)row0_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row0_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix0.s7 = 0x7fff0000 + clamp((uint)row0_4.s3, (uint)0, (uint)32767);\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 16));\n"
+			"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
+			"       op_pix1.s0 = (clamp((uint)row1_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s1 = 0x7fff0000 + clamp((uint)row1_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix1.s2 = (clamp((uint)row1_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s3 = 0x7fff0000 + clamp((uint)row1_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix1.s4 = (clamp((uint)row1_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix1.s5 = 0x7fff0000 + clamp((uint)row1_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s6 = (clamp((uint)row1_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row1_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix1.s7 = 0x7fff0000 + clamp((uint)row1_4.s3, (uint)0, (uint)32767);\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint8 *)(op_buf) = op_pix0; *(__global uint8 *)(op_buf + op_stride) = op_pix1;\n"
+			"       }\n"
+			"       //tmp_8 = *(__local short8 *)&pV0[12]; tmp_4 = *(__local short4 *)&pV0[20];\n"
+			"       row0_8 = *(__local float8 *)&pV0[12]; row0_4 = *(__local float4 *)&pV0[20];\n"
+			"       filtpix_8 = *(__local float8 *)&pV1[12]; filtpix_4 = *(__local float4 *)&pV1[20];\n"
+			"       row0_8 = mad(filtpix_8, (float8)(6.0f), row0_8); row0_4 = mad(filtpix_4, (float4)(6.0f), row0_4);\n"
+			"       row1_8 = 4.0f * filtpix_8; row1_4 = 4.0f * filtpix_4;\n"
+			"       filtpix_8 = *(__local float8 *)&pV2[12]; filtpix_4 = *(__local float4 *)&pV2[20]; \n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       row1_8 = mad(filtpix_8, (float8)(4.0f), row1_8); row1_4 = mad(filtpix_4, (float4)(4.0f), row1_4);\n"
+			"       row0_8 *= (float8)0.015625f; row0_4 *= (float4)0.015625f;\n"
+			"       row1_8 *= (float8)0.015625f; row1_4 *= (float4)0.015625f;\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + 40));\n"
+			"       row0_8 += filtpix_8; row0_4 += filtpix_4;\n"
+			"       op_pix0.s0 = (clamp((uint)row0_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s1 = 0x7fff0000 + clamp((uint)row0_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix0.s2 = (clamp((uint)row0_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix0.s3 = 0x7fff0000 + clamp((uint)row0_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix0.s4 = (clamp((uint)row0_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row0_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix0.s5 = 0x7fff0000 + clamp((uint)row0_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix0.s6 = (clamp((uint)row0_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row0_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix0.s7 = 0x7fff0000 + clamp((uint)row0_4.s3, (uint)0, (uint)32767);\n"
+			"       filtpix_8 = convert_float8(*(__global short8 *)(ip_buf + ip_stride + 24)); filtpix_4 = convert_float4(*(__global short4 *)(ip_buf + ip_stride + 40));\n"
+			"       row1_8 += filtpix_8; row1_4 += filtpix_4;\n"
+			"       op_pix1.s0 = (clamp((uint)row1_8.s1, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s1 = 0x7fff0000 + clamp((uint)row1_8.s2, (uint)0, (uint)32767);\n"
+			"       op_pix1.s2 = (clamp((uint)row1_8.s4, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s3, (uint)0, (uint)32767);\n"
+			"       op_pix1.s3 = 0x7fff0000 + clamp((uint)row1_8.s5, (uint)0, (uint)32767);\n"
+			"       op_pix1.s4 = (clamp((uint)row1_8.s7, (uint)0, (uint)32767) << 16) + clamp((uint)row1_8.s6, (uint)0, (uint)32767);\n"
+			"       op_pix1.s5 = 0x7fff0000 + clamp((uint)row1_4.s0, (uint)0, (uint)32767);\n"
+			"       op_pix1.s6 = (clamp((uint)row1_4.s2, (uint)0, (uint)32767) << 16) + clamp((uint)row1_4.s1, (uint)0, (uint)32767);\n"
+			"       op_pix1.s7 = 0x7fff0000 + clamp((uint)row1_4.s3, (uint)0, (uint)32767);\n"
+			"       if (outputValid) {\n"
+			"         *(__global uint8 *)(op_buf + 32) = op_pix0; *(__global uint8 *)(op_buf + op_stride + 32) = op_pix1;\n"
+			"       }\n"
+			"	}\n"
+			"}\n";
+	}
 	return VX_SUCCESS;
 }
 
