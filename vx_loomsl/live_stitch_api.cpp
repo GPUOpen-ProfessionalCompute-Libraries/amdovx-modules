@@ -1421,6 +1421,8 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 				_mm_store_si128(dst++, r0);
 				_mm_store_si128(dst++, r0);
 			}
+			//			for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
+			//				ptr[i] = 0x80000000;
 			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->RGBY2, map_id));
 		}
 	}
@@ -1587,14 +1589,9 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 			ERROR_CHECK_ALLOC_(stitch->A_matrix_initial_value = new vx_int32[stitch->num_cameras * stitch->num_cameras*3]());
 			ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->A_matrix, stitch->A_matrix_initial_value));
 		}
-		else if (stitch->EXPO_COMP == 4){
-			ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH * 12));
-			ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW *stitch->EXPO_COMP_GAINH * 12, &one, 0));
-		}
-		else{
-			ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH*stitch->EXPO_COMP_GAINC));
-			ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINC *stitch->EXPO_COMP_GAINH, &one, 0));
-		}
+		// create gain array
+		ERROR_CHECK_OBJECT_(stitch->gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINH*stitch->EXPO_COMP_GAINC));
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->gain_array, stitch->num_cameras*stitch->EXPO_COMP_GAINW * stitch->EXPO_COMP_GAINC *stitch->EXPO_COMP_GAINH, &one, 0));
 	}
 	// create data objects needed by seamfind kernel
 	if (stitch->SEAM_FIND) {
@@ -2655,11 +2652,12 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 			stitch->EXPO_COMP_GAINW = 1;
 			stitch->EXPO_COMP_GAINH = 1;
-			stitch->EXPO_COMP_GAINC = (stitch->EXPO_COMP==2)? 3: 1;
+			stitch->EXPO_COMP_GAINC = (stitch->EXPO_COMP == 2) ? 3 : (stitch->EXPO_COMP == 4)? 12: 1;
 			if (stitch->EXPO_COMP >= 3 ) {
 				stitch->EXPO_COMP_GAINW = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W]);
 				stitch->EXPO_COMP_GAINH = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H]);
 				stitch->EXPO_COMP_GAINC = (vx_uint32)std::max(1.0f, stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C]);
+				if (stitch->EXPO_COMP == 4) stitch->EXPO_COMP_GAINC = 12;	// override the default value since kernel expects 12.
 			}
 			if (stitch->EXPO_COMP < 3) {
 				stitch->alpha = (vx_float32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE];
