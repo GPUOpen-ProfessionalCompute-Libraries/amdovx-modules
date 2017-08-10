@@ -935,9 +935,14 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 	stitch->stitchInitData->params.camWidth = camWidth;
 	stitch->stitchInitData->params.camHeight = camHeight;
 	stitch->stitchInitData->params.paddingPixelCount = paddingPixelCount;
-	float cam_params[32] = { 0 };
+	float cam_params_val = 0.0f;
 	bool lens_fish_eye = 0;
+	vx_map_id mapIdCamPar;
+	vx_size stride = sizeof(vx_size);
+	float *cam_params;
 	ERROR_CHECK_STATUS(vxTruncateArray(stitch->stitchInitData->CameraParamsArr, 0));
+	ERROR_CHECK_STATUS(vxAddArrayItems(stitch->stitchInitData->CameraParamsArr, 32 * numCamera, &cam_params_val, 0));
+	ERROR_CHECK_STATUS_(vxMapArrayRange(stitch->stitchInitData->CameraParamsArr, 0, 32 * numCamera, &mapIdCamPar, &stride, (void **)&cam_params, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
 	const float * T = Tcam, *M = Mcam, *f = fcam;
 	for (vx_uint32 cam = 0; cam < numCamera; cam++, T += 3, M += 9, f += 2) {
 		// perform lens distortion and warp for each pixel in the equirectangular destination image
@@ -969,9 +974,9 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 		memcpy(&cam_params[16], (void*)M, sizeof(float) * 9);
 		cam_params[25] = (float)lens->lens_type;
 		lens_fish_eye = (lens->lens_type == ptgui_lens_fisheye_circ);
-		// write cam_params into stitch->stitchInitData.CameraParamsArr
-		ERROR_CHECK_STATUS(vxAddArrayItems(stitch->stitchInitData->CameraParamsArr, 32, &cam_params, sizeof(float)));
+		cam_params += 32;
 	}
+	ERROR_CHECK_STATUS_(vxUnmapArrayRange(stitch->stitchInitData->CameraParamsArr, mapIdCamPar));
 	stitch->stitchInitData->params.camId = numCamera;
 	stitch->stitchInitData->lens_fish_eye = lens_fish_eye;
 
@@ -1033,7 +1038,7 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 			stitch->overlapPadded[cam] = stitch->overlapValid[cam] + stitch->num_cameras*stitch->num_cameras;
 		}
 	}
-	if (stitch->FAST_INIT){
+	if (stitch->FAST_INIT && !stitch->stitchInitData){
 		vx_enum StitchCoord2dFloatType;
 		stitch->stitchInitData = new StitchInitializeData;
 		memset(stitch->stitchInitData, 0, sizeof(StitchInitializeData));
@@ -1635,6 +1640,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 		ERROR_CHECK_TYPE_(StitchBlendValidType = vxRegisterUserStruct(stitch->context, sizeof(StitchBlendValidEntry)));
 		ERROR_CHECK_OBJECT_(stitch->blend_offsets = vxCreateArray(stitch->context, StitchBlendValidType, stitch->table_sizes.blendOffsetTableSize));
 		ERROR_CHECK_ALLOC_(stitch->pStitchMultiband = new StitchMultibandData[stitch->num_bands]());
+		memset(stitch->pStitchMultiband, 0, sizeof(StitchMultibandData)*stitch->num_bands);
 		stitch->pStitchMultiband[0].WeightPyrImgGaussian = stitch->SEAM_FIND ? stitch->seamfind_weight_image : stitch->weight_image;	// for level#0: weight image is mask image after seem find
 		stitch->pStitchMultiband[0].DstPyrImgGaussian = stitch->EXPO_COMP ? stitch->RGBY2 : stitch->RGBY1;			// for level#0: dst image is image after exposure_comp
 		ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacian = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
@@ -3033,6 +3039,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
 				if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
 				if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->DefaultCamMap));
+				if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->ValidPixelMap));
 				if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->PaddedPixMap));
 				if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->SrcCoordMap));
 				if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
@@ -3040,6 +3047,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
 				if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
 				delete[] stitch->stitchInitData;
+				stitch->stitchInitData = nullptr;
 			}
 		}
 
