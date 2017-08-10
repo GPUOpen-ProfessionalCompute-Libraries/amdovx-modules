@@ -38,5 +38,7 @@ if(OpenCL_FOUND)
 endif(OpenCL_FOUND)
 
 if(OpenCV_FOUND)
-    add_subdirectory (vx_ext_cv)
+    if(${OpenCV_VERSION_MAJOR} EQUAL 3)
+        add_subdirectory (vx_ext_cv)
+    endif()
 endif(OpenCV_FOUND)
