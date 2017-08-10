@@ -782,6 +782,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_global_work_update(
 	vx_size arr_numitems = 0;
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
 	opencl_global_work[0] = arr_numitems*opencl_local_work[0];
+	opencl_global_work[1] = 2*opencl_local_work[1];
 	return VX_SUCCESS;
 }
 
@@ -848,7 +849,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	opencl_local_work[0] = 16;
 	opencl_local_work[1] = 16;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
-	opencl_global_work[1] = 32;
+	opencl_global_work[1] = 2*opencl_local_work[1];
 	// opencl kernel header and reading
 	char item[8192];
 	opencl_kernel_code =
@@ -1248,7 +1249,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
 			"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n"
 			"    int  lx = get_local_id(0);\n"
-			"    int  ly = get_local_id(1);\n"
+			"    int  ly = get_global_id(1);\n"
 			"    int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
 			"    int   gy = ly + ((offs.s0 >> 18) << 1);\n"
 			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
