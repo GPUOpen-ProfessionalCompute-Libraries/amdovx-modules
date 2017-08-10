@@ -1421,8 +1421,6 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 				_mm_store_si128(dst++, r0);
 				_mm_store_si128(dst++, r0);
 			}
-			//			for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
-			//				ptr[i] = 0x80000000;
 			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->RGBY2, map_id));
 		}
 	}
