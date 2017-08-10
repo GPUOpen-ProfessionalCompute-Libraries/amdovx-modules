@@ -876,7 +876,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
 			"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n"
 			"    int  lx = get_local_id(0);\n"
-			"    int  ly = get_local_id(1);\n"
+			"    int  ly = get_global_id(1);\n"
 			"    int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
 			"    int   gy = ly + ((offs.s0 >> 18) << 1);\n"
 			"    pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
@@ -937,7 +937,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 		}
 		opencl_kernel_code +=
 			"	int  lx = get_local_id(0);\n"
-			"	int  ly = get_local_id(1);\n"
+			"	int  ly = get_global_id(1);\n"
 			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
 			"   int   gy = ly + ((offs.s0 >> 18) << 1);\n"
 			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
