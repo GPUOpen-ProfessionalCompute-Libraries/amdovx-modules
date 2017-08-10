@@ -26,7 +26,7 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(OpenCL QUIET)
 
-include_directories(../../../amdovx-core/openvx/include ../../../amdovx-modules/vx_loomsl)
+include_directories(../../deps/amdovx-core/openvx/include ../../vx_loomsl)
 
 list(APPEND SOURCES
 	loom_shell_util.cpp
@@ -52,16 +52,3 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
-
-
-
-
-
-
-
-
-
-
-
-
-
