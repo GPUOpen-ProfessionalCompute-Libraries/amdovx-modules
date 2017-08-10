@@ -1,0 +1,3 @@
+[submodule "deps/amdovx-core"]
+	path = deps/amdovx-core
+	url = https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core
