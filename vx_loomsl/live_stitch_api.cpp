@@ -416,7 +416,27 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 		void *ptr[1] = { nullptr };
 		addr_in.dim_x = width;
 		addr_in.dim_y = height;
-		addr_in.stride_x = ((format == VX_DF_IMAGE_RGBX) | (format == VX_DF_IMAGE_U32) | (format == VX_DF_IMAGE_S32)) ? 4 : (format == VX_DF_IMAGE_RGB4_AMD) ? 6 : (format == VX_DF_IMAGE_RGB6_AMD) ? 8 : 1;
+		switch (format)
+		{
+			case VX_DF_IMAGE_RGBX:
+			case VX_DF_IMAGE_U32:
+			case VX_DF_IMAGE_S32:
+				addr_in.stride_x = 4;
+				break;
+			case VX_DF_IMAGE_U16:
+			case VX_DF_IMAGE_S16:
+				addr_in.stride_x = 2;
+				break;
+			case VX_DF_IMAGE_RGB4_AMD:
+				addr_in.stride_x = 6;
+				break;
+			case VX_DF_IMAGE_RGB6_AMD:
+				addr_in.stride_x = 8;
+				break;
+			default:
+				addr_in.stride_x = 1;
+		}
+	//	addr_in.stride_x = ((format == VX_DF_IMAGE_RGBX) | (format == VX_DF_IMAGE_U32) | (format == VX_DF_IMAGE_S32)) ? 4 : (format == VX_DF_IMAGE_RGB4_AMD) ? 6 : (format == VX_DF_IMAGE_RGB6_AMD) ? 8 : 1;
 		if (alignpixels == 0)
 			addr_in.stride_y = addr_in.dim_x *addr_in.stride_x;
 		else
@@ -1713,7 +1733,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 			vx_uint32 height_l = ((stitch->output_rgb_buffer_height + levelAlign) >> level) * stitch->num_cameras;
 
 			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_S16, VX_MEMORY_TYPE_OPENCL));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 32, VX_DF_IMAGE_S16, VX_MEMORY_TYPE_OPENCL));
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 			}
 			else{ // 8bit flow
@@ -3772,7 +3792,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			for (int i = 1; i < stitch->num_bands; i++) {
 				nodeMap[stitch->pStitchMultiband[i].WeightHSGNode] = "com.amd.loomsl.half_scale_gaussian";
 				nodeMap[stitch->pStitchMultiband[i].SourceHSGNode] = "com.amd.loomsl.half_scale_gaussian";
-				nodeMap[stitch->pStitchMultiband[i].UpscaleSubtractNode] = "com.amd.loomsl.upscale_gaussian_subtract";
+				nodeMap[stitch->pStitchMultiband[i-1].UpscaleSubtractNode] = "com.amd.loomsl.upscale_gaussian_subtract";
 			}
 			int i = stitch->num_bands - 1;
 			nodeMap[stitch->pStitchMultiband[i].BlendNode] = "com.amd.loomsl.multiband_blend";
