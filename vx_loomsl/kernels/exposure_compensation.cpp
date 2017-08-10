@@ -846,8 +846,9 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	strcpy(opencl_kernel_function_name, "exposure_comp_apply_gains");
 	opencl_work_dim = 2;
 	opencl_local_work[0] = 16;
-	opencl_local_work[1] = 32;
+	opencl_local_work[1] = 16;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
+	opencl_global_work[1] = 32;
 	// opencl kernel header and reading
 	char item[8192];
 	opencl_kernel_code =
@@ -1320,7 +1321,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	}
 	else
 	{
-		opencl_global_work[1] = opencl_local_work[1];
 		sprintf(item,
 			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
 			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
