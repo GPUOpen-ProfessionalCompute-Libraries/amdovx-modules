@@ -10,6 +10,8 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
   * DRIVER: AMD Radeon Crimson Edition - use the latest version
   * AMD APP SDK 3.0 [download](http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/).
 * Download [amdovx-core](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core) project at the same level folder as amdovx-modules build folder
+* OpenCV 3 (optional) [download](https://github.com/opencv/opencv/releases) for vx_ext_cv
+  * Set OpenCV_DIR environment variable to OpenCV/build folder
 
 ## Build using Visual Studio Professional 2013 on 64-bit Windows 10/8.1/7
 * Use amdovx-modules/loom.sln to build for x64 platform
@@ -17,8 +19,3 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
 ## Build using CMake on Linux (Ubuntu 15.10 64-bit)
 * Install CMake 2.8 or newer [download](http://cmake.org/download/).
 * Use CMake to configure and generate Makefile
-
-## Build OpenCV extension module (vx_ext_cv)
-* Install [OpenCV 3.0](https://github.com/opencv/opencv/releases/tag/3.0.0).
-* Set OpenCV_DIR environment variable to OpenCV/build folder
-* Use amdovx-modules/vx_ext_cv/amd_ext_cv.sln

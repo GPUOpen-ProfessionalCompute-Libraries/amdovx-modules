@@ -75,7 +75,7 @@ static inline vx_uint32 GetOneBitCount(vx_uint32 a)
 #else
 static inline vx_uint32 GetOneBitPosition(vx_uint32 a)
 {
-	return __builtin_ctz(a);
+	return ((31 - __builtin_clz(a)) < 0) ? 32 : (31 - __builtin_clz(a));
 }
 static inline vx_uint32 GetOneBitCount(vx_uint32 a)
 {

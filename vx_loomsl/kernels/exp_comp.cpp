@@ -1196,12 +1196,10 @@ vx_status CExpCompensator::SolveForGains(vx_float32 alpha, vx_float32 beta, vx_u
 		float *pRGB_gains = new float[m_numImages * 3];
 		for (i = 0; i < (int)m_numImages; i++){
 			// gamma correction for the gains
-			pRGB_gains[i * 3]		= powf(gains[i], 0.454546f);
-			pRGB_gains[i * 3 + 1]	= powf(gain_g[i], 0.454546f);
-			pRGB_gains[i * 3 + 2]	= powf(gain_b[i], 0.454546f);
-			printf("ImageNum:%d Rg: %f Gg: %f Bg: %f\n", i, pRGB_gains[i * 3], pRGB_gains[i * 3 + 1], pRGB_gains[i * 3 + 2]);
+			pRGB_gains[i * 3]     = powf(gains[i], 0.454546f);
+			pRGB_gains[i * 3 + 1] = powf(gain_g[i], 0.454546f);
+			pRGB_gains[i * 3 + 2] = powf(gain_b[i], 0.454546f);
 		}
-	
 		ERROR_CHECK_STATUS(vxTruncateArray(Gains_arr, 0));
 		ERROR_CHECK_STATUS(vxAddArrayItems(Gains_arr, m_numImages*3, pRGB_gains, sizeof(float)));
 		delete[] pRGB_gains;
@@ -1312,11 +1310,9 @@ vx_status CExpCompensator::applygains_thread_func(vx_int32 img_num, char *in_bas
 		g_g = powf(g_g, 0.454546f);
 		g_b = powf(g_b, 0.454546f);
 #endif
-	//	printf("ImageNum:%d Rg: %f Gg: %f Bg: %f\n", img_num, g_r, g_g, g_b);
 	}
 	else{
 		g_r = g_g = g_b = g_y;	// todo: check if we need to apply gain factor for RGB
-	//	printf("ImageNum:%d Rg: %f Gg: %f Bg: %f\n", img_num, g_r, g_g, g_b);
 	}
 	// todo:: if we do the following code in CPU, need to optimize using SSE
 	for (int i = 0; i < height; i++){

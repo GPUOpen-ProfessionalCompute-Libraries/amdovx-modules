@@ -4,23 +4,23 @@ The vx_ext_cv is an OpenVX module that implemented a mechanism to access OpenCV 
 ## List of OpenCV-interop kernels
 The following is a list of OpenCV functions that have been included in the vx_ext_cv module.
 
-    bilateralFilter​             org.opencv.bilateralfilter
-    blur​                        org.opencv.blur
+    bilateralFilter             org.opencv.bilateralfilter
+    blur                        org.opencv.blur
     boxfilter                   org.opencv.boxfilter
-    buildPyramid​                org.opencv.buildpyramid
+    buildPyramid                org.opencv.buildpyramid
     Dilate                      org.opencv.dilate 
     Erode                       org.opencv.erode 
-    filter2D​                    org.opencv.filter2d
+    filter2D                    org.opencv.filter2d
     GaussianBlur                org.opencv.gaussianblur
     MedianBlur                  org.opencv.medianblur
-    morphologyEx​                org.opencv.morphologyex
-    Laplacian​                   org.opencv.laplacian
-    pyrDown​                     org.opencv.pyrdown
-    pyrUp​                       org.opencv.pyrup
-    sepFilter2D​                 org.opencv.sepfilter2d
+    morphologyEx                org.opencv.morphologyex
+    Laplacian                   org.opencv.laplacian
+    pyrDown                     org.opencv.pyrdown
+    pyrUp                       org.opencv.pyrup
+    sepFilter2D                 org.opencv.sepfilter2d
     Sobel                       org.opencv.sobel
-    Scharr​                      org.opencv.scharr
-    FAST​                        org.opencv.fast
+    Scharr                      org.opencv.scharr
+    FAST                        org.opencv.fast
     MSER                        org.opencv.mser_detect 
     ORB                         org.opencv.orb_detect
     ORB_Compute                 org.opencv.orb_compute   
@@ -38,7 +38,7 @@ The following is a list of OpenCV functions that have been included in the vx_ex
     buildOpticalFlowPyramid     org.opencv.buildopticalflowpyramid
     DistanceTransform           org.opencv.distancetransform                                           
     Convert_Scale_Abs           org.opencv.convertscaleabs                      
-    addWeighted​                 org.opencv.addweighted                          
+    addWeighted                 org.opencv.addweighted                          
     Transpose                   org.opencv.transpose                            
     Resize                      org.opencv.resize
     AdaptiveThreshold           org.opencv.adaptivethreshold                                                          
@@ -63,8 +63,8 @@ The following is a list of OpenCV functions that have been included in the vx_ex
 ## Build Instructions
 
 #### Pre-requisites
-* OpenCV 3.0 [download](http://opencv.org/downloads.html).
-* CMake 3.1 or newer [download](http://cmake.org/download/).
+* OpenCV 3 [download](https://github.com/opencv/opencv/releases).
+* CMake 2.8 or newer [download](http://cmake.org/download/).
 * Build amdovx-core project at the same level folder as amdovx-modules build folder
 * OpenCV_DIR environment variable should point to OpenCV/build folder
 

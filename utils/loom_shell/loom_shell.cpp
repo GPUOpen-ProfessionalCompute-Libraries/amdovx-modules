@@ -1306,6 +1306,14 @@ int CLoomShellParser::OnCommand()
 		// process the command
 		cl_int status = createBuffer(opencl_context_[clIndex], bufSize, &opencl_buf_mem_[bufIndex]);
 		if (status) return status;
+		// initialize buffer
+		char textBuffer[1024];
+		cl_int LS_INITIALIZE_CLMEM = 0;
+		if (GetEnvVariable("LS_INITIALIZE_CLMEM", textBuffer, sizeof(textBuffer))){ LS_INITIALIZE_CLMEM = (cl_int)atoi(textBuffer); }
+		if (LS_INITIALIZE_CLMEM >= 0){
+			status = initializeBuffer(opencl_buf_mem_[bufIndex], bufSize, LS_INITIALIZE_CLMEM);
+			if (status) return status;
+		}
 	}
 	else if (!_stricmp(command, "releaseBuffer")) {
 		// parse the command

@@ -26,7 +26,7 @@ set (CMAKE_CXX_STANDARD 11)
 find_package (OpenCV REQUIRED)
 find_package (OpenCL)
 
-include_directories (include)
+include_directories (../deps/amdovx-core/openvx/include)
 
 list (APPEND SOURCES 
 	OpenCV_absdiff.cpp
@@ -94,7 +94,7 @@ list (APPEND SOURCES
 	)
 
 add_library(vx_ext_cv SHARED ${SOURCES})
-target_link_libraries(vx_ext_cv ${OpenVX_LIBRARY})
+target_link_libraries(vx_ext_cv openvx)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES})
