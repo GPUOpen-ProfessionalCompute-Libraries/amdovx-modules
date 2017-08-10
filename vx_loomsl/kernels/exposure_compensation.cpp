@@ -1364,7 +1364,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 		}
 		opencl_kernel_code +=
 			"		int lx = get_local_id(0);\n"
-			"		int ly = get_local_id(1);\n"
+			"		int ly = get_global_id(1);\n"
 			"		int gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
 			"		int gy = ly + ((offs.s0 >> 18) << 1);\n";
 		if (output_format == VX_DF_IMAGE_RGBX){
