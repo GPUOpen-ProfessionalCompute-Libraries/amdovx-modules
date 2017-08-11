@@ -131,9 +131,6 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.upscale_gaussian_add".
 	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00b,
 
-	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.laplacian_reconstruct".
-	AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00c,
-
 	//! \brief The Seam Finding kernel 0. Kernel name is "com.amd.loomsl.seamfind_scene_detect".
 	AMDOVX_KERNEL_STITCHING_SEAMFIND_SCENE_DETECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00d,
 
@@ -373,20 +370,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output, vx_uint8 flag);
-
-/*! \brief [Graph] Creates a stitchMultiBandLaplacianReconstruct node.
-* \param [in] graph The reference to the graph.
-* \param [in] num_cameras The number of cameras
-* \param [in] blend_array_offs The start_offsets to valid_arr in #of elements
-* \param [in] input1 The src image1
-* \param [in] input2 The src image2
-* \param [in] valid_arr The offsets/valid rect array (offsets will be useful for GPU kernel)
-* \param [out] output image.
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
 
 /*! \brief [Graph] Creates a SeamFind Accumulate node K1 - GPU/CPU.
 * \param [in] graph The reference to the graph.

@@ -66,7 +66,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(half_scale_gaussian_publish(context));
 	ERROR_CHECK_STATUS(upscale_gaussian_subtract_publish(context));
 	ERROR_CHECK_STATUS(upscale_gaussian_add_publish(context));
-	ERROR_CHECK_STATUS(laplacian_reconstruct_publish(context));
 	ERROR_CHECK_STATUS(seamfind_model_publish(context));
 	ERROR_CHECK_STATUS(seamfind_scene_detect_publish(context));
 	ERROR_CHECK_STATUS(seamfind_cost_generate_publish(context));
@@ -697,31 +696,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 	vxReleaseScalar(&numCam);
 	vxReleaseScalar(&array_offs);
 	return node;
-}
-
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output)
-{
-	vx_scalar numCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cameras);
-	vx_scalar array_offs = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &blend_array_offs);
-
-	vx_reference params[] = {
-		(vx_reference)numCam,
-		(vx_reference)array_offs,
-		(vx_reference)input1,
-		(vx_reference)input2,
-		(vx_reference)valid_arr,
-		(vx_reference)output
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT,
-		params,
-		dimof(params));
-
-	vxReleaseScalar(&numCam);
-	vxReleaseScalar(&array_offs);
-	return node;
-
 }
 
 /***********************************************************************************************************************************
