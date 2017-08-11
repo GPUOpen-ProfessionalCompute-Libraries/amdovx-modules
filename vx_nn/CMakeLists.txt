@@ -28,9 +28,21 @@ if(POLICY CMP0054)
 	cmake_policy(SET CMP0054 OLD)
 endif()
 
-find_package(OpenCL REQUIRED)
+find_package(OpenCL     REQUIRED)
+find_package(miopengemm PATHS /opt/rocm)
+find_package(miopen     PATHS /opt/rocm)
 
-include_directories (${OpenCL_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS}/Headers src include )
+if(NOT miopen_FOUND OR NOT miopengemm_FOUND)
+    message(FATAL_ERROR "ERROR: couldn't find MIOpen and MIOpenGEMM -- make sure to install them")
+endif()
+
+list(APPEND PACKAGE_DEPENDS PACKAGE OpenCL)
+
+include_directories(
+    ../deps/amdovx-core/openvx/include
+    src
+    include
+    )
 
 list(APPEND SOURCES
 	src/kernels.cpp
@@ -55,12 +67,8 @@ list(APPEND SOURCES
     src/tensor_convert_depth_node.cpp
 )
 
-include_directories (../../amdovx-core/openvx/include src)
-include_directories (../../MIOpen/include src)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
-target_link_libraries(${PROJECT_NAME} openvx)
-target_link_libraries(${PROJECT_NAME} MIOpen)
-
+target_link_libraries(${PROJECT_NAME} openvx MIOpen)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
