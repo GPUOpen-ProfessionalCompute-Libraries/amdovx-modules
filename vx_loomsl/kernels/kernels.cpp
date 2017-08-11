@@ -75,7 +75,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(seamfind_analyze_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcRGBErrorFn_publish(context));
 	ERROR_CHECK_STATUS(chroma_key_mask_generation_publish(context));
-	ERROR_CHECK_STATUS(chroma_key_merge_publish(context));
 	ERROR_CHECK_STATUS(noise_filter_publish(context));
 	ERROR_CHECK_STATUS(warp_eqr_to_aze_publish(context));
 	ERROR_CHECK_STATUS(calc_lens_distortionwarp_map_publish(context));
@@ -719,22 +718,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph
 
 	vxReleaseScalar(&CHROMA_KEY);
 	vxReleaseScalar(&TOLERANCE);
-	return node;
-}
-
-VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img)
-{
-	vx_reference params[] = {
-		(vx_reference)input_rgb_img,
-		(vx_reference)input_chroma_img,
-		(vx_reference)input_mask_img,
-		(vx_reference)output_merged_img
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE,
-		params,
-		dimof(params));
-
 	return node;
 }
 

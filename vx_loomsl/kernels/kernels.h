@@ -155,9 +155,6 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Seam Finding kernel 4. Kernel name is "com.amd.loomsl.chroma_key_mask_generation".
 	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MASK_GENERATION = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x015,
 
-	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.chroma_key_merge".
-	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x016,
-
 	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.noise_filter".
 	AMDOVX_KERNEL_STITCHING_NOISE_FILTER = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017,
 
@@ -471,18 +468,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_sc
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph, vx_uint32 ChromaKey, vx_uint32 ChromaKeyTol, vx_image input_rgb_img, vx_image output_mask_img);
-
-/*! \brief [Graph] Creates a stitch Chroma Key Merge Node- GPU/CPU.
-* \param [in] graph				The reference to the graph.
-* \param [in] input_rgb_img		The input stitched output image.
-* \param [in] input_chroma_img	The input Chroma image.
-* \param [in] input_mask_img	The input mask image.
-* \param [out] output			The output chorma merged image.
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img);
-
 
 /*! \brief [Graph] Creates a stitch Noise Filter Node- GPU.
 * \param [in] graph				The reference to the graph.
