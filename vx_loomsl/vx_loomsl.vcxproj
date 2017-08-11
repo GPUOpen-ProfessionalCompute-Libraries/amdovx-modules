@@ -44,7 +44,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;kernels;..\..\amdovx-core\openvx\include;$(AMDAPPSDKROOT)\include;$(OpenCV_DIR)\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;kernels;..\deps\amdovx-core\openvx\include;$(AMDAPPSDKROOT)\include;$(OpenCV_DIR)\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
@@ -61,7 +61,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>.;kernels;..\..\amdovx-core\openvx\include;$(AMDAPPSDKROOT)\include;$(OpenCV_DIR)\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>.;kernels;..\deps\amdovx-core\openvx\include;$(AMDAPPSDKROOT)\include;$(OpenCV_DIR)\include</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
