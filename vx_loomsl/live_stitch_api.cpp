@@ -430,13 +430,9 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 			case VX_DF_IMAGE_RGB4_AMD:
 				addr_in.stride_x = 6;
 				break;
-			case VX_DF_IMAGE_RGB6_AMD:
-				addr_in.stride_x = 8;
-				break;
 			default:
 				addr_in.stride_x = 1;
 		}
-	//	addr_in.stride_x = ((format == VX_DF_IMAGE_RGBX) | (format == VX_DF_IMAGE_U32) | (format == VX_DF_IMAGE_S32)) ? 4 : (format == VX_DF_IMAGE_RGB4_AMD) ? 6 : (format == VX_DF_IMAGE_RGB6_AMD) ? 8 : 1;
 		if (alignpixels == 0)
 			addr_in.stride_y = addr_in.dim_x *addr_in.stride_x;
 		else

@@ -55,7 +55,7 @@ static vx_status VX_CALLBACK multiband_blend_input_validator(vx_node node, vx_ui
 		}
 	}
 	else if (index == 2)
-	{ // image of format RGBX or RGB6(lowest level pyramid) or RGB4(laplacian) 
+	{ // image of format RGBX(lowest level pyramid) or RGB4(laplacian) 
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -63,7 +63,7 @@ static vx_status VX_CALLBACK multiband_blend_input_validator(vx_node node, vx_ui
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if ((input_format != VX_DF_IMAGE_RGBX) && (input_format != VX_DF_IMAGE_RGB4_AMD) && (input_format != VX_DF_IMAGE_RGB6_AMD)){
+		if ((input_format != VX_DF_IMAGE_RGBX) && (input_format != VX_DF_IMAGE_RGB4_AMD)){
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: merge camera id selection for image %d should be an image of U016 type\n", index);
 		}
@@ -212,15 +212,7 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
 		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
 		"\n";
-	if (in_format == VX_DF_IMAGE_RGB6_AMD)
-	{
-		opencl_kernel_code +=
-			"float4 amd_unpack(uint src0, uint src1)\n"
-			"{\n"
-			"  return (float4)((src0 & 0x7fff), (src0 >> 16), (src1 & 0x7fff), (src1 >> 16));\n"
-			"}\n";
-	}
-	else
+	if (in_format == VX_DF_IMAGE_RGBX)
 	{
 		opencl_kernel_code +=
 			"float4 amd_unpack(uint src)\n"
@@ -278,44 +270,6 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 			"	}\n"
 	"	}\n"
 	" }\n";
-	}
-	else if (in_format == VX_DF_IMAGE_RGB6_AMD)
-	{
-		if (wt_format == VX_DF_IMAGE_U8){
-			opencl_kernel_code +=
-				"	wt_buf += wt_offset + mad24(gy, wt_stride, gx);\n"
-				"	uchar4 wt_in  = *(__global uchar4*)(wt_buf); float divfactor = 0.003921569f;\n"; //new: 1/255 old: 0.0627451
-		}
-		else
-		{
-			opencl_kernel_code +=
-				"	wt_buf += wt_offset + mad24(gy, wt_stride, gx<<1);\n"
-				"	short4 wt_in  = *(__global short4*)(wt_buf); float divfactor = 0.0000305185095f;\n"; //new: 1/32767
-		}
-		opencl_kernel_code +=
-			"		uint8 RGB_in;\n"
-			"		float4 f0;\n"
-			"		ip_buf += ip_offset + mad24(gy, ip_stride, gx<<3);\n"
-			"		RGB_in = *(__global uint8*)(ip_buf);\n"
-			"		f0 = amd_unpack(RGB_in.s0,RGB_in.s1)*(float4)wt_in.s0;\n"
-			"		//f0 += (float4)127.5f;\n"
-			"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
-			"		*(__global short3*)(op_buf) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s2,RGB_in.s3)*(float4)wt_in.s1;\n"
-			"		//f0 += (float4)127.5f;\n"
-			"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
-			"		*(__global short3*)(op_buf+6) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s4,RGB_in.s5)*(float4)wt_in.s2;\n"
-			"		//f0 += (float4)127.5f;\n"
-			"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
-			"		*(__global short3*)(op_buf+12) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"		f0 = amd_unpack(RGB_in.s6,RGB_in.s7)*(float4)wt_in.s3;\n"
-			"		//f0 += (float4)127.5f;\n"
-			"		f0 *= divfactor; f0 += 0.5f;\n"	// normalize\n"
-			"		*(__global short3*)(op_buf+18) = (short3)((short)f0.s0, (short)f0.s1, (short)f0.s2);\n"
-			"	}\n"
-			"	}\n"
-			" }\n";
 	}
 	else //VX_DF_IMAGE_RGB4_AMD
 	{

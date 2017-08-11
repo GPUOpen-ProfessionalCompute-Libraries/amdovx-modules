@@ -120,26 +120,18 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_c
 std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
 std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image);
 std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image);
-std::string warp_rgb4_bilinear_rgb6(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
 std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
-std::string warp_rgb6_bilinear_rgb6(bool bWriteU8Image);
-std::string warp_rgb6_bilinear_rgb4(bool bWriteU8Image);
 // Do reading and wraping bicubic ------------------------------------------------------------------------------------------------------------
 std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
 std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
 std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image);
 std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image);
-std::string warp_rgb4_bicubic_rgb6(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
 std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
-std::string warp_rgb6_bicubic_rgb6(bool bWriteU8Image);
-std::string warp_rgb6_bicubic_rgb4(bool bWriteU8Image);
 // Write output -------------------------------------------------------------------------------------------------------------------------------
 std::string write_4pixels_to_RGBX();
 std::string write_4pixels_to_RGB();
 std::string write_4pixels_to_RGB4();
-std::string write_4pixels_to_RGB6();
 std::string write_2pixels_to_RGB4();
-std::string write_2pixels_to_RGB6();
 std::string write_exp_comp_img(bool write4pixels);
 std::string write_luma_U8_8bit_input();
 std::string write_luma_U8_16bit_input(bool write4pixels);
@@ -151,5 +143,4 @@ std::string Create_interpolate_cubic_rgb();
 std::string Create_interpolate_cubic_rgbx();
 std::string Create_amd_unpack15();
 std::string Create_interpolate_cubic_rgb4();
-std::string Create_interpolate_cubic_rgb6();
 #endif //__WARP_H__

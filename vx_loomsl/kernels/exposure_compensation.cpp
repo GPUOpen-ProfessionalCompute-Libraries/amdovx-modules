@@ -45,7 +45,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_input_validator(vx_node n
 		}
 	}
 	else if (index == 1)
-	{ // image of format RGBX or RGB6 or S16
+	{ // image of format RGBX or S16
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -53,7 +53,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_input_validator(vx_node n
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB6_AMD && input_format != VX_DF_IMAGE_S16) {
+		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_S16) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation doesn't support input image format: %4.4s\n", &input_format);
 		}
@@ -343,85 +343,6 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 			"		sumJ[lid] = mad24(Jsum4.s3, (uint)1, mad24(Jsum4.s2, (uint)1, mad24(Jsum4.s1, (uint)1, Jsum4.s0)));\n"
 			"		barrier(CLK_LOCAL_MEM_FENCE);\n";
 	}
-	else if(input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-		opencl_kernel_code +=
-			"		uint4 Isum4, Jsum4;\n"
-			"		global uint *pI, *pJ;\n"
-			"		uint8 I, J; uint4 mask; \n"
-			"		pIn_buf += pIn_offs + mad24(gy, (int)pIn_stride, (gx<<3));\n"
-			"		pI	   =  (global uint *)(pIn_buf + size*cam_id.x);\n"
-			"		pJ	   =  (global uint *)(pIn_buf + size*cam_id.y);\n"
-			"		I = vload8(0, pI);\n"
-			"		J = vload8(0, pJ); \n";
-		if (mask_image){
-			opencl_kernel_code +=
-				"		char4 maskIJ = as_char4(maskSrc.s0);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)(maskIJ.s0);\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)(maskIJ.s1);\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)(maskIJ.s2);\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)(maskIJ.s3);\n"
-				"		Isum4	= ((I.s1357)&mask)>>23; Jsum4 = ((J.s1357) & mask)>>23;\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ);\n"
-				"		maskIJ = as_char4(maskSrc.s1);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)(maskIJ.s0);\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)(maskIJ.s1);\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)(maskIJ.s2);\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)(maskIJ.s3);\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n"
-				"		pI += (pIn_stride>>2); pJ += (pIn_stride>>2);\n"
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ); \n"
-				"		maskIJ = as_char4(maskSrc.s2);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)(maskIJ.s0);\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)(maskIJ.s1);\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)(maskIJ.s2);\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)(maskIJ.s3);\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n"
-				"		I = vload8(1, pI); \n"
-				"		J = vload8(1, pJ); \n"
-				"		maskIJ = as_char4(maskSrc.s3);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)(maskIJ.s0);\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)(maskIJ.s1);\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)(maskIJ.s2);\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)(maskIJ.s3);\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n";
-		}
-		else{
-			opencl_kernel_code +=
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		Isum4	= ((I.s1357)&mask)>>23; Jsum4 = ((J.s1357) & mask)>>23;\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n"
-				"		pI += (pIn_stride>>2); pJ += (pIn_stride>>2);\n"
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ);\n"
-				"		mask.s0	= select((uint)0x7fff0000, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select((uint)0x7fff0000, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select((uint)0x7fff0000, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select((uint)0x7fff0000, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		Isum4	+= ((I.s1357)&mask)>>23; Jsum4 += ((J.s1357) & mask)>>23;\n";
-		}
-		opencl_kernel_code +=
-			"		sumI[lid] = mad24(Isum4.s3, (uint)1, mad24(Isum4.s2, (uint)1, mad24(Isum4.s1, (uint)1, Isum4.s0)));\n"
-			"		sumJ[lid] = mad24(Jsum4.s3, (uint)1, mad24(Jsum4.s2, (uint)1, mad24(Jsum4.s1, (uint)1, Jsum4.s0)));\n"
-			"		barrier(CLK_LOCAL_MEM_FENCE);\n";
-	}
 	else{ //VX_DF_IMAGE_S16
 		opencl_kernel_code +=
 			"		global uint *pI, *pJ;\n"
@@ -600,7 +521,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 	ERROR_CHECK_OBJECT(ref);
 	// validate each parameter
 	if (index == 0)
-	{ // image of format RGBX or RGB6
+	{ // image of format RGBX or RGB4
 		vx_array arr = (vx_array)avxGetNodeParamRef(node, 1);
 		ERROR_CHECK_OBJECT(arr);
 		vx_uint32 num_cam = 0;
@@ -615,7 +536,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_input_validator(vx_node no
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB6_AMD && input_format != VX_DF_IMAGE_RGB4_AMD) {
+		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation doesn't support input image format: %4.4s\n", &input_format);
 		}
@@ -700,7 +621,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_output_validator(vx_node n
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
 	if (index == 6)
-	{ // image of format RGBX or RGB6
+	{ // image of format RGBX or RGB4
 		// Get input confirguration
 		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
@@ -732,13 +653,9 @@ static vx_status VX_CALLBACK exposure_comp_applygains_output_validator(vx_node n
 		{ // pick default output format RGBX
 			format = VX_DF_IMAGE_RGBX;
 		}
-		if ((input_format == VX_DF_IMAGE_RGB6_AMD) && (format != VX_DF_IMAGE_RGB6_AMD))
-		{ // pick default output format RGB6
-			format = VX_DF_IMAGE_RGB6_AMD;
-		}
 		if ((input_format == VX_DF_IMAGE_RGB4_AMD) && (format != VX_DF_IMAGE_RGB4_AMD))
 		{ // pick default output format RGB4
-			format = VX_DF_IMAGE_RGB6_AMD;
+			format = VX_DF_IMAGE_RGB4_AMD;
 		}
 
 		// set output image meta data
@@ -863,7 +780,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
 			"}\n";
 	}
-	else if(output_format == VX_DF_IMAGE_RGB6_AMD || output_format == VX_DF_IMAGE_RGB4_AMD){ //RGB6
+	else if(output_format == VX_DF_IMAGE_RGB4_AMD){ //RGB4
 		opencl_kernel_code +=
 			"float4 amd_unpack(uint src0, uint src1)\n"
 			"{\n"
@@ -941,11 +858,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
 					"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n";
 			}
-			else if (input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<6));\n"
-					"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<6));\n";
-			}
 			else{ //VX_DF_IMAGE_RGB4_AMD
 				opencl_kernel_code +=
 					"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx*48));\n"
@@ -971,18 +883,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"	f4 = amd_unpack(r0.s2)*(float4)f.s2; r0.s2 = amd_pack(f4); \n"
 					"	f4 = amd_unpack(r0.s3)*(float4)f.s3; r0.s3 = amd_pack(f4); \n";
 			}
-			else if(input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"	uint16 r0 =  *(__global uint16 *)pIn_buf;\n"
-					"	f4 = amd_unpack(r0.s0,r0.s1)*(float4)f.s0;\n"
-					"   r0.s0 = amd_pack16(f4.s0,f4.s1); r0.s1 =  amd_pack16(f4.s2,f4.s3); \n"
-					"	f4 = amd_unpack(r0.s2,r0.s3)*(float4)f.s1;\n"
-					"   r0.s2 = amd_pack16(f4.s0,f4.s1); r0.s3 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.s4,r0.s5)*(float4)f.s2;\n"
-					"   r0.s4 = amd_pack16(f4.s0,f4.s1); r0.s5 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.s6,r0.s7)*(float4)f.s3;\n"
-					"   r0.s6 = amd_pack16(f4.s0,f4.s1); r0.s7 = amd_pack16(f4.s2,f4.s3);\n";
-			}
 			else{ //VX_DF_IMAGE_RGB4_AMD
 				opencl_kernel_code +=
 					"	uint8 r0 =  *(__global uint8 *)pIn_buf;\n"
@@ -1006,21 +906,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"	f4 = amd_unpack(r0.s6)*(float4)f.s2; r0.s6 = amd_pack(f4); \n"
 					"	f4 = amd_unpack(r0.s7)*(float4)f.s3; r0.s7 = amd_pack(f4); \n"
 					"	*(__global uint8 *)(pOut_buf) = r0;\n"
-					"}\n"
-					"}\n"
-					"}\n";
-			}
-			else if(input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"	f4 = amd_unpack(r0.s8,r0.s9)*(float4)f.s0;\n"
-					"   r0.s8 = amd_pack16(f4.s0,f4.s1); r0.s9 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sA,r0.sB)*(float4)f.s1;\n"
-					"   r0.sA = amd_pack16(f4.s0,f4.s1); r0.sB = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sC,r0.sD)*(float4)f.s2;\n"
-					"   r0.sC = amd_pack16(f4.s0,f4.s1); r0.sD = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sE,r0.sF)*(float4)f.s3;\n"
-					"   r0.sE = amd_pack16(f4.s0,f4.s1); r0.sF = amd_pack16(f4.s2,f4.s3);\n"
-					"	*(__global uint16 *)(pOut_buf) = r0;\n"
 					"}\n"
 					"}\n"
 					"}\n";
@@ -1083,11 +968,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
 					"		pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n";
 			}
-			else if (output_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<6));\n"
-					"		pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<6));\n";
-			}
 			else{ //VX_DF_IMAGE_RGB4_AMD
 				opencl_kernel_code +=
 					"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx*48));\n"
@@ -1112,18 +992,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"			f4 = amd_unpack(r0.s1)*(float4)(f1, 1.0f); r0.s1 = amd_pack(f4); \n"
 					"			f4 = amd_unpack(r0.s2)*(float4)(f2, 1.0f); r0.s2 = amd_pack(f4); \n"
 					"			f4 = amd_unpack(r0.s3)*(float4)(f3, 1.0f); r0.s3 = amd_pack(f4); \n";
-			}
-			else if (input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"	uint16 r0 =  *(__global uint16 *)pIn_buf;\n"
-					"	f4 = amd_unpack(r0.s0,r0.s1)*(float4)(f0, 1.0f);\n"
-					"   r0.s0 = amd_pack16(f4.s0,f4.s1); r0.s1 =  amd_pack16(f4.s2,f4.s3); \n"
-					"	f4 = amd_unpack(r0.s2,r0.s3)*(float4)(f1, 1.0f);\n"
-					"   r0.s2 = amd_pack16(f4.s0,f4.s1); r0.s3 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.s4,r0.s5)*(float4)(f2, 1.0f);\n"
-					"   r0.s4 = amd_pack16(f4.s0,f4.s1); r0.s5 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.s6,r0.s7)*(float4)(f3, 1.0f);\n"
-					"   r0.s6 = amd_pack16(f4.s0,f4.s1); r0.s7 = amd_pack16(f4.s2,f4.s3);\n";
 			}
 			else{ //VX_DF_IMAGE_RGB4_AMD
 				opencl_kernel_code +=
@@ -1150,21 +1018,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 					"			*(__global uint8 *)(pOut_buf) = r0;\n"
 					"			}\n"
 					"		}\n"
-					"}\n";
-			}
-			else if (input_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-				opencl_kernel_code +=
-					"	f4 = amd_unpack(r0.s8,r0.s9)*(float4)(f0, 1.0f);\n"
-					"   r0.s8 = amd_pack16(f4.s0,f4.s1); r0.s9 = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sA,r0.sB)*(float4)(f1, 1.0f);\n"
-					"   r0.sA = amd_pack16(f4.s0,f4.s1); r0.sB = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sC,r0.sD)*(float4)(f2, 1.0f);\n"
-					"   r0.sC = amd_pack16(f4.s0,f4.s1); r0.sD = amd_pack16(f4.s2,f4.s3);\n"
-					"	f4 = amd_unpack(r0.sE,r0.sF)*(float4)(f3, 1.0f);\n"
-					"   r0.sE = amd_pack16(f4.s0,f4.s1); r0.sF = amd_pack16(f4.s2,f4.s3);\n"
-					"	*(__global uint16 *)(pOut_buf) = r0;\n"
-					"}\n"
-					"}\n"
 					"}\n";
 			}
 			else{ // VX_DF_IMAGE_RGB4_AMD
@@ -1221,18 +1074,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"}\n"
 				"\n";
 		}
-		else if (input_format == VX_DF_IMAGE_RGB6_AMD){
-			opencl_kernel_code +=
-				"uint2 RGBTran_16(uint src0, uint src1, float4 r4, float4 g4, float4 b4) {\n"
-				"  float4 fin, fout;\n"
-				"  fin = amd_unpack(src0, src1);\n"
-				"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
-				"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
-				"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
-				"  fout.s3 = fin.s3;\n"
-				"  return (uint2)(amd_pack16(fout.s0,fout.s1),amd_pack16(fout.s2,fout.s3));\n"
-				"}\n";
-		}
 
 		sprintf(item,
 			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
@@ -1271,27 +1112,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"      r0.s6 = RGBTran(r0.s6, r4, g4 , b4);\n"
 				"      r0.s7 = RGBTran(r0.s7, r4, g4 , b4);\n"
 				"      *(__global uint8 *)(pOut_buf) = r0;\n"
-				"    }\n"
-				"  }\n"
-				"}\n";
-		}
-		else if (output_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-			opencl_kernel_code +=
-				"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<6));\n"
-				"		pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<6));\n"
-				"    uchar4 offs4 = as_uchar4(offs.s1); \n"
-				"    if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
-				"      uint16 r0;\n"
-				"      r0 =  *(__global uint16 *)pIn_buf;\n"
-				"      r0.s01 = RGBTran(r0.s0, r0.s1, r4, g4 , b4);\n"
-				"      r0.s23 = RGBTran(r0.s2, r0.s3, r4, g4 , b4);\n"
-				"      r0.s45 = RGBTran(r0.s4, r0.s5, r4, g4 , b4);\n"
-				"      r0.s67 = RGBTran(r0.s6, r0.s7, r4, g4 , b4);\n"
-				"      r0.s89 = RGBTran(r0.s8, r0.s9, r4, g4 , b4);\n"
-				"      r0.sAB = RGBTran(r0.sA, r0.sB, r4, g4 , b4);\n"
-				"      r0.sCD = RGBTran(r0.sC, r0.sD, r4, g4 , b4);\n"
-				"      r0.sEF = RGBTran(r0.sE, r0.sF, r4, g4 , b4);\n"
-				"      *(__global uint16 *)(pOut_buf) = r0;\n"
 				"    }\n"
 				"  }\n"
 				"}\n";
@@ -1336,7 +1156,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"		pG_buf += pG_offs; int cam_id = offs.s0&0x3f;\n"
 			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
 		opencl_kernel_code += item;
-		if (output_format == VX_DF_IMAGE_RGBX || output_format == VX_DF_IMAGE_RGB6_AMD){
+		if (output_format == VX_DF_IMAGE_RGBX){
 			if (bRGBGain){
 				opencl_kernel_code +=
 					"		__global float* pg = (__global float *)pG_buf; pg += cam_id*3;\n"
@@ -1372,11 +1192,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
 				"		pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n";
 		}
-		else if(output_format == VX_DF_IMAGE_RGB6_AMD){ //VX_DF_IMAGE_RGB6_AMD
-			opencl_kernel_code +=
-				"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<6));\n"
-				"		pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<6));\n";
-		}
 		else{ //VX_DF_IMAGE_RGB4_AMD
 			opencl_kernel_code +=
 				"		pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx*48));\n"
@@ -1398,31 +1213,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"			f4 = amd_unpack(r0.s6)*g4; r0.s6 = amd_pack(f4); \n"
 				"			f4 = amd_unpack(r0.s7)*g4; r0.s7 = amd_pack(f4); \n"
 				"			*(__global uint8 *)(pOut_buf) = r0;\n"
-				"		}\n"
-				"	}\n"
-				"}\n";
-		}
-		else if(input_format == VX_DF_IMAGE_RGB6_AMD){ 
-			opencl_kernel_code +=
-				"			uint16 r0 =  *(__global uint16 *)pIn_buf;\n"
-				"			 f4 = amd_unpack(r0.s0,r0.s1)*g4;\n"
-				"			r0.s0 = amd_pack16(f4.s0,f4.s1); r0.s1 =  amd_pack16(f4.s2,f4.s3); \n"
-				"			f4 = amd_unpack(r0.s2,r0.s3)*g4;\n"
-				"			r0.s2 = amd_pack16(f4.s0,f4.s1); r0.s3 = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.s4,r0.s5)*g4;\n"
-				"			r0.s4 = amd_pack16(f4.s0,f4.s1); r0.s5 = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.s6,r0.s7)*g4;\n"
-				"			r0.s6 = amd_pack16(f4.s0,f4.s1); r0.s7 = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.s8,r0.s9)*g4;\n"
-				"			r0.s8 = amd_pack16(f4.s0,f4.s1); r0.s9 =  amd_pack16(f4.s2,f4.s3); \n"
-				"			f4 = amd_unpack(r0.sA,r0.sB)*g4;\n"
-				"			r0.sA = amd_pack16(f4.s0,f4.s1); r0.sB = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.sC,r0.sD)*g4;\n"
-				"			r0.sC = amd_pack16(f4.s0,f4.s1); r0.sD = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.sE,r0.sF)*g4;\n"
-				"			r0.sE = amd_pack16(f4.s0,f4.s1); r0.sF = amd_pack16(f4.s2,f4.s3);\n"
-				"			f4 = amd_unpack(r0.s0,r0.s1)*g4;\n"
-				"			*(__global uint16 *)(pOut_buf) = r0;\n"
 				"		}\n"
 				"	}\n"
 				"}\n";
@@ -1682,7 +1472,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_input_validator(vx_nod
 		}
 	}
 	else if (index == 1)
-	{ // image of format RGBX or RGB6 or RGB4
+	{ // image of format RGBX or RGB4
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -1690,7 +1480,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_input_validator(vx_nod
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB6_AMD && input_format != VX_DF_IMAGE_RGB4_AMD) {
+		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation doesn't support input image format: %4.4s\n", &input_format);
 		}
@@ -1864,7 +1654,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
 		"	gamma2Linear[lid] = g_Gamma2LinearLookUp[lid];\n"
 		"	barrier(CLK_LOCAL_MEM_FENCE);\n";
-	if (input_format == VX_DF_IMAGE_RGBX || input_format == VX_DF_IMAGE_RGB6_AMD){
+	if (input_format == VX_DF_IMAGE_RGBX){
 		opencl_kernel_code +=
 			"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n";
 	}
@@ -2049,174 +1839,6 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		J.s1 = gamma2Linear[J.s1&0xFF]|(gamma2Linear[(J.s1&0xFF00)>>8]<<8)|(gamma2Linear[(J.s1&0xFF0000)>>16]<<16);\n"
 				"		J.s2 = gamma2Linear[J.s2&0xFF]|(gamma2Linear[(J.s2&0xFF00)>>8]<<8)|(gamma2Linear[(J.s2&0xFF0000)>>16]<<16);\n"
 				"		J.s3 = gamma2Linear[J.s3&0xFF]|(gamma2Linear[(J.s3&0xFF00)>>8]<<8)|(gamma2Linear[(J.s3&0xFF0000)>>16]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		sumI[lid] = Isum4; sumJ[lid] = Jsum4;\n"
-				"		barrier(CLK_LOCAL_MEM_FENCE);\n";
-		}
-	}
-	else if (input_format == VX_DF_IMAGE_RGB6_AMD){
-		opencl_kernel_code +=
-			"		uint8 I, J; \n"
-			"		uint4 mask; \n"
-			"		pIn_buf += pIn_offs + mad24(gy, (int)pIn_stride, (gx<<3));\n"
-			"		pI	   =  (global uint *)(pIn_buf + size*cam_id.x);\n"
-			"		pJ	   =  (global uint *)(pIn_buf + size*cam_id.y);\n";
-		if (mask_image){
-			opencl_kernel_code +=
-				"		char4 maskIJ = as_char4(maskSrc.s0);\n"
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ); \n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)maskIJ.s0;\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)maskIJ.s1;\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)maskIJ.s2;\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)maskIJ.s3;\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 = convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 = convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ); \n"
-				"		maskIJ = as_char4(maskSrc.s1);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)maskIJ.s0;\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)maskIJ.s1;\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)maskIJ.s2;\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)maskIJ.s3;\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		pI += (pIn_stride>>2); pJ += (pIn_stride>>2);\n"
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ); \n"
-				"		maskIJ = as_char4(maskSrc.s2);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)maskIJ.s0;\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)maskIJ.s1;\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)maskIJ.s2;\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)maskIJ.s3;\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		I = vload8(1, pI); \n"
-				"		J = vload8(1, pJ); \n"
-				"		maskIJ = as_char4(maskSrc.s3);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000))) & (int)maskIJ.s0;\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000))) & (int)maskIJ.s1;\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000))) & (int)maskIJ.s2;\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000))) & (int)maskIJ.s3;\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		sumI[lid] = Isum4; sumJ[lid] = Jsum4;\n"
-				"		barrier(CLK_LOCAL_MEM_FENCE);\n";
-		}
-		else { //no mask
-			opencl_kernel_code +=
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ); \n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 = convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 = convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		pI += (pIn_stride>>2); pJ += (pIn_stride>>2);\n"
-				"		I = vload8(0, pI);\n"
-				"		J = vload8(0, pJ);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"
-				"		Isum4 += convert_uint4(as_uchar4(I.s3 & mask.s3));		Jsum4 += convert_uint4(as_uchar4(J.s3 & mask.s3));\n"
-				"		I = vload8(1, pI);\n"
-				"		J = vload8(1, pJ);\n"
-				"		mask.s0	= select(0xffffffff, 0u, ((I.s1==0x40000000) | (J.s1==0x40000000)));\n"
-				"		mask.s1	= select(0xffffffff, 0u, ((I.s3==0x40000000) | (J.s3==0x40000000)));\n"
-				"		mask.s2	= select(0xffffffff, 0u, ((I.s5==0x40000000) | (J.s5==0x40000000)));\n"
-				"		mask.s3	= select(0xffffffff, 0u, ((I.s7==0x40000000) | (J.s7==0x40000000)));\n"
-				"		I.s0 = gamma2Linear[(I.s0&0x7f80)>>7]|(gamma2Linear[(I.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s1&0x7f80)>>7]<<16);\n"
-				"		I.s1 = gamma2Linear[(I.s2&0x7f80)>>7]|(gamma2Linear[(I.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s3&0x7f80)>>7]<<16);\n"
-				"		I.s2 = gamma2Linear[(I.s4&0x7f80)>>7]|(gamma2Linear[(I.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s5&0x7f80)>>7]<<16);\n"
-				"		I.s3 = gamma2Linear[(I.s6&0x7f80)>>7]|(gamma2Linear[(I.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(I.s7&0x7f80)>>7]<<16);\n"
-				"		J.s0 = gamma2Linear[(J.s0&0x7f80)>>7]|(gamma2Linear[(J.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s1&0x7f80)>>7]<<16);\n"
-				"		J.s1 = gamma2Linear[(J.s2&0x7f80)>>7]|(gamma2Linear[(J.s2&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s3&0x7f80)>>7]<<16);\n"
-				"		J.s2 = gamma2Linear[(J.s4&0x7f80)>>7]|(gamma2Linear[(J.s4&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s5&0x7f80)>>7]<<16);\n"
-				"		J.s3 = gamma2Linear[(J.s6&0x7f80)>>7]|(gamma2Linear[(J.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(J.s7&0x7f80)>>7]<<16);\n"
 				"		Isum4 += convert_uint4(as_uchar4(I.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(J.s0 & mask.s0));\n"
 				"		Isum4 += convert_uint4(as_uchar4(I.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(J.s1 & mask.s1));\n"
 				"		Isum4 += convert_uint4(as_uchar4(I.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(J.s2 & mask.s2));\n"

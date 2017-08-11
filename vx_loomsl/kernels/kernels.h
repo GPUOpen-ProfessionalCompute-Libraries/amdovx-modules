@@ -93,7 +93,6 @@ enum vx_df_image_amd_stitching_e {
 	VX_DF_IMAGE_V210_AMD = VX_DF_IMAGE('V', '2', '1', '0'),  // AGO image with YUV 4:2:2 10-bit (V210)
 	VX_DF_IMAGE_V216_AMD = VX_DF_IMAGE('V', '2', '1', '6'),  // AGO image with YUV 4:2:2 16-bit (V216)
 	VX_DF_IMAGE_RGB4_AMD = VX_DF_IMAGE('R', 'G', 'B', '4'),  // AGO image with RGB-48 16bit per channel (RGB4)
-	VX_DF_IMAGE_RGB6_AMD = VX_DF_IMAGE('R', 'G', 'B', '6'),  // AGO image with RGBX-64 16bit per channel (RGB6)
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -227,7 +226,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 * \param [out] output The output image.
 * \param [out] outputLuma The luma output image, which can be used by seamfind.
 * \param [in] num_camera_columns The number of camera columns (optional).
-* \param [in] alpha_value The alpha value writte in the a channel of RGBA or RGB6 (optional).
+* \param [in] alpha_value The alpha value writte in the a channel of RGBA (optional).
 * \param [in] flags The flags used for the kernel, e.g. for interpolation method (0: bilinear, 1: bicubic) (optional).
 * \param [out] outputExpComp The output image for exposure compensation, which contains invalid flags.
 * \return <tt>\ref vx_node</tt>.

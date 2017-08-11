@@ -49,8 +49,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_V216_AMD, &desc);
 	desc = { 3, 1, 48, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL };
 	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_RGB4_AMD, &desc);
-	desc = { 4, 1, 64, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL };
-	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_RGB6_AMD, &desc);
 	// register kernels
 	ERROR_CHECK_STATUS(color_convert_general_publish(context));
 	ERROR_CHECK_STATUS(color_convert_from_NV12_publish(context));
