@@ -2309,6 +2309,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
 			ls_printf("WARNING: RGB format is not supported by the 16bit mode, a 8 bit flow will be used instead. Supported formats are UYVY, YUYV, NV12, IYUV, V210, V216.\n");
 		}
+		else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
+			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
+			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
+		}
 	}
 
 	/////////////////////////////////////////////////////////
