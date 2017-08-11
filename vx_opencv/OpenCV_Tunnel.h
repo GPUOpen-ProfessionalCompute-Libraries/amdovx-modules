@@ -30,7 +30,7 @@ THE SOFTWARE.
 #endif
 
 #include"VX/vx.h"
-#include"vx_ext_cv.h"
+#include"vx_opencv.h"
 #include <VX/vx_compatibility.h>
 
 #include<stdio.h>

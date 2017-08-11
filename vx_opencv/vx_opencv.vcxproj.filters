@@ -236,7 +236,7 @@
     <ClInclude Include="OpenCV_VX_Functions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vx_ext_cv.h">
+    <ClInclude Include="vx_opencv.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

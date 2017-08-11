@@ -12,7 +12,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{C5F3ED68-728A-4610-A37F-89323A93DD81}</ProjectGuid>
-    <RootNamespace>vx_ext_cv</RootNamespace>
+    <RootNamespace>vx_opencv</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -150,7 +150,7 @@
     <ClInclude Include="OpenCV_Tunnel.h" />
     <ClInclude Include="OpenCV_VX_Functions.h" />
     <ClInclude Include="publishkernels.h" />
-    <ClInclude Include="vx_ext_cv.h" />
+    <ClInclude Include="vx_opencv.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

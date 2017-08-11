@@ -31,7 +31,7 @@ THE SOFTWARE.
 #endif
 
 #include <VX/vx.h>
-#include "vx_ext_cv.h"
+#include "vx_opencv.h"
 #include"OpenCV_Tunnel.h"
 
 #ifndef USE_OPENCV_CONTRIB

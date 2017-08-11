@@ -1,8 +1,8 @@
-﻿## AMD Module for OpenCV-interop from OpenVX (vx_ext_cv)
-The vx_ext_cv is an OpenVX module that implemented a mechanism to access OpenCV functionality as OpenVX kernels. These kernels can be access from within OpenVX framework using OpenVX API call [vxLoadKernels](https://www.khronos.org/registry/vx/specs/1.0.1/html/da/d83/group__group__user__kernels.html#gae00b6343fbb0126e3bf0f587b09393a3)(context, "vx_ext_cv").
+﻿## AMD Module for OpenCV-interop from OpenVX (vx_opencv)
+The vx_opencv is an OpenVX module that implemented a mechanism to access OpenCV functionality as OpenVX kernels. These kernels can be access from within OpenVX framework using OpenVX API call [vxLoadKernels](https://www.khronos.org/registry/vx/specs/1.0.1/html/da/d83/group__group__user__kernels.html#gae00b6343fbb0126e3bf0f587b09393a3)(context, "vx_opencv").
 
 ## List of OpenCV-interop kernels
-The following is a list of OpenCV functions that have been included in the vx_ext_cv module.
+The following is a list of OpenCV functions that have been included in the vx_opencv module.
 
     bilateralFilter             org.opencv.bilateralfilter
     blur                        org.opencv.blur
@@ -69,7 +69,7 @@ The following is a list of OpenCV functions that have been included in the vx_ex
 * OpenCV_DIR environment variable should point to OpenCV/build folder
 
 #### Build using Visual Studio Professional 2013 on 64-bit Windows 10/8.1/7
-* Use amdovx-modules/vx_ext_cv/vx_ext_cv.sln to build for x64 platform
+* Use amdovx-modules/vx_opencv/vx_opencv.sln to build for x64 platform
 
 #### Build using CMake on Linux (Ubuntu 15.10 64-bit)
 * Use CMake to configure and generate Makefile

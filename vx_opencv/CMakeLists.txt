@@ -19,7 +19,7 @@
 # THE SOFTWARE.
 
 cmake_minimum_required (VERSION 2.8)
-project (vx_ext_cv)
+project (vx_opencv)
 
 set (CMAKE_CXX_STANDARD 11)
 
@@ -93,16 +93,16 @@ list (APPEND SOURCES
 	publishkernels.cpp
 	)
 
-add_library(vx_ext_cv SHARED ${SOURCES})
-target_link_libraries(vx_ext_cv openvx)
+add_library(vx_opencv SHARED ${SOURCES})
+target_link_libraries(vx_opencv openvx)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
-target_link_libraries(vx_ext_cv ${OpenCV_LIBRARIES})
-target_compile_definitions(vx_ext_cv PUBLIC USE_OPENCV_CONTRIB=0)
+target_link_libraries(vx_opencv ${OpenCV_LIBRARIES})
+target_compile_definitions(vx_opencv PUBLIC USE_OPENCV_CONTRIB=0)
 
 if (OpenCL_FOUND)
 	include_directories(${OpenCL_INCLUDE_DIRS})
-	target_link_libraries(vx_ext_cv ${OpenCL_LIBRARIES})
+	target_link_libraries(vx_opencv ${OpenCL_LIBRARIES})
 endif(OpenCL_FOUND)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")

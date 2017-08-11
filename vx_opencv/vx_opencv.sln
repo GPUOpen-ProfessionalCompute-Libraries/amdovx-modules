@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
 VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC944}") = "vx_ext_cv", "vx_ext_cv.vcxproj", "{C5F3ED68-728A-4610-A37F-89323A93DD81}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC944}") = "vx_opencv", "vx_opencv.vcxproj", "{C5F3ED68-728A-4610-A37F-89323A93DD81}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

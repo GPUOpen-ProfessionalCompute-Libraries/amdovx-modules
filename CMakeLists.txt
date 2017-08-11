@@ -39,6 +39,6 @@ endif(OpenCL_FOUND)
 
 if(OpenCV_FOUND)
     if(${OpenCV_VERSION_MAJOR} EQUAL 3)
-        add_subdirectory (vx_ext_cv)
+        add_subdirectory (vx_opencv)
     endif()
 endif(OpenCV_FOUND)
