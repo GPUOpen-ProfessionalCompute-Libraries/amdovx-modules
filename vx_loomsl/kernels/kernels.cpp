@@ -344,12 +344,13 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera
 /**
 * \brief Function to create Stitch AlphaBlendnode
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb)
+VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb, vx_image mask_U8)
 {
 	vx_reference params[] = {
 		(vx_reference)input_rgb,
 		(vx_reference)input_rgba,
-		(vx_reference)output_rgb
+		(vx_reference)output_rgb,
+		(vx_reference)mask_U8
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_ALPHA_BLEND,

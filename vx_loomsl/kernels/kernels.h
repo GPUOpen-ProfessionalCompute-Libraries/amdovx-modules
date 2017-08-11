@@ -255,12 +255,13 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera
 /*! \brief [Graph] Creates a AlphaBlend node.
 * \param [in] graph The reference to the graph.
 * \param [in] input_rgb Input RGB image.
-* \param [in] input_rgba Input RGBX image with alpha channel.
+* \param [in] input_rgba Input RGBX image with alpha channel or RGB image (if mask is used).
 * \param [out] output_rgb Output RGB image.
+* \param [in] input_mask Input mask image as alternative to an alpha channel
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb);
+VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb, vx_image mask_U8);
 
 /*! \brief [Graph] Creates a ExposureCompCalcErrorFn node.
 * \param [in] graph      The reference to the graph.

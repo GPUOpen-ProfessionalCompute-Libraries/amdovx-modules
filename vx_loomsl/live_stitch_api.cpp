@@ -2677,11 +2677,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->chromaKey_erode_node);
 			stitch->chromaKey_dilate_node = vxDilate3x3Node(stitch->graphStitch, stitch->chroma_key_erode_mask_img, stitch->chroma_key_dilate_mask_img);
 			ERROR_CHECK_OBJECT_(stitch->chromaKey_dilate_node);
-			stitch->chromaKey_merge_node = stitchChromaKeyMergeNode(stitch->graphStitch, stitch->chroma_key_input_RGB_img, stitch->chroma_key_input_img, stitch->chroma_key_dilate_mask_img, stitch->rgb_output);
+			stitch->chromaKey_merge_node = stitchAlphaBlendNode(stitch->graphStitch, stitch->chroma_key_input_RGB_img, stitch->chroma_key_input_img, stitch->rgb_output, stitch->chroma_key_dilate_mask_img);
 			ERROR_CHECK_OBJECT_(stitch->chromaKey_merge_node);
 		}
 		else{
-			stitch->chromaKey_merge_node = stitchChromaKeyMergeNode(stitch->graphStitch, stitch->chroma_key_input_RGB_img, stitch->chroma_key_input_img, stitch->chroma_key_mask_img, stitch->rgb_output);
+			stitch->chromaKey_merge_node = stitchAlphaBlendNode(stitch->graphStitch, stitch->chroma_key_input_RGB_img, stitch->chroma_key_input_img, stitch->rgb_output, stitch->chroma_key_mask_img);
 			ERROR_CHECK_OBJECT_(stitch->chromaKey_merge_node);
 		}
 		stitch->rgb_output = stitch->chroma_key_input_RGB_img;
@@ -2689,7 +2689,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	if (stitch->Img_overlay) {
 		// need add overlay
 		ERROR_CHECK_OBJECT_(stitch->nodeOverlayRemap = vxRemapNode(stitch->graphStitch, stitch->Img_overlay, stitch->overlay_remap, VX_INTERPOLATION_TYPE_BILINEAR, stitch->Img_overlay_rgba));
-		ERROR_CHECK_OBJECT_(stitch->nodeOverlayBlend = stitchAlphaBlendNode(stitch->graphStitch, stitch->Img_overlay_rgb, stitch->Img_overlay_rgba, stitch->rgb_output));
+		ERROR_CHECK_OBJECT_(stitch->nodeOverlayBlend = stitchAlphaBlendNode(stitch->graphStitch, stitch->Img_overlay_rgb, stitch->Img_overlay_rgba, stitch->rgb_output,NULL));
 		stitch->rgb_output = stitch->Img_overlay_rgb;
 	}
 	if (strlen(stitch->loomio_viewing.kernelName) > 0) {
