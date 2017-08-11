@@ -543,6 +543,7 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"      int gybase = (gy<<1) + ly - 1;\n"
 			"      goffset.s0 = (gx<<3) + (lx << 5) - 16; goffset.s1 = goffset.s0 + 16 ; \n"
 			"      goffset.s0 = select(goffset.s0, (int)((ip_width-4)<<2), goffset.s0<0);\n"
+			"      goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip_width-4)<<2));\n"
 			"     *(__local uint4 *)(lbuf + loffset)       = vload4(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase)));\n"
 			"     *(__local uint4 *)(lbuf + loffset + 16)  = vload4(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase)));\n"
 			"      loffset += (lstride << 4);\n"
