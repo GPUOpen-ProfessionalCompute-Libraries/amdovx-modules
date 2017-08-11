@@ -266,7 +266,6 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 		opencl_local_work[0] = 256;
 		opencl_global_work[0] = ((work_items << 8) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
 	}
-	printf("work:%d", opencl_global_work[0]);
 
 	// kernel header and reading
 	char item[8192];
@@ -534,20 +533,49 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 				, op_image_height_offs, ip_image_height_offs);
 		opencl_kernel_code += item;
 		opencl_kernel_code +=
-			"    { // loading 136x35 words into LDS using 16x16 workgroup\n"
+			"    if (!border)\n"
+			"    { // loading 136x35x2 bytes into LDS using 16x16 workgroup\n"
 			"      int loffset = ly * lstride + (lx << 4);\n"
 			"      int goffset = (ly - 2) * ip_stride + (lx << 4) - 8;\n"
 			"      *(__local uint4 *)(lbuf + loffset) = vload4(0, (__global uint *)(gbuf + goffset));\n"
-			"      loffset += (lstride<<4);  goffset += (ip_stride<<4);\n"
+			"      loffset += (lstride << 4);  goffset += (ip_stride << 4);\n"
 			"      *(__local uint4 *)(lbuf + loffset) = vload4(0, (__global uint *)(gbuf + goffset));\n"
 			"      if (ly < 3) {\n"
-			"        loffset += (lstride<<4);  goffset += (ip_stride<<4);\n"
+			"        loffset += (lstride << 4);  goffset += (ip_stride << 4);\n"
 			"        *(__local uint4 *)(lbuf + loffset) = vload4(0, (__global uint *)(gbuf + goffset));\n"
 			"      }\n"
 			"      if (lid < 35) {\n"
-			"        *(__local uint4 *)(lbuf + (lid * lstride) + 256) = vload4(0, (__global uint *)(gbuf + ((lid - 2) * (int)ip_stride) + 248));\n"
+			"        *(__local uint4 *)(lbuf + (lid * lstride) + (128 << 1)) = vload4(0, (__global uint *)(gbuf + ((lid - 2) * (int)ip_stride) + ((128-4) << 1));\n"
 			"      }\n"
-			"      barrier(CLK_LOCAL_MEM_FENCE);\n"
+			"    }else\n"
+			"    {\n"
+			"      int2 goffset; \n"
+			"      gbuf = ip_buf + ip_offset + (camId*height1)*ip_stride;\n"
+			"      int loffset = ly * lstride + (lx << 4);\n"
+			"      int gybase = (gy<<1) + ly - 1;\n"
+			"      goffset.s0 = (gx<<2) + (lx << 4) - 8; goffset.s1 = goffset.s0 + 8 ; \n"
+			"      goffset.s0 = select(goffset.s0, (int)((ip_width-4)<<1), goffset.s0<0);\n"
+			"      goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip_width-4)<<1));\n"
+			"     *(__local uint2 *)(lbuf + loffset)      = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * max(0, gybase)));\n"
+			"     *(__local uint2 *)(lbuf + loffset + 8)  = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * max(0, gybase)));\n"
+			"      loffset += (lstride << 4);\n"
+			"      *(__local uint2 *)(lbuf + loffset)   = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * (gybase+16)));\n"
+			"      *(__local uint2 *)(lbuf + loffset+8) = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * (gybase+16)));\n"
+			"      if (ly < 3) {\n"
+			"        loffset += (lstride << 4);\n"
+			"        gybase = min(height1-1, gybase+32);\n"
+			"        *(__local uint2 *)(lbuf + loffset)   = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase));\n"
+			"        *(__local uint2 *)(lbuf + loffset+8) = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase));\n"
+			"      }\n"
+			"      if (lid < 35) {\n"
+			"        gybase = max(0, min(height1-1, ((gy<<1) + lid - 1)));\n"
+			"        goffset.s0 = (gx<<2) + (124<<1); goffset.s1 = goffset.s0 + 8;\n"
+			"        goffset.s1 = select(goffset.s1, 0, goffset.s1>((ip_width-4)<<1));\n"
+			"        *(__local uint2 *)(lbuf + (lid * lstride) + (128 << 1)) = vload2(0, (__global uint *)(gbuf + goffset.s0 + ip_stride * gybase));\n"
+			"        *(__local uint2 *)(lbuf + (lid * lstride) + (132 << 1)) = vload2(0, (__global uint *)(gbuf + goffset.s1 + ip_stride * gybase));\n"
+			"      }\n"
+			"    }\n"
+			"    barrier(CLK_LOCAL_MEM_FENCE);\n"
 			"    }\n"
 			"    __local uchar * lbuf_ptr = lbuf + ly * lstride + (lx << 4);\n"
 			"    float4 sum; float v;\n"
