@@ -3586,12 +3586,24 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 	vx_float32 topBotVerticalGapInDegree = live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD];
 	vx_int32 SEAM_COEQUSH_ENABLE = ((vx_int32)live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE]);
 
+	// find max pitch variance for equator cam
+	vx_float32 maxPitchVariance = 0;
+	for (vx_uint32 camId_1 = 0; camId_1 < numCamera; camId_1++) {
+		for (vx_uint32 camId_2 = camId_1 + 1; camId_2 < numCamera; camId_2++) {
+			vx_float32	pitchDiff = fabsf(camera_par[camId_1].focal.pitch - camera_par[camId_2].focal.pitch);
+			if (pitchDiff <= pitchTolerance){
+				vx_float32 pitchVariance = camera_par[camId_1].focal.pitch - pitchTolerance;
+				maxPitchVariance = std::max(maxPitchVariance, pitchVariance);
+			}
+		}
+	}
+
 	// get cameras on equator sorted with yaw from zero and above
 	typedef struct { vx_float32 yaw; vx_uint32 camId; } CameraItem;
 	CameraItem camList[LIVE_STITCH_MAX_CAMERAS];
 	vx_uint32 eqrCamCount = 0, eqrCamIdTop = numCamera, eqrCamIdBot = numCamera;
 	for (vx_uint32 camId = 0; camId < numCamera; camId++) {
-		if (camera_par[camId].lens.hfov >= hfovMin && fabsf(camera_par[camId].focal.pitch) <= pitchTolerance) {
+		if (camera_par[camId].lens.hfov >= hfovMin && fabsf(camera_par[camId].focal.pitch) <= (pitchTolerance + maxPitchVariance)) {
 			camList[eqrCamCount].camId = camId;
 			camList[eqrCamCount].yaw = camera_par[camId].focal.yaw + (camera_par[camId].focal.yaw < 0 ? 360 : 0);
 			eqrCamCount++;
