@@ -70,12 +70,11 @@ static vx_status VX_CALLBACK color_convert_general_output_validator(vx_node node
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
-		if (!(output_width == input_width && output_height == input_height) &&
-			!(output_width == ((input_width + 1) / 2) && output_height == ((input_height + 1) / 2)))
+		if (input_width != output_width || input_height != output_height)
 		{
-			// pick input dimensions as default
-			output_width = input_width;
-			output_height = input_height;
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert doesn't support input & output image with different dimensions\n");
+			return status;
 		}
 		if ((output_width == (input_width / 2) && output_height == (input_height / 2)) && (input_format == VX_DF_IMAGE_V210_AMD)){ //No support of downscaling for this format
 			// pick input dimensions as default
@@ -1153,11 +1152,9 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_input_validator(vx_node node,
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		if (format == VX_DF_IMAGE_RGB || format == VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_SUCCESS;
-		}
-		else {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
-		}
+
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
 	return status;

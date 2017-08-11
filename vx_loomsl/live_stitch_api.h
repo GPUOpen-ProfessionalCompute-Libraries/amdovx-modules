@@ -54,8 +54,6 @@ enum {
 	LIVE_STITCH_ATTR_MULTIBAND                =    5,   // multiband attribute: 0:OFF 1:ON
 	LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS       =    6,   // multiband attribute: numbands 2-6
 	LIVE_STITCH_ATTR_STITCH_MODE              =    7,   // stitch mode: 0:normal 1:quick (default: normal)
-	LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR       =    8,   // input scale factor: use 0.5 or 1.0 (default 1.0)
-	LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR      =    9,   // output scale factor: use 0.5 or 1.0 (default 1.0)
 	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
 	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
 	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 1)
