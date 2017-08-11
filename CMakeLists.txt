@@ -23,8 +23,10 @@ project (amdovx-modules)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-find_package(OpenCV QUIET)
-find_package(OpenCL QUIET)
+find_package(OpenCV     QUIET)
+find_package(OpenCL     QUIET)
+find_package(miopengemm PATHS /opt/rocm)
+find_package(miopen     PATHS /opt/rocm)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -36,6 +38,10 @@ if(OpenCL_FOUND)
     add_subdirectory (vx_loomsl)
     add_subdirectory (utils)
 endif(OpenCL_FOUND)
+
+if(OpenCL_FOUND AND miopengemm_FOUND AND miopen_FOUND)
+    add_subdirectory (vx_nn)
+endif()
 
 if(OpenCV_FOUND)
     if(${OpenCV_VERSION_MAJOR} EQUAL 3)
