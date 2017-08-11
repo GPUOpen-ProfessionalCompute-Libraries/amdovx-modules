@@ -86,7 +86,6 @@ static vx_status VX_CALLBACK processTensorAddition(vx_node node, const vx_refere
 
     //miopen elementwise addition call.
     ERROR_CHECK_MIOPEN_STATUS(miopenOpTensor(miopenHandle, data->operation, &data->alpha1, data->input1, data->input1_mem, &data->alpha2, data->input2, data->input2_mem, &data->beta, data->output, data->output_mem));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 }

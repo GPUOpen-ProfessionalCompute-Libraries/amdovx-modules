@@ -81,7 +81,6 @@ static vx_status VX_CALLBACK processActivationLayer(vx_node node, const vx_refer
 
     //miopen activation forward call.
     ERROR_CHECK_MIOPEN_STATUS((miopenActivationForward(miopenHandle, data->activationDesc, &data->alpha, data->inputDescriptor, data->input_mem, &data->beta, data->outputDescriptor, data->output_mem)));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 }

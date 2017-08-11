@@ -24,6 +24,11 @@ THE SOFTWARE.
 #include <vector>
 #include <unistd.h>
 
+#include <inttypes.h>
+#include <math.h>
+#include <stdio.h>
+#include <time.h>
+
 struct DeconvolutionLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     double alpha;
@@ -95,29 +100,18 @@ static vx_status VX_CALLBACK processDeconvolutionLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t handle = data->handle->miopen_handle;
 
-    cl_int err;
-    std::vector<float> wsf_buffer_init(data->workspace_size/4, 0);
-    err = clEnqueueWriteBuffer(data->handle->cmdq, data->workspace,CL_TRUE,0, data->workspace_size,wsf_buffer_init.data(),0, NULL,NULL);
-    if(err!=0){
-        std::cout << "Error in initializing buffer with error : " << err << std::endl;
-        return VX_FAILURE;
-    }
-
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc,data->weight_mem,data->deconv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
-    clFinish(data->handle->cmdq);
 
     //Convolution Forward Bias.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 }
 
 static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-
     DeconvolutionLayerLocalData * data = new DeconvolutionLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
@@ -179,6 +173,13 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
         data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, data->workspace_size * sizeof(vx_float32), NULL, &err);
         if(err!=0) return VX_FAILURE;
         if (!data->workspace) return VX_FAILURE;
+
+		std::vector<float> wsf_buffer_init(data->workspace_size/4, 0);
+		err = clEnqueueWriteBuffer(data->handle->cmdq, data->workspace,CL_TRUE,0, data->workspace_size,wsf_buffer_init.data(),0, NULL,NULL);
+		if(err!=0){
+		    std::cout << "Error in initializing buffer with error : " << err << std::endl;
+		    return VX_FAILURE;
+		}
     }
 
     data->alpha = 1;

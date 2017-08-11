@@ -88,7 +88,6 @@ static vx_status VX_CALLBACK processNormalizationLayer(vx_node node, const vx_re
 
     //Apply Normalization forward.
     ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, data->workspace));
-    clFinish(data->handle->cmdq);
     return VX_SUCCESS;
 }
 

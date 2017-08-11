@@ -93,7 +93,6 @@ static vx_status VX_CALLBACK processBatchNormalizationLayer(vx_node node, const 
     //miopen batch norm inference.
     ERROR_CHECK_MIOPEN_STATUS(miopenBatchNormalizationForwardInference(miopenHandle, miopenBNSpatial, &data->alpha, &data->beta, data->input_desc, data->input_mem,
                                                                        data->output_desc, data->output_mem, data->bnScaleBiasMeanVarDesc, data->bnScale, data->bnBias, nullptr, nullptr, 0));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 

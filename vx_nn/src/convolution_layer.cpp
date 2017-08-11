@@ -96,11 +96,9 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     //ConvolutionForward.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
-    clFinish(data->handle->cmdq);
     //Convolution Forward Bias.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 }

@@ -87,7 +87,6 @@ static vx_status VX_CALLBACK processPoolingLayer(vx_node node, const vx_referenc
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
     ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, data->pooling_workspace, data->pooling_workspace_size));
-    clFinish(data->handle->cmdq);
 
     return VX_SUCCESS;
 }
