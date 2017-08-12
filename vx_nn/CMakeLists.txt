@@ -39,7 +39,7 @@ endif()
 
 list(APPEND PACKAGE_DEPENDS PACKAGE OpenCL)
 
-if(NOT Protobuf_FOUND)
+if(Protobuf_FOUND)
 	message("Found Protobuf -- installing inference generator.")
 	add_subdirectory(../utils/inference_generator ${CMAKE_CURRENT_BINARY_DIR}/bin)
 endif()
