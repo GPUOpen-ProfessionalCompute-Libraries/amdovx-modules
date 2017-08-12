@@ -179,7 +179,7 @@ vx_status CV_bilateralFilter_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.bilateralfilter",
-		VX_KERNEL_EXT_CV_BILATERAL_FILTER,
+		VX_KERNEL_OPENCV_BILATERAL_FILTER,
 		CV_bilateralFilter_Kernel,
 		6,
 		CV_bilateralFilter_InputValidator,

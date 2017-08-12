@@ -183,7 +183,7 @@ vx_status CV_Canny_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.canny",
-		VX_KERNEL_EXT_CV_CANNY,
+		VX_KERNEL_OPENCV_CANNY,
 		CV_Canny_Kernel,
 		6,
 		CV_Canny_InputValidator,

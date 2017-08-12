@@ -176,7 +176,7 @@ vx_status CV_SURF_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.surf_detect",
-		VX_KERNEL_EXT_CV_SURF_DETECT,
+		VX_KERNEL_OPENCV_SURF_DETECT,
 		CV_SURF_Detect_Kernel,
 		6,
 		CV_SURF_Detect_InputValidator,

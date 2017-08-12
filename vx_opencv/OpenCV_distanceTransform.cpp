@@ -120,7 +120,7 @@ vx_status CV_distanceTransform_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.distancetransform",
-		VX_KERNEL_EXT_CV_DISTANCETRANSFORM,
+		VX_KERNEL_OPENCV_DISTANCETRANSFORM,
 		CV_distanceTransform_Kernel,
 		2,
 		CV_distanceTransform_InputValidator,

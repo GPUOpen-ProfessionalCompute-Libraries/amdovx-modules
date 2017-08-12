@@ -84,7 +84,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_absdiff(vx_graph graph, vx_image in
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ABSDIFF,
+		VX_KERNEL_OPENCV_ABSDIFF,
 		params,
 		dimof(params));
 }
@@ -102,7 +102,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_add(vx_graph graph, vx_image input_
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ADD,
+		VX_KERNEL_OPENCV_ADD,
 		params,
 		dimof(params));
 
@@ -121,7 +121,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_subtract(vx_graph graph, vx_image i
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SUBTRACT,
+		VX_KERNEL_OPENCV_SUBTRACT,
 		params,
 		dimof(params));
 
@@ -140,7 +140,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_bitwise_and(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BITWISE_AND,
+		VX_KERNEL_OPENCV_BITWISE_AND,
 		params,
 		dimof(params));
 
@@ -158,7 +158,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_bitwise_not(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BITWISE_NOT,
+		VX_KERNEL_OPENCV_BITWISE_NOT,
 		params,
 		dimof(params));
 
@@ -177,7 +177,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_bitwise_or(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BITWISE_OR,
+		VX_KERNEL_OPENCV_BITWISE_OR,
 		params,
 		dimof(params));
 
@@ -196,7 +196,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_bitwise_xor(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BITWISE_XOR,
+		VX_KERNEL_OPENCV_BITWISE_XOR,
 		params,
 		dimof(params));
 
@@ -214,7 +214,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_transpose(vx_graph graph, vx_image 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_TRANSPOSE,
+		VX_KERNEL_OPENCV_TRANSPOSE,
 		params,
 		dimof(params));
 
@@ -236,7 +236,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_compare(vx_graph graph, vx_image in
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_COMPARE,
+		VX_KERNEL_OPENCV_COMPARE,
 		params,
 		dimof(params));
 
@@ -256,7 +256,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_integral(vx_graph graph, vx_image i
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_INTEGRAL,
+		VX_KERNEL_OPENCV_INTEGRAL,
 		params,
 		dimof(params));
 
@@ -277,7 +277,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_norm(vx_graph graph, vx_image input
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_NORM,
+		VX_KERNEL_OPENCV_NORM,
 		params,
 		dimof(params));
 
@@ -296,7 +296,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_countNonZero(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_COUNT_NON_ZERO,
+		VX_KERNEL_OPENCV_COUNT_NON_ZERO,
 		params,
 		dimof(params));
 }
@@ -316,7 +316,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_flip(vx_graph graph, vx_image input
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_FLIP,
+		VX_KERNEL_OPENCV_FLIP,
 		params,
 		dimof(params));
 
@@ -337,7 +337,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_medianBlur(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_MEDIAN_BLUR,
+		VX_KERNEL_OPENCV_MEDIAN_BLUR,
 		params,
 		dimof(params));
 
@@ -370,7 +370,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_boxFilter(vx_graph graph, vx_image 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BOXFILTER,
+		VX_KERNEL_OPENCV_BOXFILTER,
 		params,
 		dimof(params));
 
@@ -399,7 +399,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_GaussianBlur(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_GAUSSIAN_BLUR,
+		VX_KERNEL_OPENCV_GAUSSIAN_BLUR,
 		params,
 		dimof(params));
 
@@ -428,7 +428,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_blur(vx_graph graph, vx_image input
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BLUR,
+		VX_KERNEL_OPENCV_BLUR,
 		params,
 		dimof(params));
 
@@ -455,7 +455,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_bilateralFilter(vx_graph graph, vx_
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BILATERAL_FILTER,
+		VX_KERNEL_OPENCV_BILATERAL_FILTER,
 		params,
 		dimof(params));
 
@@ -488,7 +488,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Sobel(vx_graph graph, vx_image inpu
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SOBEL,
+		VX_KERNEL_OPENCV_SOBEL,
 		params,
 		dimof(params));
 
@@ -513,7 +513,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_convertScaleAbs(vx_graph graph, vx_
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_CONVERTSCALEABS,
+		VX_KERNEL_OPENCV_CONVERTSCALEABS,
 		params,
 		dimof(params));
 
@@ -542,7 +542,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_addWeighted(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ADDWEIGHTED,
+		VX_KERNEL_OPENCV_ADDWEIGHTED,
 		params,
 		dimof(params));
 
@@ -570,7 +570,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Canny(vx_graph graph, vx_image inpu
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_CANNY,
+		VX_KERNEL_OPENCV_CANNY,
 		params,
 		dimof(params));
 
@@ -594,7 +594,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_cornerMinEigenVal(vx_graph graph, v
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_CORNER_MIN_EIGEN_VAL,
+		VX_KERNEL_OPENCV_CORNER_MIN_EIGEN_VAL,
 		params,
 		dimof(params));
 
@@ -620,7 +620,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_cornerHarris(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_CORNERHARRIS,
+		VX_KERNEL_OPENCV_CORNERHARRIS,
 		params,
 		dimof(params));
 
@@ -649,7 +649,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Laplacian(vx_graph graph, vx_image 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_LAPLACIAN,
+		VX_KERNEL_OPENCV_LAPLACIAN,
 		params,
 		dimof(params));
 
@@ -680,7 +680,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Scharr(vx_graph graph, vx_image inp
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SCHARR,
+		VX_KERNEL_OPENCV_SCHARR,
 		params,
 		dimof(params));
 
@@ -712,7 +712,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_SIFTdetect(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SIFT_DETECT,
+		VX_KERNEL_OPENCV_SIFT_DETECT,
 		params,
 		dimof(params));
 
@@ -740,7 +740,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_SURFdetect(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SURF_DETECT,
+		VX_KERNEL_OPENCV_SURF_DETECT,
 		params,
 		dimof(params));
 
@@ -773,7 +773,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_SIFTcompute(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SIFT_COMPUTE,
+		VX_KERNEL_OPENCV_SIFT_COMPUTE,
 		params,
 		dimof(params));
 
@@ -806,7 +806,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_SURFcompute(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SURF_COMPUTE,
+		VX_KERNEL_OPENCV_SURF_COMPUTE,
 		params,
 		dimof(params));
 
@@ -830,7 +830,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_FAST(vx_graph graph, vx_image input
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_FAST,
+		VX_KERNEL_OPENCV_FAST,
 		params,
 		dimof(params));
 
@@ -864,7 +864,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_goodFeaturesToTrack(vx_graph graph,
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_GOOD_FEATURE_TO_TRACK,
+		VX_KERNEL_OPENCV_GOOD_FEATURE_TO_TRACK,
 		params,
 		dimof(params));
 
@@ -893,7 +893,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_BRISKdetect(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BRISK_DETECT,
+		VX_KERNEL_OPENCV_BRISK_DETECT,
 		params,
 		dimof(params));
 
@@ -933,7 +933,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_MSERdetect(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_MSER_DETECT,
+		VX_KERNEL_OPENCV_MSER_DETECT,
 		params,
 		dimof(params));
 
@@ -971,7 +971,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_ORBdetect(vx_graph graph, vx_image 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ORB_DETECT,
+		VX_KERNEL_OPENCV_ORB_DETECT,
 		params,
 		dimof(params));
 
@@ -1003,7 +1003,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_StarFeatureDetector(vx_graph graph,
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_STAR_FEATURE_DETECT,
+		VX_KERNEL_OPENCV_STAR_FEATURE_DETECT,
 		params,
 		dimof(params));
 }
@@ -1022,7 +1022,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_SimpleBlobDetector(vx_graph graph, 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SIMPLE_BLOB_DETECT,
+		VX_KERNEL_OPENCV_SIMPLE_BLOB_DETECT,
 		params,
 		dimof(params));
 
@@ -1053,7 +1053,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_BRISKcompute(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BRISK_COMPUTE,
+		VX_KERNEL_OPENCV_BRISK_COMPUTE,
 		params,
 		dimof(params));
 
@@ -1093,7 +1093,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_ORBcompute(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ORB_COMPUTE,
+		VX_KERNEL_OPENCV_ORB_COMPUTE,
 		params,
 		dimof(params));
 
@@ -1119,7 +1119,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_multiply(vx_graph graph, vx_image i
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_MULTIPLY,
+		VX_KERNEL_OPENCV_MULTIPLY,
 		params,
 		dimof(params));
 
@@ -1144,7 +1144,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_divide(vx_graph graph, vx_image inp
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_DIVIDE,
+		VX_KERNEL_OPENCV_DIVIDE,
 		params,
 		dimof(params));
 
@@ -1174,7 +1174,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_adaptiveThreshold(vx_graph graph, v
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ADAPTIVETHRESHOLD,
+		VX_KERNEL_OPENCV_ADAPTIVETHRESHOLD,
 		params,
 		dimof(params));
 
@@ -1194,7 +1194,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_distanceTransform(vx_graph graph, v
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_DISTANCETRANSFORM,
+		VX_KERNEL_OPENCV_DISTANCETRANSFORM,
 		params,
 		dimof(params));
 
@@ -1216,7 +1216,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_cvtColor(vx_graph graph, vx_image i
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_CVTCOLOR,
+		VX_KERNEL_OPENCV_CVTCOLOR,
 		params,
 		dimof(params));
 }
@@ -1240,7 +1240,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_threshold(vx_graph graph, vx_image 
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_THRESHOLD,
+		VX_KERNEL_OPENCV_THRESHOLD,
 		params,
 		dimof(params));
 
@@ -1265,7 +1265,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_fastNlMeansDenoising(vx_graph graph
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_FAST_NL_MEANS_DENOISING,
+		VX_KERNEL_OPENCV_FAST_NL_MEANS_DENOISING,
 		params,
 		dimof(params));
 
@@ -1292,7 +1292,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_fastNlMeansDenoisingColored(vx_grap
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_FAST_NL_MEANS_DENOISING_COLORED,
+		VX_KERNEL_OPENCV_FAST_NL_MEANS_DENOISING_COLORED,
 		params,
 		dimof(params));
 
@@ -1317,7 +1317,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_pyrup(vx_graph graph, vx_image inpu
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_PYRUP,
+		VX_KERNEL_OPENCV_PYRUP,
 		params,
 		dimof(params));
 
@@ -1342,7 +1342,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_pyrdown(vx_graph graph, vx_image in
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_PYRDOWN,
+		VX_KERNEL_OPENCV_PYRDOWN,
 		params,
 		dimof(params));
 
@@ -1372,7 +1372,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_filter2D(vx_graph graph, vx_image i
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_FILTER_2D,
+		VX_KERNEL_OPENCV_FILTER_2D,
 		params,
 		dimof(params));
 
@@ -1403,7 +1403,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_sepFilter2D(vx_graph graph, vx_imag
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_SEPFILTER_2D,
+		VX_KERNEL_OPENCV_SEPFILTER_2D,
 		params,
 		dimof(params));
 
@@ -1431,7 +1431,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Dilate(vx_graph graph, vx_image inp
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_DILATE,
+		VX_KERNEL_OPENCV_DILATE,
 		params,
 		dimof(params));
 
@@ -1459,7 +1459,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Erode(vx_graph graph, vx_image inpu
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_ERODE,
+		VX_KERNEL_OPENCV_ERODE,
 		params,
 		dimof(params));
 
@@ -1487,7 +1487,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_warpAffine(vx_graph graph, vx_image
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_WARP_AFFINE,
+		VX_KERNEL_OPENCV_WARP_AFFINE,
 		params,
 		dimof(params));
 
@@ -1515,7 +1515,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_warpPerspective(vx_graph graph, vx_
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_WARP_PERSPECTIVE,
+		VX_KERNEL_OPENCV_WARP_PERSPECTIVE,
 		params,
 		dimof(params));
 
@@ -1544,7 +1544,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_Resize(vx_graph graph, vx_image inp
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_RESIZE,
+		VX_KERNEL_OPENCV_RESIZE,
 		params,
 		dimof(params));
 
@@ -1574,7 +1574,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_morphologyEX(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_MORPHOLOGYEX,
+		VX_KERNEL_OPENCV_MORPHOLOGYEX,
 		params,
 		dimof(params));
 
@@ -1597,7 +1597,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_buildPyramid(vx_graph graph, vx_ima
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BUILD_PYRAMID,
+		VX_KERNEL_OPENCV_BUILD_PYRAMID,
 		params,
 		dimof(params));
 
@@ -1631,7 +1631,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxExtCvNode_buildOpticalFlowPyramid(vx_graph gr
 	};
 
 	return vxCreateNodeByStructure(graph,
-		VX_KERNEL_EXT_CV_BUILD_OPTICAL_FLOW_PYRAMID,
+		VX_KERNEL_OPENCV_BUILD_OPTICAL_FLOW_PYRAMID,
 		params,
 		dimof(params));
 

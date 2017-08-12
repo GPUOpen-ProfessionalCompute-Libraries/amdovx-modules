@@ -145,7 +145,7 @@ vx_status CV_FAST_detector_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.fast",
-		VX_KERNEL_EXT_CV_FAST,
+		VX_KERNEL_OPENCV_FAST,
 		CV_FAST_detector_Kernel,
 		4,
 		CV_FAST_detector_InputValidator,

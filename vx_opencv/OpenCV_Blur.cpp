@@ -243,7 +243,7 @@ vx_status CV_blur_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.blur",
-		VX_KERNEL_EXT_CV_BLUR,
+		VX_KERNEL_OPENCV_BLUR,
 		CV_Blur_Kernel,
 		7,
 		CV_Blur_InputValidator,

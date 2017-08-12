@@ -196,7 +196,7 @@ vx_status CV_MedianBlur_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.medianblur",
-		VX_KERNEL_EXT_CV_MEDIAN_BLUR,
+		VX_KERNEL_OPENCV_MEDIAN_BLUR,
 		CV_MedianBlur_Kernel,
 		3,
 		CV_MedianBlur_InputValidator,

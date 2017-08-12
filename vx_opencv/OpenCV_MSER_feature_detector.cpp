@@ -252,7 +252,7 @@ vx_status CV_MSER_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.mser_detect",
-		VX_KERNEL_EXT_CV_MSER_DETECT,
+		VX_KERNEL_OPENCV_MSER_DETECT,
 		CV_MSER_feature_detector_Kernel,
 		12,
 		CV_MSER_feature_detector_InputValidator,

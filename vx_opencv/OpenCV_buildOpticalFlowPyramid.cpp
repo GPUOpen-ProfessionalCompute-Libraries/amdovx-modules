@@ -235,7 +235,7 @@ vx_status CV_buildOpticalFlowPyramid_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.buildopticalflowpyramid",
-		VX_KERNEL_EXT_CV_BUILD_OPTICAL_FLOW_PYRAMID,
+		VX_KERNEL_OPENCV_BUILD_OPTICAL_FLOW_PYRAMID,
 		CV_buildOpticalFlowPyramid_Kernel,
 		9,
 		CV_buildOpticalFlowPyramid_InputValidator,

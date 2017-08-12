@@ -134,7 +134,7 @@ vx_status CV_bitwise_or_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.bitwise_or",
-		VX_KERNEL_EXT_CV_BITWISE_OR,
+		VX_KERNEL_OPENCV_BITWISE_OR,
 		CV_bitwise_or_Kernel,
 		3,
 		CV_bitwise_or_InputValidator,

@@ -192,7 +192,7 @@ vx_status CV_AddWeighted_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.addweighted",
-		VX_KERNEL_EXT_CV_ADDWEIGHTED,
+		VX_KERNEL_OPENCV_ADDWEIGHTED,
 		CV_AddWeighted_Kernel,
 		7,
 		CV_AddWeighted_InputValidator,

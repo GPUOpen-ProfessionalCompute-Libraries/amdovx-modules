@@ -199,7 +199,7 @@ vx_status CV_resize_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.resize",
-		VX_KERNEL_EXT_CV_RESIZE,
+		VX_KERNEL_OPENCV_RESIZE,
 		CV_resize_Kernel,
 		7,
 		CV_resize_InputValidator,

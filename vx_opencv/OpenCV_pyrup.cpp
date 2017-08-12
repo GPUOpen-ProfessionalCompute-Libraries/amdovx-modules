@@ -164,7 +164,7 @@ vx_status CV_pyrup_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.pyrup",
-		VX_KERNEL_EXT_CV_PYRUP,
+		VX_KERNEL_OPENCV_PYRUP,
 		CV_pyrup_Kernel,
 		5,
 		CV_pyrup_InputValidator,

@@ -198,7 +198,7 @@ vx_status CV_SIFT_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.sift_detect",
-		VX_KERNEL_EXT_CV_SIFT_DETECT,
+		VX_KERNEL_OPENCV_SIFT_DETECT,
 		CV_SIFT_Detect_Kernel,
 		8,
 		CV_SIFT_Detect_InputValidator,

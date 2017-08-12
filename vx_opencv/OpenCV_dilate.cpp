@@ -189,7 +189,7 @@ vx_status CV_dilate_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.dilate",
-		VX_KERNEL_EXT_CV_DILATE,
+		VX_KERNEL_OPENCV_DILATE,
 		CV_dilate_Kernel,
 		7,
 		CV_dilate_InputValidator,

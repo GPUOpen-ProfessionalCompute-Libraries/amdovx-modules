@@ -150,7 +150,7 @@ vx_status CV_convertScaleAbs_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.convertscaleabs",
-		VX_KERNEL_EXT_CV_CONVERTSCALEABS,
+		VX_KERNEL_OPENCV_CONVERTSCALEABS,
 		CV_convertScaleAbs_Kernel,
 		4,
 		CV_convertScaleAbs_InputValidator,

@@ -166,7 +166,7 @@ vx_status CV_threshold_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.threshold",
-		VX_KERNEL_EXT_CV_THRESHOLD,
+		VX_KERNEL_OPENCV_THRESHOLD,
 		CV_threshold_Kernel,
 		5,
 		CV_threshold_InputValidator,

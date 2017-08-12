@@ -219,7 +219,7 @@ vx_status CV_Sobel_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.sobel",
-		VX_KERNEL_EXT_CV_SOBEL,
+		VX_KERNEL_OPENCV_SOBEL,
 		CV_Sobel_Kernel,
 		9,
 		CV_Sobel_InputValidator,

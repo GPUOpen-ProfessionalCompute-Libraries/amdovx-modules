@@ -166,7 +166,7 @@ vx_status CV_fastNlMeansDenoising_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.fastnlmeansdenoising",
-		VX_KERNEL_EXT_CV_FAST_NL_MEANS_DENOISING,
+		VX_KERNEL_OPENCV_FAST_NL_MEANS_DENOISING,
 		CV_fastNlMeansDenoising_Kernel,
 		5,
 		CV_fastNlMeansDenoising_InputValidator,

@@ -205,7 +205,7 @@ vx_status CV_Scharr_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.scharr",
-		VX_KERNEL_EXT_CV_SCHARR,
+		VX_KERNEL_OPENCV_SCHARR,
 		CV_Scharr_Kernel,
 		8,
 		CV_Scharr_InputValidator,

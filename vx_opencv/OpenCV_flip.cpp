@@ -137,7 +137,7 @@ vx_status CV_flip_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.flip",
-		VX_KERNEL_EXT_CV_FLIP,
+		VX_KERNEL_OPENCV_FLIP,
 		CV_flip_Kernel,
 		3,
 		CV_flip_InputValidator,

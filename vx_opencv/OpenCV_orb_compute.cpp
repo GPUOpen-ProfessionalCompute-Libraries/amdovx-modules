@@ -249,7 +249,7 @@ vx_status CV_ORB_compute_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.orb_compute",
-		VX_KERNEL_EXT_CV_ORB_COMPUTE,
+		VX_KERNEL_OPENCV_ORB_COMPUTE,
 		CV_orb_compute_Kernel,
 		12,
 		CV_orb_compute_InputValidator,

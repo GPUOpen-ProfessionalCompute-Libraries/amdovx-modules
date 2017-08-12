@@ -135,7 +135,7 @@ vx_status CV_add_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.add",
-		VX_KERNEL_EXT_CV_ADD,
+		VX_KERNEL_OPENCV_ADD,
 		CV_add_Kernel,
 		3,
 		CV_add_InputValidator,

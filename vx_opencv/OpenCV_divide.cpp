@@ -167,7 +167,7 @@ vx_status CV_divide_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.divide",
-		VX_KERNEL_EXT_CV_DIVIDE,
+		VX_KERNEL_OPENCV_DIVIDE,
 		CV_divide_Kernel,
 		5,
 		CV_divide_InputValidator,

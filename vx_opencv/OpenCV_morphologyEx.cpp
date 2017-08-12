@@ -201,7 +201,7 @@ vx_status CV_morphologyEx_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.morphologyex",
-		VX_KERNEL_EXT_CV_MORPHOLOGYEX,
+		VX_KERNEL_OPENCV_MORPHOLOGYEX,
 		CV_morphologyEx_Kernel,
 		8,
 		CV_morphologyEx_InputValidator,

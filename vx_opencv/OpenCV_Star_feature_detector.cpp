@@ -196,7 +196,7 @@ vx_status CV_star_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.star_detect",
-		VX_KERNEL_EXT_CV_STAR_FEATURE_DETECT,
+		VX_KERNEL_OPENCV_STAR_FEATURE_DETECT,
 		CV_star_feature_detector_Kernel,
 		8,
 		CV_star_feature_detector_InputValidator,

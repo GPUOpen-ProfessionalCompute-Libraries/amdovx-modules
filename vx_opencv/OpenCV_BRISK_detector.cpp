@@ -172,7 +172,7 @@ vx_status CV_brisk_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.brisk_detect",
-		VX_KERNEL_EXT_CV_BRISK_DETECT,
+		VX_KERNEL_OPENCV_BRISK_DETECT,
 		CV_brisk_detector_Kernel,
 		6,
 		CV_brisk_detector_InputValidator,

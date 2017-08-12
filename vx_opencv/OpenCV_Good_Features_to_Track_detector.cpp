@@ -215,7 +215,7 @@ vx_status CV_good_features_to_track_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.good_features_to_track",
-		VX_KERNEL_EXT_CV_GOOD_FEATURE_TO_TRACK,
+		VX_KERNEL_OPENCV_GOOD_FEATURE_TO_TRACK,
 		CV_good_feature_detector_Kernel,
 		9,
 		CV_good_feature_detector_InputValidator,

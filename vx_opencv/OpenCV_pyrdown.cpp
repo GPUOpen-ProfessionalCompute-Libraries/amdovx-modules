@@ -164,7 +164,7 @@ vx_status CV_pyrdown_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.pyrdown",
-		VX_KERNEL_EXT_CV_PYRDOWN,
+		VX_KERNEL_OPENCV_PYRDOWN,
 		CV_pyrdown_Kernel,
 		5,
 		CV_pyrdown_InputValidator,

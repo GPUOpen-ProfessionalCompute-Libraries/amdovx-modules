@@ -223,7 +223,7 @@ vx_status CV_Boxfilter_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.boxfilter",
-		VX_KERNEL_EXT_CV_BOXFILTER,
+		VX_KERNEL_OPENCV_BOXFILTER,
 		CV_Boxfilter_Kernel,
 		9,
 		CV_Boxfilter_InputValidator,

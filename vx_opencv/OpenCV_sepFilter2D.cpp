@@ -214,7 +214,7 @@ vx_status CV_sepFilter2D_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.sepfilter2d",
-		VX_KERNEL_EXT_CV_SEPFILTER_2D,
+		VX_KERNEL_OPENCV_SEPFILTER_2D,
 		CV_sepFilter2D_Kernel,
 		9,
 		CV_sepFilter2D_InputValidator,

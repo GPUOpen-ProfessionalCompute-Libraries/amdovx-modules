@@ -179,7 +179,7 @@ vx_status CV_fastNlMeansDenoisingColored_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.fastnlmeansdenoisingcolored",
-		VX_KERNEL_EXT_CV_FAST_NL_MEANS_DENOISING_COLORED,
+		VX_KERNEL_OPENCV_FAST_NL_MEANS_DENOISING_COLORED,
 		CV_fastNlMeansDenoisingColored_Kernel,
 		6,
 		CV_fastNlMeansDenoisingColored_InputValidator,

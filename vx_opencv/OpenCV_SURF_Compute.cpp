@@ -217,7 +217,7 @@ vx_status CV_SURF_compute_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.surf_compute",
-		VX_KERNEL_EXT_CV_SURF_COMPUTE,
+		VX_KERNEL_OPENCV_SURF_COMPUTE,
 		CV_SURF_Compute_Kernel,
 		9,
 		CV_SURF_Compute_InputValidator,

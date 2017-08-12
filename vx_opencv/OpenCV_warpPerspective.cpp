@@ -188,7 +188,7 @@ vx_status CV_warpPerspective_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.warpperspective",
-		VX_KERNEL_EXT_CV_WARP_PERSPECTIVE,
+		VX_KERNEL_OPENCV_WARP_PERSPECTIVE,
 		CV_warpPerspective_Kernel,
 		7,
 		CV_warpPerspective_InputValidator,

@@ -151,7 +151,7 @@ vx_status CV_compare_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.compare",
-		VX_KERNEL_EXT_CV_COMPARE,
+		VX_KERNEL_OPENCV_COMPARE,
 		CV_compare_Kernel,
 		4,
 		CV_compare_InputValidator,

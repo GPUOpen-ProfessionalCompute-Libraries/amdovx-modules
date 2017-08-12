@@ -135,7 +135,7 @@ vx_status CV_absdiff_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.absdiff",
-		VX_KERNEL_EXT_CV_ABSDIFF,
+		VX_KERNEL_OPENCV_ABSDIFF,
 		CV_absdiff_Kernel,
 		3,
 		CV_absdiff_InputValidator,

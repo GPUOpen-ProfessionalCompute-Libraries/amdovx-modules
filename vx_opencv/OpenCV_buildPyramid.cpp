@@ -164,7 +164,7 @@ vx_status CV_buildPyramid_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.buildpyramid",
-		VX_KERNEL_EXT_CV_BUILD_PYRAMID,
+		VX_KERNEL_OPENCV_BUILD_PYRAMID,
 		CV_buildPyramid_Kernel,
 		4,
 		CV_buildPyramid_InputValidator,

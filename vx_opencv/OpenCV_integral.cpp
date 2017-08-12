@@ -138,7 +138,7 @@ vx_status CV_integral_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.integral",
-		VX_KERNEL_EXT_CV_INTEGRAL,
+		VX_KERNEL_OPENCV_INTEGRAL,
 		CV_integral_Kernel,
 		3,
 		CV_integral_InputValidator,

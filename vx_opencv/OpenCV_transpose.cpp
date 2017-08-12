@@ -128,7 +128,7 @@ vx_status CV_transpose_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.transpose",
-		VX_KERNEL_EXT_CV_TRANSPOSE,
+		VX_KERNEL_OPENCV_TRANSPOSE,
 		CV_transpose_Kernel,
 		2,
 		CV_transpose_InputValidator,

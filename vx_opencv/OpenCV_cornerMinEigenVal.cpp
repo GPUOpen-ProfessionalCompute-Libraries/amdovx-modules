@@ -163,7 +163,7 @@ vx_status CV_cornerMinEigenVal_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.cornermineigenval",
-		VX_KERNEL_EXT_CV_CORNER_MIN_EIGEN_VAL,
+		VX_KERNEL_OPENCV_CORNER_MIN_EIGEN_VAL,
 		CV_cornerMinEigenVal_Kernel,
 		5,
 		CV_cornerMinEigenVal_InputValidator,

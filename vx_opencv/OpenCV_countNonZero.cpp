@@ -110,7 +110,7 @@ vx_status CV_countNonZero_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.countnonzero",
-		VX_KERNEL_EXT_CV_COUNT_NON_ZERO,
+		VX_KERNEL_OPENCV_COUNT_NON_ZERO,
 		CV_countNonZero_Kernel,
 		2,
 		CV_countNonZero_InputValidator,

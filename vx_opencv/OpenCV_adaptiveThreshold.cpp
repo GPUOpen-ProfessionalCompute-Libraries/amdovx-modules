@@ -190,7 +190,7 @@ vx_status CV_adaptiveThreshold_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.adaptivethreshold",
-		VX_KERNEL_EXT_CV_ADAPTIVETHRESHOLD,
+		VX_KERNEL_OPENCV_ADAPTIVETHRESHOLD,
 		CV_adaptiveThreshold_Kernel,
 		7,
 		CV_adaptiveThreshold_InputValidator,

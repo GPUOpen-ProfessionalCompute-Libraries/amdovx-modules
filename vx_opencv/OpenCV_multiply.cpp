@@ -167,7 +167,7 @@ vx_status CV_multiply_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.multiply",
-		VX_KERNEL_EXT_CV_MULTIPLY,
+		VX_KERNEL_OPENCV_MULTIPLY,
 		CV_multiply_Kernel,
 		5,
 		CV_multiply_InputValidator,

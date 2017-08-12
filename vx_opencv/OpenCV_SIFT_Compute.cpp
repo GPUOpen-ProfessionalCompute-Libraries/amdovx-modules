@@ -213,7 +213,7 @@ vx_status CV_SIFT_compute_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.sift_compute",
-		VX_KERNEL_EXT_CV_SIFT_COMPUTE,
+		VX_KERNEL_OPENCV_SIFT_COMPUTE,
 		CV_SIFT_Compute_Kernel,
 		9,
 		CV_SIFT_Compute_InputValidator,

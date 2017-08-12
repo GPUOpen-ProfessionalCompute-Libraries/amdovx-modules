@@ -192,7 +192,7 @@ vx_status CV_Gaussianblur_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.gaussianblur",
-		VX_KERNEL_EXT_CV_GAUSSIAN_BLUR,
+		VX_KERNEL_OPENCV_GAUSSIAN_BLUR,
 		CV_Gaussianblur_Kernel,
 		7,
 		CV_Gaussianblur_InputValidator,

@@ -120,7 +120,7 @@ vx_status CV_bitwise_not_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.bitwise_not",
-		VX_KERNEL_EXT_CV_BITWISE_NOT,
+		VX_KERNEL_OPENCV_BITWISE_NOT,
 		CV_bitwise_not_Kernel,
 		2,
 		CV_bitwise_not_InputValidator,

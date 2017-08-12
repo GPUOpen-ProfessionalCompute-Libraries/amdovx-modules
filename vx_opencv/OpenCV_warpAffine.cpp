@@ -188,7 +188,7 @@ vx_status CV_warpAffine_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.warpaffine",
-		VX_KERNEL_EXT_CV_WARP_AFFINE,
+		VX_KERNEL_OPENCV_WARP_AFFINE,
 		CV_warpAffine_Kernel,
 		7,
 		CV_warpAffine_InputValidator,

@@ -134,7 +134,7 @@ vx_status CV_subtract_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.subtract",
-		VX_KERNEL_EXT_CV_SUBTRACT,
+		VX_KERNEL_OPENCV_SUBTRACT,
 		CV_subtract_Kernel,
 		3,
 		CV_subtract_InputValidator,

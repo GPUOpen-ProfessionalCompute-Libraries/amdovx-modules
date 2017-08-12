@@ -126,7 +126,7 @@ vx_status CV_simple_blob_detect_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.simple_blob_detect",
-		VX_KERNEL_EXT_CV_SIMPLE_BLOB_DETECT,
+		VX_KERNEL_OPENCV_SIMPLE_BLOB_DETECT,
 		CV_simple_blob_detector_Kernel,
 		3,
 		CV_simple_blob_detector_InputValidator,
@@ -515,7 +515,7 @@ vx_status CV_simple_blob_detect_initialize_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.simple_blob_detect_initialize",
-		VX_KERNEL_EXT_CV_SIMPLE_BLOB_DETECT_INITIALIZE,
+		VX_KERNEL_OPENCV_SIMPLE_BLOB_DETECT_INITIALIZE,
 		CV_simple_blob_detector_INITIALIZE_Kernel,
 		22,
 		CV_simple_blob_detector_INITIALIZE_InputValidator,

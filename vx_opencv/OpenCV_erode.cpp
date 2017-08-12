@@ -188,7 +188,7 @@ vx_status CV_erode_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.erode",
-		VX_KERNEL_EXT_CV_ERODE,
+		VX_KERNEL_OPENCV_ERODE,
 		CV_erode_Kernel,
 		7,
 		CV_erode_InputValidator,

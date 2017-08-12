@@ -136,7 +136,7 @@ vx_status CV_cvtColor_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel kernel = vxAddKernel(context,
 		"org.opencv.cvtcolor",
-		VX_KERNEL_EXT_CV_CVTCOLOR,
+		VX_KERNEL_OPENCV_CVTCOLOR,
 		CV_cvtColor_Kernel,
 		3,
 		CV_cvtColor_InputValidator,

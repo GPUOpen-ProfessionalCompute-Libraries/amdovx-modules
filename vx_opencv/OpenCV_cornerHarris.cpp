@@ -179,7 +179,7 @@ vx_status CV_cornerHarris_Register(vx_context context)
 	vx_status status = VX_SUCCESS;
 	vx_kernel Kernel = vxAddKernel(context,
 		"org.opencv.cornerharris",
-		VX_KERNEL_EXT_CV_CORNERHARRIS,
+		VX_KERNEL_OPENCV_CORNERHARRIS,
 		CV_cornerHarris_Kernel,
 		6,
 		CV_cornerHarris_InputValidator,
