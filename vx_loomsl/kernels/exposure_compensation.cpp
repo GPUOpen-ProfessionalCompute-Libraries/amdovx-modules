@@ -1102,7 +1102,9 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_float32 alpha = 0, beta = 0;
 	vx_uint32 *pIMat, *pNMat;
 	vx_uint32 numCameras;
-	CExpCompensator* exp_comp = new CExpCompensator();
+	CExpCompensator* exp_comp = nullptr;
+	status = vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)); if (status != VX_SUCCESS) return VX_FAILURE;
+
 	vx_scalar scalar = (vx_scalar)parameters[0];
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &alpha));
 	scalar = (vx_scalar)parameters[1];
@@ -1111,13 +1113,13 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_matrix mat = (vx_matrix)parameters[2];
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
-	pIMat = new vx_uint32[rows*columns];
+	pIMat = exp_comp->m_pIMat;
 	ERROR_CHECK_STATUS(vxReadMatrix(mat, (void *)pIMat));
 	mat = (vx_matrix)parameters[3];
 	vx_size rows1 = 0;
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows1, sizeof(rows1)));
-	pNMat = new vx_uint32[rows1*columns];
+	pNMat = exp_comp->m_pNMat;
 	ERROR_CHECK_STATUS(vxReadMatrix(mat, (void *)pNMat));
 	// get output array pointer
 	vx_array arr = (vx_array)parameters[4];
@@ -1138,11 +1140,33 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_size stride = 0;
 	void *base = NULL;
 	status = exp_comp->SolveForGains(alpha, beta, pIMat, pNMat, numCameras, arr, (vx_uint32)rows, (vx_uint32)columns);
-	delete[] pIMat;
-	delete[] pNMat;
+	return status;
+}
+
+static vx_status VX_CALLBACK exposure_comp_solvegains_initialize(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	vx_size columns = 0, rows = 0;
+	vx_matrix mat = (vx_matrix)parameters[2];
+	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
+	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
+
+	CExpCompensator *pExpComp = new CExpCompensator((int)rows, (int)columns);
+	vx_size size = sizeof(CExpCompensator);
+	status = vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_SIZE, &size, sizeof(size)); if (status != VX_SUCCESS) return VX_FAILURE;
+	status = vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &pExpComp, sizeof(pExpComp)); if (status != VX_SUCCESS) return VX_FAILURE;
+	return status;
+}
+
+static vx_status VX_CALLBACK exposure_comp_solvegains_uninitialize(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	CExpCompensator* exp_comp = nullptr;
+	status = vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)); if (status != VX_SUCCESS) return VX_FAILURE;
 	delete exp_comp;
 	return status;
 }
+
 
 //! \brief The exposure_comp_applygains kernel publisher.
 vx_status exposure_comp_solvegains_publish(vx_context context)
@@ -1154,8 +1178,8 @@ vx_status exposure_comp_solvegains_publish(vx_context context)
 		5,
 		exposure_comp_solvegains_input_validator,
 		exposure_comp_solvegains_output_validator,
-		nullptr,
-		nullptr);
+		exposure_comp_solvegains_initialize,
+		exposure_comp_solvegains_uninitialize);
 	ERROR_CHECK_OBJECT(kernel);
 	// set kernel parameters
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
