@@ -27,7 +27,7 @@ THE SOFTWARE.
 #include <fstream>
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
-#include "../proto/caffe.pb.h"
+#include "caffe.pb.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -37,12 +37,14 @@ THE SOFTWARE.
 
 //Dump Layer Data : disabled unless enabled explicitly by setting ENABLE_DUMP_LAYER_DATA = 1
 #ifndef ENABLE_DUMP_LAYER_DATA
-    #define ENABLE_DUMP_LAYER_DATA 0
+#define ENABLE_DUMP_LAYER_DATA 0
 #endif
 
 #ifndef ENABLE_DIRECTIVE
-    #define ENABLE_DIRECTIVE 0
+#define ENABLE_DIRECTIVE 0
 #endif
+
+int isVirtualEnabled = 0;
 
 void getLayerParams
 (
@@ -266,7 +268,6 @@ int calculateTensorDim
 std::map<std::string,std::vector<int>>& tensorMap
                                       )
 {
-
     tensorMap[net[0][4]] = std::vector<int>{inputDim[0], inputDim[1], inputDim[2], inputDim[3]};
 
 
@@ -364,20 +365,45 @@ void writeGDF
         )
 {
     std::map<std::string,bool> tensorCheck;
-	ofsGDF << "import vx_nn" << std::endl;
+    ofsGDF << "import vx_nn" << std::endl;
     for(auto& node : net) {
         // create input/output tensor objects
+        bool isFirstLayer = (&node == &net.front());
+        bool isLastLayer = (&node == &net.back());
         for(size_t i = 4; i < node.size(); i++) {
             if(node[i] != "" && tensorCheck.find(node[i]) == tensorCheck.end()) {
                 auto&& dim = tensorMap[node[i]];
-                ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                tensorCheck[node[i]] = true;
+                if((isVirtualEnabled && isFirstLayer) || (isVirtualEnabled && isLastLayer)) {
+                    ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    tensorCheck[node[i]] = true;
+                    if(!isLastLayer){
+                        ofsGDF << "read data input.f32" << std::endl;
+                    }
+                }else {
+                    if(isVirtualEnabled) {
+                        ofsGDF << "data " << node[i] << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        tensorCheck[node[i]] = true;
+                    }else{
+                        ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        tensorCheck[node[i]]= true;
+                        if(isFirstLayer) ofsGDF << "read data input.f32" << std::endl;
+                    }
+                }
             }
         }
         auto&& output = node[3];
         auto&& odim = tensorMap[output];
         if(!tensorCheck[output]) {
-            ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            if(!isVirtualEnabled) {
+                ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            } else {
+                if(!isLastLayer) {
+                    ofsGDF << "data " << output << " = virtual-tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                }
+                else {
+                    ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                }
+            }
 #if ENABLE_DIRECTIVE
             ofsGDF << "directive " << output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
@@ -407,7 +433,7 @@ void writeGDF
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
-            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
                 tensorCheck[bias] = true;
             }
@@ -418,7 +444,7 @@ void writeGDF
                    << " " << node[3]
                    << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
         }else if (type == "Deconvolution"){
             std::stringstream ss(params);
@@ -438,14 +464,14 @@ void writeGDF
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
-            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
                 tensorCheck[bias] = true;
             }else{
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
 #if ENABLE_DIRECTIVE
-            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
                 tensorCheck[bias] = true;
             }
@@ -455,9 +481,9 @@ void writeGDF
                    << node[3] <<"_params"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Pooling") {
             std::stringstream ss(params);
@@ -479,9 +505,9 @@ void writeGDF
                    << node[3] << "_roundPolicy"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "InnerProduct") {
             std::stringstream ss(params);
@@ -501,7 +527,7 @@ void writeGDF
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
                 ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
-            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
                 tensorCheck[bias] = true;
             }
@@ -512,9 +538,9 @@ void writeGDF
                    << node[3] << "_roundPolicy"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "ReLU") {
             ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_ACTIVATION_RELU" << std::endl;
@@ -526,9 +552,9 @@ void writeGDF
                    << node[3] << "_param_b"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "LRN") {
             int normalization_size;
@@ -552,9 +578,9 @@ void writeGDF
                    << node[3] << " "
                    << node[3] << "_bias"
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "BatchNorm") {
             int use_global_stats;
@@ -569,9 +595,9 @@ void writeGDF
                    << node[3] << "_beta "
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Eltwise") {
             int op;
@@ -599,9 +625,9 @@ void writeGDF
                            << " " << out
                            << std::endl;
                     tmp = out;
-                    #if ENABLE_DUMP_LAYER_DATA
-                        ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-                    #endif
+#if ENABLE_DUMP_LAYER_DATA
+                    ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
                 }
                 else error("writeGDF: Eltwise op=%d not supported\n", op);
             }
@@ -615,9 +641,9 @@ void writeGDF
                    << node[3] << "_beta"
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Concat") {
             ofsGDF << "node com.amd.nn_extension.concat_layer" ;
@@ -625,38 +651,38 @@ void writeGDF
                 ofsGDF << " " << node[i];
             }
             ofsGDF << " " << node[3] << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Dropout") {
             //during inference dropout layer copies its input to output.
             ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Softmax") {
             ofsGDF << "node org.khronos.nn_extension.softmax_layer " << node[4]
                    << " " << node[3]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "Split") {
             ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else if(type == "SoftmaxWithLoss") {
             ofsGDF << "node org.khronos.nn_extension.softmax_layer " << node[4]
                    << " " << node[5]
                    << std::endl;
-            #if ENABLE_DUMP_LAYER_DATA
-                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-            #endif
+#if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
         }
         else {
             ofsGDF << "# "
@@ -668,7 +694,9 @@ void writeGDF
                 ofsGDF << std::left << std::setw(32) << node[i];
             ofsGDF << std::endl;
         }
-
+        if(isLastLayer) {
+            ofsGDF << "write " << node[3] << " output.f32" << std::endl;
+        }
         ofsGDF << std::endl;
     }
 }
@@ -689,10 +717,10 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter){
     FILE * fs_bias;
     fs_weights = fopen(fileName_weights.c_str(), "wb");
     fs_bias    = fopen(fileName_bias.c_str(),"wb");
-	if(!fs_weights || !fs_bias) {
-		printf("ERROR: unable to create dump files: make sure weights and bias folders are writable.\n");
-		exit(1);
-	} 
+    if(!fs_weights || !fs_bias) {
+        printf("ERROR: unable to create dump files: make sure weights and bias folders are writable.\n");
+        exit(1);
+    }
     int blob_size = layer_parameter.blobs_size();
     if(blob_size > 0) {
         //Extracting the weights.
@@ -820,7 +848,6 @@ int loadCaffeModelFile
         std::vector<std::vector<std::string>>& net,
         int inputDim[4]
 ) {
-
     //verify the version of protobuf library.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -844,7 +871,7 @@ int main(int argc, char* argv[])
 {
     // check for command-line arguments
     if(argc < 2) {
-        printf("Usage: inference_generator <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+        printf("Usage: inference_generator <net.prototxt | net.caffemodel> -enable_virtual [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
         return -1;
     }
 
@@ -854,15 +881,22 @@ int main(int argc, char* argv[])
     const char * convertPolicy = "VX_CONVERT_POLICY_SATURATE";
     const char * roundPolicy = "VX_ROUND_POLICY_TO_NEAREST_EVEN";
     const char *  fileName = argv[1];
-    if(argc > 2) inputDim[0] = atoi(argv[2]);
-    if(argc > 3) inputDim[1] = atoi(argv[3]);
-    if(argc > 4) inputDim[2] = atoi(argv[4]);
-    if(argc > 5) inputDim[3] = atoi(argv[5]);
-    if(argc > 6) tensorType = argv[6];
-    if(argc > 7) fixedPointPosition = atoi(argv[7]);
-    if(argc > 8) convertPolicy = argv[8];
-    if(argc > 9) roundPolicy = argv[9];
-
+    const char * enable_virtual_tensor = argv[2];
+    if(!strcmp(enable_virtual_tensor, "-enable_virtual")) {
+        isVirtualEnabled = atoi(argv[3]);
+    }
+    else {
+        printf("Missing enable virtual tensor support parameter (-enable_virtual)\n");
+        return -1;
+    }
+    if(argc > 4) inputDim[0] = atoi(argv[4]);
+    if(argc > 5) inputDim[1] = atoi(argv[5]);
+    if(argc > 6) inputDim[2] = atoi(argv[6]);
+    if(argc > 7) inputDim[3] = atoi(argv[7]);
+    if(argc > 8) tensorType = argv[8];
+    if(argc > 9) fixedPointPosition = atoi(argv[9]);
+    if(argc > 10) convertPolicy = argv[10];
+    if(argc > 11) roundPolicy = argv[11];
     std::vector<std::vector<std::string>> net;
     // Check type of file given.
     if(strstr(fileName,".prototxt")) {
@@ -874,7 +908,7 @@ int main(int argc, char* argv[])
             return -1;
         }
     }else{
-        printf("Usage: inference_generator <net.prototxt | net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+        printf("Usage: inference_generator <net.prototxt | net.caffemodel> -enable_virtual [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
         return -1;
     }
 
