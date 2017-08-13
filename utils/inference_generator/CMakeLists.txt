@@ -25,16 +25,16 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
 
-file( DOWNLOAD  "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto/caffe.proto")
-execute_process( COMMAND protoc -I=${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto/ --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto/ ${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto/caffe.proto)
+file( DOWNLOAD  "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto")
+execute_process( COMMAND protoc -I=${CMAKE_CURRENT_BINARY_DIR}/proto/ --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/proto/ ${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR}/bin CACHE PATH "Directory where inference generator.exe files are generated." FORCE)
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto )
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto )
 
 list(APPEND SOURCES
 	src/inference_generator.cpp
-	${CMAKE_CURRENT_BINARY_DIR}/../inference_generator/proto/caffe.pb.cc
+	${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.pb.cc
     )
 
 add_executable(inference_generator ${SOURCES} )
