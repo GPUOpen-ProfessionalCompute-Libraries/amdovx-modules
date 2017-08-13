@@ -39,13 +39,14 @@ typedef struct _block_gain_info
 class CExpCompensator
 {
 public:
-	CExpCompensator();
+	CExpCompensator(int rows = 0, int columns = 0);
 	virtual ~CExpCompensator();
 	virtual vx_status Process();
 	virtual vx_status ProcessBlockGains(vx_array ArrBlkGains);
 	virtual vx_status Initialize(vx_node node, vx_float32 alpha, vx_float32 beta, vx_array valid_roi, vx_image input, vx_image output, vx_array blockgain_arr = nullptr, vx_int32 channel=-1);
 	virtual vx_status DeInitialize();
 	virtual vx_status SolveForGains(vx_float32 alpha, vx_float32 beta, vx_uint32 *IMat, vx_uint32 *NMat, vx_uint32 num_images, vx_array pGains, vx_uint32 rows, vx_uint32 cols);
+	vx_uint32 *m_pIMat, *m_pNMat;
 
 protected:
 	vx_uint32	m_numImages;
