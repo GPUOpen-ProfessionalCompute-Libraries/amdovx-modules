@@ -3592,7 +3592,7 @@ static bool GenerateSeamFindOverlapsForFishEyeOnEquator(
 		for (vx_uint32 camId_2 = camId_1 + 1; camId_2 < numCamera; camId_2++) {
 			vx_float32	pitchDiff = fabsf(camera_par[camId_1].focal.pitch - camera_par[camId_2].focal.pitch);
 			if (pitchDiff <= pitchTolerance){
-				vx_float32 pitchVariance = camera_par[camId_1].focal.pitch - pitchTolerance;
+				vx_float32 pitchVariance = fabsf(camera_par[camId_1].focal.pitch) - pitchTolerance;
 				maxPitchVariance = std::max(maxPitchVariance, pitchVariance);
 			}
 		}
