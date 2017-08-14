@@ -2575,7 +2575,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		addr_out.dim_x = stitch->output_buffer_width;
 		addr_out.dim_y = stitch->output_buffer_height;
 		addr_out.stride_x = 3;
-		addr_out.stride_y = stitch->output_buffer_stride_in_bytes;
+		addr_out.stride_y = stitch->output_buffer_width * 3;
 		if (addr_out.stride_y == 0) addr_out.stride_y = addr_out.stride_x * addr_out.dim_x;
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 			ERROR_CHECK_OBJECT_(stitch->chroma_key_input_img = vxCreateImageFromHandle(stitch->context, VX_DF_IMAGE_RGB4_AMD, &addr_out, ptr, VX_MEMORY_TYPE_OPENCL));
