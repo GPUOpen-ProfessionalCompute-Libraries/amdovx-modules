@@ -70,12 +70,11 @@ static vx_status VX_CALLBACK color_convert_output_validator(vx_node node, vx_uin
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
-		if (!(output_width == input_width && output_height == input_height) &&
-			!(output_width == (input_width / 2) && output_height == (input_height / 2)))
+		if (input_width != output_width || input_height != output_height)
 		{
-			// pick input dimensions as default
-			output_width = input_width;
-			output_height = input_height;
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert doesn't support input & output image with different dimensions\n");
+			return status;
 		}
 		if ((input_format == VX_DF_IMAGE_UYVY || input_format == VX_DF_IMAGE_YUYV || input_format == VX_DF_IMAGE_Y210_AMD || input_format == VX_DF_IMAGE_Y216_AMD) && output_format != VX_DF_IMAGE_RGB && output_format != VX_DF_IMAGE_RGBX) {
 			// pick RGBX as default
@@ -474,105 +473,39 @@ static vx_status VX_CALLBACK color_convert_opencl_codegen(
 		}
 	}
 	if (output_format == VX_DF_IMAGE_RGBX) {
-		if (input_width == output_width && input_height == output_height) {
-			opencl_kernel_code +=
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 5);\n"
-				"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-				"    *(__global uint8 *)&pRGB_buf[pRGB_stride] = pRGB1;\n";
-		}
-		else {
-			opencl_kernel_code +=
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx << 4);\n"
-				"    f.s0 = (amd_unpack0(pRGB0.s0) + amd_unpack0(pRGB0.s1) + amd_unpack0(pRGB1.s0) + amd_unpack0(pRGB1.s1)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB0.s0) + amd_unpack1(pRGB0.s1) + amd_unpack1(pRGB1.s0) + amd_unpack1(pRGB1.s1)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB0.s0) + amd_unpack2(pRGB0.s1) + amd_unpack2(pRGB1.s0) + amd_unpack2(pRGB1.s1)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack3(pRGB0.s0) + amd_unpack3(pRGB0.s1) + amd_unpack3(pRGB1.s0) + amd_unpack3(pRGB1.s1)) * 0.25f;\n"
-				"    pRGB0.s0 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack0(pRGB0.s2) + amd_unpack0(pRGB0.s3) + amd_unpack0(pRGB1.s2) + amd_unpack0(pRGB1.s3)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB0.s2) + amd_unpack1(pRGB0.s3) + amd_unpack1(pRGB1.s2) + amd_unpack1(pRGB1.s3)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB0.s2) + amd_unpack2(pRGB0.s3) + amd_unpack2(pRGB1.s2) + amd_unpack2(pRGB1.s3)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack3(pRGB0.s2) + amd_unpack3(pRGB0.s3) + amd_unpack3(pRGB1.s2) + amd_unpack3(pRGB1.s3)) * 0.25f;\n"
-				"    pRGB0.s1 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack0(pRGB0.s4) + amd_unpack0(pRGB0.s5) + amd_unpack0(pRGB1.s4) + amd_unpack0(pRGB1.s5)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB0.s4) + amd_unpack1(pRGB0.s5) + amd_unpack1(pRGB1.s4) + amd_unpack1(pRGB1.s5)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB0.s4) + amd_unpack2(pRGB0.s5) + amd_unpack2(pRGB1.s4) + amd_unpack2(pRGB1.s5)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack3(pRGB0.s4) + amd_unpack3(pRGB0.s5) + amd_unpack3(pRGB1.s4) + amd_unpack3(pRGB1.s5)) * 0.25f;\n"
-				"    pRGB0.s2 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack0(pRGB0.s6) + amd_unpack0(pRGB0.s7) + amd_unpack0(pRGB1.s6) + amd_unpack0(pRGB1.s7)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB0.s6) + amd_unpack1(pRGB0.s7) + amd_unpack1(pRGB1.s6) + amd_unpack1(pRGB1.s7)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB0.s6) + amd_unpack2(pRGB0.s7) + amd_unpack2(pRGB1.s6) + amd_unpack2(pRGB1.s7)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack3(pRGB0.s6) + amd_unpack3(pRGB0.s7) + amd_unpack3(pRGB1.s6) + amd_unpack3(pRGB1.s7)) * 0.25f;\n"
-				"    pRGB0.s3 = amd_pack(f);\n"
-				"    *(__global uint4 *) pRGB_buf = pRGB0.s0123;\n";
-		}
+		opencl_kernel_code +=
+			"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 5);\n"
+			"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
+			"    *(__global uint8 *)&pRGB_buf[pRGB_stride] = pRGB1;\n";
+
 	}
 	else if (output_format == VX_DF_IMAGE_RGB)
 	{
-		if (input_width == output_width && input_height == output_height) {
-			opencl_kernel_code +=
-				"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
-				"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
-				"    pRGB0.s2 = ((pRGB0.s2 & 0x00ff0000) >> 16) + (pRGB0.s3 <<  8);\n"
-				"    pRGB0.s4 = ((pRGB0.s4 & 0x00ffffff)      ) + (pRGB0.s5 << 24);\n"
-				"    pRGB0.s5 = ((pRGB0.s5 & 0x00ffff00) >>  8) + (pRGB0.s6 << 16);\n"
-				"    pRGB0.s6 = ((pRGB0.s6 & 0x00ff0000) >> 16) + (pRGB0.s7 <<  8);\n"
-				"    pRGB1.s0 = ((pRGB1.s0 & 0x00ffffff)      ) + (pRGB1.s1 << 24);\n"
-				"    pRGB1.s1 = ((pRGB1.s1 & 0x00ffff00) >>  8) + (pRGB1.s2 << 16);\n"
-				"    pRGB1.s2 = ((pRGB1.s2 & 0x00ff0000) >> 16) + (pRGB1.s3 <<  8);\n"
-				"    pRGB1.s4 = ((pRGB1.s4 & 0x00ffffff)      ) + (pRGB1.s5 << 24);\n"
-				"    pRGB1.s5 = ((pRGB1.s5 & 0x00ffff00) >>  8) + (pRGB1.s6 << 16);\n"
-				"    pRGB1.s6 = ((pRGB1.s6 & 0x00ff0000) >> 16) + (pRGB1.s7 <<  8);\n"
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 24);\n"
-				"    *(__global uint3 *) pRGB_buf = pRGB0.s012;\n"
-				"    *(__global uint3 *)&pRGB_buf[12] = pRGB0.s456;\n"
-				"    *(__global uint3 *)&pRGB_buf[pRGB_stride] = pRGB1.s012;\n"
-				"    *(__global uint3 *)&pRGB_buf[pRGB_stride+12] = pRGB1.s456;\n";
-		}
-		else {
-			opencl_kernel_code +=
-				"    f.s0 = (amd_unpack0(pRGB0.s0) + amd_unpack0(pRGB0.s1) + amd_unpack0(pRGB1.s0) + amd_unpack0(pRGB1.s1)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB0.s0) + amd_unpack1(pRGB0.s1) + amd_unpack1(pRGB1.s0) + amd_unpack1(pRGB1.s1)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB0.s0) + amd_unpack2(pRGB0.s1) + amd_unpack2(pRGB1.s0) + amd_unpack2(pRGB1.s1)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack0(pRGB0.s2) + amd_unpack0(pRGB0.s3) + amd_unpack0(pRGB1.s2) + amd_unpack0(pRGB1.s3)) * 0.25f;\n"
-				"    pRGB0.s0 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack1(pRGB0.s2) + amd_unpack1(pRGB0.s3) + amd_unpack1(pRGB1.s2) + amd_unpack1(pRGB1.s3)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack2(pRGB0.s2) + amd_unpack2(pRGB0.s3) + amd_unpack2(pRGB1.s2) + amd_unpack2(pRGB1.s3)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack0(pRGB0.s4) + amd_unpack0(pRGB0.s5) + amd_unpack0(pRGB1.s4) + amd_unpack0(pRGB1.s5)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack1(pRGB0.s4) + amd_unpack1(pRGB0.s5) + amd_unpack1(pRGB1.s4) + amd_unpack1(pRGB1.s5)) * 0.25f;\n"
-				"    pRGB0.s1 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack2(pRGB0.s4) + amd_unpack2(pRGB0.s5) + amd_unpack2(pRGB1.s4) + amd_unpack2(pRGB1.s5)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack0(pRGB0.s6) + amd_unpack0(pRGB0.s7) + amd_unpack0(pRGB1.s6) + amd_unpack0(pRGB1.s7)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack1(pRGB0.s6) + amd_unpack1(pRGB0.s7) + amd_unpack1(pRGB1.s6) + amd_unpack1(pRGB1.s7)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack2(pRGB0.s6) + amd_unpack2(pRGB0.s7) + amd_unpack2(pRGB1.s6) + amd_unpack2(pRGB1.s7)) * 0.25f;\n"
-				"    pRGB0.s2 = amd_pack(f);\n"
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 12);\n"
-				"    *(__global uint3 *) pRGB_buf = pRGB0.s012;\n";
-		}
+		opencl_kernel_code +=
+			"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
+			"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
+			"    pRGB0.s2 = ((pRGB0.s2 & 0x00ff0000) >> 16) + (pRGB0.s3 <<  8);\n"
+			"    pRGB0.s4 = ((pRGB0.s4 & 0x00ffffff)      ) + (pRGB0.s5 << 24);\n"
+			"    pRGB0.s5 = ((pRGB0.s5 & 0x00ffff00) >>  8) + (pRGB0.s6 << 16);\n"
+			"    pRGB0.s6 = ((pRGB0.s6 & 0x00ff0000) >> 16) + (pRGB0.s7 <<  8);\n"
+			"    pRGB1.s0 = ((pRGB1.s0 & 0x00ffffff)      ) + (pRGB1.s1 << 24);\n"
+			"    pRGB1.s1 = ((pRGB1.s1 & 0x00ffff00) >>  8) + (pRGB1.s2 << 16);\n"
+			"    pRGB1.s2 = ((pRGB1.s2 & 0x00ff0000) >> 16) + (pRGB1.s3 <<  8);\n"
+			"    pRGB1.s4 = ((pRGB1.s4 & 0x00ffffff)      ) + (pRGB1.s5 << 24);\n"
+			"    pRGB1.s5 = ((pRGB1.s5 & 0x00ffff00) >>  8) + (pRGB1.s6 << 16);\n"
+			"    pRGB1.s6 = ((pRGB1.s6 & 0x00ff0000) >> 16) + (pRGB1.s7 <<  8);\n"
+			"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 24);\n"
+			"    *(__global uint3 *) pRGB_buf = pRGB0.s012;\n"
+			"    *(__global uint3 *)&pRGB_buf[12] = pRGB0.s456;\n"
+			"    *(__global uint3 *)&pRGB_buf[pRGB_stride] = pRGB1.s012;\n"
+			"    *(__global uint3 *)&pRGB_buf[pRGB_stride+12] = pRGB1.s456;\n";
 	}
 	else // output format UYVY
-	{ 
-		if (input_width == output_width && input_height == output_height) {
-			opencl_kernel_code +=
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 4);\n"
-				"    *(__global uint4 *) pRGB_buf = pRGB0.s0123;\n"
-				"    *(__global uint4 *)&pRGB_buf[pRGB_stride] = pRGB0.s4567;\n";
-		}
-		else {
-			opencl_kernel_code +=
-				"    f.s0 = (amd_unpack0(pRGB.s0) + amd_unpack0(pRGB.s1) + amd_unpack0(pRGB.s4) + amd_unpack0(pRGB.s5)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB.s0) + amd_unpack3(pRGB.s0) + amd_unpack1(pRGB.s4) + amd_unpack3(pRGB.s4)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB.s0) + amd_unpack2(pRGB.s1) + amd_unpack2(pRGB.s4) + amd_unpack2(pRGB.s5)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack1(pRGB.s1) + amd_unpack3(pRGB.s1) + amd_unpack1(pRGB.s5) + amd_unpack3(pRGB.s5)) * 0.25f;\n"
-				"    pRGB.s0 = amd_pack(f);\n"
-				"    f.s0 = (amd_unpack0(pRGB.s2) + amd_unpack0(pRGB.s3) + amd_unpack0(pRGB.s6) + amd_unpack0(pRGB.s7)) * 0.25f;\n"
-				"    f.s1 = (amd_unpack1(pRGB.s2) + amd_unpack3(pRGB.s2) + amd_unpack1(pRGB.s6) + amd_unpack3(pRGB.s6)) * 0.25f;\n"
-				"    f.s2 = (amd_unpack2(pRGB.s2) + amd_unpack2(pRGB.s3) + amd_unpack2(pRGB.s6) + amd_unpack2(pRGB.s7)) * 0.25f;\n"
-				"    f.s3 = (amd_unpack1(pRGB.s3) + amd_unpack3(pRGB.s3) + amd_unpack1(pRGB.s7) + amd_unpack3(pRGB.s7)) * 0.25f;\n"
-				"    pRGB.s1 = amd_pack(f);\n"
-				"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx << 3);\n"
-				"    *(__global uint2 *) pRGB_buf = pRGB.s01;\n"
-				;
-		}
+	{
+		opencl_kernel_code +=
+			"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 4);\n"
+			"    *(__global uint4 *) pRGB_buf = pRGB0.s0123;\n"
+			"    *(__global uint4 *)&pRGB_buf[pRGB_stride] = pRGB0.s4567;\n";
 	}
 	opencl_kernel_code +=
 		"  }\n"

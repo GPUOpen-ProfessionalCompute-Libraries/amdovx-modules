@@ -95,7 +95,6 @@ struct ls_context_t {
 	vx_uint32   camera_buffer_width;            // camera buffer width
 	vx_uint32   camera_buffer_height;           // camera buffer height
 	camera_params * camera_par;                 // individual camera parameters
-	vx_float32  camera_rgb_scale_factor;        // camera image scale factor (valid values: 1.0 and 0.5) 
 	vx_uint32   camera_rgb_buffer_width;        // camera buffer width after color conversion
 	vx_uint32   camera_rgb_buffer_height;       // camera buffer height after color conversion
 	vx_uint32   num_overlays;                   // number of overlays
@@ -108,7 +107,6 @@ struct ls_context_t {
 	vx_uint32   output_buffer_width;            // output equirectangular image width
 	vx_uint32   output_buffer_height;           // output equirectangular image height
 	vx_df_image output_buffer_format;           // output image format (VX_DF_IMAGE_UYVY/YUYV/RGB/NV12/IYUV)
-	vx_float32  output_rgb_scale_factor;        // output image downscale factor (valid values: 1.0 and 0.5)
 	vx_uint32   output_rgb_buffer_width;        // camera buffer width after color conversion
 	vx_uint32   output_rgb_buffer_height;       // camera buffer height after color conversion
 	cl_context  opencl_context;                 // OpenCL context for DGMA interop
@@ -458,8 +456,6 @@ static void ResetLiveStitchGlobalAttributes()
 		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR] = 1;
 		// frame encoding default attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
@@ -1965,19 +1961,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch,
 		ls_printf("ERROR: lsSetCameraConfig: only UYVY/YUYV/RGB/NV12/IYUV buffer formats are allowed\n");
 		return VX_ERROR_INVALID_FORMAT;
 	}
-	// check and set camera scale factor from attributes
-	stitch->camera_rgb_scale_factor = 1.0f;
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR] > 0.0f) {
-		stitch->camera_rgb_scale_factor = stitch->live_stitch_attr[LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR];
-	}
-	if (stitch->camera_rgb_scale_factor != 0.5f && stitch->camera_rgb_scale_factor != 1) {
-		ls_printf("ERROR: Input Scale Factor of 0.5 or 1 only supported in this Release\n");
-		return VX_ERROR_INVALID_PARAMETERS;
-	}
-	if ((buffer_format == VX_DF_IMAGE_NV12 || buffer_format == VX_DF_IMAGE_IYUV || buffer_format == VX_DF_IMAGE_RGB ) && stitch->camera_rgb_scale_factor != 1) {
-		ls_printf("ERROR: Input Scale Factor of 1 only supported with RGB/NV12/IYUV input format in this Release\n");
-		return VX_ERROR_INVALID_PARAMETERS;
-	}
 	// check num rows and columns
 	if (num_camera_rows < 1 || num_camera_columns < 1 ||
 		(buffer_width % num_camera_columns) != 0 ||
@@ -2001,8 +1984,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch,
 	if (buffer_format != VX_DF_IMAGE_NV12 && buffer_format != VX_DF_IMAGE_IYUV){ stitch->camera_buffer_stride_in_bytes = buffer_width * (buffer_format == VX_DF_IMAGE_RGB ? 3 : 2); }
 	else{ stitch->camera_buffer_stride_in_bytes = buffer_width; }
 	ERROR_CHECK_ALLOC_(stitch->camera_par = new camera_params[stitch->num_cameras]());
-	stitch->camera_rgb_buffer_width = (vx_uint32)(stitch->camera_rgb_scale_factor * stitch->camera_buffer_width);
-	stitch->camera_rgb_buffer_height = (vx_uint32)(stitch->camera_rgb_scale_factor * stitch->camera_buffer_height);
+	stitch->camera_rgb_buffer_width = stitch->camera_buffer_width;
+	stitch->camera_rgb_buffer_height = stitch->camera_buffer_height;
 	// set default orientations
 	for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
 		stitch->camera_par[i].focal.yaw = -180.0f + 360.0f * (float)i / (float)stitch->num_cameras;
@@ -2021,19 +2004,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 		ls_printf("ERROR: lsSetOutputConfig: buffer_width should be 2 times buffer_height\n");
 		return VX_ERROR_INVALID_DIMENSION;
 	}
-	// get output scale factor and check it's validity
-	stitch->output_rgb_scale_factor = 1.0f;
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR] > 0.0f) {
-		stitch->output_rgb_scale_factor = stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR];
-	}
-	if (stitch->output_rgb_scale_factor != 0.5f && stitch->output_rgb_scale_factor != 1) {
-		ls_printf("ERROR: Output Scale Factor of 0.5 or 1 only supported in this Release\n");
-		return VX_ERROR_INVALID_PARAMETERS;
-	}
-	if ((buffer_format == VX_DF_IMAGE_RGB || buffer_format == VX_DF_IMAGE_NV12 || buffer_format == VX_DF_IMAGE_IYUV) && stitch->output_rgb_scale_factor != 1) {
-		ls_printf("ERROR: Output Scale Factor of 1 only supported with RGB/NV12/IYUV output format in this Release\n");
-		return VX_ERROR_INVALID_PARAMETERS;
-	}
 	// check that dimensions are multiples of 16x2
 	if ((buffer_width % 16) != 0 || (buffer_height % 2) != 0) {
 		ls_printf("ERROR: lsSetOutputConfig: output dimensions are required to be multiple of 16x2\n");
@@ -2045,8 +2015,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 	stitch->output_buffer_height = buffer_height;
 	if (buffer_format != VX_DF_IMAGE_NV12 && buffer_format != VX_DF_IMAGE_IYUV){ stitch->output_buffer_stride_in_bytes = buffer_width * (buffer_format == VX_DF_IMAGE_RGB ? 3 : 2); }
 	else{ stitch->output_buffer_stride_in_bytes = buffer_width; }
-	stitch->output_rgb_buffer_width = (vx_uint32)(stitch->output_buffer_width / stitch->output_rgb_scale_factor);
-	stitch->output_rgb_buffer_height = (vx_uint32)(stitch->output_buffer_height / stitch->output_rgb_scale_factor);
+	stitch->output_rgb_buffer_width = stitch->output_buffer_width;
+	stitch->output_rgb_buffer_height = stitch->output_buffer_height;
 
 	return VX_SUCCESS;
 }
@@ -2373,10 +2343,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 					stitch->output_buffer_format);
 		}
 		else{
-			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch,
-				(vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_width),
-				(vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_height),
-				stitch->output_buffer_format);
+			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch, stitch->output_buffer_width,	stitch->output_buffer_height, stitch->output_buffer_format);
 		}
 		ERROR_CHECK_OBJECT_(stitch->Img_output);
 		vx_uint32 zero = 0;
@@ -2446,15 +2413,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 					addr_out[2].stride_x = 1; addr_out[2].stride_y = stitch->output_buffer_stride_in_bytes;
 				}
 				ERROR_CHECK_OBJECT_(stitch->Img_output = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
-			}
-			
+			}			
 		}
 		else{
 			// create RGB/YUV buffer
 			vx_imagepatch_addressing_t addr_out = { 0 };
 			void *ptr[1] = { nullptr };
-			addr_out.dim_x = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_width);
-			addr_out.dim_y = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_height);
+			addr_out.dim_x = stitch->output_buffer_width;
+			addr_out.dim_y = stitch->output_buffer_height;
 			addr_out.stride_x = (stitch->output_buffer_format == VX_DF_IMAGE_RGB) ? 3 : 2;
 			addr_out.stride_y = stitch->output_buffer_stride_in_bytes;
 			if (addr_out.stride_y == 0) addr_out.stride_y = addr_out.stride_x * addr_out.dim_x;
@@ -2467,8 +2433,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
 	}
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
-		vx_uint32 output_img_width = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_width);
-		vx_uint32 output_img_height = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_height);
+		vx_uint32 output_img_width =  stitch->output_buffer_width;
+		vx_uint32 output_img_height = stitch->output_buffer_height;
 		ERROR_CHECK_OBJECT_(stitch->Img_output_rgb = vxCreateImage(stitch->context, output_img_width, output_img_height, VX_DF_IMAGE_RGB));
 	}
 	// process chroma key
@@ -2477,15 +2443,15 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// create chroma key RGB buffer
 		vx_imagepatch_addressing_t addr_out = { 0 };
 		void *ptr[1] = { nullptr };
-		addr_out.dim_x = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_width);
-		addr_out.dim_y = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_height);
+		addr_out.dim_x = stitch->output_buffer_width;
+		addr_out.dim_y = stitch->output_buffer_height;
 		addr_out.stride_x = 3;
-		addr_out.stride_y = stitch->output_buffer_stride_in_bytes;
+		addr_out.stride_y = stitch->output_buffer_width * 3;
 		if (addr_out.stride_y == 0) addr_out.stride_y = addr_out.stride_x * addr_out.dim_x;
 		ERROR_CHECK_OBJECT_(stitch->chroma_key_input_img = vxCreateImageFromHandle(stitch->context, VX_DF_IMAGE_RGB, &addr_out, ptr, VX_MEMORY_TYPE_OPENCL));
 		// create chroma key mask U8 buffer
-		vx_uint32 output_img_width = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_width);
-		vx_uint32 output_img_height = (vx_uint32)(stitch->output_rgb_scale_factor * stitch->output_buffer_height);
+		vx_uint32 output_img_width = stitch->output_buffer_width;
+		vx_uint32 output_img_height = stitch->output_buffer_height;
 		ERROR_CHECK_OBJECT_(stitch->chroma_key_mask_img = vxCreateVirtualImage(stitch->graphStitch, output_img_width, output_img_height, VX_DF_IMAGE_U8));
 		ERROR_CHECK_OBJECT_(stitch->chroma_key_input_RGB_img = vxCreateVirtualImage(stitch->graphStitch, output_img_width, output_img_height, VX_DF_IMAGE_RGB));
 		stitch->CHROMA_KEY_EED = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_EED];
