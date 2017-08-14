@@ -44,13 +44,11 @@ THE SOFTWARE.
 #define ENABLE_DIRECTIVE 0
 #endif
 
-int isVirtualEnabled = 0;
-
 void getLayerParams
-(
+    (
         const caffe::LayerParameter& layer,
         std::string& params
-        )
+    )
 {
     if(layer.type() == "Convolution") {
         const caffe::ConvolutionParameter& conv = layer.convolution_param();
@@ -152,11 +150,11 @@ void getLayerParams
 }
 
 int loadCaffeProtoTxt
-(
+    (
         const char * prototxtFileName,
         std::vector<std::vector<std::string>>& net,
         int inputDim[4]
-)
+    )
 {
     // verify that the version of the library that we linked against is
     // compatible with the version of the headers we compiled against.
@@ -262,89 +260,89 @@ int loadCaffeProtoTxt
 }
 
 int calculateTensorDim
-(
+    (
         std::vector<std::vector<std::string>>& net,
         int inputDim[4],
-std::map<std::string,std::vector<int>>& tensorMap
-                                      )
+        std::map<std::string,std::vector<int>>& tensorMap
+    )
 {
     tensorMap[net[0][4]] = std::vector<int>{inputDim[0], inputDim[1], inputDim[2], inputDim[3]};
 
-
-for(auto& node : net) {
-
-    auto&& type = node[0];
-    auto&& params = node[1];
-    auto&& output = node[3];
-    auto&& input = node[4];
-    auto&& it = tensorMap.find(input);
-    if(it == tensorMap.end()) {
-        error("calculateTensorDim: no dims found for %s\n", input.c_str());
-    }
-
-
-    auto&& idim = it->second;
-    int n = idim[0], c = idim[1], H = idim[2], W = idim[3];
-    int k = c, h = H, w = W;
-
-    if(n < 1 || c < 1 || H < 1 || W < 1) error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, c, H, W, input.c_str());
-
-    if(type == "Convolution") {
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-        ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
-        w = ((W + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / stride_w) + 1;
-        h = ((H + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / stride_h) + 1;
-        tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
-        if(bias_term) {
-            tensorMap[output + "_B"] = std::vector<int>{k};
+    for(auto& node : net) {
+        auto&& type = node[0];
+        auto&& params = node[1];
+        auto&& output = node[3];
+        auto&& input = node[4];
+        auto&& it = tensorMap.find(input);
+        if(it == tensorMap.end()) {
+            error("calculateTensorDim: no dims found for %s\n", input.c_str());
         }
-    }else if(type == "Deconvolution"){
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-        ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
-        w = stride_w * (W - 1) + dilation_w * (kernel_w - 1) + 1 - ( 2* pad_w );
-        h = stride_h * (H - 1) + dilation_h * (kernel_h - 1) + 1 - ( 2* pad_h );
-        tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
-        if(bias_term) {
-            tensorMap[output + "_B"] = std::vector<int>{k};
-        }
-    }
-    else if(type == "Pooling") {
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
-        ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
-        w = static_cast<int>(ceil( static_cast<float> (W + 2 * pad_w + stride_w - kernel_w)/ stride_w));
-        h = static_cast<int>(ceil( static_cast<float> (H + 2 * pad_h + stride_h - kernel_h)/ stride_h));
-        if(pad_h > 0) if((h-1)*stride_h >= (H+pad_h)) h=h-1;
-        if(pad_w > 0) if((w-1)*stride_w >= (W+pad_w)) w=w-1;
-    }
-    else if(type == "InnerProduct") {
-        std::stringstream ss(params);
-        ss >> k;
-        w = 1;
-        h = 1;
-        tensorMap[output + "_W"] = std::vector<int>{k, c, H, W};
-    }
-    else if(type == "Concat") {
-        for(int i = 5; i < node.size(); i++) {
-            auto&& dim = tensorMap[node[i]];
-            k += dim[1];
-            if(dim[0] != n || dim[2] != H || dim[3] != W)
-                error("calculateTensorDim: Concat: got invalid dim %dx%dx%dx%d for %s (should be %dx*x%dx%d)\n", dim[0], dim[1], dim[2], dim[3], node[i].c_str(), n, H, W);
-        }
-    }
-    else if(type == "SoftmaxWithLoss") {
-        output = node[5];
-    }
-    tensorMap[output] = std::vector<int>{n, k, h, w};
-    if(n < 1 || k < 1 || h < 1 || w < 1) error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
 
+        auto&& idim = it->second;
+        int n = idim[0], c = idim[1], H = idim[2], W = idim[3];
+        int k = c, h = H, w = W;
+
+        if (n < 1 || c < 1 || H < 1 || W < 1)
+            error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, c, H, W, input.c_str());
+
+        if(type == "Convolution") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            w = ((W + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / stride_w) + 1;
+            h = ((H + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / stride_h) + 1;
+            tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
+            if(bias_term) {
+                tensorMap[output + "_B"] = std::vector<int>{k};
+            }
+        }
+        else if(type == "Deconvolution") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            w = stride_w * (W - 1) + dilation_w * (kernel_w - 1) + 1 - ( 2* pad_w );
+            h = stride_h * (H - 1) + dilation_h * (kernel_h - 1) + 1 - ( 2* pad_h );
+            tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
+            if(bias_term) {
+                tensorMap[output + "_B"] = std::vector<int>{k};
+            }
+        }
+        else if(type == "Pooling") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
+            ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
+            w = static_cast<int>(ceil( static_cast<float> (W + 2 * pad_w + stride_w - kernel_w)/ stride_w));
+            h = static_cast<int>(ceil( static_cast<float> (H + 2 * pad_h + stride_h - kernel_h)/ stride_h));
+            if(pad_h > 0) if((h-1)*stride_h >= (H+pad_h)) h=h-1;
+            if(pad_w > 0) if((w-1)*stride_w >= (W+pad_w)) w=w-1;
+        }
+        else if(type == "InnerProduct") {
+            std::stringstream ss(params);
+            ss >> k;
+            w = 1;
+            h = 1;
+            tensorMap[output + "_W"] = std::vector<int>{k, c, H, W};
+        }
+        else if(type == "Concat") {
+            for(int i = 5; i < node.size(); i++) {
+                auto&& dim = tensorMap[node[i]];
+                k += dim[1];
+                if(dim[0] != n || dim[2] != H || dim[3] != W)
+                    error("calculateTensorDim: Concat: got invalid dim %dx%dx%dx%d for %s (should be %dx*x%dx%d)\n", dim[0], dim[1], dim[2], dim[3], node[i].c_str(), n, H, W);
+            }
+        }
+        else if(type == "SoftmaxWithLoss") {
+            output = node[5];
+        }
+        tensorMap[output] = std::vector<int>{n, k, h, w};
+        if(n < 1 || k < 1 || h < 1 || w < 1)
+            error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
+    }
+    return 0;
 }
-return 0;
-}
 
-void formatFileName(std::string& str, const std::string& from, const std::string& to){
+void formatFileName(std::string& str, const std::string& from, const std::string& to)
+{
     //Written to avoid conflicts with file creation with filenames that contain "/"
     size_t start_pos = 0;
     while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
@@ -354,15 +352,16 @@ void formatFileName(std::string& str, const std::string& from, const std::string
 }
 
 void writeGDF
-(
+    (
         std::ostream& ofsGDF,
         std::vector<std::vector<std::string>>& net,
         std::map<std::string,std::vector<int>>& tensorMap,
         std::string tensorType,
         int fixedPointPosition,
         std::string convertPolicy,
-        std::string roundPolicy
-        )
+        std::string roundPolicy,
+        bool isVirtualEnabled
+    )
 {
     std::map<std::string,bool> tensorCheck;
     ofsGDF << "import vx_nn" << std::endl;
@@ -446,7 +445,8 @@ void writeGDF
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
-        }else if (type == "Deconvolution"){
+        }
+        else if (type == "Deconvolution"){
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
             ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
@@ -701,18 +701,16 @@ void writeGDF
     }
 }
 
-
-
-void dumpLayerData(const caffe::LayerParameter& layer_parameter){
-
+void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string outputFolder)
+{
     std:: string layer_name;
     if(layer_parameter.has_name()){
         layer_name = layer_parameter.name();
         formatFileName(layer_name,"/","_");
     }
 
-    std::string fileName_weights= "weights/"+layer_name+ ".f32";
-    std::string fileName_bias = "bias/"+layer_name+".f32";
+    std::string fileName_weights= outputFolder + "/weights/" + layer_name + ".f32";
+    std::string fileName_bias = outputFolder + "/bias/" + layer_name + ".f32";
     FILE * fs_weights;
     FILE * fs_bias;
     fs_weights = fopen(fileName_weights.c_str(), "wb");
@@ -748,9 +746,55 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter){
     fclose(fs_bias);
 }
 
+void generateCode
+    (
+        std::ostream& ofsCodeH,
+        std::ostream& ofsCodeC,
+        std::vector<std::vector<std::string>>& net,
+        std::map<std::string,std::vector<int>>& tensorMap,
+        std::string tensorType,
+        int fixedPointPosition,
+        std::string convertPolicy,
+        std::string roundPolicy,
+        bool isVirtualEnabled
+    )
+{
+    ofsCodeH << "#ifndef __net_h__" << std::endl;
+    ofsCodeH << "#define __net_h__" << std::endl << std::endl;
+    ofsCodeH
+        << "class NetVX {" << std::endl
+        << "public:" << std::endl
+        << "    int Initialize(const char * dataFolder);" << std::endl
+        << "    int Shutdown();" << std::endl
+        << "    int Run(const float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes);" << std::endl
+        << std::endl
+        << "protected:" << std::endl
+        ;
+    // TODO: add all member variables needed
+    ofsCodeH << "};" << std::endl << std::endl << "#endif" << std::endl;
 
-void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4]){
+    ofsCodeC << "#include \"net.h\"" << std::endl << std::endl;
+    ofsCodeC << "int NetVX::Initialize(const char * dataFolder)" << std::endl;
+    ofsCodeC << "{" << std::endl;
+    // TODO: add initialization code generation here
+    ofsCodeC << "   return 0;" << std::endl;
+    ofsCodeC << "}" << std::endl << std::endl;
 
+    ofsCodeC << "int NetVX::Shutdown()" << std::endl;
+    ofsCodeC << "{" << std::endl;
+    // TODO: add shutdown code generation here
+    ofsCodeC << "   return 0;" << std::endl;
+    ofsCodeC << "}" << std::endl << std::endl;
+
+    ofsCodeC << "int NetVX::Run(const float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes)" << std::endl;
+    ofsCodeC << "{" << std::endl;
+    // TODO: add frame processing code generation here
+    ofsCodeC << "   return 0;" << std::endl;
+    ofsCodeC << "}" << std::endl << std::endl;
+}
+
+void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder)
+{
     if(net_parameter.has_name())
         std::cout<<"Fetching the weights for : " << net_parameter.name()<< std::endl;
 
@@ -770,7 +814,7 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
     //extract layer information.
     for(int i=0; i < net_parameter.layer_size() ;i++){
         const caffe::LayerParameter& layer_parameter = net_parameter.layer(i);
-        
+
         caffe::Phase phase = layer_parameter.phase();
         for(int j=0;j<layer_parameter.include_size();j++){
             if(layer_parameter.include(j).phase()){
@@ -795,7 +839,7 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
         }
 
         //dump layer data.
-        dumpLayerData(layer_parameter);
+        dumpLayerData(layer_parameter, outputFolder);
 
 
         //Split type (copy type).
@@ -841,13 +885,14 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
     }
 }
 
-
 int loadCaffeModelFile
-(
+    (
         const char* fileName,
         std::vector<std::vector<std::string>>& net,
-        int inputDim[4]
-) {
+        int inputDim[4],
+        std::string outputFolder
+    )
+{
     //verify the version of protobuf library.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -859,19 +904,71 @@ int loadCaffeModelFile
         bool isSuccess = net_parameter.ParseFromIstream(&input);
         if(isSuccess) {
             std::cout<<"CaffeModel Read Successful" << std::endl;
-            fetchNetworkDetails(net_parameter,net,inputDim);
+            fetchNetworkDetails(net_parameter,net,inputDim, outputFolder);
         }else {
             std::cerr<<"CaffeModel Read Failed" << std::endl;
         }
     }
     return 0;
-} 
+}
 
 int main(int argc, char* argv[])
 {
+    const char * usage =
+        "Usage:\n"
+        "  % inference_generator [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
+        "    options:\n"
+        "      --[no-]virtual-buffers    - do/don't use virtual buffers (default: ON)\n"
+        "      --[no-]generate-gdf       - do/don't generate RunVX GDF with weight/bias initialization (default: ON)\n"
+        "      --[no-]generate-vx-code   - do/don't generate OpenVX C Code with weight/bias initialization (default: OFF)\n"
+        "      --output-dir <folder>     - specify output folder for weights/biases, GDF, and OpenVX C Code (default: current)\n"
+        "      --flags <int>             - specify custom flags (default: 0)\n"
+        ;
+
+    // get options
+    bool isVirtualEnabled = true;
+    bool generateGDF = true;
+    bool generateVXC = false;
+    std::string outputFolder = ".";
+    int flags = 0;
+    for(; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
+        if(!strcmp(argv[1], "--virtual-buffers")) {
+            isVirtualEnabled = true;
+        }
+        else if(!strcmp(argv[1], "--no-virtual-buffers")) {
+            isVirtualEnabled = false;
+        }
+        else if(!strcmp(argv[1], "--generate-gdf")) {
+            generateGDF = true;
+        }
+        else if(!strcmp(argv[1], "--no-generate-gdf")) {
+            generateGDF = false;
+        }
+        else if(!strcmp(argv[1], "--generate-vx-code")) {
+            generateVXC = true;
+        }
+        else if(!strcmp(argv[1], "--no-generate-vx-code")) {
+            generateVXC = false;
+        }
+        else if(!strcmp(argv[1], "--output-dir") && argc > 2) {
+            outputFolder = argv[2];
+            argc--;
+            argv++;
+        }
+        else if(!strcmp(argv[1], "--flags") && argc > 2) {
+            flags = atoi(argv[2]);
+            argc--;
+            argv++;
+        }
+        else {
+            printf("ERROR: invalid option: %s\n", argv[1]);
+            return -1;
+        }
+    }
+
     // check for command-line arguments
     if(argc < 2) {
-        printf("Usage: inference_generator <net.prototxt | net.caffemodel> -enable_virtual [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+        printf("%s", usage);
         return -1;
     }
 
@@ -881,34 +978,31 @@ int main(int argc, char* argv[])
     const char * convertPolicy = "VX_CONVERT_POLICY_SATURATE";
     const char * roundPolicy = "VX_ROUND_POLICY_TO_NEAREST_EVEN";
     const char *  fileName = argv[1];
-    const char * enable_virtual_tensor = argv[2];
-    if(!strcmp(enable_virtual_tensor, "-enable_virtual")) {
-        isVirtualEnabled = atoi(argv[3]);
-    }
-    else {
-        printf("Missing enable virtual tensor support parameter (-enable_virtual)\n");
-        return -1;
-    }
-    if(argc > 4) inputDim[0] = atoi(argv[4]);
-    if(argc > 5) inputDim[1] = atoi(argv[5]);
-    if(argc > 6) inputDim[2] = atoi(argv[6]);
-    if(argc > 7) inputDim[3] = atoi(argv[7]);
-    if(argc > 8) tensorType = argv[8];
-    if(argc > 9) fixedPointPosition = atoi(argv[9]);
-    if(argc > 10) convertPolicy = argv[10];
-    if(argc > 11) roundPolicy = argv[11];
+    if(argc > 2) inputDim[0] = atoi(argv[2]);
+    if(argc > 3) inputDim[1] = atoi(argv[3]);
+    if(argc > 4) inputDim[2] = atoi(argv[4]);
+    if(argc > 5) inputDim[3] = atoi(argv[5]);
+    if(argc > 6) tensorType = argv[6];
+    if(argc > 7) fixedPointPosition = atoi(argv[7]);
+    if(argc > 8) convertPolicy = argv[8];
+    if(argc > 9) roundPolicy = argv[9];
     std::vector<std::vector<std::string>> net;
-    // Check type of file given.
-    if(strstr(fileName,".prototxt")) {
+
+    // TODO: enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
+
+    // load caffe model (or just .prototxt)
+    if(strstr(fileName,".caffemodel")) {
+        if(loadCaffeModelFile(fileName,net,inputDim, outputFolder) < 0) {
+            return -1;
+        }
+    }
+    else if(strstr(fileName,".prototxt")) {
         if(loadCaffeProtoTxt(fileName, net, inputDim) < 0) {
             return -1;
         }
-    }else if(strstr(fileName,".caffemodel")) {
-        if(loadCaffeModelFile(fileName,net,inputDim) < 0) {
-            return -1;
-        }
-    }else{
-        printf("Usage: inference_generator <net.prototxt | net.caffemodel> -enable_virtual [n c H W [type fixed-point-position [convert-policy round-policy]]]\n");
+    }
+    else{
+        printf("%s", usage);
         return -1;
     }
 
@@ -918,10 +1012,16 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    // dump net structure
-    std::string outFile = "net.gdf";
-    std::ofstream ofsGDF(outFile, std::ios::binary);
-    writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy);
+    if(generateGDF) {
+        std::ofstream ofsGDF(outputFolder + "/net.gdf", std::ios::binary);
+        writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled);
+    }
+
+    if(generateVXC) {
+        std::ofstream ofsCodeH(outputFolder + "/net.h", std::ios::binary);
+        std::ofstream ofsCodeC(outputFolder + "/net.cpp", std::ios::binary);
+        generateCode(ofsCodeH, ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled);
+    }
 
     return 0;
 }
