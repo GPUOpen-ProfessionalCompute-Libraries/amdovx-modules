@@ -97,15 +97,16 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
     //Convolution Forward Bias.
-    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
+	if(parameters[2]) {
+		ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
+	}
 
     return VX_SUCCESS;
 }
 
 static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-
     ConvolutionLayerLocalData * data = new ConvolutionLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
@@ -174,15 +175,12 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     data->alpha = 1;
     data->beta = 0;
 
-
-
     //Finding best Convolution Algorithm.
     miopenConvAlgoPerf_t perf;
     int algo_count;
     ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,
                                                                     data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, false));
     data->algo = perf.fwd_algo;
-
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
@@ -201,7 +199,7 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
 {
     ConvolutionLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    clReleaseMemObject(data->workspace);
+    if(clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->conv_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

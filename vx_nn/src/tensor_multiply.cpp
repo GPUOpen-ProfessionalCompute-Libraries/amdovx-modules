@@ -137,7 +137,10 @@ static vx_status VX_CALLBACK initializeTensorMultiply(vx_node node, const vx_ref
 static vx_status VX_CALLBACK uninitializeTensorMultiply(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
     TensorMultiplyLocalData * data = NULL;
-    ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    ERROR_CHECK_STATUS(vxQuerNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input2));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

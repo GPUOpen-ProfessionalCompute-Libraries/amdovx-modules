@@ -91,7 +91,6 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
-
     //initializing input and output Descriptors.
     vx_size input_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
@@ -119,7 +118,7 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     else if (activationMode == VX_NN_ACTIVATION_SOFTRELU) {
         data->mode = miopenActivationSOFTRELU;
     }
-    data->alpha = 0;
+    data->alpha = 1;
     data->beta = 0;
 
     //activation Descriptor.
@@ -132,7 +131,6 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     std::cout << "activation input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
-
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     return VX_SUCCESS;

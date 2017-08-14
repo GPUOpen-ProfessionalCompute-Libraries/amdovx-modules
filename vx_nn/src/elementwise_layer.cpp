@@ -138,6 +138,9 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
 static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
     ElementwiseLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+	ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input1));
+	ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input2));
+	ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;
