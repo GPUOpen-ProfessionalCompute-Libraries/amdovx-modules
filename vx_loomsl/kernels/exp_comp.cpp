@@ -602,7 +602,7 @@ vx_status exposure_compensation_publish(vx_context context)
 	return VX_SUCCESS;
 }
 
-CExpCompensator::CExpCompensator()
+CExpCompensator::CExpCompensator(int rows, int columns)
 {
 	m_NMat = nullptr;
 	m_IMat = nullptr;
@@ -610,11 +610,16 @@ CExpCompensator::CExpCompensator()
 	m_Gains = nullptr;
 	m_block_gain_buf = nullptr;
 	m_pblockgainInfo = nullptr;
+	if (rows && columns){
+		m_pIMat = new vx_uint32[rows*columns];
+		m_pNMat = new vx_uint32[rows*columns];
+	}
 }
 
 CExpCompensator::~CExpCompensator()
 {
-
+	if (m_pIMat) delete[] m_pIMat;
+	if (m_pNMat) delete[] m_pNMat;
 }
 
 vx_status CExpCompensator::Initialize(vx_node node, vx_float32 alpha, vx_float32 beta, vx_array valid_roi, vx_image input, vx_image output, vx_array block_gains, vx_int32 channel)
