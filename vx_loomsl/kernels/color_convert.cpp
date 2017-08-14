@@ -1145,8 +1145,10 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_input_validator(vx_node node,
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		if (format == VX_DF_IMAGE_RGB || format == VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_SUCCESS;
+		}
+		else{
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_to_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
