@@ -25,36 +25,20 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
 
-file( DOWNLOAD  "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_BINARY_DIR}/proto/caffe.proto")
-execute_process( COMMAND protoc -I=${CMAKE_BINARY_DIR}/proto/ --cpp_out=${CMAKE_BINARY_DIR}/proto/ ${CMAKE_BINARY_DIR}/proto/caffe.proto)
+file( DOWNLOAD  "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto")
+execute_process( COMMAND protoc -I=${CMAKE_CURRENT_BINARY_DIR}/proto/ --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/proto/ ${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto)
 
 SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR}/bin CACHE PATH "Directory where inference generator.exe files are generated." FORCE)
 
-include_directories(${CMAKE_BINARY_DIR}/proto )
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto )
 
 list(APPEND SOURCES
 	src/inference_generator.cpp
-	${CMAKE_BINARY_DIR}/proto/caffe.pb.cc
+	${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.pb.cc
     )
 
 add_executable(inference_generator ${SOURCES} )
 target_link_libraries(inference_generator ${PROTOBUF_LIBRARIES})
-
-list(APPEND SOURCE_TEST_1
-	src/bin2proto.cpp
-	${CMAKE_BINARY_DIR}/proto/caffe.pb.cc
-    )
-
-add_executable(bin2proto ${SOURCE_TEST_1} )
-target_link_libraries(bin2proto ${PROTOBUF_LIBRARIES})
-
-list(APPEND SOURCE_TEST_2
-	src/proto2bin.cpp
-	${CMAKE_BINARY_DIR}/proto/caffe.pb.cc
-    )
-
-add_executable(proto2bin ${SOURCE_TEST_2} )
-target_link_libraries(proto2bin ${PROTOBUF_LIBRARIES})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
