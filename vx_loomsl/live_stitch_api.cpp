@@ -3742,7 +3742,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			"com.amd.loomsl.seamfind_scene_detect", "com.amd.loomsl.seamfind_cost_generate", "com.amd.loomsl.seamfind_cost_accumulate", "com.amd.loomsl.seamfind_path_trace", "com.amd.loomsl.seamfind_set_weights",
 			"org.khronos.openvx.remap", "com.amd.loomsl.alpha_blend",
 			stitch->loomio_camera.kernelName, stitch->loomio_overlay.kernelName, stitch->loomio_output.kernelName, stitch->loomio_viewing.kernelName,
-			"com.amd.loomsl.chroma_key_mask_generation", "com.amd.loomsl.chroma_key_merge",
+			"com.amd.loomsl.chroma_key_mask_generation", "com.amd.loomsl.alpha_blend",
 		};
 		if (stitch->camera_buffer_format == VX_DF_IMAGE_NV12){
 			kernelNameList[0] = "com.amd.loomsl.color_convert_from_NV12";
