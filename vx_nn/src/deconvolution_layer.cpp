@@ -104,10 +104,10 @@ static vx_status VX_CALLBACK processDeconvolutionLayer(vx_node node, const vx_re
                                                        data->weight_desc,data->weight_mem,data->deconv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
 	
     //Convolution Forward Bias.
-	if(parameters[2]) {
+    if(parameters[2]) {
 	    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
-	}
+    }
 
     return VX_SUCCESS;
 }
@@ -176,12 +176,9 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
         if(err!=0) return VX_FAILURE;
         if (!data->workspace) return VX_FAILURE;
 
-		std::vector<float> wsf_buffer_init(data->workspace_size/4, 0);
-		err = clEnqueueWriteBuffer(data->handle->cmdq, data->workspace,CL_TRUE,0, data->workspace_size,wsf_buffer_init.data(),0, NULL,NULL);
-		if(err!=0){
-		    std::cout << "Error in initializing buffer with error : " << err << std::endl;
-		    return VX_FAILURE;
-		}
+        cl_float pattern = 0;
+        err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size * sizeof(vx_float32), 0, NULL,NULL);
+        if(err!=0) return VX_FAILURE;
     }
 
     data->alpha = 1;

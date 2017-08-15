@@ -146,6 +146,10 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
         if (!data->workspace) {
             return VX_FAILURE;
         }
+        cl_float pattern = 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->workspace,&pattern,sizeof(cl_float),0,data->workspace_size * sizeof(vx_float32),
+                                         0,NULL, NULL);
+        if(err) return VX_FAILURE;
     }
 
 #if ENABLE_DEBUG_PRINT_DIMS

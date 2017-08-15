@@ -119,6 +119,10 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
         if (!data->pooling_workspace) {
             return VX_FAILURE;
         }
+        cl_float pattern = 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size * sizeof(vx_float32),
+                                         0,NULL, NULL);
+        if(err) return VX_FAILURE;
     }
 
     //Set Descriptors.
