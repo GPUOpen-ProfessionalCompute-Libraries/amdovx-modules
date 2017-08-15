@@ -942,17 +942,24 @@ void generateCode
     ofsCodeH
         << "class NetVX {" << std::endl
         << "public:" << std::endl
+        << "    NetVX();" << std::endl
         << "    int Initialize(const char * dataFolder);" << std::endl
         << "    int Shutdown();" << std::endl
         << "    int Run(const float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes);" << std::endl
-        << std::endl
+        << "    ~NetVX();"
+        << std::endl << std::endl
         << "protected:" << std::endl
         ;
-    // TODO: add all member variables needed
     declareMemberVariables(net, ofsCodeH, tensorMap);
     ofsCodeH << "};" << std::endl << std::endl << "#endif" << std::endl;
 
     ofsCodeC << "#include \"net.h\"" << std::endl << std::endl;
+    ofsCodeC << "NetVX::NetVX()" << std::endl;
+    ofsCodeC << "{" << std::endl;
+    // TODO: Initialize declared member variables.
+    ofsCodeC << "   return 0;" << std::endl;
+    ofsCodeC << "}" << std::endl << std::endl;
+    ofsCodeC << "NetVX::~NetVX() {}" << std::endl << std::endl;
     ofsCodeC << "int NetVX::Initialize(const char * dataFolder)" << std::endl;
     ofsCodeC << "{" << std::endl;
     // TODO: add initialization code generation here
