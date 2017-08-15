@@ -434,7 +434,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -447,7 +447,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -662,7 +662,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -675,7 +675,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -688,7 +688,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -905,7 +905,7 @@ static vx_status VX_CALLBACK color_convert_to_NV12_input_validator(vx_node node,
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_to_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -936,7 +936,7 @@ static vx_status VX_CALLBACK color_convert_to_NV12_output_validator(vx_node node
 		if (input_width != output_width || input_height != output_height)
 		{
 			status = VX_ERROR_INVALID_DIMENSION;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert doesn't support input & output image with different dimensions\n");
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_to_NV12 doesn't support input & output image with different dimensions\n");
 			return status;
 		}
 		if (output_format != VX_DF_IMAGE_U8) {
