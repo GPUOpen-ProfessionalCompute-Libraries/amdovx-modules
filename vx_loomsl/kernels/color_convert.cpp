@@ -165,12 +165,12 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[2];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool useLinearColorSpace = (flags & 1) ? false : true;
+	bool useLinearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -230,13 +230,19 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	}
 	if (output_format == VX_DF_IMAGE_RGB || output_format == VX_DF_IMAGE_RGBX || output_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code +=
-			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
 	}
 	else{ //input_format: UYVY, YUYV, V210, V216
 		opencl_kernel_code +=
-			"	uint p422_width, uint p422_height, __global uchar * p422_buf, uint p422_stride, uint p422_offset)\n";
+			"	uint p422_width, uint p422_height, __global uchar * p422_buf, uint p422_stride, uint p422_offset";
+	}
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
 	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -585,12 +591,12 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[3];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool useLinearColorSpace = (flags & 1) ? false : true;
+	bool useLinearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -627,8 +633,14 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	opencl_kernel_code +=
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -854,12 +866,12 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[4];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool useLinearColorSpace = (flags & 1) ? false : true;
+	bool useLinearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -896,8 +908,14 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
 		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -1133,12 +1151,12 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[3];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool useLinearColorSpace = (flags & 1) ? false : true;
+	bool useLinearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -1174,8 +1192,14 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	opencl_kernel_code +=
 		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
-		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset)\n";
+		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -1405,12 +1429,12 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[4];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool useLinearColorSpace = (flags & 1) ? false : true;
+	bool useLinearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -1447,8 +1471,14 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
-		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset)\n";
+		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -2939,36 +2969,36 @@ std::string ConvertV216toRGB4AndDegamma()
 		"    float4 rgbx; float4 uyvy; \n"
 		"    uyvy = amd_unpack16(L0.s0, L0.s1); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s1 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s1 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L0.s2, L0.s3); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s4 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s4 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s4 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s4 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L0.s4, L0.s5); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s7 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s7 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s7 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s7 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L0.s6, L0.s7); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s2 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s2 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s2 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s2 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L1.s0, L1.s1); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s1 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s1 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s1 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s1 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L1.s2, L1.s3); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s4 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s4 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s4 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s4 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L1.s4, L1.s5); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s7 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s7 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s7 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s7 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
 		"    uyvy = amd_unpack16(L1.s6, L1.s7); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB3.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB3.s2 = pRGB3.s2 = (uint) clamp(degamma*rgbx.s2),0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB3.s2 += (((uint) clamp(degamma*rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB3.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB3.s2 = pRGB3.s2 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB3.s2 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
 	return output;
 }
 std::string ConvertRGB2toUYVY()
@@ -3581,7 +3611,7 @@ std::string Gamma3()
 	std::string output =
 		"float3 gamma3(float3 input)\n"
 		"{\n"
-		"  return float3(gamma(input.s0),gamma(input.s1),gamma(input.s2));\n"
+		"  return (float3)(gamma(input.s0),gamma(input.s1),gamma(input.s2));\n"
 		"}\n"
 		"\n";
 	return output;
