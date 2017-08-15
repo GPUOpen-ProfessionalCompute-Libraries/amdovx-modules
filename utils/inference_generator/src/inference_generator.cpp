@@ -746,6 +746,7 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
     fclose(fs_bias);
 }
 
+
 void generateCode
     (
         std::ostream& ofsCodeH,
@@ -771,6 +772,22 @@ void generateCode
         << "protected:" << std::endl
         ;
     // TODO: add all member variables needed
+    std::map<std::string,bool> declare_tensor_check;
+    for(auto& node : net) {
+        //declare input and output tensors.
+        for(size_t i=4; i < node.size(); i++) {
+            if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
+                auto&& dim = tensorMap[node[i]];
+                ofsCodeH << "	vx_size " << node[i] << "[4] = {" << " " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " };" << std::endl;
+                declare_tensor_check[node[i]]= true;
+            }
+        }
+        auto&& output = node[3];
+        auto&& odim = tensorMap[output];
+        if(!declare_tensor_check[output]) {
+            ofsCodeH << "	vx_size " << output << "[4] = {" << " " << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << " };" << std::endl;
+        }
+    }
     ofsCodeH << "};" << std::endl << std::endl << "#endif" << std::endl;
 
     ofsCodeC << "#include \"net.h\"" << std::endl << std::endl;
