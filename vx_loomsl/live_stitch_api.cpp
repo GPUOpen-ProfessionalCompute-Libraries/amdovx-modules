@@ -140,7 +140,7 @@ struct ls_context_t {
 	vx_node		nodeOverlayRemap, nodeOverlayBlend;
 	vx_float32	alpha, beta;					// needed for expcomp
 	vx_int32	* A_matrix_initial_value;		// needed for expcomp
-    vx_uint8 alpha_value, warp_flags;
+    vx_uint8 alpha_value, warp_flags, color_convert_flags;
 	// seamfind data & node elements
 	vx_array    overlap_rect_array, seamfind_valid_array, seamfind_weight_array, seamfind_accum_array, 
 				seamfind_pref_array, seamfind_info_array, seamfind_path_array, seamfind_scene_array;
@@ -516,6 +516,7 @@ static void ResetLiveStitchGlobalAttributes()
 		g_live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT] = 0;
 		// 16 bit flow
 		g_live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
 		// warp
 		g_live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION] = 0;
 	}
@@ -1806,7 +1807,7 @@ static vx_status EncodeCreateImageFromROI(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->encode_dst_imgs[i] = vxCreateImageFromROI(stitch->encodetileOutput[outputTileID], &stitch->dst_encode_tile_rect[i]));
 
 		// color covert the image ROI's
-		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = stitchColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i]));
+		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = stitchColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i],stitch->color_convert_flags));
 	}
 	return VX_SUCCESS;
 }
@@ -2290,6 +2291,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
+		ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+	}
+
 
 	/////////////////////////////////////////////////////////
 	// pick default stitch mode and aux data length
@@ -2596,10 +2602,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 	////////////////////////////////////////////////////////////////////////
 	// build the input and output processing parts of stitch graph
+	stitch->color_convert_flags = (vx_uint8)stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE];
 	stitch->rgb_input = stitch->Img_input;
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
 		// needs input color conversion
-		stitch->InputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb);
+		stitch->InputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
 		stitch->rgb_input = stitch->Img_input_rgb;
 	}
@@ -2624,7 +2631,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// needs output color conversion
 		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
 			if (stitch->output_encode_tiles == 1){ 
-				stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output);
+				stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
 				ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 			}
 			else{
@@ -2634,7 +2641,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 		}
 		else{
-			stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output);
+			stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
 			ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 		}
 		stitch->rgb_output = stitch->Img_output_rgb;

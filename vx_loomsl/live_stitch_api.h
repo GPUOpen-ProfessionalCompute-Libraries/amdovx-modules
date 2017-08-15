@@ -97,6 +97,7 @@ enum {
 	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_PRECISION	              =	  58,	// enables a 16bit flow from input to output color convert: 0:Auto-Detect 1:8-bit 2: 16-bit (default:0)
 	LIVE_STITCH_ATTR_WARP_INTERPOLATION       =   59,   // warp interpolation mode: 0: bilinear, 1: bicubic (default:0)
+	LIVE_STITCH_ATTR_LINEAR_COLORSPACE        =   60,   // the whole flow will use a linear colorspace: 0: Non linear, 1: linear (default:0)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
 	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
