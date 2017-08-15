@@ -747,6 +747,183 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
 }
 
 
+void declareMemberVariables(std::vector<std::vector<std::string>>& net, std::ostream& ofsCodeH, std::map<std::string,std::vector<int>>& tensorMap)
+{
+    ofsCodeH << "	vx_graph graph; " << std::endl;
+    std::map<std::string,bool> declare_tensor_check;
+    for(auto& node : net) {
+        //declare input and output tensors.
+        for(size_t i=4; i < node.size(); i++) {
+            if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
+                auto&& dim = tensorMap[node[i]];
+                ofsCodeH << "	vx_size " << node[i] << "_dims[4];" << std::endl;
+                ofsCodeH << "	vx_tensor " << node[i] << " ;" << std::endl;
+                declare_tensor_check[node[i]]= true;
+            }
+        }
+        auto&& output = node[3];
+        auto&& odim = tensorMap[output];
+        if(!declare_tensor_check[output]) {
+            ofsCodeH << "	vx_size " << output << "_dims[4];" << std::endl;
+            ofsCodeH << "	vx_tensor " << output << " ;" << std::endl;
+            declare_tensor_check[output] = true;
+        }
+
+        auto&& type = node[0];
+        auto&& params = node[1];
+        if(type == "Convolution") {
+            std::stringstream ss(params);
+            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            std::string weights = output + "_W";
+            ofsCodeH << "	vx_size " << weights << "_dims[4];" << std::endl;
+            ofsCodeH << "	vx_tensor " << weights << " ;" << std::endl;
+            declare_tensor_check[weights] = true;
+            std::string bias = "NULL";
+            if(bias_term) {
+                bias = output + "_B";
+                ofsCodeH << "	vx_size " << bias << "_dims[1];" << std::endl;
+                ofsCodeH << "	vx_tensor " << bias << ";" << std::endl;
+                declare_tensor_check[bias] = true;
+            }
+
+            ofsCodeH << "	vx_nn_conv_params_t " << output << "_params;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }else if(type == "Deconvolution") {
+            std::stringstream ss(params);
+            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            std::string weights = output + "_W";
+            ofsCodeH << "	vx_size " << weights << "_dims[4];" << std::endl;
+            ofsCodeH << "	vx_tensor " << weights << " ;" << std::endl;
+            declare_tensor_check[weights] = true;
+            std::string bias = "NULL";
+            if(bias_term) {
+                bias = output + "_B";
+                ofsCodeH << "	vx_size " << bias << "_dims[1];" << std::endl;
+                ofsCodeH << "	vx_tensor " << bias << ";" << std::endl;
+                declare_tensor_check[bias] = true;
+            }
+
+            ofsCodeH << "	vx_nn_deconvolution_params_t " << output << "_params;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "Pooling") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
+            ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
+            if((pool != 0 && pool != 1)) error("writeGDF: pooling_layer supports only MAX and AVG\n");
+            ofsCodeH << "	vx_enum " << output << "_type;" << std::endl;
+            ofsCodeH << "	vx_size " << output << "_kernel_w;" << std::endl;
+            ofsCodeH << "	vx_size " << output << "_kernel_h;" << std::endl;
+            ofsCodeH << "	vx_size " << output << "_pad_w;" << std::endl;
+            ofsCodeH << "	vx_size " << output << "_pad_h;" << std::endl;
+            ofsCodeH << "	vx_enum " << output << "_roundPolicy;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "InnerProduct") {
+            std::stringstream ss(params);
+            int k,bias_term;
+            ss >> k >> bias_term;
+            std::string weights = output + "_W";
+            auto&& dim = tensorMap[weights];
+            ofsCodeH << "	vx_size " << output << "_W[4];" << std::endl;
+            ofsCodeH << "	vx_tensor " << output << ";" << std::endl;
+            declare_tensor_check[weights]= true;
+            std::string bias= "NULL";
+            if(bias_term) {
+                bias = output + "_B" ;
+                ofsCodeH << "	vx_size " << output << "_B[1];" << std::endl;
+                ofsCodeH << "	vx_tensor " << output << ";" << std::endl;
+                declare_tensor_check[bias]= true;
+            }
+            ofsCodeH << "	vx_enum " << output << "_convertPolicy;" << std::endl;
+            ofsCodeH << "	vx_enum " << output << "_roundPolicy;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "ReLU") {
+            ofsCodeH << "	vx_enum " << output << "_mode;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_param_a;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_param_b;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "LRN") {
+            int normalization_size; float alpha,beta,k;
+            std::string norm_region;
+            std::stringstream ss(params);
+            ss >> normalization_size >> alpha >> beta >> norm_region >> k;
+            std::string lrnType;
+            ofsCodeH << "	vx_enum " << output << "_mode;" << std::endl;
+            ofsCodeH << "	vx_size " << output << "_size;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_alpha;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_beta;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_bias;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "BatchNorm") {
+            int use_global_stats;
+            float eps,beta=0, gamma= 1;
+            std::stringstream ss(params);
+            ss >> eps >> use_global_stats;
+            ofsCodeH << "	vx_float32 " << output << "_eps; " << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_beta; " << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_gamma;" << std::endl;
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "Eltwise") {
+            int op;
+            std::stringstream ss(params);
+            ss >> op;
+            auto&& dim = tensorMap[output];
+            for(int i=4; i < node.size(); i++) {
+                auto&& idim= tensorMap[node[i]];
+                if(dim[0]!= idim[0] || dim[1] != idim[1] || dim[2] != idim[2] || dim[3] != idim[3])
+                    error("generateCode : Eltwise op=%d requires same dimension inputs : %s[%dx%dx%dx%d] != %s[%dx%dx%dx%d]\n", op, node[i].c_str(),idim[0], idim[1], idim[2], idim[3], node[i-1].c_str(), dim[0],dim[1],dim[2],dim[3]);
+                dim = idim;
+            }
+            std::string tmp = node[4];
+            for(int i=5; i < node.size() ; i++) {
+                std::string out = node[3];
+                if(i < node.size()- 1) {
+                    out += "tmp_"+ std::to_string(i-4);
+                    ofsCodeH << "	vx_size " << out << "_dim[4];" << std::endl;
+                    declare_tensor_check[out]= true;
+                }
+                if(op == 1) {
+                    ofsCodeH << "	vx_enum " << node[3] << "_convertPolicy;" << std::endl;
+                    ofsCodeH << "	vx_node	" << node[3] <<"_node;" << std::endl;
+                    tmp = out;
+                }
+                else error("generateCode : Eltwise op=%d not supported\n", op);
+            }
+        }
+        else if(type == "Scale") {
+            float alpha =1,beta=0;
+            ofsCodeH << "	vx_float32 " << output << "_alpha;" << std::endl;
+            ofsCodeH << "	vx_float32 " << output << "_beta;" << std::endl;
+            ofsCodeH << "	vx_node	" << output << "_node;" << std::endl;
+        }
+        else if(type == "Concat") {
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "Dropout") {
+            //during inference dropout layer propogates input to output .
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "Softmax") {
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "Split") {
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        else if(type == "SoftmaxWithLoss") {
+            ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+        }
+        ofsCodeH << std::endl;
+
+    }
+}
+
 void generateCode
     (
         std::ostream& ofsCodeH,
@@ -772,22 +949,7 @@ void generateCode
         << "protected:" << std::endl
         ;
     // TODO: add all member variables needed
-    std::map<std::string,bool> declare_tensor_check;
-    for(auto& node : net) {
-        //declare input and output tensors.
-        for(size_t i=4; i < node.size(); i++) {
-            if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
-                auto&& dim = tensorMap[node[i]];
-                ofsCodeH << "	vx_size " << node[i] << "[4] = {" << " " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " };" << std::endl;
-                declare_tensor_check[node[i]]= true;
-            }
-        }
-        auto&& output = node[3];
-        auto&& odim = tensorMap[output];
-        if(!declare_tensor_check[output]) {
-            ofsCodeH << "	vx_size " << output << "[4] = {" << " " << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << " };" << std::endl;
-        }
-    }
+    declareMemberVariables(net, ofsCodeH, tensorMap);
     ofsCodeH << "};" << std::endl << std::endl << "#endif" << std::endl;
 
     ofsCodeC << "#include \"net.h\"" << std::endl << std::endl;
