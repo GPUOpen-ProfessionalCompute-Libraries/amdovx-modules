@@ -44,6 +44,19 @@ static vx_status VX_CALLBACK color_convert_general_input_validator(vx_node node,
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
+	else if (index == 2)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -150,6 +163,14 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_RANGE, &output_channel_range, sizeof(output_channel_range)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[2];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? false : true;
 
 	// set kernel configuration
 	vx_uint32 work_items[2];
@@ -395,7 +416,7 @@ vx_status color_convert_general_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_general",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL,
 		color_convert_general_kernel,
-		2,
+		3,
 		color_convert_general_input_validator,
 		color_convert_general_output_validator,
 		nullptr,
@@ -409,6 +430,7 @@ vx_status color_convert_general_publish(vx_context context)
 	// set kernel parameters
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -438,7 +460,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 1)
+	else if (index == 1)
 	{ // image of format NV12 > second plane U16
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -450,6 +472,19 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 3)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -543,6 +578,14 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[3];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? false : true;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -622,7 +665,7 @@ vx_status color_convert_from_NV12_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_from_NV12",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12,
 		color_convert_from_NV12_kernel,
-		3,
+		4,
 		color_convert_from_NV12_input_validator,
 		color_convert_from_NV12_output_validator,
 		nullptr,
@@ -637,6 +680,7 @@ vx_status color_convert_from_NV12_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -666,7 +710,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 1)
+	else if (index == 1)
 	{ // image of format IYUV > second plane U8
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -679,7 +723,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 2)
+	else if (index == 2)
 	{ // image of format IYUV > third plane U8
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -691,6 +735,19 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 4)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -784,6 +841,14 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[4];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? false : true;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -864,7 +929,7 @@ vx_status color_convert_from_IYUV_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_from_IYUV",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV,
 		color_convert_from_IYUV_kernel,
-		4,
+		5,
 		color_convert_from_IYUV_input_validator,
 		color_convert_from_IYUV_output_validator,
 		nullptr,
@@ -880,6 +945,7 @@ vx_status color_convert_from_IYUV_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -908,6 +974,19 @@ static vx_status VX_CALLBACK color_convert_to_NV12_input_validator(vx_node node,
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_to_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 3)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -1035,6 +1114,14 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[3];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? false : true;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -1108,7 +1195,7 @@ vx_status color_convert_to_NV12_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_to_NV12",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12,
 		color_convert_to_NV12_kernel,
-		3,
+		4,
 		color_convert_to_NV12_input_validator,
 		color_convert_to_NV12_output_validator,
 		nullptr,
@@ -1123,6 +1210,7 @@ vx_status color_convert_to_NV12_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -1152,6 +1240,19 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_input_validator(vx_node node,
 		}
 
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 4)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -1279,6 +1380,14 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[4];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? false : true;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -1353,7 +1462,7 @@ vx_status color_convert_to_IYUV_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_to_IYUV",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV,
 		color_convert_to_IYUV_kernel,
-		4,
+		5,
 		color_convert_to_IYUV_input_validator,
 		color_convert_to_IYUV_output_validator,
 		nullptr,
@@ -1369,6 +1478,7 @@ vx_status color_convert_to_IYUV_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
