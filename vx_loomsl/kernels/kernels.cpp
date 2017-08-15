@@ -56,7 +56,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(color_convert_to_NV12_publish(context));
 	ERROR_CHECK_STATUS(color_convert_to_IYUV_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
-	ERROR_CHECK_STATUS(exposure_compensation_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_solvegains_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_applygains_publish(context));
