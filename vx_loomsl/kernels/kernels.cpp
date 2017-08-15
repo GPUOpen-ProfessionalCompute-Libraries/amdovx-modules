@@ -203,19 +203,22 @@ OVX Stich Nodes
 /**
 * \brief Function to create Color Convert node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags)
 {
 	vx_node node;
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 	vxQueryImage(input, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format));
 	vxQueryImage(output, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format));
+
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 	if (input_format == VX_DF_IMAGE_NV12){
 		vx_image y_channel  = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
 		vx_image uv_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
 		vx_reference params[] = {
 			(vx_reference)y_channel,
 			(vx_reference)uv_channel,
-			(vx_reference)output
+			(vx_reference)output,
+			(vx_reference)s_flags
 		};
 		node = stitchCreateNode(graph,
 			AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12,
@@ -230,7 +233,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 			(vx_reference)y_channel,
 			(vx_reference)u_channel,
 			(vx_reference)v_channel,
-			(vx_reference)output
+			(vx_reference)output,
+			(vx_reference)s_flags
 		};
 		node = stitchCreateNode(graph,
 			AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV,
@@ -243,7 +247,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 		vx_reference params[] = {
 			(vx_reference)input,
 			(vx_reference)y_channel,
-			(vx_reference)uv_channel			
+			(vx_reference)uv_channel,
+			(vx_reference)s_flags
 		};
 		node = stitchCreateNode(graph,
 			AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12,
@@ -258,7 +263,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 			(vx_reference)input,
 			(vx_reference)y_channel,
 			(vx_reference)u_channel,
-			(vx_reference)v_channel
+			(vx_reference)v_channel,
+			(vx_reference)s_flags
 		};
 		node = stitchCreateNode(graph,
 			AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV,
@@ -268,7 +274,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 	else{
 		vx_reference params[] = {
 			(vx_reference)input,
-			(vx_reference)output
+			(vx_reference)output,
+			(vx_reference)s_flags
 		};
 		node = stitchCreateNode(graph,
 			AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL,
