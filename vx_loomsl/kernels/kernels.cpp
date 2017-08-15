@@ -389,9 +389,10 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnNode(vx_graph grap
 /**
 * \brief Function to create Calculate RGB Error Function node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity)
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity, vx_uint8 flags)
 {
 	vx_scalar Num_Camera = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &numCameras);
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 
 	vx_reference params[] = {
 		(vx_reference)Num_Camera,
@@ -399,6 +400,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph g
 		(vx_reference)exp_data,
 		(vx_reference)mask,
 		(vx_reference)out_intensity,
+		(vx_reference)s_flags
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT_RGB,

@@ -310,7 +310,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras,
-	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity);
+	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity, vx_uint8 flags);
 
 
 /*! \brief [Graph] Creates a stitchBlendMultiBandMerge node.

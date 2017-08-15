@@ -2822,7 +2822,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				ERROR_CHECK_OBJECT_(stitch->ExpcompSolveGainNode = stitchExposureCompSolveForGainNode(stitch->graphStitch, stitch->alpha, stitch->beta, stitch->A_matrix, stitch->overlap_matrix, stitch->gain_array));
 			}
 			else if (stitch->EXPO_COMP == 2) {
-				ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnRGBNode(stitch->graphStitch, stitch->num_cameras, stitch->RGBY1, stitch->OverlapPixelEntry, stitch->valid_mask_image, stitch->A_matrix));
+				ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnRGBNode(stitch->graphStitch, stitch->num_cameras, stitch->RGBY1, stitch->OverlapPixelEntry, stitch->valid_mask_image, stitch->A_matrix, stitch->color_convert_flags));
 				ERROR_CHECK_OBJECT_(stitch->ExpcompSolveGainNode = stitchExposureCompSolveForGainNode(stitch->graphStitch, stitch->alpha, stitch->beta, stitch->A_matrix, stitch->overlap_matrix, stitch->gain_array));
 			}
 			ERROR_CHECK_OBJECT_(stitch->ExpcompApplyGainNode = stitchExposureCompApplyGainNode(stitch->graphStitch, stitch->RGBY1, stitch->gain_array, stitch->valid_array, stitch->num_cameras, stitch->EXPO_COMP_GAINW, stitch->EXPO_COMP_GAINH, stitch->RGBY2));
