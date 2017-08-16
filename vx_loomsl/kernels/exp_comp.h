@@ -81,12 +81,4 @@ private:
 	vx_status applyblockgains_thread_func(vx_int32 img_num, char *in_base_addr);
 };
 
-vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pValid_roi, vx_array ExpCompOut, int numCameras);
-vx_status Compute_StitchExpCompCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array pExpCompOut, int numCameras, int Dst_height);
-vx_status Compute_StitchBlendCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array blendOffs, int numCameras);
-
-//////////////////////////////////////////////////////////////////////
-//! \brief The kernel registration functions.
-vx_status exposure_compensation_publish(vx_context context);
-
 #endif // __EXP_COMP_H__
