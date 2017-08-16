@@ -53,13 +53,15 @@ std::string GetColorRangeConversionTableFor15bitTo8bit(vx_color_space_e output_c
 std::string GetColorRangeConversionTableFor15bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
 std::string GetColorRangeConversionTableFor15bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range);
 // Read input from buffer -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string Read2x8PixelsFrom422buffer8bit();
+std::string Read1x4PixelsFrom422buffer8bit();
 std::string Read2x8PixelsFromYbufferAndUVbuffer();
 std::string Read2x8PixelsFromYbufferAndUbufferAndVbuffer();
 std::string Read1x6PixelsFrom422buffer();
-std::string Read2x8PixelsFrom422buffer16bit();
+std::string Read1x4PixelsFrom422buffer16bit();
 std::string Read2x8PixelsFromRGBbuffer8bit();
 std::string Read2x8PixelsFromRGBbuffer16bit();
+std::string Read1x4PixelsFromRGBbuffer8bit();
+std::string Read1x4PixelsFromRGBbuffer16bit();
 // Do Color Conversion --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 std::string ConvertUYVYtoRGB2();
 std::string ConvertUYVYtoRGBX();
@@ -114,8 +116,7 @@ std::string Write1x6PixelsToRGB2buffer();
 std::string Write1x6PixelsToRGBXbuffer();
 std::string Write1x6PixelsToRGB4buffer();
 std::string Write2x8PixelsTo422buffer8bit();
-std::string Write1x4PixelsTo422bufferUYVY();
-std::string Write1x4PixelsTo422bufferYUYV();
+std::string Write1x4PixelsTo422buffer8bit();
 std::string Write2x8PixelsToYbufferAndUVbuffer();
 std::string Write2x8PixelsToYbufferAndUbufferAndVbuffer();
 std::string Write1x6PixelsTo422buffer();
