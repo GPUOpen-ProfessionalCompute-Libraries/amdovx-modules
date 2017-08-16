@@ -762,6 +762,7 @@ void writeVXCode
         )
 {
     if(codeType == "declaration") {
+        ofsCodeH << "	vx_context context; " << std::endl;
         ofsCodeH << "	vx_graph graph; " << std::endl;
     }
     std::map<std::string,bool> declare_tensor_check;
@@ -777,6 +778,9 @@ void writeVXCode
                 else if(codeType == "constructor") {
                     ofsCodeC << "	" << node[i] + "_dims  {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
                 }
+                else if(codeType == "initialize") {
+                    ofsCodeC << "	" << node[i] << " = vxCreateTensor(context, 4, " << node[i] + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                }
                 declare_tensor_check[node[i]]= true;
             }
         }
@@ -789,6 +793,9 @@ void writeVXCode
             }
             else if(codeType == "constructor") {
                 ofsCodeC << "	" << output + "_dims  {" << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << "}," << std::endl;
+            }
+            else if(codeType == "initialize") {
+                ofsCodeC << "	" << output << " = vxCreateTensor(context,4, " << output + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
             }
             declare_tensor_check[output] = true;
         }
@@ -825,7 +832,16 @@ void writeVXCode
                 ofsCodeH << "	vx_nn_conv_params_t " << output << "_params;" << std::endl;
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
-            
+            else if(codeType == "initialize") {
+                ofsCodeC << "	" << output + "_params.padding_x = " << pad_w << ";" << std::endl;
+                ofsCodeC << "	" << output + "_params.padding_y = " << pad_h << ";" << std::endl;
+                ofsCodeC << "	" << output + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
+                ofsCodeC << "	" << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
+                ofsCodeC << "	" << output + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
+                ofsCodeC << "	" << output + "_params.dilation_x = " << dilation_w - 1 << " ;" << std::endl;
+                ofsCodeC << "	" << output + "_params.dilation_y = " << dilation_h - 1 << " ;" << std::endl;
+            }
+
         }
         else if(type == "Deconvolution") {
             std::stringstream ss(params);
@@ -1036,6 +1052,7 @@ void writeVXCode
             }
         }
         ofsCodeH << std::endl;
+        if(codeType== "initialize") ofsCodeC << std::endl;
     }
 }
 
@@ -1073,13 +1090,13 @@ void generateCode
     ofsCodeC << "NetVX::NetVX() :" << std::endl;
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "constructor");
     ofsCodeC << "{" << std::endl;
-    // TODO: Initialize declared member variables.
     ofsCodeC << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
     ofsCodeC << "NetVX::~NetVX() {}" << std::endl << std::endl;
     ofsCodeC << "int NetVX::Initialize(const char * dataFolder)" << std::endl;
     ofsCodeC << "{" << std::endl;
     // TODO: add initialization code generation here
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "initialize");
     ofsCodeC << "	return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
