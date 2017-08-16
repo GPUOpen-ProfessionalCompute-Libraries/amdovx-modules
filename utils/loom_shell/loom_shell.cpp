@@ -1409,7 +1409,7 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "loadBuffer") || !_stricmp(command, "saveBuffer")) {
 		// parse the command
-		vx_uint32 bufIndex = 0; char fileName[256];
+		vx_uint32 bufIndex = 0; char fileName[256]; vx_uint32 offsetOrFlag;
 		const char * invalidSyntax = !_stricmp(command, "loadBuffer") ?
 			"ERROR: invalid syntax: expects: loadBuffer(buf,\"fileName.bin\");" :
 			"ERROR: invalid syntax: expects: saveBuffer(buf,\"fileName.bin\");";
@@ -1417,18 +1417,37 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
+		bool threeArguments = false;
+		if (*s == ',') {
+			SYNTAX_CHECK(ParseSkip(s, ","));
+			SYNTAX_CHECK(ParseUInt(s, offsetOrFlag));
+			threeArguments = true;
+		}
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		if (!opencl_buf_mem_[bufIndex]) return Error("ERROR: OpenCL buffer %s[%d] doesn't exist", name_buf, bufIndex);
 		// process the command
-		if (!_stricmp(command, "loadBuffer")) {
-			vx_status status = loadBuffer(opencl_buf_mem_[bufIndex], fileName);
-			if (status) return status;
+		if (threeArguments)
+		{
+			if (!_stricmp(command, "loadBuffer")) {
+				vx_status status = loadBuffer(opencl_buf_mem_[bufIndex], fileName, offsetOrFlag);
+				if (status) return status;
+			}
+			else {
+				vx_status status = saveBuffer(opencl_buf_mem_[bufIndex], fileName, offsetOrFlag);
+				if (status) return status;
+			}
 		}
-		else {
-			vx_status status = saveBuffer(opencl_buf_mem_[bufIndex], fileName);
-			if (status) return status;
+		else{
+			if (!_stricmp(command, "loadBuffer")) {
+				vx_status status = loadBuffer(opencl_buf_mem_[bufIndex], fileName);
+				if (status) return status;
+			}
+			else {
+				vx_status status = saveBuffer(opencl_buf_mem_[bufIndex], fileName);
+				if (status) return status;
+			}
 		}
 	}
 	else if (!_stricmp(command, "run")) {

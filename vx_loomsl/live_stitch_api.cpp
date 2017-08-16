@@ -3219,7 +3219,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch,
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_input, ptr_in, nullptr, 2));
 	}
 	else if (stitch->camera_buffer_format == VX_DF_IMAGE_IYUV){
-		void * ptr_in[] = { input_buffer ? input_buffer[0] : nullptr, input_buffer ? input_buffer[1] : nullptr };
+		void * ptr_in[] = { input_buffer ? input_buffer[0] : nullptr, input_buffer ? input_buffer[1] : nullptr, input_buffer ? input_buffer[2] : nullptr };
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_input, ptr_in, nullptr, 3));
 	}
 	else {
@@ -3252,12 +3252,12 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 	else if (stitch->output_buffer_format == VX_DF_IMAGE_IYUV) {
 		if (stitch->output_encode_tiles > 1) {
 			for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
-				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 2) + 1] : nullptr };
+				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 3) + 1] : nullptr, output_buffer ? output_buffer[(i * 3) + 2] : nullptr };
 				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->encodetileOutput[i], ptr_out, nullptr, 3));
 			}
 		}
 		else {
-			void * ptr_out[] = { output_buffer ? output_buffer[0] : nullptr, output_buffer ? output_buffer[1] : nullptr };
+			void * ptr_out[] = { output_buffer ? output_buffer[0] : nullptr, output_buffer ? output_buffer[1] : nullptr, output_buffer ? output_buffer[2] : nullptr };
 			ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_output, ptr_out, nullptr, 3));
 		}
 	}

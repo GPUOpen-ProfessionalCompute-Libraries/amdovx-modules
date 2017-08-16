@@ -56,7 +56,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(color_convert_to_NV12_publish(context));
 	ERROR_CHECK_STATUS(color_convert_to_IYUV_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
-	ERROR_CHECK_STATUS(exposure_compensation_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_solvegains_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_applygains_publish(context));
@@ -228,7 +227,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 	else if (input_format == VX_DF_IMAGE_IYUV){
 		vx_image y_channel = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
 		vx_image u_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
-		vx_image v_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
+		vx_image v_channel = vxCreateImageFromChannel(input, VX_CHANNEL_V);
 		vx_reference params[] = {
 			(vx_reference)y_channel,
 			(vx_reference)u_channel,
