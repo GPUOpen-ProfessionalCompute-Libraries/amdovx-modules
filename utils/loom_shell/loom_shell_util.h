@@ -55,7 +55,9 @@ vx_status saveBufferToImage(cl_mem mem, const char * fileName, vx_df_image buffe
 vx_status loadBufferFromMultipleImages(cl_mem mem, const char * fileName, vx_uint32 num_rows, vx_uint32 num_cols, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height, vx_uint32 stride_in_bytes = 0);
 vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint32 num_rows, vx_uint32 num_cols, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height, vx_uint32 stride_in_bytes = 0);
 vx_status loadBuffer(cl_mem mem, const char * fileName);
+vx_status loadBuffer(cl_mem mem, const char * fileName, vx_uint32 offset);
 vx_status saveBuffer(cl_mem mem, const char * fileName);
+vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags);
 
 vx_status setGlobalAttribute(vx_uint32 offset, float value);
 vx_status saveGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * fileName);
