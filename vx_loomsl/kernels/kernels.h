@@ -205,10 +205,11 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context);
 * \param [in] graph The reference to the graph.
 * \param [in] input The input image.
 * \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output);
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags);
 
 /*! \brief [Graph] Creates a Warp node.
 * \param [in] graph The reference to the graph.
@@ -309,7 +310,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras,
-	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity);
+	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity, vx_uint8 flags);
 
 
 /*! \brief [Graph] Creates a stitchBlendMultiBandMerge node.

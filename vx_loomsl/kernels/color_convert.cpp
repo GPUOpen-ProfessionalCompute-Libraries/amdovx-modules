@@ -44,6 +44,19 @@ static vx_status VX_CALLBACK color_convert_general_input_validator(vx_node node,
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
+	else if (index == 2)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -151,6 +164,14 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[2];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? true : false;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	if (input_format == VX_DF_IMAGE_V210_AMD || output_format == VX_DF_IMAGE_V210_AMD){
@@ -164,8 +185,8 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 		opencl_global_work[1] = (work_items[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
 	}
 	else{
-		work_items[0] = (input_width + 7) / 8;
-		work_items[1] = (input_height + 1) / 2;
+		work_items[0] = (input_width + 3) / 4;
+		work_items[1] = input_height;
 		strcpy(opencl_kernel_function_name, "color_convert");
 		opencl_work_dim = 2;
 		opencl_local_work[0] = 16;
@@ -186,6 +207,12 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	if (output_format == VX_DF_IMAGE_V210_AMD) opencl_kernel_code += Create_amd_pack10();
 	if (output_format == VX_DF_IMAGE_V216_AMD) opencl_kernel_code += Create_amd_pack16();
 	if (output_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_pack15();
+	if (output_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace) opencl_kernel_code += Degamma();
+	if (input_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace)
+	{
+		opencl_kernel_code += Gamma();
+		opencl_kernel_code += Gamma3();
+	}
 
 	char item[8192];
 	sprintf(item,
@@ -203,13 +230,19 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	}
 	if (output_format == VX_DF_IMAGE_RGB || output_format == VX_DF_IMAGE_RGBX || output_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code +=
-			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
 	}
 	else{ //input_format: UYVY, YUYV, V210, V216
 		opencl_kernel_code +=
-			"	uint p422_width, uint p422_height, __global uchar * p422_buf, uint p422_stride, uint p422_offset)\n";
+			"	uint p422_width, uint p422_height, __global uchar * p422_buf, uint p422_stride, uint p422_offset";
+	}
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
 	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -220,48 +253,48 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	// Input: UYVY
 	if (input_format == VX_DF_IMAGE_UYVY){
 		opencl_kernel_code += GetColorConversionTableForYUVInput(input_color_space);
-		opencl_kernel_code += Read2x8PixelsFrom422buffer8bit();
+		opencl_kernel_code += Read1x4PixelsFrom422buffer8bit();
 		if (output_format == VX_DF_IMAGE_RGB)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertUYVYtoRGB2();
-			opencl_kernel_code += Write2x8PixelsToRGB2buffer();
+			opencl_kernel_code += Write1x4PixelsToRGB2buffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGBX)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertUYVYtoRGBX();
-			opencl_kernel_code += Write2x8PixelsToRGBXbuffer();
+			opencl_kernel_code += Write1x4PixelsToRGBXbuffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo15bit(input_channel_range);
-			opencl_kernel_code += ConvertUYVYtoRGB4();
-			opencl_kernel_code += Write2x8PixelsToRGB4buffer();
+			opencl_kernel_code += (useLinearColorSpace) ? ConvertUYVYtoRGB4AndDegamma() : ConvertUYVYtoRGB4();
+			opencl_kernel_code += Write1x4PixelsToRGB4buffer();
 		}
 	}
 
 	// Input: YUYV
 	else if (input_format == VX_DF_IMAGE_YUYV){
 		opencl_kernel_code += GetColorConversionTableForYUVInput(input_color_space);
-		opencl_kernel_code += Read2x8PixelsFrom422buffer8bit();
+		opencl_kernel_code += Read1x4PixelsFrom422buffer8bit();
 		if (output_format == VX_DF_IMAGE_RGB)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertYUYVtoRGB2();
-			opencl_kernel_code += Write2x8PixelsToRGB2buffer();
+			opencl_kernel_code += Write1x4PixelsToRGB2buffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGBX)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertYUYVtoRGBX();
-			opencl_kernel_code += Write2x8PixelsToRGBXbuffer();
+			opencl_kernel_code += Write1x4PixelsToRGBXbuffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor8bitTo15bit(input_channel_range);
-			opencl_kernel_code += ConvertYUYVtoRGB4();
-			opencl_kernel_code += Write2x8PixelsToRGB4buffer();
+			opencl_kernel_code += (useLinearColorSpace) ? ConvertYUYVtoRGB4AndDegamma() : ConvertYUYVtoRGB4();
+			opencl_kernel_code += Write1x4PixelsToRGB4buffer();
 		}
 	}
 
@@ -284,7 +317,7 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 		else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor10bitTo15bit(input_channel_range);
-			opencl_kernel_code += ConvertV210toRGB4();
+			opencl_kernel_code += (useLinearColorSpace) ? ConvertV210toRGB4AndDegamma() : ConvertV210toRGB4();
 			opencl_kernel_code += Write1x6PixelsToRGB4buffer();
 		}
 	}
@@ -292,24 +325,24 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	// Input: V216
 	else if (input_format == VX_DF_IMAGE_V216_AMD){
 		opencl_kernel_code += GetColorConversionTableForYUVInput(input_color_space);
-		opencl_kernel_code += Read2x8PixelsFrom422buffer16bit();
+		opencl_kernel_code += Read1x4PixelsFrom422buffer16bit();
 		if (output_format == VX_DF_IMAGE_RGB)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor16bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertV216toRGB2();
-			opencl_kernel_code += Write2x8PixelsToRGB2buffer();
+			opencl_kernel_code += Write1x4PixelsToRGB2buffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGBX)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor16bitTo8bit(input_channel_range);
 			opencl_kernel_code += ConvertV216toRGBX();
-			opencl_kernel_code += Write2x8PixelsToRGBXbuffer();
+			opencl_kernel_code += Write1x4PixelsToRGBXbuffer();
 		}
 		else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 		{
 			opencl_kernel_code += GetRangeConversionTableFor16bitTo15bit(input_channel_range);
-			opencl_kernel_code += ConvertV216toRGB4();
-			opencl_kernel_code += Write2x8PixelsToRGB4buffer();
+			opencl_kernel_code += (useLinearColorSpace) ? ConvertV216toRGB4AndDegamma() : ConvertV216toRGB4();
+			opencl_kernel_code += Write1x4PixelsToRGB4buffer();
 		}
 	}
 
@@ -318,16 +351,16 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 		if (output_format == VX_DF_IMAGE_UYVY)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor8bitTo8bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer8bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer8bit();
 			opencl_kernel_code += ConvertRGB2toUYVY();
-			opencl_kernel_code += Write2x8PixelsTo422buffer8bit();
+			opencl_kernel_code += Write1x4PixelsTo422buffer8bit();
 		}
 		else if (output_format == VX_DF_IMAGE_YUYV)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor8bitTo8bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer8bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer8bit();
 			opencl_kernel_code += ConvertRGB2toYUYV();
-			opencl_kernel_code += Write2x8PixelsTo422buffer8bit();
+			opencl_kernel_code += Write1x4PixelsTo422buffer8bit();
 		}
 		else if (output_format == VX_DF_IMAGE_V210_AMD)
 		{
@@ -338,9 +371,9 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 		else if (output_format == VX_DF_IMAGE_V216_AMD)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor8bitTo16bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer8bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer8bit();
 			opencl_kernel_code += ConvertRGB2toV216();
-			opencl_kernel_code += Write2x8PixelsTo422buffer16bit();
+			opencl_kernel_code += Write1x4PixelsTo422buffer16bit();
 		}
 	}
 
@@ -349,29 +382,29 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 		if (output_format == VX_DF_IMAGE_UYVY)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor15bitTo8bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer16bit();
-			opencl_kernel_code += ConvertRGB4toUYVY();
-			opencl_kernel_code += Write2x8PixelsTo422buffer8bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer16bit();
+			opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toUYVY() : ConvertRGB4toUYVY();
+			opencl_kernel_code += Write1x4PixelsTo422buffer8bit();
 		}
 		else if (output_format == VX_DF_IMAGE_YUYV)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor15bitTo8bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer16bit();
-			opencl_kernel_code += ConvertRGB4toYUYV();
-			opencl_kernel_code += Write2x8PixelsTo422buffer8bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer16bit();
+			opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toYUYV() : ConvertRGB4toYUYV();
+			opencl_kernel_code += Write1x4PixelsTo422buffer8bit();
 		}
 		else if (output_format == VX_DF_IMAGE_V210_AMD)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor15bitTo10bit(input_color_space, input_channel_range);
-			opencl_kernel_code += ReadAndConvertRGB4toV210();
+			opencl_kernel_code += (useLinearColorSpace) ? ReadAndGammaAndConvertRGB4toV210() : ReadAndConvertRGB4toV210();
 			opencl_kernel_code += Write1x6PixelsTo422buffer();
 		}
 		else if (output_format == VX_DF_IMAGE_V216_AMD)
 		{
 			opencl_kernel_code += GetColorRangeConversionTableFor15bitTo16bit(input_color_space, input_channel_range);
-			opencl_kernel_code += Read2x8PixelsFromRGBbuffer16bit();
-			opencl_kernel_code += ConvertRGB4toV216();
-			opencl_kernel_code += Write2x8PixelsTo422buffer16bit();
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer16bit();
+			opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toV216() : ConvertRGB4toV216();
+			opencl_kernel_code += Write1x4PixelsTo422buffer16bit();
 		}
 	}
 
@@ -395,7 +428,7 @@ vx_status color_convert_general_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_general",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL,
 		color_convert_general_kernel,
-		2,
+		3,
 		color_convert_general_input_validator,
 		color_convert_general_output_validator,
 		nullptr,
@@ -409,6 +442,7 @@ vx_status color_convert_general_publish(vx_context context)
 	// set kernel parameters
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -438,7 +472,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 1)
+	else if (index == 1)
 	{ // image of format NV12 > second plane U16
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -450,6 +484,19 @@ static vx_status VX_CALLBACK color_convert_from_NV12_input_validator(vx_node nod
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 3)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -543,6 +590,14 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[3];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? true : false;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -562,6 +617,12 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	//Define help functions for 10 and 16 bit
 	if (input_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_unpackAB();
 	if (output_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_pack15();
+	if (output_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace) opencl_kernel_code += Degamma();
+	if (input_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace)
+	{
+		opencl_kernel_code += Gamma();
+		opencl_kernel_code += Gamma3();
+	}
 
 	char item[8192];
 	sprintf(item,
@@ -572,8 +633,14 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	opencl_kernel_code +=
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -599,7 +666,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 	{
 		opencl_kernel_code += GetRangeConversionTableFor8bitTo15bit(input_channel_range);
-		opencl_kernel_code += ConvertNV12toRGB4();
+		opencl_kernel_code += (useLinearColorSpace) ? ConvertNV12toRGB4AndDegamma() : ConvertNV12toRGB4();
 		opencl_kernel_code += Write2x8PixelsToRGB4buffer();
 	}
 	opencl_kernel_code +=
@@ -622,7 +689,7 @@ vx_status color_convert_from_NV12_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_from_NV12",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12,
 		color_convert_from_NV12_kernel,
-		3,
+		4,
 		color_convert_from_NV12_input_validator,
 		color_convert_from_NV12_output_validator,
 		nullptr,
@@ -637,6 +704,7 @@ vx_status color_convert_from_NV12_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -666,7 +734,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 1)
+	else if (index == 1)
 	{ // image of format IYUV > second plane U8
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -679,7 +747,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
-	if (index == 2)
+	else if (index == 2)
 	{ // image of format IYUV > third plane U8
 		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
@@ -691,6 +759,19 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_input_validator(vx_node nod
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_from_IYUV doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 4)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -784,6 +865,14 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[4];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? true : false;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -802,6 +891,12 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 
 	//Define help functions for 10 and 16 bit
 	if (output_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_pack15();
+	if (output_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace) opencl_kernel_code += Degamma();
+	if (input_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace)
+	{
+		opencl_kernel_code += Gamma();
+		opencl_kernel_code += Gamma3();
+	}
 
 	char item[8192];
 	sprintf(item,
@@ -813,8 +908,14 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
 		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset)\n";
+		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -840,7 +941,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 	else if (output_format == VX_DF_IMAGE_RGB4_AMD)
 	{
 		opencl_kernel_code += GetRangeConversionTableFor8bitTo15bit(input_channel_range);
-		opencl_kernel_code += ConvertIYUVtoRGB4();
+		opencl_kernel_code += (useLinearColorSpace) ? ConvertIYUVtoRGB4AndDegamma() : ConvertIYUVtoRGB4();
 		opencl_kernel_code += Write2x8PixelsToRGB4buffer();
 	}
 
@@ -864,7 +965,7 @@ vx_status color_convert_from_IYUV_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_from_IYUV",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV,
 		color_convert_from_IYUV_kernel,
-		4,
+		5,
 		color_convert_from_IYUV_input_validator,
 		color_convert_from_IYUV_output_validator,
 		nullptr,
@@ -880,6 +981,7 @@ vx_status color_convert_from_IYUV_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -908,6 +1010,19 @@ static vx_status VX_CALLBACK color_convert_to_NV12_input_validator(vx_node node,
 			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_to_NV12 doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 3)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -1035,6 +1150,14 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[3];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? true : false;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -1053,6 +1176,12 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 
 	//Define help functions for 16 bit
 	if (input_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_unpackAB();
+	if (output_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace) opencl_kernel_code += Degamma();
+	if (input_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace)
+	{
+		opencl_kernel_code += Gamma();
+		opencl_kernel_code += Gamma3();
+	}
 
 	char item[8192];
 	sprintf(item,
@@ -1063,8 +1192,14 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	opencl_kernel_code +=
 		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
-		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset)\n";
+		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -1084,7 +1219,7 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 	else if (input_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code += GetColorRangeConversionTableFor15bitTo8bit(input_color_space, input_channel_range);
 		opencl_kernel_code += Read2x8PixelsFromRGBbuffer16bit();
-		opencl_kernel_code += ConvertRGB4toNV12();
+		opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toNV12() : ConvertRGB4toNV12();
 		opencl_kernel_code += Write2x8PixelsToYbufferAndUVbuffer();
 	}
 
@@ -1108,7 +1243,7 @@ vx_status color_convert_to_NV12_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_to_NV12",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12,
 		color_convert_to_NV12_kernel,
-		3,
+		4,
 		color_convert_to_NV12_input_validator,
 		color_convert_to_NV12_output_validator,
 		nullptr,
@@ -1123,6 +1258,7 @@ vx_status color_convert_to_NV12_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -1152,6 +1288,19 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_input_validator(vx_node node,
 		}
 
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+	}
+	else if (index == 4)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
 	}
 	return status;
 }
@@ -1279,6 +1428,14 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_SPACE, &output_color_space, sizeof(output_color_space)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
+	// Check for linear colorspace method
+	vx_uint8 flags = 0;
+	vx_scalar s_flags = (vx_scalar)parameters[4];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool useLinearColorSpace = (flags & 1) ? true : false;
+
 	// set kernel configuration
 	vx_uint32 work_items[2];
 	work_items[0] = (input_width + 7) / 8;
@@ -1297,6 +1454,12 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 
 	//Define help functions for 16 bit
 	if (input_format == VX_DF_IMAGE_RGB4_AMD) opencl_kernel_code += Create_amd_unpackAB();
+	if (output_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace) opencl_kernel_code += Degamma();
+	if (input_format == VX_DF_IMAGE_RGB4_AMD && useLinearColorSpace)
+	{
+		opencl_kernel_code += Gamma();
+		opencl_kernel_code += Gamma3();
+	}
 
 	char item[8192];
 	sprintf(item,
@@ -1308,8 +1471,14 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
-		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset)\n";
+		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset";
+	if (s_flags) {
+		opencl_kernel_code +=
+			",\n"
+			"        uint flags";
+	}
 	sprintf(item,
+		")\n"
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
@@ -1329,7 +1498,7 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 	else if (input_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code += GetColorRangeConversionTableFor15bitTo8bit(input_color_space, input_channel_range);
 		opencl_kernel_code += Read2x8PixelsFromRGBbuffer16bit();
-		opencl_kernel_code += ConvertRGB4toIYUV();
+		opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toIYUV() : ConvertRGB4toIYUV();
 		opencl_kernel_code += Write2x8PixelsToYbufferAndUbufferAndVbuffer();
 	}
 
@@ -1353,7 +1522,7 @@ vx_status color_convert_to_IYUV_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_to_IYUV",
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV,
 		color_convert_to_IYUV_kernel,
-		4,
+		5,
 		color_convert_to_IYUV_input_validator,
 		color_convert_to_IYUV_output_validator,
 		nullptr,
@@ -1369,6 +1538,7 @@ vx_status color_convert_to_IYUV_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -1403,7 +1573,8 @@ std::string GetColorConversionTableForYUVInput(vx_color_space_e input_color_spac
 }
 
 //Input Range Conversion ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string GetRangeConversionTableFor8bitTo8bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor8bitTo8bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1415,7 +1586,8 @@ std::string GetRangeConversionTableFor8bitTo8bit(vx_channel_range_e input_channe
 	}
 	return output;
 }
-std::string GetRangeConversionTableFor8bitTo15bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor8bitTo15bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1427,7 +1599,8 @@ std::string GetRangeConversionTableFor8bitTo15bit(vx_channel_range_e input_chann
 	}
 	return output;
 }
-std::string GetRangeConversionTableFor10bitTo8bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor10bitTo8bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1439,7 +1612,8 @@ std::string GetRangeConversionTableFor10bitTo8bit(vx_channel_range_e input_chann
 	}
 	return output;
 }
-std::string GetRangeConversionTableFor10bitTo15bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor10bitTo15bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1451,7 +1625,8 @@ std::string GetRangeConversionTableFor10bitTo15bit(vx_channel_range_e input_chan
 	}
 	return output;
 }
-std::string GetRangeConversionTableFor16bitTo8bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor16bitTo8bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1463,7 +1638,8 @@ std::string GetRangeConversionTableFor16bitTo8bit(vx_channel_range_e input_chann
 	}
 	return output;
 }
-std::string GetRangeConversionTableFor16bitTo15bit(vx_channel_range_e input_channel_range){
+std::string GetRangeConversionTableFor16bitTo15bit(vx_channel_range_e input_channel_range)
+{
 	std::string output;
 	if (input_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
 		output =
@@ -1477,7 +1653,8 @@ std::string GetRangeConversionTableFor16bitTo15bit(vx_channel_range_e input_chan
 }
 
 // Output Color and Range Conversion ------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string GetColorRangeConversionTableFor8bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor8bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) {
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1523,7 +1700,8 @@ std::string GetColorRangeConversionTableFor8bitTo8bit(vx_color_space_e output_co
 	}
 	return output;
 }
-std::string GetColorRangeConversionTableFor8bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor8bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) {
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1569,7 +1747,8 @@ std::string GetColorRangeConversionTableFor8bitTo10bit(vx_color_space_e output_c
 	}
 	return output;
 }
-std::string GetColorRangeConversionTableFor8bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor8bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) {
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1615,7 +1794,8 @@ std::string GetColorRangeConversionTableFor8bitTo16bit(vx_color_space_e output_c
 	}
 	return output;
 }
-std::string GetColorRangeConversionTableFor15bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor15bitTo8bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) {
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1661,7 +1841,8 @@ std::string GetColorRangeConversionTableFor15bitTo8bit(vx_color_space_e output_c
 	}
 	return output;
 }
-std::string GetColorRangeConversionTableFor15bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor15bitTo10bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) { // 15bit > 10bit
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1707,7 +1888,8 @@ std::string GetColorRangeConversionTableFor15bitTo10bit(vx_color_space_e output_
 	}
 	return output;
 }
-std::string GetColorRangeConversionTableFor15bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range){
+std::string GetColorRangeConversionTableFor15bitTo16bit(vx_color_space_e output_color_space, vx_channel_range_e output_channel_range)
+{
 	std::string output;
 	if (output_color_space == VX_COLOR_SPACE_BT601_525 || output_color_space == VX_COLOR_SPACE_BT601_625) {
 		if (output_channel_range == VX_CHANNEL_RANGE_RESTRICTED) {
@@ -1755,15 +1937,16 @@ std::string GetColorRangeConversionTableFor15bitTo16bit(vx_color_space_e output_
 }
 
 // Read input from buffer -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string Read2x8PixelsFrom422buffer8bit(){
+std::string Read1x4PixelsFrom422buffer8bit()
+{
 	std::string output =
-		"    uint4 L0, L1;\n"
-		"    p422_buf += p422_offset + (gy * p422_stride * 2) + (gx << 4);\n"
-		"    L0 = *(__global uint4 *) p422_buf;\n"
-		"    L1 = *(__global uint4 *)&p422_buf[p422_stride];\n";
+		"    uint2 L0;\n"
+		"    p422_buf += p422_offset + (gy * p422_stride) + (gx << 3);\n"
+		"    L0 = *(__global uint2 *) p422_buf;\n";
 	return output;
 }
-std::string Read2x8PixelsFromYbufferAndUVbuffer(){
+std::string Read2x8PixelsFromYbufferAndUVbuffer()
+{
 	std::string output =
 		"		pY_buf += pY_offset + (gy * pY_stride << 1) + (gx << 3);\n"
 		"		pUV_buf += pUV_offset + (gy * pUV_stride) + (gx << 3);\n"
@@ -1772,7 +1955,8 @@ std::string Read2x8PixelsFromYbufferAndUVbuffer(){
 		"		uint2 pUV = *(__global uint2 *) pUV_buf;\n";
 	return output;
 }
-std::string Read2x8PixelsFromYbufferAndUbufferAndVbuffer(){
+std::string Read2x8PixelsFromYbufferAndUbufferAndVbuffer()
+{
 	std::string output =
 		"    pY_buf += pY_offset + (gy * pY_stride << 1) + (gx << 3);\n"
 		"    pU_buf += pU_offset + (gy * pU_stride) + (gx << 2);\n"
@@ -1783,22 +1967,24 @@ std::string Read2x8PixelsFromYbufferAndUbufferAndVbuffer(){
 		"    uint pV = *(__global uint *) pV_buf;\n";
 	return output;
 }
-std::string Read1x6PixelsFrom422buffer(){
+std::string Read1x6PixelsFrom422buffer()
+{
 	std::string output =
 		"		uint8 L0;\n"
 		"		p422_buf += p422_offset + (gy * p422_stride) + (gx << 5);\n"
 		"		L0 = *(__global uint8 *) p422_buf;\n";
 	return output;
 }
-std::string Read2x8PixelsFrom422buffer16bit(){
+std::string Read1x4PixelsFrom422buffer16bit()
+{
 	std::string output =
-		"    uint8 L0, L1;\n"
-		"    p422_buf += p422_offset + (gy * p422_stride * 2) + (gx << 5);\n"
-		"    L0 = *(__global uint8 *) p422_buf;\n"
-		"    L1 = *(__global uint8 *)&p422_buf[p422_stride];\n";
+		"    uint4 L0;\n"
+		"    p422_buf += p422_offset + (gy * p422_stride) + (gx << 4);\n"
+		"    L0 = *(__global uint4 *) p422_buf;\n";
 	return output;
 }
-std::string Read2x8PixelsFromRGBbuffer8bit(){
+std::string Read2x8PixelsFromRGBbuffer8bit()
+{
 	std::string output =
 		"    uint8 L0, L1;\n"
 		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 24);\n"
@@ -1806,7 +1992,8 @@ std::string Read2x8PixelsFromRGBbuffer8bit(){
 		"    L1 = *(__global uint8 *)&pRGB_buf[pRGB_stride];\n";
 	return output;
 }
-std::string Read2x8PixelsFromRGBbuffer16bit(){
+std::string Read2x8PixelsFromRGBbuffer16bit()
+{
 	std::string output =
 		"    uint8 L0, L2;\n"
 		"	 uint4 L1, L3;\n"
@@ -1817,190 +2004,135 @@ std::string Read2x8PixelsFromRGBbuffer16bit(){
 		"    L3 = *(__global uint4 *)&pRGB_buf[pRGB_stride+32];\n";
 	return output;
 }
+std::string Read1x4PixelsFromRGBbuffer8bit()
+{
+	std::string output =
+		"    uint4 L0;\n"
+		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 12);\n"
+		"    L0 = *(__global uint4 *) pRGB_buf;\n";
+	return output;
+}
+std::string Read1x4PixelsFromRGBbuffer16bit()
+{
+	std::string output =
+		"    uint4 L0;\n"
+		"	 uint2 L1;\n"
+		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 24);\n"
+		"    L0 = *(__global uint4 *) pRGB_buf;\n"
+		"    L1 = *(__global uint2 *)&pRGB_buf[16];\n";
+	return output;
+}
 // Do Color Conversion --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string ConvertUYVYtoRGB2(){
+std::string ConvertUYVYtoRGB2()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
 		"    u = mad(amd_unpack0(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s0 = amd_pack(rgbx);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s1 = amd_pack(rgbx);\n"
 		"    u = mad(amd_unpack0(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s1),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s7 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s1 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s7 = amd_pack(rgbx);\n";
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertUYVYtoRGBX(){
+std::string ConvertUYVYtoRGBX()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx; float y0, y1, u, v;\n"
 		"    u = mad(amd_unpack0(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s0 = amd_pack(rgbx);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s1 = amd_pack(rgbx);\n"
 		"    u = mad(amd_unpack0(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s1),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s7 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s1 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack0(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s7 = amd_pack(rgbx);\n";
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertUYVYtoRGB4(){
+std::string ConvertUYVYtoRGB4()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
-		"    uint8 pRGB2, pRGB3;\n"
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
 		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
 		"    u = mad(amd_unpack0(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s0 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s1 = (uint)rgbx.s2;\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s1 += ((uint)rgbx.s0 << 16); pRGB0.s2 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
 		"    u = mad(amd_unpack0(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s4 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s4 += ((uint)rgbx.s0 << 16); pRGB0.s5 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s6 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s7 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s7 += ((uint)rgbx.s0 << 16); pRGB1.s0 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB1.s1 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB1.s2 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s2 += ((uint)rgbx.s0 << 16); pRGB1.s3 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s0 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s1 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s1 += ((uint)rgbx.s0 << 16); pRGB2.s2 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s4 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s4 += ((uint)rgbx.s0 << 16); pRGB2.s5 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s6 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s7 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s7 += ((uint)rgbx.s0 << 16); pRGB3.s0 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack0(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack2(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB3.s1 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB3.s2 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB3.s2 += ((uint)rgbx.s0 << 16); pRGB3.s3 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n";
-	return output;
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB1.s0 = (uint)rgbx.s2;\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s0 += ((uint)rgbx.s0 << 16); pRGB1.s1 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n";
+		return output;
 }
-std::string ConvertYUYVtoRGB2(){
+std::string ConvertUYVYtoRGB4AndDegamma()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
+		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
+		"    u = mad(amd_unpack0(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s0),r2f.s0,r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s0 = (((uint)degamma(rgbx.s1)) << 16) + (uint)degamma(rgbx.s0); pRGB0.s1 = (uint)degamma(rgbx.s2);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s1 += ((uint)degamma(rgbx.s0) << 16); pRGB0.s2 = (((uint)degamma(rgbx.s2)) << 16) + (uint)degamma(rgbx.s1);\n"
+		"    u = mad(amd_unpack0(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack1(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack2(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack3(L0.s1),r2f.s0,r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)degamma(rgbx.s1)) << 16) + (uint)degamma(rgbx.s0); pRGB1.s0 = (uint)degamma(rgbx.s2);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s0 += ((uint)degamma(rgbx.s0) << 16); pRGB1.s1 = (((uint)degamma(rgbx.s2)) << 16) + (uint)degamma(rgbx.s1);\n";
+		return output;
+}
+std::string ConvertYUYVtoRGB2()
+{
+	std::string output =
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
 		"    u = mad(amd_unpack1(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s0 = amd_pack(rgbx);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s1 = amd_pack(rgbx);\n"
 		"    u = mad(amd_unpack1(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s1),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s7 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s1 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB1.s7 = amd_pack(rgbx);\n";
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); pRGB0.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertYUYVtoRGBX(){
+std::string ConvertYUYVtoRGBX()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx; float y0, y1, u, v;\n"
 		"    u = mad(amd_unpack1(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s0 = amd_pack(rgbx);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s1 = amd_pack(rgbx);\n"
 		"    u = mad(amd_unpack1(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s1),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s7 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s1 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s3 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s5 = amd_pack(rgbx);\n"
-		"    u = mad(amd_unpack1(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx.s3 = y0; pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB1.s7 = amd_pack(rgbx);\n";
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx.s3 = y1; pRGB0.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertYUYVtoRGB4(){
+std::string ConvertYUYVtoRGB4()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB2;\n"
-		"    uint4 pRGB1, pRGB3;\n"
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
 		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
 		"    u = mad(amd_unpack1(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s0),r2f.s0,r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s0 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s1 = (uint)rgbx.s2;\n"
 		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s1 += ((uint)rgbx.s0 << 16); pRGB0.s2 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
 		"    u = mad(amd_unpack1(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s4 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s4 += ((uint)rgbx.s0 << 16); pRGB0.s5 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L0.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s6 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB0.s7 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s7 += ((uint)rgbx.s0 << 16); pRGB1.s0 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L0.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB1.s1 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB1.s2 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s2 += ((uint)rgbx.s0 << 16); pRGB1.s3 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L1.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s0),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s0 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s1 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s1 += ((uint)rgbx.s0 << 16); pRGB2.s2 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L1.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s1),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s4 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s4 += ((uint)rgbx.s0 << 16); pRGB2.s5 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L1.s2),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s2),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s2),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s2),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB2.s6 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB2.s7 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB2.s7 += ((uint)rgbx.s0 << 16); pRGB3.s0 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n"
-		"    u = mad(amd_unpack1(L1.s3),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L1.s3),r2f.s0,r2f.s1); v = mad(amd_unpack3(L1.s3),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L1.s3),r2f.s0,r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB3.s1 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB3.s2 = (uint)rgbx.s2;\n"
-		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB3.s2 += ((uint)rgbx.s0 << 16); pRGB3.s3 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n";
-	return output;
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)rgbx.s1) << 16) + (uint)rgbx.s0; pRGB1.s0 = (uint)rgbx.s2;\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s0 += ((uint)rgbx.s0 << 16); pRGB1.s1 = (((uint)rgbx.s2) << 16) + (uint)rgbx.s1;\n";
+		return output;
 }
-std::string ConvertNV12toRGB2(){
+std::string ConvertYUYVtoRGB4AndDegamma()
+{
+	std::string output =
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
+		"    float4 rgbx; float y0, y1, u, v; rgbx.s3 = 0.0f;\n"
+		"    u = mad(amd_unpack1(L0.s0),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s0),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s0),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s0),r2f.s0,r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s0 = (((uint)degamma(rgbx.s1)) << 16) + (uint)degamma(rgbx.s0); pRGB0.s1 = (uint)degamma(rgbx.s2);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB0.s1 += ((uint)degamma(rgbx.s0) << 16); pRGB0.s2 = (((uint)degamma(rgbx.s2)) << 16) + (uint)degamma(rgbx.s1);\n"
+		"    u = mad(amd_unpack1(L0.s1),r2f.s2,r2f.s3); y0 = mad(amd_unpack0(L0.s1),r2f.s0,r2f.s1); v = mad(amd_unpack3(L0.s1),r2f.s2,r2f.s3); y1 = mad(amd_unpack2(L0.s1),r2f.s0,r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y0); rgbx.s1 = mad(cG.s0, u, y0); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y0); rgbx = clamp (rgbx, 0, 32767); pRGB0.s3 = (((uint)degamma(rgbx.s1)) << 16) + (uint)degamma(rgbx.s0); pRGB1.s0 = (uint)degamma(rgbx.s2);\n"
+		"    rgbx.s0 = mad(cR.s1, v, y1); rgbx.s1 = mad(cG.s0, u, y1); rgbx.s1 = mad(cG.s1, v, rgbx.s1); rgbx.s2 = mad(cB.s0, u, y1); rgbx = clamp (rgbx, 0, 32767); pRGB1.s0 += ((uint)degamma(rgbx.s0) << 16); pRGB1.s1 = (((uint)degamma(rgbx.s2)) << 16) + (uint)degamma(rgbx.s1);\n";
+		return output;
+}
+std::string ConvertNV12toRGB2()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB1;\n"
 		"		float3 yuv; float4 rgbx; rgbx.s3 = 0.0f;//NV12 > half scaled in both directions, UV interleaved\n"
@@ -2054,7 +2186,8 @@ std::string ConvertNV12toRGB2(){
 		"		pRGB1.s7 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertNV12toRGBX(){
+std::string ConvertNV12toRGBX()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB1;\n"
 		"		float3 yuv; float4 rgbx; //NV12 > half scaled in both directions, UV interleaved\n"
@@ -2108,7 +2241,8 @@ std::string ConvertNV12toRGBX(){
 		"		pRGB1.s7 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertNV12toRGB4(){
+std::string ConvertNV12toRGB4()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB2;\n"
 		"		uint4 pRGB1, pRGB3;\n"
@@ -2163,7 +2297,64 @@ std::string ConvertNV12toRGB4(){
 		"		pRGB3.s2 += (((uint)clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(rgbx.s1,rgbx.s2);\n";
 	return output;
 }
-std::string ConvertIYUVtoRGB2(){
+std::string ConvertNV12toRGB4AndDegamma()
+{
+	std::string output =
+		"		uint8 pRGB0, pRGB2;\n"
+		"		uint4 pRGB1, pRGB3;\n"
+		"		float3 yuv; float4 rgbx; rgbx.s3 = 0.0f;//NV12 > half scaled in both directions, UV interleaved\n"
+		"		yuv.s0 = mad(amd_unpack0(pY0.s0),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack0(pUV.s0),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack1(pUV.s0),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack0(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s1 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack1(pY0.s0),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s1 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack1(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s1 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack2(pY0.s0),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack2(pUV.s0),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack3(pUV.s0),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s4 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack2(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s4 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack3(pY0.s0),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s4 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack3(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s4 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack0(pY0.s1),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack0(pUV.s1),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack1(pUV.s1),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s7 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack0(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s7 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack1(pY0.s1),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s7 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack1(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s7 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack2(pY0.s1),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack2(pUV.s1),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack3(pUV.s1),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB1.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s2 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack2(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB3.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB3.s2 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack3(pY0.s1),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB1.s2 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack3(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB3.s2 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
+	return output;
+}
+std::string ConvertIYUVtoRGB2()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB1;\n"
 		"		float3 yuv; float4 rgbx; rgbx.s3 = 0.0f;//IYUV > All planes seperate\n"
@@ -2225,7 +2416,8 @@ std::string ConvertIYUVtoRGB2(){
 		"		pRGB1.s7 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertIYUVtoRGBX(){
+std::string ConvertIYUVtoRGBX()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB1;\n"
 		"		float3 yuv; float4 rgbx; //IYUV > All planes seperate\n"
@@ -2279,7 +2471,8 @@ std::string ConvertIYUVtoRGBX(){
 		"		pRGB1.s7 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertIYUVtoRGB4(){
+std::string ConvertIYUVtoRGB4()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB2;\n"
 		"		uint4 pRGB1, pRGB3;\n"
@@ -2334,7 +2527,64 @@ std::string ConvertIYUVtoRGB4(){
 		"		pRGB3.s2 += (((uint)clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(rgbx.s1,rgbx.s2);\n";
 	return output;
 }
-std::string ConvertV210toRGB2(){
+std::string ConvertIYUVtoRGB4AndDegamma()
+{
+	std::string output =
+		"		uint8 pRGB0, pRGB2;\n"
+		"		uint4 pRGB1, pRGB3;\n"
+		"		float3 yuv; float4 rgbx; rgbx.s3 = 0.0f;//IYUV > All planes seperate\n"
+		"		yuv.s0 = mad(amd_unpack0(pY0.s0),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack0(pU),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack0(pV),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack0(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s1 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack1(pY0.s0),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s1 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack1(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s1 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack2(pY0.s0),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack1(pU),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack1(pV),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s4 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack2(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s4 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack3(pY0.s0),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s4 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack3(pY1.s0),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s4 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack0(pY0.s1),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack2(pU),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack2(pV),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s7 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack0(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s7 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack1(pY0.s1),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB0.s7 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack1(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB2.s7 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack2(pY0.s1),r2f.s0,r2f.s1); yuv.s1 = mad(amd_unpack3(pU),r2f.s2,r2f.s3); yuv.s2 = mad(amd_unpack3(pV),r2f.s2,r2f.s3);//first row, even pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB1.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s2 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack2(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB3.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB3.s2 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		yuv.s0 = mad(amd_unpack3(pY0.s1),r2f.s0,r2f.s1);//first row, odd pixel\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB1.s2 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		yuv.s0 = mad(amd_unpack3(pY1.s1),r2f.s0,r2f.s1);//second row\n"
+		"		rgbx.s0 = mad(cR.s1, yuv.s2, yuv.s0); rgbx.s1 = mad(cG.s0, yuv.s1, yuv.s0); rgbx.s1 = mad(cG.s1, yuv.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, yuv.s1, yuv.s0);\n"
+		"		pRGB3.s2 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
+	return output;
+}
+std::string ConvertV210toRGB2()
+{
 	std::string output =
 		"		uint8 pRGB0;\n"
 		"		uint4 pRGB1;\n"
@@ -2366,7 +2616,8 @@ std::string ConvertV210toRGB2(){
 		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertV210toRGBX(){
+std::string ConvertV210toRGBX()
+{
 	std::string output =
 		"		uint8 pRGB0;\n"
 		"		uint4 pRGB1;\n"
@@ -2398,7 +2649,8 @@ std::string ConvertV210toRGBX(){
 		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB1.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertV210toRGB4(){
+std::string ConvertV210toRGB4()
+{
 	std::string output =
 		"		uint8 pRGB0, pRGB1;\n"
 		"		uint2 pRGB2;\n"
@@ -2430,9 +2682,43 @@ std::string ConvertV210toRGB4(){
 		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s0 += (((uint)clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB2.s1 = amd_pack15(rgbx.s1,rgbx.s2);\n";
 	return output;
 }
-std::string ConvertV216toRGB2(){
+std::string ConvertV210toRGB4AndDegamma()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"		uint8 pRGB0, pRGB1;\n"
+		"		uint2 pRGB2;\n"
+		"		float4 rgbx, uyvy; float3 input; rgbx.s3 = 0.0f; \n"
+		"		//Line[0]\n"
+		"		input = amd_unpack10(L0.s0); uyvy.s02 = mad(input.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s1 = mad(input.s1,(float )r2f.s0,(float )r2f.s1);\n"
+		"		input = amd_unpack10(L0.s1);                                                          uyvy.s3 = mad(input.s0,(float )r2f.s0,(float )r2f.s1);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s1 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		                             uyvy.s0 = mad(input.s1,(float )r2f.s2,(float )r2f.s3); uyvy.s1 = mad(input.s2,(float )r2f.s0,(float )r2f.s1);\n"
+		"		input = amd_unpack10(L0.s2); uyvy.s2 = mad(input.s0,(float )r2f.s2,(float )r2f.s3); uyvy.s3 = mad(input.s1,(float )r2f.s0,(float )r2f.s1);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s4 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s4 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		                             uyvy.s0 = mad(input.s2,(float )r2f.s2,(float )r2f.s3);\n"
+		"		input = amd_unpack10(L0.s3); uyvy.s2 = mad(input.s1,(float )r2f.s2,(float )r2f.s3); uyvy.s13 = mad(input.s02,(float2)r2f.s0,(float2)r2f.s1);"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s6 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s7 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s7 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		input = amd_unpack10(L0.s4); uyvy.s02 = mad(input.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s1 = mad(input.s1,(float )r2f.s0,(float )r2f.s1);\n"
+		"		input = amd_unpack10(L0.s5);                                                          uyvy.s3 = mad(input.s0,(float )r2f.s0,(float )r2f.s1);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s1 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s2 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s2 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		                             uyvy.s0 = mad(input.s1,(float )r2f.s2,(float )r2f.s3); uyvy.s1 = mad(input.s2,(float )r2f.s0,(float )r2f.s1);\n"
+		"		input = amd_unpack10(L0.s6); uyvy.s2 = mad(input.s0,(float )r2f.s2,(float )r2f.s3); uyvy.s3 = mad(input.s1,(float )r2f.s0,(float )r2f.s1);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s4 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s5 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s5 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s6 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"		                             uyvy.s0 = mad(input.s2,(float )r2f.s2,(float )r2f.s3);\n"
+		"		input = amd_unpack10(L0.s7); uyvy.s2 = mad(input.s1,(float )r2f.s2,(float )r2f.s3); uyvy.s13 = mad(input.s02,(float2)r2f.s0,(float2)r2f.s1);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s7 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB2.s0 = (uint)clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"		rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s0 += (((uint)clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB2.s1 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
+	return output;
+}
+std::string ConvertV216toRGB2()
+{
+	std::string output =
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx, uyvy; rgbx.s3 = 0.0f; \n"
 		"    uyvy = amd_unpack16(L0.s0, L0.s1); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
@@ -2441,36 +2727,13 @@ std::string ConvertV216toRGB2(){
 		"    uyvy = amd_unpack16(L0.s2, L0.s3); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s3 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L0.s4, L0.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s5 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L0.s6, L0.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s7 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s0, L1.s1); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s1 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s2, L1.s3); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s3 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s4, L1.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s5 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s6, L1.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s7 = amd_pack(rgbx);\n";
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s3 = amd_pack(rgbx);\n";
 	return output;
 }
-std::string ConvertV216toRGBX(){
+std::string ConvertV216toRGBX()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB1;\n"
+		"    uint4 pRGB0;\n"
 		"    float4 rgbx, uyvy; \n"
 		"    uyvy = amd_unpack16(L0.s0, L0.s1); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
@@ -2479,37 +2742,14 @@ std::string ConvertV216toRGBX(){
 		"    uyvy = amd_unpack16(L0.s2, L0.s3); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
 		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB0.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB0.s3 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L0.s4, L0.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB0.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB0.s5 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L0.s6, L0.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB0.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB0.s7 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s0, L1.s1); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB1.s0 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB1.s1 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s2, L1.s3); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB1.s2 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB1.s3 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s4, L1.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB1.s4 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB1.s5 = amd_pack(rgbx);\n"
-		"    uyvy = amd_unpack16(L1.s6, L1.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); rgbx.s3 = uyvy.s1; pRGB1.s6 = amd_pack(rgbx);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB1.s7 = amd_pack(rgbx);\n";
-	return output;
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); rgbx.s3 = uyvy.s3; pRGB0.s3 = amd_pack(rgbx);\n";
+		return output;
 }
-std::string ConvertV216toRGB4(){
+std::string ConvertV216toRGB4()
+{
 	std::string output =
-		"    uint8 pRGB0, pRGB2;\n"
-		"    uint4 pRGB1, pRGB3;\n"
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
 		"    float4 rgbx; float4 uyvy; \n"
 		"    uyvy = amd_unpack16(L0.s0, L0.s1); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
@@ -2517,79 +2757,50 @@ std::string ConvertV216toRGB4(){
 		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s1 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(rgbx.s1,rgbx.s2);\n"
 		"    uyvy = amd_unpack16(L0.s2, L0.s3); \n"
 		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(rgbx.s0,rgbx.s1); pRGB0.s4 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s4 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB0.s5 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L0.s4, L0.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s6 = amd_pack15(rgbx.s0,rgbx.s1); pRGB0.s7 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s7 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB1.s0 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L0.s6, L0.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB1.s1 = amd_pack15(rgbx.s0,rgbx.s1); pRGB1.s2 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s2 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB1.s3 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L1.s0, L1.s1); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s0 = amd_pack15(rgbx.s0,rgbx.s1); pRGB2.s1 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s1 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB2.s2 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L1.s2, L1.s3); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s3 = amd_pack15(rgbx.s0,rgbx.s1); pRGB2.s4 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s4 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB2.s5 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L1.s4, L1.s5); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB2.s6 = amd_pack15(rgbx.s0,rgbx.s1); pRGB2.s7 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB2.s7 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB3.s0 = amd_pack15(rgbx.s1,rgbx.s2);\n"
-		"    uyvy = amd_unpack16(L1.s6, L1.s7); \n"
-		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB3.s1 = amd_pack15(rgbx.s0,rgbx.s1); pRGB3.s2 = pRGB3.s2 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
-		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB3.s2 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB3.s3 = amd_pack15(rgbx.s1,rgbx.s2);\n";
-	return output;
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(rgbx.s0,rgbx.s1); pRGB1.s0 = (uint) clamp(rgbx.s2,0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s0 += (((uint) clamp(rgbx.s0,0.0f,32767.0f))<<16); pRGB1.s1 = amd_pack15(rgbx.s1,rgbx.s2);\n";
+		return output;
 }
-std::string ConvertRGB2toUYVY(){
+std::string ConvertV216toRGB4AndDegamma()
+{
 	std::string output =
-		"    uint8 pUYVY;"
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
+		"    float4 rgbx; float4 uyvy; \n"
+		"    uyvy = amd_unpack16(L0.s0, L0.s1); \n"
+		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s0 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB0.s1 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB0.s1 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB0.s2 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n"
+		"    uyvy = amd_unpack16(L0.s2, L0.s3); \n"
+		"    uyvy.s02 = mad(uyvy.s02,(float2)r2f.s2,(float2)r2f.s3); uyvy.s13 = mad(uyvy.s13,(float2)r2f.s0,(float2)r2f.s1);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s1); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s1); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s1); pRGB0.s3 = amd_pack15(degamma(rgbx.s0),degamma(rgbx.s1)); pRGB1.s0 = (uint) clamp(degamma(rgbx.s2),0.0f,32767.0f);\n"
+		"    rgbx.s0 = mad(cR.s1, uyvy.s2, uyvy.s3); rgbx.s1 = mad(cG.s0, uyvy.s0, uyvy.s3); rgbx.s1 = mad(cG.s1, uyvy.s2, rgbx.s1); rgbx.s2 = mad(cB.s0, uyvy.s0, uyvy.s3); pRGB1.s0 += (((uint) clamp(degamma(rgbx.s0),0.0f,32767.0f))<<16); pRGB1.s1 = amd_pack15(degamma(rgbx.s1),degamma(rgbx.s2));\n";
+		return output;
+}
+std::string ConvertRGB2toUYVY()
+{
+	std::string output =
+		"    uint2 pUYVY;"
 		"    float4 f; float3 rgb;\n"
 		"    rgb = (float3)(amd_unpack0(L0.s0), amd_unpack1(L0.s0), amd_unpack2(L0.s0));\n"
 		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L0.s0), amd_unpack0(L0.s1), amd_unpack1(L0.s1))) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
 		"    rgb = (float3)(amd_unpack2(L0.s1), amd_unpack3(L0.s1), amd_unpack0(L0.s2));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY.s1 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L0.s3), amd_unpack1(L0.s3), amd_unpack2(L0.s3));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L0.s3), amd_unpack0(L0.s4), amd_unpack1(L0.s4))) + cY.s3; pUYVY.s2 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L0.s4), amd_unpack3(L0.s4), amd_unpack0(L0.s5));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s5), amd_unpack2(L0.s5), amd_unpack3(L0.s5))) + cY.s3; pUYVY.s3 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s0), amd_unpack1(L1.s0), amd_unpack2(L1.s0));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L1.s0), amd_unpack0(L1.s1), amd_unpack1(L1.s1))) + cY.s3; pUYVY.s4 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s1), amd_unpack3(L1.s1), amd_unpack0(L1.s2));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L1.s2), amd_unpack2(L1.s2), amd_unpack3(L1.s2))) + cY.s3; pUYVY.s5 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s3), amd_unpack1(L1.s3), amd_unpack2(L1.s3));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L1.s3), amd_unpack0(L1.s4), amd_unpack1(L1.s4))) + cY.s3; pUYVY.s6 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s4), amd_unpack3(L1.s4), amd_unpack0(L1.s5));\n"
-		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L1.s5), amd_unpack2(L1.s5), amd_unpack3(L1.s5))) + cY.s3; pUYVY.s7 = amd_pack(f);\n";
+		"    f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
 	return output;
 }
-std::string ConvertRGB2toYUYV(){
+std::string ConvertRGB2toYUYV()
+{
 	std::string output =
-		"    uint8 pUYVY;"
+		"    uint2 pUYVY;"
 		"    float4 f; float3 rgb;\n"
 		"    rgb = (float3)(amd_unpack0(L0.s0), amd_unpack1(L0.s0), amd_unpack2(L0.s0));\n"
 		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack3(L0.s0), amd_unpack0(L0.s1), amd_unpack1(L0.s1))) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
 		"    rgb = (float3)(amd_unpack2(L0.s1), amd_unpack3(L0.s1), amd_unpack0(L0.s2));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY.s1 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L0.s3), amd_unpack1(L0.s3), amd_unpack2(L0.s3));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack3(L0.s3), amd_unpack0(L0.s4), amd_unpack1(L0.s4))) + cY.s3; pUYVY.s2 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L0.s4), amd_unpack3(L0.s4), amd_unpack0(L0.s5));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L0.s5), amd_unpack2(L0.s5), amd_unpack3(L0.s5))) + cY.s3; pUYVY.s3 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s0), amd_unpack1(L1.s0), amd_unpack2(L1.s0));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack3(L1.s0), amd_unpack0(L1.s1), amd_unpack1(L1.s1))) + cY.s3; pUYVY.s4 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s1), amd_unpack3(L1.s1), amd_unpack0(L1.s2));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L1.s2), amd_unpack2(L1.s2), amd_unpack3(L1.s2))) + cY.s3; pUYVY.s5 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s3), amd_unpack1(L1.s3), amd_unpack2(L1.s3));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack3(L1.s3), amd_unpack0(L1.s4), amd_unpack1(L1.s4))) + cY.s3; pUYVY.s6 = amd_pack(f);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s4), amd_unpack3(L1.s4), amd_unpack0(L1.s5));\n"
-		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L1.s5), amd_unpack2(L1.s5), amd_unpack3(L1.s5))) + cY.s3; pUYVY.s7 = amd_pack(f);\n";
+		"    f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
 	return output;
 }
-std::string ConvertRGB2toNV12(){
+std::string ConvertRGB2toNV12()
+{
 	std::string output =
 		"    uint2 pY0, pY1, pUV;\n"
 		"    float4 y0, y1, uv; float3 rgb;\n"
@@ -2625,7 +2836,8 @@ std::string ConvertRGB2toNV12(){
 		"    pY0.s1 = amd_pack(y0);  pY1.s1 = amd_pack(y1); pUV.s1 = amd_pack(uv);\n";
 	return output;
 }
-std::string ConvertRGB2toIYUV(){
+std::string ConvertRGB2toIYUV()
+{
 	std::string output =
 		"    uint2 pY0, pY1; uint pU, pV;\n"
 		"    float4 y0, y1, u, v; float3 rgb;\n"
@@ -2661,29 +2873,19 @@ std::string ConvertRGB2toIYUV(){
 		"    pY0.s1 = amd_pack(y0);  pY1.s1 = amd_pack(y1); pV = amd_pack(v); pU = amd_pack(u);\n";
 	return output;
 }
-std::string ConvertRGB2toV216(){
+std::string ConvertRGB2toV216()
+{
 	std::string output = // RGB2 > V216, for description of V216 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
-		"    uint8 pUYVY0, pUYVY1;"
+		"    uint4 pUYVY;"
 		"    float4 f; float3 rgb;\n"
 		"    rgb = (float3)(amd_unpack0(L0.s0), amd_unpack1(L0.s0), amd_unpack2(L0.s0));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L0.s0), amd_unpack0(L0.s1), amd_unpack1(L0.s1))) + cY.s3; pUYVY0.s0 = amd_pack16(f.s0,f.s1); pUYVY0.s1 = amd_pack16(f.s2,f.s3);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L0.s0), amd_unpack0(L0.s1), amd_unpack1(L0.s1))) + cY.s3; pUYVY.s0 = amd_pack16(f.s0,f.s1); pUYVY.s1 = amd_pack16(f.s2,f.s3);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
 		"    rgb = (float3)(amd_unpack2(L0.s1), amd_unpack3(L0.s1), amd_unpack0(L0.s2));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY0.s2 = amd_pack16(f.s0,f.s1); pUYVY0.s3 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack0(L0.s3), amd_unpack1(L0.s3), amd_unpack2(L0.s3));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L0.s3), amd_unpack0(L0.s4), amd_unpack1(L0.s4))) + cY.s3; pUYVY0.s4 = amd_pack16(f.s0,f.s1); pUYVY0.s5 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack2(L0.s4), amd_unpack3(L0.s4), amd_unpack0(L0.s5));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s5), amd_unpack2(L0.s5), amd_unpack3(L0.s5))) + cY.s3; pUYVY0.s6 = amd_pack16(f.s0,f.s1); pUYVY0.s7 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s0), amd_unpack1(L1.s0), amd_unpack2(L1.s0));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L1.s0), amd_unpack0(L1.s1), amd_unpack1(L1.s1))) + cY.s3; pUYVY1.s0 = amd_pack16(f.s0,f.s1); pUYVY1.s1 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s1), amd_unpack3(L1.s1), amd_unpack0(L1.s2));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L1.s2), amd_unpack2(L1.s2), amd_unpack3(L1.s2))) + cY.s3; pUYVY1.s2 = amd_pack16(f.s0,f.s1); pUYVY1.s3 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack0(L1.s3), amd_unpack1(L1.s3), amd_unpack2(L1.s3));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack3(L1.s3), amd_unpack0(L1.s4), amd_unpack1(L1.s4))) + cY.s3; pUYVY1.s4 = amd_pack16(f.s0,f.s1); pUYVY1.s5 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = (float3)(amd_unpack2(L1.s4), amd_unpack3(L1.s4), amd_unpack0(L1.s5));\n"
-		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L1.s5), amd_unpack2(L1.s5), amd_unpack3(L1.s5))) + cY.s3; pUYVY1.s6 = amd_pack16(f.s0,f.s1); pUYVY1.s7 = amd_pack16(f.s2,f.s3);\n";
+		"    f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, (float3)(amd_unpack1(L0.s2), amd_unpack2(L0.s2), amd_unpack3(L0.s2))) + cY.s3; pUYVY.s2 = amd_pack16(f.s0,f.s1); pUYVY.s3 = amd_pack16(f.s2,f.s3);\n";
 	return output;
 }
-std::string ReadAndConvertRGB2toV210(){ // RGB2 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
+std::string ReadAndConvertRGB2toV210()
+{ // RGB2 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
 	std::string output =
 		"		uint8 L0;\n"
 		"		uint  L1;\n"
@@ -2713,35 +2915,44 @@ std::string ReadAndConvertRGB2toV210(){ // RGB2 > V210, for description of V210 
 		"		                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L1), amd_unpack2(L1), amd_unpack3(L1)))          + cY.s3; pUYVY0.s7 = amd_pack10(f.s0,f.s1,f.s2);\n";
 	return output;
 }
-std::string ConvertRGB4toUYVY(){
+std::string ConvertRGB4toUYVY()
+{
 	std::string output =
-		"    uint8 pUYVY;"
+		"    uint2 pUYVY;"
 		"    float4 f; float3 rgb;\n"
 		"    rgb = amd_unpackA(L0.s0,L0.s1); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
-		"    rgb = amd_unpackA(L0.s3,L0.s4); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s4,L0.s5)) + cY.s3; pUYVY.s1 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L0.s6,L0.s7); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s7,L1.s0)) + cY.s3; pUYVY.s2 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L1.s1,L1.s2); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L1.s2,L1.s3)) + cY.s3; pUYVY.s3 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s0,L2.s1); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s1,L2.s2)) + cY.s3; pUYVY.s4 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s3,L2.s4); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s4,L2.s5)) + cY.s3; pUYVY.s5 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s6,L2.s7); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s7,L3.s0)) + cY.s3; pUYVY.s6 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L3.s1,L3.s2); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L3.s2,L3.s3)) + cY.s3; pUYVY.s7 = amd_pack(f);\n";
+		"    rgb = amd_unpackA(L0.s3,L1.s0); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, amd_unpackB(L1.s0,L1.s1)) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
+		return output;
+}
+std::string GammaAndConvertRGB4toUYVY()
+{
+	std::string output =
+		"    uint2 pUYVY;"
+		"    float4 f; float3 rgb;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L0.s3,L1.s0)); f.s0 = dot(cU, rgb) + 128.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 128.0f; f.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s0,L1.s1))) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
 	return output;
 }
-std::string ConvertRGB4toYUYV(){
+std::string ConvertRGB4toYUYV()
+{
 	std::string output =
-		"    uint8 pUYVY;"
+		"    uint2 pUYVY;"
 		"    float4 f; float3 rgb;\n"
 		"    rgb = amd_unpackA(L0.s0,L0.s1); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
-		"    rgb = amd_unpackA(L0.s3,L0.s4); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L0.s4,L0.s5)) + cY.s3; pUYVY.s1 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L0.s6,L0.s7); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L0.s7,L1.s0)) + cY.s3; pUYVY.s2 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L1.s1,L1.s2); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L1.s2,L1.s3)) + cY.s3; pUYVY.s3 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s0,L2.s1); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L2.s1,L2.s2)) + cY.s3; pUYVY.s4 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s3,L2.s4); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L2.s4,L2.s5)) + cY.s3; pUYVY.s5 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L2.s6,L2.s7); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L2.s7,L3.s0)) + cY.s3; pUYVY.s6 = amd_pack(f);\n"
-		"    rgb = amd_unpackA(L3.s1,L3.s2); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L3.s2,L3.s3)) + cY.s3; pUYVY.s7 = amd_pack(f);\n";
+		"    rgb = amd_unpackA(L0.s3,L1.s0); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, amd_unpackB(L1.s0,L1.s1)) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
 	return output;
 }
-std::string ConvertRGB4toNV12(){
+std::string GammaAndConvertRGB4toYUYV()
+{
+	std::string output =
+		"    uint2 pUYVY;"
+		"    float4 f; float3 rgb;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3; pUYVY.s0 = amd_pack(f);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L0.s3,L1.s0)); f.s1 = dot(cU, rgb) + 128.0f; f.s0 = dot(cY.s012, rgb) + cY.s3; f.s3 = dot(cV, rgb) + 128.0f; f.s2 = dot(cY.s012, gamma3(amd_unpackB(L1.s0,L1.s1))) + cY.s3; pUYVY.s1 = amd_pack(f);\n";
+	return output;
+}
+std::string ConvertRGB4toNV12()
+{
 	std::string output =
 		"    uint2 pY0, pY1, pUV;\n"
 		"    float4 y0, y1, uv; float3 rgb;\n"
@@ -2761,7 +2972,29 @@ std::string ConvertRGB4toNV12(){
 		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pUV.s1 = amd_pack(uv);\n";
 	return output;
 }
-std::string ConvertRGB4toIYUV(){
+std::string GammaAndConvertRGB4toNV12()
+{
+	std::string output =
+		"    uint2 pY0, pY1, pUV;\n"
+		"    float4 y0, y1, uv; float3 rgb;\n"
+		"    //pixel[0]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L2.s0,L2.s1)); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s1,L2.s2))) + cY.s3;\n"
+		"    //pixel[2]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s3,L0.s4)); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s4,L0.s5))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s3,L2.s4)); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L2.s4,L2.s5))) + cY.s3;\n"
+		"    pY0.s0 = amd_pack(y0); pY1.s0 = amd_pack(y1); pUV.s0 = amd_pack(uv);\n"
+		"    //pixel[4]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s6,L0.s7)); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s7,L1.s0))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s6,L2.s7)); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s7,L3.s0))) + cY.s3;\n"
+		"    //pixel[6]\n"
+		"    rgb = gamma3(amd_unpackA(L1.s1,L1.s2)); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s2,L1.s3))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L3.s1,L3.s2)); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L3.s2,L3.s3))) + cY.s3;\n"
+		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pUV.s1 = amd_pack(uv);\n";
+	return output;
+}
+std::string ConvertRGB4toIYUV()
+{
 	std::string output =
 		"    uint2 pY0, pY1; uint pU, pV;\n"
 		"    float4 y0, y1, u, v; float3 rgb;\n"
@@ -2781,21 +3014,47 @@ std::string ConvertRGB4toIYUV(){
 		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pU = amd_pack(u); pV = amd_pack(v);\n";
 	return output;
 }
-std::string ConvertRGB4toV216(){
-	std::string output = //RGB4 > V216, for description of V216 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
-		"    uint8 pUYVY0, pUYVY1;"
-		"    float4 f; float3 rgb;\n"
-		"    rgb = amd_unpackA(L0.s0,L0.s1); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3; pUYVY0.s0 = amd_pack16(f.s0,f.s1); pUYVY0.s1 = amd_pack16(f.s2,f.s3);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
-		"    rgb = amd_unpackA(L0.s3,L0.s4); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s4,L0.s5)) + cY.s3; pUYVY0.s2 = amd_pack16(f.s0,f.s1); pUYVY0.s3 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L0.s6,L0.s7); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s7,L1.s0)) + cY.s3; pUYVY0.s4 = amd_pack16(f.s0,f.s1); pUYVY0.s5 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L1.s1,L1.s2); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L1.s2,L1.s3)) + cY.s3; pUYVY0.s6 = amd_pack16(f.s0,f.s1); pUYVY0.s7 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L2.s0,L2.s1); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s1,L2.s2)) + cY.s3; pUYVY1.s0 = amd_pack16(f.s0,f.s1); pUYVY1.s1 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L2.s3,L2.s4); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s4,L2.s5)) + cY.s3; pUYVY1.s2 = amd_pack16(f.s0,f.s1); pUYVY1.s3 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L2.s6,L2.s7); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L2.s7,L3.s0)) + cY.s3; pUYVY1.s4 = amd_pack16(f.s0,f.s1); pUYVY1.s5 = amd_pack16(f.s2,f.s3);\n"
-		"    rgb = amd_unpackA(L3.s1,L3.s2); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L3.s2,L3.s3)) + cY.s3; pUYVY1.s6 = amd_pack16(f.s0,f.s1); pUYVY1.s7 = amd_pack16(f.s2,f.s3);\n";
+std::string GammaAndConvertRGB4toIYUV()
+{
+	std::string output =
+		"    uint2 pY0, pY1; uint pU, pV;\n"
+		"    float4 y0, y1, u, v; float3 rgb;\n"
+		"    //pixel[0]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); u.s0 = dot(cU, rgb);                 y0.s0 = dot(cY.s012, rgb) + cY.s3; v.s0 = dot(cV, rgb);                 y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L2.s0,L2.s1)); u.s0 = (dot(cU, rgb)+u.s0)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; v.s0 = (dot(cV, rgb)+v.s0)*0.5 + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s1,L2.s2))) + cY.s3;\n"
+		"    //pixel[2]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s3,L0.s4)); u.s1 = dot(cU, rgb);                 y0.s2 = dot(cY.s012, rgb) + cY.s3; v.s2 = dot(cV, rgb);                 y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s4,L0.s5))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s3,L2.s4)); u.s1 = (dot(cU, rgb)+u.s1)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; v.s1 = (dot(cV, rgb)+v.s1)*0.5 + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L2.s4,L2.s5))) + cY.s3;\n"
+		"    pY0.s0 = amd_pack(y0); pY1.s0 = amd_pack(y1);\n"
+		"    //pixel[4]\n"
+		"    rgb = gamma3(amd_unpackA(L0.s6,L0.s7)); u.s2 = dot(cU, rgb);                 y0.s0 = dot(cY.s012, rgb) + cY.s3; v.s2 = dot(cV, rgb);                 y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s7,L1.s0))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s6,L2.s7)); u.s2 = (dot(cU, rgb)+u.s2)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; v.s2 = (dot(cV, rgb)+v.s2)*0.5 + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s7,L3.s0))) + cY.s3;\n"
+		"    //pixel[6]\n"
+		"    rgb = gamma3(amd_unpackA(L1.s1,L1.s2)); u.s3 = dot(cU, rgb);                 y0.s2 = dot(cY.s012, rgb) + cY.s3; v.s3 = dot(cV, rgb);                 y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s2,L1.s3))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L3.s1,L3.s2)); u.s3 = (dot(cU, rgb)+u.s3)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; v.s3 = (dot(cV, rgb)+v.s3)*0.5 + 128.0f;  y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L3.s2,L3.s3))) + cY.s3;\n"
+		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pU = amd_pack(u); pV = amd_pack(v);\n";
 	return output;
 }
-std::string ReadAndConvertRGB4toV210(){
+std::string ConvertRGB4toV216()
+{
+	std::string output = //RGB4 > V216, for description of V216 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
+		"    uint4 pUYVY;"
+		"    float4 f; float3 rgb;\n"
+		"    rgb = amd_unpackA(L0.s0,L0.s1); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3; pUYVY.s0 = amd_pack16(f.s0,f.s1); pUYVY.s1 = amd_pack16(f.s2,f.s3);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = amd_unpackA(L0.s3,L1.s0); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, amd_unpackB(L1.s0,L1.s1)) + cY.s3; pUYVY.s2 = amd_pack16(f.s0,f.s1); pUYVY.s3 = amd_pack16(f.s2,f.s3);\n";
+	return output;
+}
+std::string GammaAndConvertRGB4toV216()
+{
+	std::string output = //RGB4 > V216, for description of V216 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
+		"    uint4 pUYVY;"
+		"    float4 f; float3 rgb;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3; pUYVY.s0 = amd_pack16(f.s0,f.s1); pUYVY.s1 = amd_pack16(f.s2,f.s3);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L0.s3,L1.s0)); f.s0 = dot(cU, rgb) + 32768.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 32768.0f; f.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s0,L1.s1))) + cY.s3; pUYVY.s2 = amd_pack16(f.s0,f.s1); pUYVY.s3 = amd_pack16(f.s2,f.s3);\n";
+	return output;
+}
+std::string ReadAndConvertRGB4toV210()
+{
 	std::string output =  //RGB4 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
 		"		uint8 L0, L1;\n"
 		"		uint2 L2;\n"
@@ -2820,8 +3079,36 @@ std::string ReadAndConvertRGB4toV210(){
 		"		                                                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, amd_unpackB(L2.s0,L2.s1)) + cY.s3; pUYVY0.s7 = amd_pack10(f.s0,f.s1,f.s2);\n";
 	return output;
 }
+std::string ReadAndGammaAndConvertRGB4toV210()
+{
+	std::string output =  //RGB4 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
+		"		uint8 L0, L1;\n"
+		"		uint2 L2;\n"
+		"		pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 72);\n"
+		"		L0 = *(__global uint8 *) pRGB_buf;\n"
+		"		L1 = *(__global uint8 *)&pRGB_buf[32];\n"
+		"		L2 = *(__global uint2 *)&pRGB_buf[64];\n"
+		"		uint8 pUYVY0;"
+		"		float3 f; float3 rgb;\n"
+		"		//Line[0]\n"
+		"		rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); f.s0 = dot(cU, rgb) + 512.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 512.0f;                                                        pUYVY0.s0 = amd_pack10(f.s0,f.s1,f.s2);\n" // BT601 U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"		                                                                                                                              f.s0 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3;                                       ;\n"
+		"		rgb = gamma3(amd_unpackA(L0.s3,L0.s4)); f.s1 = dot(cU, rgb) + 512.0f; f.s2 = dot(cY.s012, rgb) + cY.s3;                                                                                      pUYVY0.s1 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		                                                                                                f.s0 = dot(cV, rgb) + 512.0f; f.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s4,L0.s5))) + cY.s3;                                       ;\n"
+		"		rgb = gamma3(amd_unpackA(L0.s6,L0.s7)); f.s2 = dot(cU, rgb) + 512.0f;                                                                                                                        pUYVY0.s2 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		                                                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, gamma3(amd_unpackB(L0.s7,L1.s0))) + cY.s3; pUYVY0.s3 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		rgb = gamma3(amd_unpackA(L1.s1,L1.s2)); f.s0 = dot(cU, rgb) + 512.0f; f.s1 = dot(cY.s012, rgb) + cY.s3; f.s2 = dot(cV, rgb) + 512.0f;                                                        pUYVY0.s4 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		                                                                                                                              f.s0 = dot(cY.s012, gamma3(amd_unpackB(L1.s2,L1.s3))) + cY.s3;                                       ;\n"
+		"		rgb = gamma3(amd_unpackA(L1.s4,L1.s5)); f.s1 = dot(cU, rgb) + 512.0f; f.s2 = dot(cY.s012, rgb) + cY.s3;                                                                                      pUYVY0.s5 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		                                                                                                f.s0 = dot(cV, rgb) + 512.0f; f.s1 = dot(cY.s012, gamma3(amd_unpackB(L1.s5,L1.s6))) + cY.s3;                                       ;\n"
+		"		rgb = gamma3(amd_unpackA(L1.s7,L2.s0)); f.s2 = dot(cU, rgb) + 512.0f;                                                                                                                        pUYVY0.s6 = amd_pack10(f.s0,f.s1,f.s2);\n"
+		"		                                                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, gamma3(amd_unpackB(L2.s0,L2.s1))) + cY.s3; pUYVY0.s7 = amd_pack10(f.s0,f.s1,f.s2);\n";
+	return output;
+}
+
 // Write output to buffer ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string Write2x8PixelsToRGB2buffer(){
+std::string Write2x8PixelsToRGB2buffer()
+{
 	std::string output =
 		"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
 		"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
@@ -2842,14 +3129,34 @@ std::string Write2x8PixelsToRGB2buffer(){
 		"    *(__global uint3 *)&pRGB_buf[pRGB_stride+12] = pRGB1.s456;\n";
 	return output;
 }
-std::string Write2x8PixelsToRGBXbuffer(){
+std::string Write1x4PixelsToRGB2buffer()
+{
+	std::string output =
+		"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
+		"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
+		"    pRGB0.s2 = ((pRGB0.s2 & 0x00ff0000) >> 16) + (pRGB0.s3 <<  8);\n"
+		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 12);\n"
+		"    *(__global uint2 *) pRGB_buf = pRGB0.s01;\n"
+		"    *(__global uint *)&pRGB_buf[8] = pRGB0.s2;\n";
+	return output;
+}
+std::string Write2x8PixelsToRGBXbuffer()
+{
 	std::string output =
 		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 5);\n"
 		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
 		"    *(__global uint8 *)&pRGB_buf[pRGB_stride] = pRGB1;\n";
 	return output;
 }
-std::string Write2x8PixelsToRGB4buffer(){
+std::string Write1x4PixelsToRGBXbuffer()
+{
+	std::string output =
+		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx << 4);\n"
+		"    *(__global uint4 *) pRGB_buf = pRGB0;\n";
+	return output;
+}
+std::string Write2x8PixelsToRGB4buffer()
+{
 	std::string output =
 		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 48);\n"
 		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
@@ -2858,7 +3165,16 @@ std::string Write2x8PixelsToRGB4buffer(){
 		"    *(__global uint4 *)&pRGB_buf[pRGB_stride+32] = pRGB3.s0123;\n";
 	return output;
 }
-std::string Write1x6PixelsToRGB2buffer(){
+std::string Write1x4PixelsToRGB4buffer()
+{
+	std::string output =
+		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 24);\n"
+		"    *(__global uint4 *) pRGB_buf = pRGB0;\n"
+		"    *(__global uint2 *)&pRGB_buf[16] = pRGB1;\n";
+	return output;
+}
+std::string Write1x6PixelsToRGB2buffer()
+{
 	std::string output =
 		"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
 		"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
@@ -2874,14 +3190,16 @@ std::string Write1x6PixelsToRGB2buffer(){
 		"    *(__global uint  *)&pRGB_buf[32] = pRGB1.s0;\n";
 	return output;
 }
-std::string Write1x6PixelsToRGBXbuffer(){
+std::string Write1x6PixelsToRGBXbuffer()
+{
 	std::string output =
 		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 48);\n"
 		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
 		"    *(__global uint4 *)&pRGB_buf[32] = pRGB1;\n";
 	return output;
 }
-std::string Write1x6PixelsToRGB4buffer(){
+std::string Write1x6PixelsToRGB4buffer()
+{
 	std::string output =
 		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 72);\n"
 		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
@@ -2889,14 +3207,23 @@ std::string Write1x6PixelsToRGB4buffer(){
 		"    *(__global uint2 *)&pRGB_buf[64] = pRGB2;\n";
 	return output;
 }
-std::string Write2x8PixelsTo422buffer8bit(){
+std::string Write2x8PixelsTo422buffer8bit()
+{
 	std::string output =
 		"    p422_buf += p422_offset + (gy * p422_stride * 2) + (gx << 4);\n"
 		"    *(__global uint4 *) p422_buf = pUYVY.s0123;\n"
 		"    *(__global uint4 *)&p422_buf[p422_stride] = pUYVY.s4567;\n";
 	return output;
 }
-std::string Write2x8PixelsToYbufferAndUVbuffer(){
+std::string Write1x4PixelsTo422buffer8bit()
+{
+	std::string output =
+		"    p422_buf += p422_offset + (gy * p422_stride) + (gx << 3);\n"
+		"    *(__global uint2 *) p422_buf = pUYVY;\n";
+	return output;
+}
+std::string Write2x8PixelsToYbufferAndUVbuffer()
+{
 	std::string output =
 		"    pY_buf += pY_offset + (gy * pY_stride*2) + (gx << 3);\n"
 		"    pUV_buf += pUV_offset + (gy * pUV_stride) + (gx << 3);\n"
@@ -2905,7 +3232,8 @@ std::string Write2x8PixelsToYbufferAndUVbuffer(){
 		"    *(__global uint2 *) pUV_buf = pUV;\n";
 	return output;
 }
-std::string Write2x8PixelsToYbufferAndUbufferAndVbuffer(){
+std::string Write2x8PixelsToYbufferAndUbufferAndVbuffer()
+{
 	std::string output =
 		"    pY_buf += pY_offset + (gy * pY_stride * 2) + (gx << 3);\n"
 		"    pU_buf += pU_offset + (gy * pU_stride) + (gx << 2);\n"
@@ -2916,21 +3244,31 @@ std::string Write2x8PixelsToYbufferAndUbufferAndVbuffer(){
 		"    *(__global uint *) pV_buf = pV;\n";
 	return output;
 }
-std::string Write1x6PixelsTo422buffer(){
+std::string Write1x6PixelsTo422buffer()
+{
 	std::string output =
 		"    p422_buf += p422_offset + (gy * p422_stride) + (gx << 5);\n"
 		"    *(__global uint8 *) p422_buf = pUYVY0;\n";
 	return output;
 }
-std::string Write2x8PixelsTo422buffer16bit(){
+std::string Write2x8PixelsTo422buffer16bit()
+{
 	std::string output =
 		"    p422_buf += p422_offset + (gy * p422_stride * 2) + (gx << 5);\n"
 		"    *(__global uint8 *) p422_buf = pUYVY0;\n"
 		"    *(__global uint8 *)&p422_buf[p422_stride] = pUYVY1;\n";
 	return output;
 }
+std::string Write1x4PixelsTo422buffer16bit()
+{
+	std::string output =
+		"    p422_buf += p422_offset + (gy * p422_stride) + (gx << 4);\n"
+		"    *(__global uint4 *) p422_buf = pUYVY;\n";
+	return output;
+}
 //Define help functions for 10 and 16 bit -------------------------------------------------------------------------------------------------------------------------------------------------------
-std::string Create_amd_unpack16(){
+std::string Create_amd_unpack16()
+{
 	std::string output =
 		"float4 amd_unpack16(uint src0, uint src1)\n"
 		"{\n"
@@ -2939,7 +3277,8 @@ std::string Create_amd_unpack16(){
 		"\n";
 	return output;
 }
-std::string Create_amd_unpackAB(){
+std::string Create_amd_unpackAB()
+{
 	std::string output =
 		"float3 amd_unpackA(uint src0, uint src1)\n"
 		"{\n"
@@ -2952,7 +3291,8 @@ std::string Create_amd_unpackAB(){
 		"\n";
 	return output;
 }
-std::string Create_amd_unpack10(){
+std::string Create_amd_unpack10()
+{
 	std::string output =
 		"float3 amd_unpack10(uint src0)\n"
 		"{\n"
@@ -2960,7 +3300,8 @@ std::string Create_amd_unpack10(){
 		"}\n";
 	return output;
 }
-std::string Create_amd_pack15(){
+std::string Create_amd_pack15()
+{
 	std::string output =
 		"uint amd_pack15(float src0, float src1)\n"
 		"{\n"
@@ -2969,7 +3310,8 @@ std::string Create_amd_pack15(){
 		"\n";
 	return output;
 }
-std::string Create_amd_pack16(){
+std::string Create_amd_pack16()
+{
 	std::string output =
 		"uint amd_pack16(float src0, float src1)\n"
 		"{\n"
@@ -2978,11 +3320,42 @@ std::string Create_amd_pack16(){
 		"\n";
 	return output;
 }
-std::string Create_amd_pack10(){
+std::string Create_amd_pack10()
+{
 	std::string output =
 		"uint amd_pack10(float src0, float src1, float src2)\n"
 		"{\n"
 		"  return ( (uint) clamp(src0,0.0f,1023.0f) + (((uint) clamp(src1,0.0f,1023.0f))<<10) + (((uint) clamp(src2,0.0f,1023.0f))<<20));\n"
+		"}\n"
+		"\n";
+	return output;
+}
+std::string Degamma()
+{
+	std::string output =
+		"float degamma(float input)\n"
+		"{\n"
+		"  return (input>1325.42515)? powr(mad(input,0.0034437731651f,6.20631634155943312f)*0.9478672985782f,2.2f) : input*0.07739938080495356f;\n"//( ( Csrgb * (32767^(1/2.2)/32767) + 0.055*32767^(1/2.2) ) * (1/1.055) ) ^ 2.2, Csrgb*(1/12.92)
+		"}\n"
+		"\n";
+	return output;
+}
+std::string Gamma()
+{
+	std::string output =
+		"float gamma(float input)\n"
+		"{\n"
+		"  return (input>102.5869236)? mad(powr(input,0.4545454545454545f),274.4083174742070237489f,-1802.185f) : input*12.92f;\n"//( ( Clinear^(1/2.2) * (1-0.055)*(32767/32767^(1/2.2)) - 0.055 * 32767 , Csrgb*12.92
+		"}\n"
+		"\n";
+	return output;
+}
+std::string Gamma3()
+{
+	std::string output =
+		"float3 gamma3(float3 input)\n"
+		"{\n"
+		"  return (float3)(gamma(input.s0),gamma(input.s1),gamma(input.s2));\n"
 		"}\n"
 		"\n";
 	return output;

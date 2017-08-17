@@ -1546,6 +1546,19 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_input_validator(vx_nod
 		}
 		status = VX_SUCCESS;
 	}
+	else if (index == 5)
+	{ // object of SCALAR type (UINT8) for flags
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: color convert flags scalar type should be a UINT8\n");
+			}
+		}
+	}
 	return status;
 }
 
@@ -1620,6 +1633,14 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 		ERROR_CHECK_STATUS(vxQueryImage(mask_image, VX_IMAGE_ATTRIBUTE_FORMAT, &mask_format, sizeof(mask_format)));
 	}
 
+	// Check for linear colorspace method
+	vx_uint8 flags;
+	vx_scalar s_flags = (vx_scalar)parameters[5];
+	if (s_flags) {
+		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
+	}
+	bool linearColorSpace = (flags & 1) ? false : true;
+
 	// set kernel configuration
 	vx_uint32 height_one = (vx_uint32)(input_height / num_cameras);
 	strcpy(opencl_kernel_function_name, "exposure_comp_calc_errorRGBfn_mask");
@@ -1630,20 +1651,23 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	opencl_global_work[1] = opencl_local_work[1];
 	// kernel header and reading
 	char item[8192];
-	opencl_kernel_code = 
-		// lookup table generated with gamma = 2.2
-		"__constant uchar g_Gamma2LinearLookUp[256] = { \n"
-		"	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, \n"
-		"	2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12,\n"
-		"	12, 13, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29,\n"
-		"	30, 31, 31, 32, 33, 33, 34, 35, 36, 36, 37, 38, 39, 40, 40, 41, 42, 43, 44, 45, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 55,\n"
-		"	56, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 90, 91,\n"
-		"	92, 93, 95, 96, 97, 99, 100, 101, 103, 104, 105, 107, 108, 109, 111, 112, 114, 115, 117, 118, 119, 121, 122, 124, 125, 127, 128, 130, 131, 133, 135, 136,\n"
-		"	138, 139, 141, 142, 144, 146, 147, 149, 151, 152, 154, 156, 157, 159, 161, 162, 164, 166, 168, 169, 171, 173, 175, 176, 178, 180, 182, 184, 186, 187, 189, 191,\n"
-		"	193, 195, 197, 199, 201, 203, 205, 207, 209, 211, 213, 215, 217, 219, 221, 223, 225, 227, 229, 231, 233, 235, 237, 239, 241, 244, 246, 248, 250, 252, 255};\n";
-	sprintf(item,
+	opencl_kernel_code =
 		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n";
+	if (!linearColorSpace){
+		opencl_kernel_code +=
+			// lookup table generated with gamma = 2.2
+			"__constant uchar g_Gamma2LinearLookUp[256] = { \n"
+			"	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, \n"
+			"	2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 12,\n"
+			"	12, 13, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 21, 21, 22, 22, 23, 23, 24, 25, 25, 26, 27, 27, 28, 29, 29,\n"
+			"	30, 31, 31, 32, 33, 33, 34, 35, 36, 36, 37, 38, 39, 40, 40, 41, 42, 43, 44, 45, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 55,\n"
+			"	56, 57, 58, 59, 60, 61, 62, 63, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81, 82, 84, 85, 86, 87, 88, 90, 91,\n"
+			"	92, 93, 95, 96, 97, 99, 100, 101, 103, 104, 105, 107, 108, 109, 111, 112, 114, 115, 117, 118, 119, 121, 122, 124, 125, 127, 128, 130, 131, 133, 135, 136,\n"
+			"	138, 139, 141, 142, 144, 146, 147, 149, 151, 152, 154, 156, 157, 159, 161, 162, 164, 166, 168, 169, 171, 173, 175, 176, 178, 180, 182, 184, 186, 187, 189, 191,\n"
+			"	193, 195, 197, 199, 201, 203, 205, 207, 209, 211, 213, 215, 217, 219, 221, 223, 225, 227, 229, 231, 233, 235, 237, 239, 241, 244, 246, 248, 250, 252, 255};\n";
+	}
+	sprintf(item,
 		"__attribute__((reqd_work_group_size(%d, %d, 1)))\n"
 		"__kernel void %s(uint num_cameras,\n" // opencl_kernel_function_name
 		"			uint	pIn_width, uint	pIn_height, __global uchar *pIn_buf, uint pIn_stride, uint	pIn_offs,\n"
@@ -1894,23 +1918,27 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		mask.s4	= select(0xffffffff, 0u, ((Ia.s6==0x80008000) | (Ja.s6==0x80008000))) & (int)maskIJ.s0;\n"
 				"		mask.s5	= select(0xffffffff, 0u, ((Ib.s0==0x80008000) | (Jb.s0==0x80008000))) & (int)maskIJ.s1;\n"
 				"		mask.s6	= select(0xffffffff, 0u, ((Ib.s1==0x80008000) | (Jb.s1==0x80008000))) & (int)maskIJ.s2;\n"
-				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000))) & (int)maskIJ.s3;\n"
-				"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
-				"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
-				"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
-				"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
-				"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
-				"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
-				"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
-				"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n"
+				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000))) & (int)maskIJ.s3;\n";
+			if (!linearColorSpace){
+				opencl_kernel_code +=
+					"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
+					"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
+					"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
+					"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
+					"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
+					"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
+					"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
+					"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n";
+			}
+			opencl_kernel_code +=
 				"		Isum4 = convert_uint4(as_uchar4(Ia.s0 & mask.s0));		Jsum4 = convert_uint4(as_uchar4(Ja.s0 & mask.s0));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(Ja.s1 & mask.s1));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(Ja.s2 & mask.s2));\n"
@@ -1933,23 +1961,27 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		mask.s4	= select(0xffffffff, 0u, ((Ia.s6==0x80008000) | (Ja.s6==0x80008000))) & (int)maskIJ.s0;\n"
 				"		mask.s5	= select(0xffffffff, 0u, ((Ib.s0==0x80008000) | (Jb.s0==0x80008000))) & (int)maskIJ.s1;\n"
 				"		mask.s6	= select(0xffffffff, 0u, ((Ib.s1==0x80008000) | (Jb.s1==0x80008000))) & (int)maskIJ.s2;\n"
-				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000))) & (int)maskIJ.s3;\n"
-				"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
-				"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
-				"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
-				"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
-				"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
-				"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
-				"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
-				"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n"
+				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000))) & (int)maskIJ.s3;\n";
+			if (!linearColorSpace){
+				opencl_kernel_code +=
+					"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
+					"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
+					"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
+					"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
+					"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
+					"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
+					"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
+					"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n";
+			}
+			opencl_kernel_code +=
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(Ja.s0 & mask.s0));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(Ja.s1 & mask.s1));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(Ja.s2 & mask.s2));\n"
@@ -1974,7 +2006,9 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		mask.s4	= select(0xffffffff, 0u, ((Ia.s6==0x80008000) | (Ja.s6==0x80008000)));\n"
 				"		mask.s5	= select(0xffffffff, 0u, ((Ib.s0==0x80008000) | (Jb.s0==0x80008000)));\n"
 				"		mask.s6	= select(0xffffffff, 0u, ((Ib.s1==0x80008000) | (Jb.s1==0x80008000)));\n"
-				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000)));\n"
+				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000)));\n";
+			if (!linearColorSpace){
+				opencl_kernel_code +=
 				"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
 				"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
 				"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
@@ -1990,7 +2024,9 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
 				"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
 				"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n"
+				"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n";
+			}
+			opencl_kernel_code +=
 				"		Isum4 = convert_uint4(as_uchar4(Ia.s0 & mask.s0));		Jsum4 = convert_uint4(as_uchar4(Ja.s0 & mask.s0));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(Ja.s1 & mask.s1));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(Ja.s2 & mask.s2));\n"
@@ -2011,23 +2047,27 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 				"		mask.s4	= select(0xffffffff, 0u, ((Ia.s6==0x80008000) | (Ja.s6==0x80008000)));\n"
 				"		mask.s5	= select(0xffffffff, 0u, ((Ib.s0==0x80008000) | (Jb.s0==0x80008000)));\n"
 				"		mask.s6	= select(0xffffffff, 0u, ((Ib.s1==0x80008000) | (Jb.s1==0x80008000)));\n"
-				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000)));\n"
-				"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
-				"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
-				"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
-				"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
-				"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
-				"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
-				"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
-				"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
-				"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n"
+				"		mask.s7	= select(0xffffffff, 0u, ((Ib.s3==0x80008000) | (Jb.s3==0x80008000)));\n";
+			if (!linearColorSpace){
+				opencl_kernel_code +=
+					"		Ia.s0 = gamma2Linear[(Ia.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s1 = gamma2Linear[(Ia.s1&0x7f800000)>>23]|(gamma2Linear[(Ia.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s2&0x7f800000)>>23]<<16);\n"
+					"		Ia.s2 = gamma2Linear[(Ia.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s3 = gamma2Linear[(Ia.s4&0x7f800000)>>23]|(gamma2Linear[(Ia.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ia.s5&0x7f800000)>>23]<<16);\n"
+					"		Ia.s4 = gamma2Linear[(Ia.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ia.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ia.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s5 = gamma2Linear[(Ia.s7&0x7f800000)>>23]|(gamma2Linear[(Ib.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s0&0x7f800000)>>23]<<16);\n"
+					"		Ia.s6 = gamma2Linear[(Ib.s1&0x7f80    )>>7 ]|(gamma2Linear[(Ib.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Ib.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ia.s7 = gamma2Linear[(Ib.s2&0x7f800000)>>23]|(gamma2Linear[(Ib.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ib.s3&0x7f800000)>>23]<<16);\n"
+					"		Ja.s0 = gamma2Linear[(Ja.s0&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s0&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s1&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s1 = gamma2Linear[(Ja.s1&0x7f800000)>>23]|(gamma2Linear[(Ja.s2&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s2&0x7f800000)>>23]<<16);\n"
+					"		Ja.s2 = gamma2Linear[(Ja.s3&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s3&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s4&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s3 = gamma2Linear[(Ja.s4&0x7f800000)>>23]|(gamma2Linear[(Ja.s5&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Ja.s5&0x7f800000)>>23]<<16);\n"
+					"		Ja.s4 = gamma2Linear[(Ja.s6&0x7f80    )>>7 ]|(gamma2Linear[(Ja.s6&0x7f800000)>>23]<<8)|(gamma2Linear[(Ja.s7&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s5 = gamma2Linear[(Ja.s7&0x7f800000)>>23]|(gamma2Linear[(Jb.s0&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s0&0x7f800000)>>23]<<16);\n"
+					"		Ja.s6 = gamma2Linear[(Jb.s1&0x7f80    )>>7 ]|(gamma2Linear[(Jb.s1&0x7f800000)>>23]<<8)|(gamma2Linear[(Jb.s2&0x7f80    )>>7 ]<<16);\n"
+					"		Ja.s7 = gamma2Linear[(Jb.s2&0x7f800000)>>23]|(gamma2Linear[(Jb.s3&0x7f80    )>>7 ]<<8)|(gamma2Linear[(Jb.s3&0x7f800000)>>23]<<16);\n";
+			}
+			opencl_kernel_code +=
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s0 & mask.s0));		Jsum4 += convert_uint4(as_uchar4(Ja.s0 & mask.s0));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s1 & mask.s1));		Jsum4 += convert_uint4(as_uchar4(Ja.s1 & mask.s1));\n"
 				"		Isum4 += convert_uint4(as_uchar4(Ia.s2 & mask.s2));		Jsum4 += convert_uint4(as_uchar4(Ja.s2 & mask.s2));\n"
@@ -2119,7 +2159,7 @@ vx_status exposure_comp_calcRGBErrorFn_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.expcomp_compute_gainmatrix_rgb",
 		AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT_RGB,
 		exposure_comp_calcRGBErrorFn_kernel,
-		5,
+		6,
 		exposure_comp_calcRGBErrorFn_input_validator,
 		exposure_comp_calcRGBErrorFn_output_validator,
 		nullptr,
@@ -2138,6 +2178,7 @@ vx_status exposure_comp_calcRGBErrorFn_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_OUTPUT, VX_TYPE_MATRIX, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
 	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
