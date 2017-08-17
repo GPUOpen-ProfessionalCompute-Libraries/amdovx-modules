@@ -748,7 +748,7 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
 
 
 void writeVXCode
-(
+	(
         std::ostream& ofsCodeH,
         std::ostream& ofsCodeC,
         std::vector<std::vector<std::string>>& net,
@@ -759,7 +759,7 @@ void writeVXCode
         std::string roundPolicy,
         bool isVirtualEnabled,
         std::string codeType
-        )
+	)
 {
     if(codeType == "declaration") {
         ofsCodeH << "	vx_context context; " << std::endl;
@@ -771,7 +771,7 @@ void writeVXCode
     }
     std::map<std::string,bool> declare_tensor_check;
     for(auto& node : net) {
-        //declare input and output tensors.
+        //declare input tensors.
         for(size_t i=4; i < node.size(); i++) {
             if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
                 auto&& dim = tensorMap[node[i]];
@@ -788,6 +788,7 @@ void writeVXCode
                 declare_tensor_check[node[i]]= true;
             }
         }
+		//declare output tensor.
         auto&& output = node[3];
         auto&& odim = tensorMap[output];
         if(!declare_tensor_check[output]) {
@@ -823,7 +824,7 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << weights << " = vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
-                ofsCodeC << "	" << "FILE * " << weights << "_file = fopen(\"" << "weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
+                ofsCodeC << "	" << "FILE * " << weights << "_file = fopen(dataFolder.c_str() + \"" << "/weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
                 ofsCodeC << "	" << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << "  << weights + "_file << std::endl; }" << std::endl;
                 ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
@@ -852,7 +853,7 @@ void writeVXCode
                 }
                 else if(codeType == "initialize") {
                     ofsCodeC << "	" << bias << " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(" << "bias/\"" << layer_name + ".f32 " << "\",\"rb\"" << ");" << std::endl;
+                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen( dataFolder.c_str() + \"" << "/bias/" << layer_name + ".f32 " << "\",\"rb\"" << ");" << std::endl;
                     ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
                     ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
                     ofsCodeC << "	" << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
@@ -879,6 +880,8 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
                 ofsCodeC << "	" << output + "_params.dilation_x = " << dilation_w - 1 << " ;" << std::endl;
                 ofsCodeC << "	" << output + "_params.dilation_y = " << dilation_h - 1 << " ;" << std::endl;
+				ofsCodeC << "	" << output + "_node = " << "vxConvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << "sizeof(" << output + "_params, " << output << ");" << std::endl;
+				
             }
         }
         else if(type == "Deconvolution") {
@@ -896,7 +899,7 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << weights + "= vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
-                ofsCodeC << "   " << "FILE * " << weights << "_file = fopen(\"" << "weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
+                ofsCodeC << "   " << "FILE * " << weights << "_file = fopen( dataFolder.c_str() + \"" << "/weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
                 ofsCodeC << "   " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << "  << weights + "_file << std::endl; }" << std::endl;
                 ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
@@ -925,7 +928,7 @@ void writeVXCode
                 }
                 else if(codeType == "initialize") {
                     ofsCodeC << "	" << bias + " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(" << "bias/" << layer_name + ".f32"  << ",\"rb\"" << ");" << std::endl;
+                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(dataFolder.c_str() + \"" << "bias/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
                     ofsCodeC << "       " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << "  << bias + "_file << std::endl; }" << std::endl;
                     ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
                     ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
@@ -952,6 +955,7 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
                 ofsCodeC << "	" << output + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
                 ofsCodeC << "	" << output + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
+				ofsCodeC << "	" << output + "_node = " << " vxDeconvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << output << ");" << std::endl;
             }
         }
         else if(type == "Pooling") {
@@ -977,6 +981,8 @@ void writeVXCode
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output + "_type = " << (pool == 0 ? "VX_NN_POOLING_MAX" : "VX_NN_POOLING_AVG") << " ;" << std::endl;
                 ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
+				ofsCodeC << "	" << output + "_node = " << "vxPoolingLayer(graph, " << node[4] << ", " << output + "_type" << ", " << output + "_kernel_w, " << output + "_kernel_h, " 
+								  << output + "_pad_w, " << output + "_pad_h, " << output + "_roundPolicy, " << output << " );" << std::endl;
             }
         }
         else if(type == "InnerProduct") {
@@ -994,7 +1000,7 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << weights << "= vxCreateTensor(context,4," << weights + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
-                ofsCodeC << "   " << "FILE * " << weights << "_file = fopen(\"" << "weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
+                ofsCodeC << "   " << "FILE * " << weights << "_file = fopen(dataFolder.c_str() + \"" << "/weights/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
                 ofsCodeC << "   " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << "  << weights + "_file << std::endl; }" << std::endl;
                 ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
@@ -1023,7 +1029,7 @@ void writeVXCode
                 }
                 else if(codeType == "initialize") {
                     ofsCodeC << "	" << bias << "= vxCreateTensor(context,1," << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(\"" << "bias/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
+                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen( dataFolder.c_str() + \"" << "/bias/" << layer_name + ".f32"  << "\",\"rb\"" << ");" << std::endl;
                     ofsCodeC << "       " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << "  << bias + "_file << std::endl; }" << std::endl;
                     ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
                     ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
@@ -1047,6 +1053,7 @@ void writeVXCode
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output + "_convertPolicy = " << convertPolicy << ";" << std::endl;
                 ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
+				ofsCodeC << "	" << output + "_node = " << "vxFullyConnectedLayer( graph, " << node[4] << ", " << weights << ", " << bias << ", " << output + "_convertPolicy, " << output + "_roundPolicy, " << output + ");" << std::endl;
             }
         }
         else if(type == "ReLU") {
@@ -1062,6 +1069,7 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output + "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
+				ofsCodeC << "	" << output + "_node = " << "vxActivationLayer(graph, " << node[4] << ", " << output + "_mode, " << output + "_param_a, " << output + "_param_b, " << output << ");" << std::endl;
             }
         }
         else if(type == "LRN") {
@@ -1087,6 +1095,8 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output + "_mode = " << lrnType << ";" << std::endl;
+				ofsCodeC << "	" << output + "_node = " << "vxNormalizationLayer( graph, " << node[4] << ", " << output + "_mode, " << output + "_size, " << output + "_alpha, " << output + "_beta, " 
+								  << output << ", " << output + "_bias );" << std::endl;
             }
         }
         else if(type == "BatchNorm") {
@@ -1105,6 +1115,9 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_beta(" << beta << ")," << std::endl;
                 ofsCodeC << "	" << output + "_gamma(" << gamma << ")," << std::endl;
             }
+			else if(codeType == "initialize") {
+				ofsCodeC << "	" << output + "_node = " << "vxBatchNormalizationLayer(graph, " << node[4] << output + "_gamma, " << output + "_beta, " << output << ");" << std::endl;
+			}
         }
         else if(type == "Eltwise") {
             int op;
@@ -1141,6 +1154,7 @@ void writeVXCode
                     }
                     else if(codeType == "initialize") {
                         ofsCodeC << "	" << node[3] + "_convertPolicy = " << convertPolicy << ";" << std::endl;
+						ofsCodeC << "	" << node[3] + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << node[3] + "_convertPolicy, " << out << ");" << std::endl;
                     }
                     tmp = out;
                 }
@@ -1163,27 +1177,46 @@ void writeVXCode
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
+			else if(codeType == "initialize") {
+				ofsCodeC << "	" <<  output + "_node = " << "vxConcatLayer(graph, " ; 
+				for(int i=4;i < node.size(); i++) {
+					ofsCodeC << node[i] << ", " ;
+				}
+				ofsCodeC << node[3] << " );" << std::endl;
+			}
         }
         else if(type == "Dropout") {
             //during inference dropout layer propogates input to output .
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
+			else if(codeType ==  "initialize") {
+				ofsCodeC << "	" << output + "_node = " << "vxCopyLayer( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+			}
         }
         else if(type == "Softmax") {
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
+			else if(codeType == "initialize") {
+				ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+			}
         }
         else if(type == "Split") {
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
+			else if(codeType == "initialize") {
+				ofsCodeC << "	" << output + "_node = " << "vxCopyLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+			}
         }
         else if(type == "SoftmaxWithLoss") {
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
             }
+			else if(codeType == "initialize") {
+				ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+			}
         }
         ofsCodeH << std::endl;
         if(codeType== "initialize") ofsCodeC << std::endl;
