@@ -2350,14 +2350,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			addr_in[0].stride_x = 1;
 			addr_in[0].stride_y = stitch->camera_buffer_stride_in_bytes;
 			if (stitch->camera_buffer_format == VX_DF_IMAGE_NV12){
-				addr_in[1].dim_x = stitch->camera_buffer_width;	addr_in[1].dim_y = stitch->camera_buffer_height >> 1;
+				addr_in[1].dim_x = stitch->camera_buffer_width >> 1;	addr_in[1].dim_y = stitch->camera_buffer_height >> 1;
 				addr_in[1].stride_x = 2; addr_in[1].stride_y = stitch->camera_buffer_stride_in_bytes;
 			}
 			else{
-				addr_in[1].dim_x = stitch->camera_buffer_width;	addr_in[1].dim_y = stitch->camera_buffer_height;
-				addr_in[1].stride_x = 1; addr_in[1].stride_y = stitch->camera_buffer_stride_in_bytes;
-				addr_in[2].dim_x = stitch->camera_buffer_width;	addr_in[2].dim_y = stitch->camera_buffer_height;
-				addr_in[2].stride_x = 1; addr_in[2].stride_y = stitch->camera_buffer_stride_in_bytes;
+				addr_in[1].dim_x = stitch->camera_buffer_width >> 1;	addr_in[1].dim_y = stitch->camera_buffer_height >> 1;
+				addr_in[1].stride_x = 1; addr_in[1].stride_y = stitch->camera_buffer_stride_in_bytes >> 1;
+				addr_in[2].dim_x = stitch->camera_buffer_width >> 1;	addr_in[2].dim_y = stitch->camera_buffer_height >> 1;
+				addr_in[2].stride_x = 1; addr_in[2].stride_y = stitch->camera_buffer_stride_in_bytes >> 1;
 			}
 			ERROR_CHECK_OBJECT_(stitch->Img_input = vxCreateImageFromHandle(stitch->context, stitch->camera_buffer_format, &addr_in[0], ptr, VX_MEMORY_TYPE_OPENCL));
 		}
@@ -2503,13 +2503,13 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				addr_out[0].dim_x = stitch->output_encode_buffer_width;	addr_out[0].dim_y = stitch->output_encode_buffer_height;
 				addr_out[0].stride_x = 1; addr_out[0].stride_y = (vx_int32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y];	// assuing every tile has the same stride
 				if (stitch->output_buffer_format == VX_DF_IMAGE_NV12){
-					addr_out[1].dim_x = stitch->output_encode_buffer_width;	addr_out[1].dim_y = stitch->output_encode_buffer_height >> 1;
+					addr_out[1].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_encode_buffer_height >> 1;
 					addr_out[1].stride_x = 1; addr_out[1].stride_y = addr_out[0].stride_y;
 				}
 				else{
-					addr_out[1].dim_x = stitch->output_encode_buffer_width;	addr_out[1].dim_y = stitch->output_encode_buffer_height;
+					addr_out[1].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_encode_buffer_height >> 1;
 					addr_out[1].stride_x = 1; addr_out[1].stride_y = addr_out[0].stride_y >> 1;
-					addr_out[2].dim_x = stitch->output_encode_buffer_width;	addr_out[2].dim_y = stitch->output_encode_buffer_height;
+					addr_out[2].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[2].dim_y = stitch->output_encode_buffer_height >> 1;
 					addr_out[2].stride_x = 1; addr_out[2].stride_y = addr_out[0].stride_y >> 1;
 				}
 
@@ -2522,14 +2522,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				addr_out[0].dim_x = stitch->output_rgb_buffer_width;	addr_out[0].dim_y = stitch->output_rgb_buffer_height;
 				addr_out[0].stride_x = 1; addr_out[0].stride_y = stitch->output_buffer_stride_in_bytes;
 				if (stitch->output_buffer_format == VX_DF_IMAGE_NV12){
-					addr_out[1].dim_x = stitch->output_rgb_buffer_width;	addr_out[1].dim_y = stitch->output_rgb_buffer_height >> 1;
+					addr_out[1].dim_x = stitch->output_rgb_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_rgb_buffer_height >> 1;
 					addr_out[1].stride_x = 1; addr_out[1].stride_y = stitch->output_buffer_stride_in_bytes;
 				}
 				else{
-					addr_out[1].dim_x = stitch->output_rgb_buffer_width;	addr_out[1].dim_y = stitch->output_rgb_buffer_height;
-					addr_out[1].stride_x = 1; addr_out[1].stride_y = stitch->output_buffer_stride_in_bytes;
-					addr_out[2].dim_x = stitch->output_rgb_buffer_width;	addr_out[2].dim_y = stitch->output_rgb_buffer_height;
-					addr_out[2].stride_x = 1; addr_out[2].stride_y = stitch->output_buffer_stride_in_bytes;
+					addr_out[1].dim_x = stitch->output_rgb_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_rgb_buffer_height >> 1;
+					addr_out[1].stride_x = 1; addr_out[1].stride_y = stitch->output_buffer_stride_in_bytes >> 1;
+					addr_out[2].dim_x = stitch->output_rgb_buffer_width >> 1;	addr_out[2].dim_y = stitch->output_rgb_buffer_height >> 1;
+					addr_out[2].stride_x = 1; addr_out[2].stride_y = stitch->output_buffer_stride_in_bytes >> 1;
 				}
 				ERROR_CHECK_OBJECT_(stitch->Img_output = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
 			}			
