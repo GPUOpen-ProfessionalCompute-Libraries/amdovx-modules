@@ -118,16 +118,6 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
 
     data->alpha = 1; data->beta = 0;
 
-    vx_context   vxContext = vxGetContext((vx_reference)node);
-    cl_context context;
-    ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-    vx_size size = 1 * input_dims[2] * 1 * 1 * sizeof(vx_float32);
-    data->bnBias = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, NULL);
-    data->bnScale = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, NULL);
-    if (!data->bnBias && !data->bnScale) {
-        return VX_FAILURE;
-    }
-    
     //input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->bnScale, sizeof(data->bnScale)));
@@ -147,8 +137,9 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
 static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
     BatchNormLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    clReleaseMemObject(data->bnBias);
-    clReleaseMemObject(data->bnScale);
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bnScaleBiasMeanVarDesc));
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

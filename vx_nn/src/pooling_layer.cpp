@@ -21,8 +21,6 @@ THE SOFTWARE.
 */
 
 #include "kernels.h"
-#include <iostream>
-#include <string.h>
 
 struct PoolingLayerLocalData {
     NeuralNetworkCommonHandle * handle;
@@ -121,6 +119,10 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
         if (!data->pooling_workspace) {
             return VX_FAILURE;
         }
+        cl_float pattern = 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size * sizeof(vx_float32),
+                                         0,NULL, NULL);
+        if(err) return VX_FAILURE;
     }
 
     //Set Descriptors.
@@ -169,7 +171,7 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 {
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    clReleaseMemObject(data->pooling_workspace);
+    if(clReleaseMemObject(data->pooling_workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

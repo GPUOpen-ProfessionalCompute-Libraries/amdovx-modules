@@ -100,11 +100,12 @@ static vx_status VX_CALLBACK processFullyConnectedLayer(vx_node node, const vx_r
                                                        data->weight_desc, data->weight_mem, data->convdesc, data->algo, &data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
 
     //Convolution Forward Bias.
-    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
+	if(parameters[2]) {
+	    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
+	}
     
     return VX_SUCCESS;
-
 }
 
 static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
@@ -150,6 +151,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
         if (!data->workspace) {
             return VX_FAILURE;
         }
+        cl_float pattern= 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size * sizeof(vx_float32), 0, NULL, NULL);
+        if(err) return VX_FAILURE;
     }
 
     //Algorithm.
@@ -177,7 +181,7 @@ static vx_status VX_CALLBACK uninitializeFullyConnectedLayer(vx_node node, const
 {
     FullyConnectedLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    clReleaseMemObject(data->workspace);
+    if(clReleaseMemObject(data->workspace) != 0 ) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->convdesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

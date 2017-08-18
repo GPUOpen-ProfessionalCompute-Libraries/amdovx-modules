@@ -146,6 +146,10 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
         if (!data->workspace) {
             return VX_FAILURE;
         }
+        cl_float pattern = 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->workspace,&pattern,sizeof(cl_float),0,data->workspace_size * sizeof(vx_float32),
+                                         0,NULL, NULL);
+        if(err) return VX_FAILURE;
     }
 
 #if ENABLE_DEBUG_PRINT_DIMS
@@ -164,7 +168,7 @@ static vx_status VX_CALLBACK uninitializeNormalizationLayer(vx_node node, const 
 {
     NormalizationLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    clReleaseMemObject(data->workspace);
+    if(clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyLRNDescriptor(data->lrnDesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

@@ -32,7 +32,6 @@ struct SoftmaxLayerLocalData {
     cl_mem output_mem;
     int dim_in;
     int dim_out;
-
 };
 
 static vx_status VX_CALLBACK validateSoftmaxLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
