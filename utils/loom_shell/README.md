@@ -68,8 +68,8 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         loadBufferFromImage(buf[#],"image.bmp",format,width,height,stride);
         saveBufferToMultipleImages(buf[#],"image%02d.bmp",rows,columns,format,width,height,stride);
         loadBufferFromMultipleImages(buf[#],"image%02d.bmp",rows,columns,format,width,height,stride);
-        loadBuffer(buf[#],"image.bin",[offset]);
-        saveBuffer(buf[#],"image.bin",[flags]); // flags: 0:write 1:append
+        loadBuffer(buf[#],"image.bin"[,offset]); // default: 0
+        saveBuffer(buf[#],"image.bin"[,flags]); // flags: 0:write 1:append, deault: 0
     ~ OpenVX/OpenVX contexts (advanced)
         createOpenCLContext("platform","device",&opencl_context);
         createOpenVXContext(&openvx_context);

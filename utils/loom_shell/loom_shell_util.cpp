@@ -926,11 +926,6 @@ vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint3
 	return VX_SUCCESS;
 }
 
-vx_status loadBuffer(cl_mem mem, const char * fileName)
-{
-	return loadBuffer(mem,fileName,0);
-}
-
 vx_status loadBuffer(cl_mem mem, const char * fileName, vx_uint32 offset)
 {
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
@@ -950,21 +945,14 @@ vx_status loadBuffer(cl_mem mem, const char * fileName, vx_uint32 offset)
 	return VX_SUCCESS;
 }
 
-vx_status saveBuffer(cl_mem mem, const char * fileName)
-{
-	if (fileName[0] == '+') {
-		fileName++;
-		return saveBuffer(mem, fileName, 1);
-	}
-	else{
-		return saveBuffer(mem, fileName, 0);
-	}
-}
-
 vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags)
 {
 	bool append = false;
 	if (flags&1) {
+		append = true;
+	}
+	else if (fileName[0] == '+') {
+		fileName++;
 		append = true;
 	}
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
