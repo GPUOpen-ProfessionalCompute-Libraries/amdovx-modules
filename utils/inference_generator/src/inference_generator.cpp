@@ -1356,6 +1356,9 @@ void generateCode
 {
     ofsCodeH << "#ifndef __net_h__" << std::endl;
     ofsCodeH << "#define __net_h__" << std::endl << std::endl;
+    ofsCodeH << "#include <VX/vx.h>" << std::endl;
+    ofsCodeH << "#include <vx_ext_amd.h>" << std::endl;
+    ofsCodeH << "#include <VX/vx_khr_nn.h>" << std::endl << std::endl;
     ofsCodeH << "#include <iostream>" << std::endl;
     ofsCodeH << "#include <stdio.h>" << std::endl;
     ofsCodeH << "#include <stdlib.h>" << std::endl << std::endl;
