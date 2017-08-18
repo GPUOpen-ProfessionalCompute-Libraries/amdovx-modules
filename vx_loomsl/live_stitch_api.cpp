@@ -183,7 +183,7 @@ struct ls_context_t {
     #define MAX_TILE_IMG 16
 	vx_uint32   output_encode_buffer_width;             // buffer width after encode conversion
 	vx_uint32   output_encode_buffer_height;            // buffer height after encode conversion
-	vx_uint32   output_encode_tiles;                    // total number of encode tiles
+	vx_uint32   output_tiles;                    // total number of encode tiles
 	vx_uint32   num_encode_sections;                    // total number of encode sectional images
 	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];      // encode intermediate images
 	vx_image    encode_dst_imgs[MAX_TILE_IMG];          // encode intermediate images
@@ -1791,7 +1791,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 /*****************************************************************************************************************************************
 functions to encode stitched output
 *****************************************************************************************************************************************/
-static vx_status EncodeCreateImageFromROI(ls_context stitch)
+static vx_status CreateImageFromROI(ls_context stitch)
 {
 	vx_uint32 dst_tile_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 
@@ -1811,7 +1811,7 @@ static vx_status EncodeCreateImageFromROI(ls_context stitch)
 	}
 	return VX_SUCCESS;
 }
-static vx_status EncodeProcessImage(ls_context stitch)
+static vx_status ROIProcessImage(ls_context stitch)
 {
 	// src tile dimesions
 	vx_uint32 src_tile_width = (vx_uint32)(stitch->output_rgb_buffer_width / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
@@ -2450,17 +2450,17 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 		}
 		// instantiate specified node into the graph
-		stitch->output_encode_tiles = 1;
+		stitch->output_tiles = 1;
 		ERROR_CHECK_OBJECT_(stitch->outputMediaConfig = vxCreateScalar(stitch->context, VX_TYPE_STRING_AMD, stitch->loomio_output.kernelArguments));
 		if ((stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV) &&
 			(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] != 1.0f ||
 				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f)){
 				// set buffer to encode tile width and height
-				stitch->output_encode_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
+				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
 				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
-					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] * stitch->output_encode_tiles);
+					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] * stitch->output_tiles);
 				// create virtual image
 				stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch,
 					stitch->output_encode_buffer_width,
@@ -2490,7 +2490,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 	else {
 		// need image created from OpenCL handle
-		stitch->output_encode_tiles = 1;
+		stitch->output_tiles = 1;
 		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV)
 		{
 			vx_imagepatch_addressing_t addr_out[3] = { 0, 0, 0 };
@@ -2499,7 +2499,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] != 1.0f ||
 				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f){		
 				// create the encoded tiled output
-				stitch->output_encode_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
+				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
 				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
@@ -2519,7 +2519,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 					addr_out[2].stride_x = 1; addr_out[2].stride_y = addr_out[0].stride_y >> 1;
 				}
 
-				for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
+				for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
 					ERROR_CHECK_OBJECT_(stitch->encodetileOutput[i] = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
 				}
 			}
@@ -2552,7 +2552,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_output = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out, ptr, VX_MEMORY_TYPE_OPENCL));
 		}
 	}
-	if (stitch->output_encode_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS;}
+	if (stitch->output_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS;}
 	// create temporary images when extra color conversion is needed
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
@@ -2630,14 +2630,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
 		// needs output color conversion
 		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
-			if (stitch->output_encode_tiles == 1){ 
+			if (stitch->output_tiles == 1){ 
 				stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
 				ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 			}
 			else{
 				// output needs to be encoded 
-				ERROR_CHECK_STATUS_(EncodeProcessImage(stitch));
-				ERROR_CHECK_STATUS_(EncodeCreateImageFromROI(stitch));
+				ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
+				ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
 			}
 		}
 		else{
@@ -3254,8 +3254,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 			ls_printf("ERROR: Output buffer format NV12 needs two buffers.\n");
 			return VX_ERROR_INVALID_VALUE;
 		}
-		if (stitch->output_encode_tiles > 1) {
-			for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
+		if (stitch->output_tiles > 1) {
+			for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 2) + 1] : nullptr };
 				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->encodetileOutput[i], ptr_out, nullptr, 2));
 			}
@@ -3270,8 +3270,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 			ls_printf("ERROR: Output buffer format IYUV needs three buffers.\n");
 			return VX_ERROR_INVALID_VALUE;
 		}
-		if (stitch->output_encode_tiles > 1) {
-			for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
+		if (stitch->output_tiles > 1) {
+			for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 3) + 1] : nullptr, output_buffer ? output_buffer[(i * 3) + 2] : nullptr };
 				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->encodetileOutput[i], ptr_out, nullptr, 3));
 			}
