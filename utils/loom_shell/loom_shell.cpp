@@ -793,6 +793,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -826,6 +827,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -859,6 +861,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -880,6 +883,7 @@ int CLoomShellParser::OnCommand()
 	else if (!_stricmp(command, "lsSetChromaKeyBuffer")) {
 		// parse the command
 		vx_uint32 contextIndex = 0, bufIndex = 0;
+		vx_uint32 num_buffers;
 		bool useNull = false;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetChromaKeyBuffer(ls[#],&buf[#]|NULL)";
 		SYNTAX_CHECK(ParseSkip(s, "("));
@@ -890,6 +894,10 @@ int CLoomShellParser::OnCommand()
 		else {
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
+			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
+				SYNTAX_CHECK(ParseUInt(s, num_buffers));
+			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
 		}
 		SYNTAX_CHECK(ParseEndOfLine(s));
