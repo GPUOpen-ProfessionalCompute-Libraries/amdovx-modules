@@ -3206,7 +3206,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 //     output_buffer  - output opencl buffer for output equirectangular image
 //     chromaKey_buffer  - chroma key opencl buffer for equirectangular image
 //   Use of nullptr will return the control of previously set buffer
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer, vx_uint32 number_buffers)
 {
 	PROFILER_START(LoomSL, SetInputBuffer);
 	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
@@ -3215,21 +3215,33 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch,
 
 	// switch the user specified OpenCL buffer into image
 	if (stitch->camera_buffer_format == VX_DF_IMAGE_NV12) {
+		if (number_buffers != 2){
+			ls_printf("ERROR: Camera buffer format NV12 needs two buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		void * ptr_in[] = { input_buffer ? input_buffer[0] : nullptr, input_buffer ? input_buffer[1] : nullptr };
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_input, ptr_in, nullptr, 2));
 	}
 	else if (stitch->camera_buffer_format == VX_DF_IMAGE_IYUV){
+		if (number_buffers != 3){
+			ls_printf("ERROR: Camera buffer format IYUV needs three buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		void * ptr_in[] = { input_buffer ? input_buffer[0] : nullptr, input_buffer ? input_buffer[1] : nullptr, input_buffer ? input_buffer[2] : nullptr };
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_input, ptr_in, nullptr, 3));
 	}
 	else {
+		if (number_buffers != 1){
+			ls_printf("ERROR: Camera buffer format RGB or YUYV or UYVY or V210 or V216 needs one buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		void * ptr_in[] = { input_buffer ? input_buffer[0] : nullptr };
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_input, ptr_in, nullptr, 1));
 	}
 	PROFILER_STOP(LoomSL, SetInputBuffer);
 	return VX_SUCCESS;
 }
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer, vx_uint32 number_buffers)
 {
 	PROFILER_START(LoomSL, SetOutputBuffer);
 	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
@@ -3238,6 +3250,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 
 	// switch the user specified OpenCL buffer into image
 	if (stitch->output_buffer_format == VX_DF_IMAGE_NV12) {
+		if (number_buffers != 2){
+			ls_printf("ERROR: Output buffer format NV12 needs two buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		if (stitch->output_encode_tiles > 1) {
 			for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 2) + 1] : nullptr };
@@ -3250,6 +3266,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 		}
 	}
 	else if (stitch->output_buffer_format == VX_DF_IMAGE_IYUV) {
+		if (number_buffers != 3){
+			ls_printf("ERROR: Output buffer format IYUV needs three buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		if (stitch->output_encode_tiles > 1) {
 			for (vx_uint32 i = 0; i < stitch->output_encode_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 3) + 1] : nullptr, output_buffer ? output_buffer[(i * 3) + 2] : nullptr };
@@ -3262,30 +3282,42 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 		}
 	}
 	else {
+		if (number_buffers != 1){
+			ls_printf("ERROR: Output buffer format RGB or YUYV or UYVY or V210 or V216 needs one buffers.\n");
+			return VX_ERROR_INVALID_VALUE;
+		}
 		void * ptr_out[] = { output_buffer ? output_buffer[0] : nullptr };
 		ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_output, ptr_out, nullptr, 1));
 	}
 	PROFILER_STOP(LoomSL, SetOutputBuffer);
 	return VX_SUCCESS;
 }
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer, vx_uint32 number_buffers)
 {
 	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
 	// check to make sure that LoomIO for overlay is not active
 	if (stitch->nodeLoomIoOverlay) return VX_ERROR_NOT_ALLOCATED;
 
 	// switch the user specified OpenCL buffer into image
+	if (number_buffers != 1){
+		ls_printf("ERROR: Overlay buffer format RGB needs one buffers.\n");
+		return VX_ERROR_INVALID_VALUE;
+	}
 	void * ptr_overlay[] = { overlay_buffer ? overlay_buffer[0] : nullptr };
 	ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->Img_overlay, ptr_overlay, nullptr, 1));
 
 	return VX_SUCCESS;
 }
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer, vx_uint32 number_buffers)
 {
 	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
 	if (!stitch->CHROMA_KEY) return VX_ERROR_NOT_ALLOCATED;
 
 	// switch the user specified OpenCL buffer into image
+	if (number_buffers != 1){
+		ls_printf("ERROR: ChromaKey buffer format RGB needs one buffers.\n");
+		return VX_ERROR_INVALID_VALUE;
+	}
 	void * ptr_chroma[] = { chromaKey_buffer ? chromaKey_buffer[0] : nullptr };
 	ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->chroma_key_input_img, ptr_chroma, nullptr, 1));
 
