@@ -1,27 +1,24 @@
 # OpenVX Neural Network Extension Library (vx_nn)
-vx_nn is an OpenVX Neural Network extension module. This implementation supports only floating-point tensor datatypes and does not support 8-bit and 16-bit fixed-point types specified in the OpenVX specification.
+vx_nn is an OpenVX Neural Network extension module. This implementation supports only floating-point tensor datatype and does not support 8-bit and 16-bit fixed-point datatypes specified in the OpenVX specification.
 
 ### Pre-requisites :
 1. Ubuntu 16.04 with ROCm enabled platform.
    For further details visit the following [site](https://rocm.github.io/ROCmInstall.html) on how to install ROCm.
 2. ROCm cmake modules can be installed from [here](https://github.com/RadeonOpenCompute/rocm-cmake).
 3. This implementation is dependent on [MIOpen](https://github.com/ROCmSoftwarePlatform/MIOpen) and [MIOpenGemm](https://github.com/ROCmSoftwarePlatform/MIOpenGEMM). 
-4. [Optional] Install the [Protobuf](https://github.com/google/protobuf) library to build [inference_generator](https://github.com/lcskrishna/amdovx-modules/tree/miopen/utils/inference_generator) that generates a GDF that can be used for inference. Make sure protoc is properly installed to run this tool.
-5. CMake 2.8 or newer [download](https://cmake.org/download/).
-6. [Optional] OpenCV 3.0 [download](http://docs.opencv.org/3.0-beta/doc/tutorials/introduction/linux_install/linux_install.html)
+4. CMake 2.8 or newer [download](https://cmake.org/download/).
+5. Install the [Protobuf](https://github.com/google/protobuf) library to build [inference_generator](https://github.com/lcskrishna/amdovx-modules/tree/miopen/utils/inference_generator) that generates a GDF that can be used for inference. Make sure protoc compiler is properly installed to run this tool.
 
 Please find the install instructions on above dependencies on their respective repositories.
 
 ### Build Instructions :
-1.  Clone the repository [amdovx-modules](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules).
+1.  Clone the repository [amdovx-modules](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/tree/nn).
 2.  mkdir build
 3.  cd build
-4.  cmake -DCMAKE_BUILD_TYPE=Release ../amdovx-modules/ [Release Mode]                
-      [**OR**]                                                                                                                           
-    cmake -DCMAKE_BUILD_TYPE=Debug ../amdovx-modules/ [Debug Mode]
+4.  cmake ../amdovx-modules/              
 5.  make
 
-After the build is successful, the executables will be present in bin folder. 
+After the make is successful, the executables will be present in build/bin folder. 
 
 ### List of supported layers:
 Layer Supported | Function|Kernel name
@@ -49,12 +46,13 @@ Tensor convert depth node|vxTensorConvertDepthNode|org.khronos.openvx.tensor_con
 Image to Tensor convert node|vxConvertImageToTensorNode|com.amd.nn_extension.convert_image_to_tensor
 Tensor to Image convert node|vxConvertTensorToImageNode|com.amd.nn_extension.tensorToImage
 
-### How to run using runvx:
-1. Create a GDF that contains the network definition.
-2. [Optional] inference_generator can be used to generate a GDF.
-3. Currently the implementation supports floating point tensors. Hence, additional pre-processing step is requrired to convert an image to floating point tensor which can be given as an input.
-4. % runvx[.exe] file net.gdf
-
+### How to run using [AMD RunVX](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core/tree/master/runvx):
+1. [inference_generator](utils/inference_generator) can be used to generate a GDF & binary weights from a given pre-trained caffemodel.
+2. Convert an input image to a floating point tensor, as shown in the example below.
+3. Run the network inference using the following command:
+```
+%runvx[.exe] net.gdf
+```
 ### Example using CIFAR 10 caffemodel :
 
 To use the inference_generator tool follow proper syntax as follows:
@@ -71,7 +69,7 @@ Usage:
 
 ```
 
-To generate a GDF for CIFAR 10 caffemodel run the following command, make sure to create a folder name specified and the weights and bias folders where all the weights will be extracted.
+To generate a GDF for CIFAR 10 caffemodel run the following command, make sure to create an output directory which contains the weights and bias folders, where all the weights will be extracted.
 
 ```
 % inference_generator[.exe] --no-virtual-buffers --output-dir example cifar10_quick_iter_4000.caffemodel 1 3 32 32
@@ -180,7 +178,7 @@ write label output.f32
 
 
 
-To convert a caffemodel file to tensor of type float32, convert_image_to_tensor kernel comes handy.
+To convert an image to a tensor of type float32, use convert_image_to_tensor kernel.
 Here is a simple script that shows how to convert an image to a tensor.
 
 ```
