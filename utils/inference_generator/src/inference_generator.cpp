@@ -1280,12 +1280,12 @@ void generateCode
     ofsCodeC << "}" << std::endl << std::endl;
 }
 
-void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder)
+void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder, int flags)
 {
     if(net_parameter.has_name())
         std::cout<<"Fetching the weights for : " << net_parameter.name()<< std::endl;
 
-    std::map<std::string,std::string> outputNameMap;
+    std::map<std::string,std::string> outputNameMap, splitNameMap;
     if(net_parameter.input_size() > 0) {
         outputNameMap[net_parameter.input(0)] = net_parameter.input(0);
     }
@@ -1328,28 +1328,40 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
         //dump layer data.
         dumpLayerData(layer_parameter, outputFolder);
 
-
-        //Split type (copy type).
-        if(layer_parameter.type()=="Split"){
-            for(int j=0; j< layer_parameter.top_size() ; j++ ){
-
-                // get layer information and add to net
-                std::vector<std::string> node;
-                node.push_back(layer_parameter.type());
-                node.push_back("");
-                node.push_back(layer_parameter.top(j));
-                node.push_back(layer_parameter.top(j));
-                for(int z = 0; z < layer_parameter.bottom_size();z++) {
-                    if(outputNameMap.find(layer_parameter.bottom(z)) == outputNameMap.end()) {
-                        outputNameMap[layer_parameter.bottom(z)] = layer_parameter.bottom(z);
+        // enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
+        bool isSplitEnabled = (flags == 1) ? true : false;
+        if(!isSplitEnabled) {
+            if(layer_parameter.type()=="Split"){
+                for(int j=0; j< layer_parameter.top_size() ; j++ ){
+                    // get layer information and add to net
+                    std::vector<std::string> node;
+                    node.push_back(layer_parameter.type());
+                    node.push_back("");
+                    node.push_back(layer_parameter.top(j));
+                    node.push_back(layer_parameter.top(j));
+                    for(int z = 0; z < layer_parameter.bottom_size();z++) {
+                        if(outputNameMap.find(layer_parameter.bottom(z)) == outputNameMap.end()) {
+                            outputNameMap[layer_parameter.bottom(z)] = layer_parameter.bottom(z);
+                        }
+                        node.push_back(outputNameMap[layer_parameter.bottom(z)]);
                     }
-                    node.push_back(outputNameMap[layer_parameter.bottom(z)]);
+                    net.push_back(node);
+                    // update output name with layer name
+                    outputNameMap[layer_parameter.top(j)] = layer_parameter.top(j);
                 }
-                net.push_back(node);
-                // update output name with layer name
-                outputNameMap[layer_parameter.top(j)] = layer_parameter.top(j);
+                continue;
             }
-            continue;
+        }
+        else
+        {
+            //Split type.
+             if(layer_parameter.type()=="Split"){
+                 splitNameMap[layer_parameter.name()]= layer_parameter.bottom(0);
+                 for(int j=0; j< layer_parameter.top_size() ; j++ ){
+                     splitNameMap[layer_parameter.top(j)] = layer_parameter.bottom(0);
+                 }
+                 continue;
+             }
         }
 
         // get layer information and add to net
@@ -1361,6 +1373,9 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
         node.push_back(layer_parameter.top(0));
         node.push_back(layer_parameter.name());
         for(int j = 0; j < layer_parameter.bottom_size()  ; j++) {
+            if(isSplitEnabled && (strstr(layer_parameter.bottom(j).c_str(),"split"))){
+                outputNameMap[layer_parameter.bottom(j)]= splitNameMap[layer_parameter.bottom(j)];
+            }
             if(outputNameMap.find(layer_parameter.bottom(j)) == outputNameMap.end()) {
                 outputNameMap[layer_parameter.bottom(j)] = layer_parameter.bottom(j);
             }
@@ -1377,7 +1392,8 @@ int loadCaffeModelFile
         const char* fileName,
         std::vector<std::vector<std::string>>& net,
         int inputDim[4],
-std::string outputFolder
+		std::string outputFolder,
+		int flags
 )
 {
     //verify the version of protobuf library.
@@ -1391,7 +1407,7 @@ std::string outputFolder
         bool isSuccess = net_parameter.ParseFromIstream(&input);
         if(isSuccess) {
             std::cout<<"CaffeModel Read Successful" << std::endl;
-            fetchNetworkDetails(net_parameter,net,inputDim, outputFolder);
+            fetchNetworkDetails(net_parameter,net,inputDim, outputFolder, flags);
         }else {
             std::cerr<<"CaffeModel Read Failed" << std::endl;
         }
@@ -1475,11 +1491,15 @@ int main(int argc, char* argv[])
     if(argc > 9) roundPolicy = argv[9];
     std::vector<std::vector<std::string>> net;
 
-    // TODO: enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
+
+    if(flags != 1 && flags != 0 ) {
+        printf("ERROR: flags can only take 0 or 1\n");
+        return -1;
+    }
 
     // load caffe model (or just .prototxt)
     if(strstr(fileName,".caffemodel")) {
-        if(loadCaffeModelFile(fileName,net,inputDim, outputFolder) < 0) {
+        if(loadCaffeModelFile(fileName,net,inputDim, outputFolder, flags) < 0) {
             return -1;
         }
     }
