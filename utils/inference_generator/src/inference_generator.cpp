@@ -772,6 +772,8 @@ void writeVXCode
     std::map<std::string,bool> declare_tensor_check;
     for(auto& node : net) {
         //declare input tensors.
+        bool isFirstLayer = (&node == &net.front());
+        bool isLastLayer = (&node == &net.back());
         for(size_t i=4; i < node.size(); i++) {
             if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
                 auto&& dim = tensorMap[node[i]];
@@ -784,6 +786,18 @@ void writeVXCode
                 }
                 else if(codeType == "initialize") {
                     ofsCodeC << "	" << node[i] << " = vxCreateTensor(context, 4, " << node[i] + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                }
+                else if(codeType == "run") {
+                    if(isFirstLayer) {
+                        ofsCodeC << "   " << "vx_size " << node[i] << "_m_size = 4;" << std::endl;
+                        ofsCodeC << "   " << "vx_size " << node[i] << "_m_stride[4];" << std::endl;
+                        ofsCodeC << "   " << "for (vx_uint32 i=0; i < 4 ; i++ ) { " << node[i] << "_m_stride[i] = " << node[i] << "_m_size;" << node[i] +"_m_size *= " << node[i] + "_dims[i]; }" << std::endl;
+                        ofsCodeC << "   " << "vxCopyTensorPatch (" << node[i] << "," << node[i] + "_dims, nullptr, nullptr, " << node[i] << "_m_stride, " << "inputTensor, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST );" << std::endl;
+                        ofsCodeC << "   " << std::endl;
+                        ofsCodeC << "   " << "vxProcessGraph(graph);" << std::endl;
+                        ofsCodeC << "   " << std::endl;
+                    }
+
                 }
                 declare_tensor_check[node[i]]= true;
             }
@@ -1219,6 +1233,10 @@ void writeVXCode
 			}
         }
         ofsCodeH << std::endl;
+        if(isLastLayer && codeType == "initialize")
+        {
+            ofsCodeC << "   " << "vxVerifyGraph(graph);" << std::endl;
+        }
         if(codeType== "initialize") ofsCodeC << std::endl;
     }
 }
@@ -1262,7 +1280,6 @@ void generateCode
     ofsCodeC << "NetVX::~NetVX() {}" << std::endl << std::endl;
     ofsCodeC << "int NetVX::Initialize(const char * dataFolder)" << std::endl;
     ofsCodeC << "{" << std::endl;
-    // TODO: add initialization code generation here
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "initialize");
     ofsCodeC << "	return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
@@ -1276,6 +1293,7 @@ void generateCode
     ofsCodeC << "int NetVX::Run(const float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes)" << std::endl;
     ofsCodeC << "{" << std::endl;
     // TODO: add frame processing code generation here
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "run");
     ofsCodeC << "	return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 }
