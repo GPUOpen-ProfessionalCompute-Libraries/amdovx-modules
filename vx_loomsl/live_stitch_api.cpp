@@ -566,7 +566,7 @@ static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool&
 		{ (vx_reference)stitch->valid_array,           false, false, "exp-valid.bin" },
 		{ (vx_reference)stitch->OverlapPixelEntry,     false, false, "exp-overlap.bin" },
 		{ (vx_reference)stitch->overlap_matrix,        false, true,  "exp-count.bin" },
-		{ (vx_reference)stitch->exp_comp_output_image,                 false, false, "exp-rgby.raw" },
+		{ (vx_reference)stitch->exp_comp_output_image, false, false, "exp-rgby.raw" },
 		{ (vx_reference)stitch->valid_mask_image,      false, false, "valid-mask.raw" },
 		{ (vx_reference)stitch->seamfind_valid_array,  false, false, "seam-valid.bin" },
 		{ (vx_reference)stitch->seamfind_weight_array, false, false, "seam-weight.bin" },
