@@ -200,7 +200,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReleaseContext(ls_context * pStitc
 //  - buffer_width must be multiple of 16
 //  - buffer_height must be multiple of 2
 //  - Note that 16 bit flow is not supported when output format is VX_DF_IMAGE_RGB
-//  - Note that output scale factor attribute is not supported when output format is VX_DF_IMAGE_RGB, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV or VX_DF_IMAGE_V210
 //  - Note that this function must be called before lsInitialize call
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height);
@@ -213,7 +212,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 //  - buffer_width must be multiple of 16 and less than 8K
 //  - buffer_height must be multiple of 2 and less than 8K
 //  - dimensions of all image tiles inside the buffer must be same
-//  - Note that input scale factor attribute is not supported when input format is VX_DF_IMAGE_RGB, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV or VX_DF_IMAGE_V210
 //  - Note that this function must be called before lsInitialize call
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch, vx_uint32 num_camera_rows, vx_uint32 num_camera_columns, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height);
