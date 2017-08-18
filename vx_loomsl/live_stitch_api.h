@@ -309,10 +309,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReinitialize(ls_context stitch);
 //   Use of nullptr will return the control of previously set buffer
 //  - return VX_SUCCESS or error code (see log messages for further details)
 //  - for multiplanar images (NV12 or IYUV) every plane needs a seperate buffer
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer, vx_uint32 number_buffers));
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer, vx_uint32 number_buffers));
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer, vx_uint32 number_buffers));
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer, vx_uint32 number_buffers));
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer, vx_uint32 number_buffers);
 
 //! \brief Schedule a frame
 //  - only one frame can be scheduled at a time
