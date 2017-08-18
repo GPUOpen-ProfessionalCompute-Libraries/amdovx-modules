@@ -793,6 +793,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -826,6 +827,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -859,6 +861,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
@@ -892,6 +895,7 @@ int CLoomShellParser::OnCommand()
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 			if (*s == ','){
+				SYNTAX_CHECK(ParseSkip(s, ","));
 				SYNTAX_CHECK(ParseUInt(s, num_buffers));
 			}
 			SYNTAX_CHECK(ParseSkip(s, ")"));
