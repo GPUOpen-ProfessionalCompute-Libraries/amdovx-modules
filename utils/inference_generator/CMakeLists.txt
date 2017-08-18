@@ -24,21 +24,22 @@ project(inference_generator)
 set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
-
-file( DOWNLOAD  "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto")
-execute_process( COMMAND protoc -I=${CMAKE_CURRENT_BINARY_DIR}/proto/ --cpp_out=${CMAKE_CURRENT_BINARY_DIR}/proto/ ${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.proto)
-
-SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY  ${CMAKE_BINARY_DIR}/bin CACHE PATH "Directory where inference generator.exe files are generated." FORCE)
-
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto )
+file(DOWNLOAD "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/caffe.proto")
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/caffe.proto)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND SOURCES
 	src/inference_generator.cpp
-	${CMAKE_CURRENT_BINARY_DIR}/proto/caffe.pb.cc
+        ${PROTO_SRCS} ${PROTO_HDRS}
     )
 
-add_executable(inference_generator ${SOURCES} )
+add_executable(inference_generator ${SOURCES})
 target_link_libraries(inference_generator ${PROTOBUF_LIBRARIES})
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif()
 
