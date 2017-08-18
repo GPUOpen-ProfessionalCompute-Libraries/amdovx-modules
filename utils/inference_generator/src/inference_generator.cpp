@@ -769,6 +769,12 @@ void writeVXCode
         ofsCodeC << "	context = vxCreateContext(); " << std::endl;
         ofsCodeC << "	graph = vxCreateGraph(context); " << std::endl;
     }
+    else if(codeType == "release_graph") {
+        ofsCodeC << "   vxReleaseGraph(graph);" << std::endl;
+    }
+    else if(codeType == "release_context") {
+        ofsCodeC << "   vxReleaseContext(context);" << std::endl;
+    }
     std::map<std::string,bool> declare_tensor_check;
     for(auto& node : net) {
         //declare input tensors.
@@ -799,6 +805,9 @@ void writeVXCode
                     }
 
                 }
+                else if(codeType == "release_tensors") {
+                    ofsCodeC << "   " << "vxReleaseTensor(" << node[i] << " );" << std::endl;
+                }
                 declare_tensor_check[node[i]]= true;
             }
         }
@@ -815,6 +824,9 @@ void writeVXCode
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output << " = vxCreateTensor(context,4, " << output + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+            }
+            else if(codeType == "release_tensors") {
+                ofsCodeC << "   " << "vxReleaseTensor(" << output << " );" << std::endl;
             }
             declare_tensor_check[output] = true;
         }
@@ -854,6 +866,9 @@ void writeVXCode
                 ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
                 ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
             }
+            else if(codeType == "release_tensors") {
+                ofsCodeC << "   " << "vxReleaseTensor( " << weights << " );" << std::endl;
+            }
             declare_tensor_check[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
@@ -880,6 +895,9 @@ void writeVXCode
                     ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
                     ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
                 }
+                else if(codeType == "release_tensors") {
+                    ofsCodeC << "   " << "vxReleaseTensor( " << bias << " );" << std::endl;
+                }
                 declare_tensor_check[bias] = true;
             }
             if(codeType == "declaration") {
@@ -896,6 +914,9 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_params.dilation_y = " << dilation_h - 1 << " ;" << std::endl;
 				ofsCodeC << "	" << output + "_node = " << "vxConvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << "sizeof(" << output + "_params, " << output << ");" << std::endl;
 				
+            }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
             }
         }
         else if(type == "Deconvolution") {
@@ -929,6 +950,9 @@ void writeVXCode
                 ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
                 ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
             }
+            else if(codeType == "release_tensors") {
+                ofsCodeC << "   " << "vxReleaseTensor( " << weights << " );" << std::endl;
+            }
             declare_tensor_check[weights] = true;
             std::string bias = "NULL";
             if(bias_term) {
@@ -956,6 +980,9 @@ void writeVXCode
                     ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
                     ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
                 }
+                else if(codeType == "release_tensors") {
+                    ofsCodeC << "   " << "vxReleaseTensor( " << bias << " );" << std::endl;
+                }
                 declare_tensor_check[bias] = true;
             }
             if(codeType == "declaration") {
@@ -970,6 +997,9 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
                 ofsCodeC << "	" << output + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
 				ofsCodeC << "	" << output + "_node = " << " vxDeconvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << output << ");" << std::endl;
+            }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
             }
         }
         else if(type == "Pooling") {
@@ -997,6 +1027,9 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
 				ofsCodeC << "	" << output + "_node = " << "vxPoolingLayer(graph, " << node[4] << ", " << output + "_type" << ", " << output + "_kernel_w, " << output + "_kernel_h, " 
 								  << output + "_pad_w, " << output + "_pad_h, " << output + "_roundPolicy, " << output << " );" << std::endl;
+            }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
             }
         }
         else if(type == "InnerProduct") {
@@ -1030,6 +1063,9 @@ void writeVXCode
                 ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
                 ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
             }
+            else if(codeType == "release_tensors") {
+                ofsCodeC << "   " << "vxReleaseTensor( " << weights << " );" << std::endl;
+            }
             declare_tensor_check[weights]= true;
             std::string bias= "NULL";
             if(bias_term) {
@@ -1057,6 +1093,9 @@ void writeVXCode
                     ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
                     ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
                 }
+                else if(codeType == "release_tensors") {
+                    ofsCodeC << "   " << "vxReleaseTensor( " << bias << " );" << std::endl;
+                }
                 declare_tensor_check[bias]= true;
             }
             if(codeType == "declaration") {
@@ -1068,6 +1107,9 @@ void writeVXCode
                 ofsCodeC << "	" << output + "_convertPolicy = " << convertPolicy << ";" << std::endl;
                 ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
 				ofsCodeC << "	" << output + "_node = " << "vxFullyConnectedLayer( graph, " << node[4] << ", " << weights << ", " << bias << ", " << output + "_convertPolicy, " << output + "_roundPolicy, " << output + ");" << std::endl;
+            }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
             }
         }
         else if(type == "ReLU") {
@@ -1084,6 +1126,9 @@ void writeVXCode
             else if(codeType == "initialize") {
                 ofsCodeC << "	" << output + "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
 				ofsCodeC << "	" << output + "_node = " << "vxActivationLayer(graph, " << node[4] << ", " << output + "_mode, " << output + "_param_a, " << output + "_param_b, " << output << ");" << std::endl;
+            }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
             }
         }
         else if(type == "LRN") {
@@ -1112,6 +1157,9 @@ void writeVXCode
 				ofsCodeC << "	" << output + "_node = " << "vxNormalizationLayer( graph, " << node[4] << ", " << output + "_mode, " << output + "_size, " << output + "_alpha, " << output + "_beta, " 
 								  << output << ", " << output + "_bias );" << std::endl;
             }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         else if(type == "BatchNorm") {
             int use_global_stats;
@@ -1132,6 +1180,9 @@ void writeVXCode
 			else if(codeType == "initialize") {
 				ofsCodeC << "	" << output + "_node = " << "vxBatchNormalizationLayer(graph, " << node[4] << output + "_gamma, " << output + "_beta, " << output << ");" << std::endl;
 			}
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         else if(type == "Eltwise") {
             int op;
@@ -1170,6 +1221,9 @@ void writeVXCode
                         ofsCodeC << "	" << node[3] + "_convertPolicy = " << convertPolicy << ";" << std::endl;
 						ofsCodeC << "	" << node[3] + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << node[3] + "_convertPolicy, " << out << ");" << std::endl;
                     }
+                    else if(codeType == "release_nodes") {
+                        ofsCodeC << "   " << "vxReleaseNode(&" << node[3] + "_node );" << std::endl;
+                    }
                     tmp = out;
                 }
                 else error("generateCode : Eltwise op=%d not supported\n", op);
@@ -1198,6 +1252,9 @@ void writeVXCode
 				}
 				ofsCodeC << node[3] << " );" << std::endl;
 			}
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         else if(type == "Dropout") {
             //during inference dropout layer propogates input to output .
@@ -1207,7 +1264,9 @@ void writeVXCode
 			else if(codeType ==  "initialize") {
 				ofsCodeC << "	" << output + "_node = " << "vxCopyLayer( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
 			}
-        }
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }        }
         else if(type == "Softmax") {
             if(codeType == "declaration") {
                 ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
@@ -1215,6 +1274,9 @@ void writeVXCode
 			else if(codeType == "initialize") {
 				ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
 			}
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         else if(type == "Split") {
             if(codeType == "declaration") {
@@ -1223,6 +1285,9 @@ void writeVXCode
 			else if(codeType == "initialize") {
 				ofsCodeC << "	" << output + "_node = " << "vxCopyLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
 			}
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         else if(type == "SoftmaxWithLoss") {
             if(codeType == "declaration") {
@@ -1231,6 +1296,9 @@ void writeVXCode
 			else if(codeType == "initialize") {
 				ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
 			}
+            else if(codeType == "release_nodes") {
+                ofsCodeC << "   " << "vxReleaseNode(&" << output + "_node );" << std::endl;
+            }
         }
         ofsCodeH << std::endl;
         if(isLastLayer && codeType == "initialize")
@@ -1287,12 +1355,15 @@ void generateCode
     ofsCodeC << "int NetVX::Shutdown()" << std::endl;
     ofsCodeC << "{" << std::endl;
     // TODO: add shutdown code generation here
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_nodes");
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_graph");
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_tensors");
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_context");
     ofsCodeC << "	return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
     ofsCodeC << "int NetVX::Run(const float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes)" << std::endl;
     ofsCodeC << "{" << std::endl;
-    // TODO: add frame processing code generation here
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "run");
     ofsCodeC << "	return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
