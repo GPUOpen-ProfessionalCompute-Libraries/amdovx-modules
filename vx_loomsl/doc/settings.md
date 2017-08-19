@@ -3,8 +3,9 @@
  The settings can be set using [loom_shell](../../utils/loom_shell/README.md) or by using the [API](../README.md).
  In both cases the following function could be used:
  
- ...
- setGlobalAttribute(offset,value);
+``` 
+setGlobalAttribute(offset,value);
+```
  
  Where offset is a number for a certain parameter.
  
