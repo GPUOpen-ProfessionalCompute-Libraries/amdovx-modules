@@ -15,6 +15,7 @@ This software is provided under a MIT-style license,  see the file COPYRIGHT.txt
 * Overlay other videos on top of stitched video
 * Support for 3rd party *LoomIO* plug-ins for camera capture and stitched output
 * Support PtGui project export/import for camera calibration
+* Supports different [settings](doc/settings.md) to change quality and performance
 
 ## Live Stitch API: Simple Example
 Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses. 
