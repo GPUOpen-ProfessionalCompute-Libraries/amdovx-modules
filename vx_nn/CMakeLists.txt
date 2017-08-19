@@ -31,6 +31,7 @@ endif()
 find_package(OpenCL     REQUIRED)
 find_package(miopengemm PATHS /opt/rocm)
 find_package(miopen     PATHS /opt/rocm)
+find_package(Protobuf)
 
 if(NOT miopen_FOUND OR NOT miopengemm_FOUND)
     message(FATAL_ERROR "ERROR: couldn't find MIOpen and MIOpenGEMM -- make sure to install them")
@@ -38,14 +39,20 @@ endif()
 
 list(APPEND PACKAGE_DEPENDS PACKAGE OpenCL)
 
+if(Protobuf_FOUND)
+	message("Found Protobuf -- installing inference generator.")
+	add_subdirectory(../utils/inference_generator ${CMAKE_CURRENT_BINARY_DIR}/bin)
+endif()
+
 include_directories(
     ../deps/amdovx-core/openvx/include
     src
     include
+	../utils/inference_generator
     )
 
 list(APPEND SOURCES
-	src/kernels.cpp
+    src/kernels.cpp
     src/activation_layer.cpp
     src/convolution_layer.cpp
     src/deconvolution_layer.cpp
@@ -65,12 +72,14 @@ list(APPEND SOURCES
     src/tensor_subtract.cpp
     src/tensor_multiply.cpp
     src/tensor_convert_depth_node.cpp
-)
+    )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 target_link_libraries(${PROJECT_NAME} openvx MIOpen)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+else()
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
 endif()
