@@ -108,7 +108,8 @@ static vx_status VX_CALLBACK opencl_codegen(
     if (num_of_dims == 4) {
         char item[8192];
         sprintf(item,
-                "__kernel void copy_layer(__global float * in, uint in_offset, uint4 in_stride,  __global float * out, uint out_offset, uint4 out_stride) \n"
+                "__kernel __attribute__((reqd_work_group_size(256, 1, 1)))\n"
+                "void copy_layer(__global float * in, uint in_offset, uint4 in_stride,  __global float * out, uint out_offset, uint4 out_stride) \n"
                 "{ \n"
                 "     size_t id = get_global_id(0);\n"
                 "     out[id] = in[id];\n"
