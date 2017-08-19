@@ -128,7 +128,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
 | module          | LoomIO plug-in: OpenVX module name
 | kernelName      | LoomIO plug-in: OpenVX kernel name
 | kernelArguments | LoomIO plug-in: custom kernel arguments
-| offset          | start index of an attribute
+| offset          | start index of an attribute, see [settings](../../vx_loomsl/doc/settings.md)
 | count           | number of attributes
 | value           | value of attribute
 | contextCount    | number of stitch instances in context[] allocated using "ls_context context[N];"
