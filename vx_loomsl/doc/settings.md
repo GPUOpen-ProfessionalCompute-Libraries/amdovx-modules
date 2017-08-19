@@ -2,6 +2,7 @@
  There are different ways to improve the output or the performance of the stitch process by optimizing or changing certain parameters and settings.
  The settings can be set using [loom_shell](../../utils/loom_shell/README.md) or by using the [API](../README.md).
  In both cases the following function could be used:
+ 
  ...
  setGlobalAttribute(offset,value);
  
