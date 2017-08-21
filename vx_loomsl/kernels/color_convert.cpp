@@ -24,7 +24,7 @@ THE SOFTWARE.
 #include "color_convert.h"
 
 //! \brief The input validator callback.
-static vx_status VX_CALLBACK color_convert_general_input_validator(vx_node node, vx_uint32 index)
+static vx_status VX_CALLBACK color_convert_input_validator(vx_node node, vx_uint32 index)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
 	// get reference for parameter at specified index
@@ -40,7 +40,7 @@ static vx_status VX_CALLBACK color_convert_general_input_validator(vx_node node,
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert_general doesn't support input image format: %4.4s\n", &format);
+			vxAddLogEntry((vx_reference)node, status, "ERROR: color_convert doesn't support input image format: %4.4s\n", &format);
 		}
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
 	}
@@ -61,7 +61,7 @@ static vx_status VX_CALLBACK color_convert_general_input_validator(vx_node node,
 }
 
 //! \brief The output validator callback.
-static vx_status VX_CALLBACK color_convert_general_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
+static vx_status VX_CALLBACK color_convert_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
 	if (index == 1)
@@ -98,11 +98,11 @@ static vx_status VX_CALLBACK color_convert_general_output_validator(vx_node node
 			// for 16 bit YUV input take RGB4 as default output
 			output_format = VX_DF_IMAGE_RGB4_AMD;
 		}
-		else if ((input_format == VX_DF_IMAGE_RGB) && (output_format != VX_DF_IMAGE_UYVY) && (output_format != VX_DF_IMAGE_YUYV) && output_format != VX_DF_IMAGE_V210_AMD && output_format != VX_DF_IMAGE_V216_AMD) {
+		else if ((input_format == VX_DF_IMAGE_RGB) && (output_format != VX_DF_IMAGE_UYVY) && (output_format != VX_DF_IMAGE_YUYV) && output_format != VX_DF_IMAGE_V210_AMD && output_format != VX_DF_IMAGE_V216_AMD && output_format != VX_DF_IMAGE_RGB4_AMD) {
 			// for 8 bit RGB take UYVY as default output
 			output_format = VX_DF_IMAGE_UYVY;
 		}
-		else if ((input_format == VX_DF_IMAGE_RGB4_AMD) && (output_format != VX_DF_IMAGE_UYVY) && (output_format != VX_DF_IMAGE_YUYV) && output_format != VX_DF_IMAGE_V210_AMD && output_format != VX_DF_IMAGE_V216_AMD) {
+		else if ((input_format == VX_DF_IMAGE_RGB4_AMD) && (output_format != VX_DF_IMAGE_UYVY) && (output_format != VX_DF_IMAGE_YUYV) && output_format != VX_DF_IMAGE_V210_AMD && output_format != VX_DF_IMAGE_V216_AMD && output_format != VX_DF_IMAGE_RGB) {
 			// for 16 bit RGB take Y216 as default output
 			output_format = VX_DF_IMAGE_V216_AMD;
 		}
@@ -117,7 +117,7 @@ static vx_status VX_CALLBACK color_convert_general_output_validator(vx_node node
 }
 
 //! \brief The kernel target support callback.
-static vx_status VX_CALLBACK color_convert_general_query_target_support(vx_graph graph, vx_node node,
+static vx_status VX_CALLBACK color_convert_query_target_support(vx_graph graph, vx_node node,
 	vx_bool use_opencl_1_2,              // [input]  false: OpenCL driver is 2.0+; true: OpenCL driver is 1.2
 	vx_uint32& supported_target_affinity // [output] must be set to AGO_TARGET_AFFINITY_CPU or AGO_TARGET_AFFINITY_GPU or (AGO_TARGET_AFFINITY_CPU | AGO_TARGET_AFFINITY_GPU)
 	)
@@ -127,7 +127,7 @@ static vx_status VX_CALLBACK color_convert_general_query_target_support(vx_graph
 }
 
 //! \brief The OpenCL code generator callback.
-static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
+static vx_status VX_CALLBACK color_convert_opencl_codegen(
 	vx_node node,                                  // [input] node
 	const vx_reference parameters[],               // [input] parameters
 	vx_uint32 num,                                 // [input] number of parameters
@@ -222,7 +222,7 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	opencl_kernel_code += item;
 	if (input_format == VX_DF_IMAGE_RGB || input_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code +=
-			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n";
+			"	uint pRGB_in_width, uint pRGB_in_height, __global uchar * pRGB_in_buf, uint pRGB_in_stride, uint pRGB_in_offset,\n";
 	}
 	else{ //input_format: UYVY, YUYV, V210, V216
 		opencl_kernel_code +=
@@ -230,7 +230,7 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 	}
 	if (output_format == VX_DF_IMAGE_RGB || output_format == VX_DF_IMAGE_RGBX || output_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code +=
-			"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+			"	uint pRGB_out_width, uint pRGB_out_height, __global uchar * pRGB_out_buf, uint pRGB_out_stride, uint pRGB_out_offset";
 	}
 	else{ //input_format: UYVY, YUYV, V210, V216
 		opencl_kernel_code +=
@@ -375,6 +375,12 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 			opencl_kernel_code += ConvertRGB2toV216();
 			opencl_kernel_code += Write1x4PixelsTo422buffer16bit();
 		}
+		else if (output_format == VX_DF_IMAGE_RGB4_AMD)
+		{
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer8bit();
+			opencl_kernel_code += (useLinearColorSpace) ? ConvertRGB2toRGB4AndDegamma() : ConvertRGB2toRGB4();
+			opencl_kernel_code += Write1x4PixelsToRGB4buffer();
+		}
 	}
 
 	// Input: RGB4
@@ -406,6 +412,12 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 			opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toV216() : ConvertRGB4toV216();
 			opencl_kernel_code += Write1x4PixelsTo422buffer16bit();
 		}
+		else if (output_format == VX_DF_IMAGE_RGB)
+		{
+			opencl_kernel_code += Read1x4PixelsFromRGBbuffer16bit();
+			opencl_kernel_code += (useLinearColorSpace) ? GammaAndConvertRGB4toRGB2() : ConvertRGB4toRGB2();
+			opencl_kernel_code += Write1x4PixelsToRGB2buffer();
+		}
 	}
 
 	opencl_kernel_code +=
@@ -416,26 +428,26 @@ static vx_status VX_CALLBACK color_convert_general_opencl_codegen(
 }
 
 //! \brief The kernel execution.
-static vx_status VX_CALLBACK color_convert_general_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
+static vx_status VX_CALLBACK color_convert_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
 {
 	return VX_ERROR_NOT_SUPPORTED;
 }
 
 //! \brief The kernel publisher.
-vx_status color_convert_general_publish(vx_context context)
+vx_status color_convert_publish(vx_context context)
 {
 	// add kernel to the context with callbacks
-	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert_general",
-		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL,
-		color_convert_general_kernel,
+	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.color_convert",
+		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT,
+		color_convert_kernel,
 		3,
-		color_convert_general_input_validator,
-		color_convert_general_output_validator,
+		color_convert_input_validator,
+		color_convert_output_validator,
 		nullptr,
 		nullptr);
 	ERROR_CHECK_OBJECT(kernel);
-	amd_kernel_query_target_support_f query_target_support_f = color_convert_general_query_target_support;
-	amd_kernel_opencl_codegen_callback_f opencl_codegen_callback_f = color_convert_general_opencl_codegen;
+	amd_kernel_query_target_support_f query_target_support_f = color_convert_query_target_support;
+	amd_kernel_opencl_codegen_callback_f opencl_codegen_callback_f = color_convert_opencl_codegen;
 	ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_QUERY_TARGET_SUPPORT, &query_target_support_f, sizeof(query_target_support_f)));
 	ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_CODEGEN_CALLBACK, &opencl_codegen_callback_f, sizeof(opencl_codegen_callback_f)));
 
@@ -633,7 +645,7 @@ static vx_status VX_CALLBACK color_convert_from_NV12_opencl_codegen(
 	opencl_kernel_code +=
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+		"	uint pRGB_out_width, uint pRGB_out_height, __global uchar * pRGB_out_buf, uint pRGB_out_stride, uint pRGB_out_offset";
 	if (s_flags) {
 		opencl_kernel_code +=
 			",\n"
@@ -908,7 +920,7 @@ static vx_status VX_CALLBACK color_convert_from_IYUV_opencl_codegen(
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n    "
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
 		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset,\n"
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset";
+		"	uint pRGB_out_width, uint pRGB_out_height, __global uchar * pRGB_out_buf, uint pRGB_out_stride, uint pRGB_out_offset";
 	if (s_flags) {
 		opencl_kernel_code +=
 			",\n"
@@ -1190,7 +1202,7 @@ static vx_status VX_CALLBACK color_convert_to_NV12_opencl_codegen(
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
 	opencl_kernel_code += item;
 	opencl_kernel_code +=
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
+		"	uint pRGB_in_width, uint pRGB_in_height, __global uchar * pRGB_in_buf, uint pRGB_in_stride, uint pRGB_in_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
 		"	uint pUV_width, uint pUV_height, __global uchar * pUV_buf, uint pUV_stride, uint pUV_offset";
 	if (s_flags) {
@@ -1468,7 +1480,7 @@ static vx_status VX_CALLBACK color_convert_to_IYUV_opencl_codegen(
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
 	opencl_kernel_code += item;
 	opencl_kernel_code +=
-		"	uint pRGB_width, uint pRGB_height, __global uchar * pRGB_buf, uint pRGB_stride, uint pRGB_offset,\n"
+		"	uint pRGB_in_width, uint pRGB_in_height, __global uchar * pRGB_in_buf, uint pRGB_in_stride, uint pRGB_in_offset,\n"
 		"	uint pY_width, uint pY_height, __global uchar * pY_buf, uint pY_stride, uint pY_offset,\n"
 		"	uint pU_width, uint pU_height, __global uchar * pU_buf, uint pU_stride, uint pU_offset,\n"
 		"	uint pV_width, uint pV_height, __global uchar * pV_buf, uint pV_stride, uint pV_offset";
@@ -1987,9 +1999,9 @@ std::string Read2x8PixelsFromRGBbuffer8bit()
 {
 	std::string output =
 		"    uint8 L0, L1;\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 24);\n"
-		"    L0 = *(__global uint8 *) pRGB_buf;\n"
-		"    L1 = *(__global uint8 *)&pRGB_buf[pRGB_stride];\n";
+		"    pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride * 2) + (gx * 24);\n"
+		"    L0 = *(__global uint8 *) pRGB_in_buf;\n"
+		"    L1 = *(__global uint8 *)&pRGB_in_buf[pRGB_in_stride];\n";
 	return output;
 }
 std::string Read2x8PixelsFromRGBbuffer16bit()
@@ -1997,19 +2009,19 @@ std::string Read2x8PixelsFromRGBbuffer16bit()
 	std::string output =
 		"    uint8 L0, L2;\n"
 		"	 uint4 L1, L3;\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 48);\n"
-		"    L0 = *(__global uint8 *) pRGB_buf;\n"
-		"    L1 = *(__global uint4 *)&pRGB_buf[32];\n"
-		"    L2 = *(__global uint8 *)&pRGB_buf[pRGB_stride];\n"
-		"    L3 = *(__global uint4 *)&pRGB_buf[pRGB_stride+32];\n";
+		"    pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride * 2) + (gx * 48);\n"
+		"    L0 = *(__global uint8 *) pRGB_in_buf;\n"
+		"    L1 = *(__global uint4 *)&pRGB_in_buf[32];\n"
+		"    L2 = *(__global uint8 *)&pRGB_in_buf[pRGB_in_stride];\n"
+		"    L3 = *(__global uint4 *)&pRGB_in_buf[pRGB_in_stride+32];\n";
 	return output;
 }
 std::string Read1x4PixelsFromRGBbuffer8bit()
 {
 	std::string output =
 		"    uint4 L0;\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 12);\n"
-		"    L0 = *(__global uint4 *) pRGB_buf;\n";
+		"    pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride) + (gx * 12);\n"
+		"    L0 = *(__global uint4 *) pRGB_in_buf;\n";
 	return output;
 }
 std::string Read1x4PixelsFromRGBbuffer16bit()
@@ -2017,9 +2029,9 @@ std::string Read1x4PixelsFromRGBbuffer16bit()
 	std::string output =
 		"    uint4 L0;\n"
 		"	 uint2 L1;\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 24);\n"
-		"    L0 = *(__global uint4 *) pRGB_buf;\n"
-		"    L1 = *(__global uint2 *)&pRGB_buf[16];\n";
+		"    pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride) + (gx * 24);\n"
+		"    L0 = *(__global uint4 *) pRGB_in_buf;\n"
+		"    L1 = *(__global uint2 *)&pRGB_in_buf[16];\n";
 	return output;
 }
 // Do Color Conversion --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2889,9 +2901,9 @@ std::string ReadAndConvertRGB2toV210()
 	std::string output =
 		"		uint8 L0;\n"
 		"		uint  L1;\n"
-		"		pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 36);\n"
-		"		L0 = *(__global uint8 *) pRGB_buf;\n"
-		"		L1 = *(__global uint  *)&pRGB_buf[32];\n"
+		"		pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride) + (gx * 36);\n"
+		"		L0 = *(__global uint8 *) pRGB_in_buf;\n"
+		"		L1 = *(__global uint  *)&pRGB_in_buf[32];\n"
 		"		uint8 pUYVY0;"
 		"		float3 f; float3 rgb;\n"
 		"		//Line[0]\n"
@@ -2913,6 +2925,36 @@ std::string ReadAndConvertRGB2toV210()
 		"		rgb = (float3)(amd_unpack2(L0.s7), amd_unpack3(L0.s7), amd_unpack0(L1));                                                                                                                                                                \n"
 		"		f.s2 = dot(cU, rgb) + 512.0f;                                                                                                                                                                    pUYVY0.s6 = amd_pack10(f.s0,f.s1,f.s2);\n"
 		"		                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, (float3)(amd_unpack1(L1), amd_unpack2(L1), amd_unpack3(L1)))          + cY.s3; pUYVY0.s7 = amd_pack10(f.s0,f.s1,f.s2);\n";
+	return output;
+}
+std::string ConvertRGB2toRGB4()
+{
+	std::string output =
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
+		"    float mulfactor = 32767.0f/255.0f;\n"
+		"    float2 rgb;\n"
+		"    rgb = (float2)(amd_unpack0(L0.s0), amd_unpack1(L0.s0))*(float2)mulfactor; pRGB0.s0 = amd_pack15(rgb.s0,rgb.s1);\n"
+		"    rgb = (float2)(amd_unpack2(L0.s0), amd_unpack3(L0.s0))*(float2)mulfactor; pRGB0.s1 = amd_pack15(rgb.s0,rgb.s1);\n"
+		"    rgb = (float2)(amd_unpack0(L0.s1), amd_unpack1(L0.s1))*(float2)mulfactor; pRGB0.s2 = amd_pack15(rgb.s0,rgb.s1);\n"
+		"    rgb = (float2)(amd_unpack2(L0.s1), amd_unpack3(L0.s1))*(float2)mulfactor; pRGB0.s3 = amd_pack15(rgb.s0,rgb.s1);\n"
+		"    rgb = (float2)(amd_unpack0(L0.s2), amd_unpack1(L0.s2))*(float2)mulfactor; pRGB1.s0 = amd_pack15(rgb.s0,rgb.s1);\n"
+		"    rgb = (float2)(amd_unpack2(L0.s2), amd_unpack3(L0.s2))*(float2)mulfactor; pRGB1.s1 = amd_pack15(rgb.s0,rgb.s1);\n";
+	return output;
+}
+std::string ConvertRGB2toRGB4AndDegamma()
+{
+	std::string output =
+		"    uint4 pRGB0;\n"
+		"    uint2 pRGB1;\n"
+		"    float mulfactor = 32767.0f/255.0f;\n"
+		"    float2 rgb;\n"
+		"    rgb = (float2)(amd_unpack0(L0.s0), amd_unpack1(L0.s0))*(float2)mulfactor; pRGB0.s0 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n"
+		"    rgb = (float2)(amd_unpack2(L0.s0), amd_unpack3(L0.s0))*(float2)mulfactor; pRGB0.s1 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n"
+		"    rgb = (float2)(amd_unpack0(L0.s1), amd_unpack1(L0.s1))*(float2)mulfactor; pRGB0.s2 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n"
+		"    rgb = (float2)(amd_unpack2(L0.s1), amd_unpack3(L0.s1))*(float2)mulfactor; pRGB0.s3 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n"
+		"    rgb = (float2)(amd_unpack0(L0.s2), amd_unpack1(L0.s2))*(float2)mulfactor; pRGB1.s0 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n"
+		"    rgb = (float2)(amd_unpack2(L0.s2), amd_unpack3(L0.s2))*(float2)mulfactor; pRGB1.s1 = amd_pack15(degamma(rgb.s0),degamma(rgb.s1));\n";
 	return output;
 }
 std::string ConvertRGB4toUYVY()
@@ -3058,10 +3100,10 @@ std::string ReadAndConvertRGB4toV210()
 	std::string output =  //RGB4 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
 		"		uint8 L0, L1;\n"
 		"		uint2 L2;\n"
-		"		pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 72);\n"
-		"		L0 = *(__global uint8 *) pRGB_buf;\n"
-		"		L1 = *(__global uint8 *)&pRGB_buf[32];\n"
-		"		L2 = *(__global uint2 *)&pRGB_buf[64];\n"
+		"		pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride) + (gx * 72);\n"
+		"		L0 = *(__global uint8 *) pRGB_in_buf;\n"
+		"		L1 = *(__global uint8 *)&pRGB_in_buf[32];\n"
+		"		L2 = *(__global uint2 *)&pRGB_in_buf[64];\n"
 		"		uint8 pUYVY0;"
 		"		float3 f; float3 rgb;\n"
 		"		//Line[0]\n"
@@ -3084,10 +3126,10 @@ std::string ReadAndGammaAndConvertRGB4toV210()
 	std::string output =  //RGB4 > V210, for description of V210 see: https://developer.apple.com/library/content/technotes/tn2162/_index.html#//
 		"		uint8 L0, L1;\n"
 		"		uint2 L2;\n"
-		"		pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 72);\n"
-		"		L0 = *(__global uint8 *) pRGB_buf;\n"
-		"		L1 = *(__global uint8 *)&pRGB_buf[32];\n"
-		"		L2 = *(__global uint2 *)&pRGB_buf[64];\n"
+		"		pRGB_in_buf += pRGB_in_offset + (gy * pRGB_in_stride) + (gx * 72);\n"
+		"		L0 = *(__global uint8 *) pRGB_in_buf;\n"
+		"		L1 = *(__global uint8 *)&pRGB_in_buf[32];\n"
+		"		L2 = *(__global uint2 *)&pRGB_in_buf[64];\n"
 		"		uint8 pUYVY0;"
 		"		float3 f; float3 rgb;\n"
 		"		//Line[0]\n"
@@ -3103,6 +3145,26 @@ std::string ReadAndGammaAndConvertRGB4toV210()
 		"		                                                                                                f.s0 = dot(cV, rgb) + 512.0f; f.s1 = dot(cY.s012, gamma3(amd_unpackB(L1.s5,L1.s6))) + cY.s3;                                       ;\n"
 		"		rgb = gamma3(amd_unpackA(L1.s7,L2.s0)); f.s2 = dot(cU, rgb) + 512.0f;                                                                                                                        pUYVY0.s6 = amd_pack10(f.s0,f.s1,f.s2);\n"
 		"		                                                              f.s0 = dot(cY.s012, rgb) + cY.s3; f.s1 = dot(cV, rgb) + 512.0f; f.s2 = dot(cY.s012, gamma3(amd_unpackB(L2.s0,L2.s1))) + cY.s3; pUYVY0.s7 = amd_pack10(f.s0,f.s1,f.s2);\n";
+	return output;
+}
+std::string ConvertRGB4toRGB2()
+{
+	std::string output = //RGB4 > RGB2
+		"    uint4 pRGB0;\n"
+		"    float mulfactor = 255.0f/32767.0f;\n"
+		"    float4 f; f.s0 = 0;\n"
+		"    f.s012 = amd_unpackA(L0.s0,L0.s1)*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = amd_unpackB(L0.s1,L0.s2); pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = amd_unpackA(L0.s3,L1.s0)*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = amd_unpackB(L1.s0,L1.s1); pRGB0.s3 = amd_pack(f);\n";
+	return output;
+}
+std::string GammaAndConvertRGB4toRGB2()
+{
+	std::string output = //RGB4 > RGB2
+		"    uint4 pRGB0;\n"
+		"    float mulfactor = 255.0f/32767.0f;\n"
+		"    float4 f; f.s0 = 0;\n"
+		"    f.s012 = gamma3(amd_unpackA(L0.s0,L0.s1))*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L0.s1,L0.s2)); pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = gamma3(amd_unpackA(L0.s3,L1.s0))*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L1.s0,L1.s1)); pRGB0.s3 = amd_pack(f);\n";
 	return output;
 }
 
@@ -3122,11 +3184,11 @@ std::string Write2x8PixelsToRGB2buffer()
 		"    pRGB1.s4 = ((pRGB1.s4 & 0x00ffffff)      ) + (pRGB1.s5 << 24);\n"
 		"    pRGB1.s5 = ((pRGB1.s5 & 0x00ffff00) >>  8) + (pRGB1.s6 << 16);\n"
 		"    pRGB1.s6 = ((pRGB1.s6 & 0x00ff0000) >> 16) + (pRGB1.s7 <<  8);\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 24);\n"
-		"    *(__global uint3 *) pRGB_buf = pRGB0.s012;\n"
-		"    *(__global uint3 *)&pRGB_buf[12] = pRGB0.s456;\n"
-		"    *(__global uint3 *)&pRGB_buf[pRGB_stride] = pRGB1.s012;\n"
-		"    *(__global uint3 *)&pRGB_buf[pRGB_stride+12] = pRGB1.s456;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride * 2) + (gx * 24);\n"
+		"    *(__global uint3 *) pRGB_out_buf = pRGB0.s012;\n"
+		"    *(__global uint3 *)&pRGB_out_buf[12] = pRGB0.s456;\n"
+		"    *(__global uint3 *)&pRGB_out_buf[pRGB_out_stride] = pRGB1.s012;\n"
+		"    *(__global uint3 *)&pRGB_out_buf[pRGB_out_stride+12] = pRGB1.s456;\n";
 	return output;
 }
 std::string Write1x4PixelsToRGB2buffer()
@@ -3135,42 +3197,42 @@ std::string Write1x4PixelsToRGB2buffer()
 		"    pRGB0.s0 = ((pRGB0.s0 & 0x00ffffff)      ) + (pRGB0.s1 << 24);\n"
 		"    pRGB0.s1 = ((pRGB0.s1 & 0x00ffff00) >>  8) + (pRGB0.s2 << 16);\n"
 		"    pRGB0.s2 = ((pRGB0.s2 & 0x00ff0000) >> 16) + (pRGB0.s3 <<  8);\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 12);\n"
-		"    *(__global uint2 *) pRGB_buf = pRGB0.s01;\n"
-		"    *(__global uint *)&pRGB_buf[8] = pRGB0.s2;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 12);\n"
+		"    *(__global uint2 *) pRGB_out_buf = pRGB0.s01;\n"
+		"    *(__global uint *)&pRGB_out_buf[8] = pRGB0.s2;\n";
 	return output;
 }
 std::string Write2x8PixelsToRGBXbuffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx << 5);\n"
-		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint8 *)&pRGB_buf[pRGB_stride] = pRGB1;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride * 2) + (gx << 5);\n"
+		"    *(__global uint8 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint8 *)&pRGB_out_buf[pRGB_out_stride] = pRGB1;\n";
 	return output;
 }
 std::string Write1x4PixelsToRGBXbuffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx << 4);\n"
-		"    *(__global uint4 *) pRGB_buf = pRGB0;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx << 4);\n"
+		"    *(__global uint4 *) pRGB_out_buf = pRGB0;\n";
 	return output;
 }
 std::string Write2x8PixelsToRGB4buffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride * 2) + (gx * 48);\n"
-		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint4 *)&pRGB_buf[32] = pRGB1.s0123;\n"
-		"    *(__global uint8 *)&pRGB_buf[pRGB_stride] = pRGB2;\n"
-		"    *(__global uint4 *)&pRGB_buf[pRGB_stride+32] = pRGB3.s0123;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride * 2) + (gx * 48);\n"
+		"    *(__global uint8 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint4 *)&pRGB_out_buf[32] = pRGB1.s0123;\n"
+		"    *(__global uint8 *)&pRGB_out_buf[pRGB_out_stride] = pRGB2;\n"
+		"    *(__global uint4 *)&pRGB_out_buf[pRGB_out_stride+32] = pRGB3.s0123;\n";
 	return output;
 }
 std::string Write1x4PixelsToRGB4buffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 24);\n"
-		"    *(__global uint4 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint2 *)&pRGB_buf[16] = pRGB1;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 24);\n"
+		"    *(__global uint4 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint2 *)&pRGB_out_buf[16] = pRGB1;\n";
 	return output;
 }
 std::string Write1x6PixelsToRGB2buffer()
@@ -3185,26 +3247,26 @@ std::string Write1x6PixelsToRGB2buffer()
 		"    pRGB0.s6 = ((pRGB1.s0 & 0x00ffffff)      ) + (pRGB1.s1 << 24);\n"
 		"    pRGB0.s7 = ((pRGB1.s1 & 0x00ffff00) >>  8) + (pRGB1.s2 << 16);\n"
 		"    pRGB1.s0 = ((pRGB1.s2 & 0x00ff0000) >> 16) + (pRGB1.s3 <<  8);\n"
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 36);\n"
-		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint  *)&pRGB_buf[32] = pRGB1.s0;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 36);\n"
+		"    *(__global uint8 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint  *)&pRGB_out_buf[32] = pRGB1.s0;\n";
 	return output;
 }
 std::string Write1x6PixelsToRGBXbuffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 48);\n"
-		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint4 *)&pRGB_buf[32] = pRGB1;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 48);\n"
+		"    *(__global uint8 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint4 *)&pRGB_out_buf[32] = pRGB1;\n";
 	return output;
 }
 std::string Write1x6PixelsToRGB4buffer()
 {
 	std::string output =
-		"    pRGB_buf += pRGB_offset + (gy * pRGB_stride) + (gx * 72);\n"
-		"    *(__global uint8 *) pRGB_buf = pRGB0;\n"
-		"    *(__global uint8 *)&pRGB_buf[32] = pRGB1;\n"
-		"    *(__global uint2 *)&pRGB_buf[64] = pRGB2;\n";
+		"    pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 72);\n"
+		"    *(__global uint8 *) pRGB_out_buf = pRGB0;\n"
+		"    *(__global uint8 *)&pRGB_out_buf[32] = pRGB1;\n"
+		"    *(__global uint2 *)&pRGB_out_buf[64] = pRGB2;\n";
 	return output;
 }
 std::string Write2x8PixelsTo422buffer8bit()
@@ -3360,3 +3422,4 @@ std::string Gamma3()
 		"\n";
 	return output;
 }
+

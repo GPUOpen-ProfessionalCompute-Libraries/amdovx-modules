@@ -98,8 +98,8 @@ enum vx_df_image_amd_stitching_e {
 //////////////////////////////////////////////////////////////////////
 //! \brief The list of kernels in the stitching library.
 enum vx_kernel_stitching_amd_e {
-	//! \brief The Color Convert with optional 2x2 scale down function kernel. Kernel name is "com.amd.loomsl.color_convert_general".
-	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_GENERAL = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
+	//! \brief The Color Convert function kernel. Kernel name is "com.amd.loomsl.color_convert".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
 
 	//! \brief The Warp function kernel. Kernel name is "com.amd.loomsl.warp".
 	AMDOVX_KERNEL_STITCHING_WARP = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x002,
@@ -211,6 +211,52 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context);
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags);
 
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] inputY The Y plane of the input image.
+* \param [in] inputUV The UV plane of the input image.
+* \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromNV12Node(vx_graph graph, vx_image inputY, vx_image inputUV, vx_image output, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] inputY The Y plane of the input image.
+* \param [in] inputU The U plane of the input image.
+* \param [in] inputV The V plane of the input image.
+* \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromIYUVNode(vx_graph graph, vx_image inputY, vx_image inputU, vx_image inputV, vx_image output, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] input The input image.
+* \param [out] outputY The Y plane of the output image.
+* \param [out] outputUV The UV plane of the output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToNV12Node(vx_graph graph, vx_image input, vx_image outputY, vx_image outputUV, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] input The input image.
+* \param [out] outputY The Y plane of the output image.
+* \param [out] outputU The U plane of the output image.
+* \param [out] outputV The V plane of the output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx_image input, vx_image outputY, vx_image outputU, vx_image outputV, vx_uint8 flags);
+
 /*! \brief [Graph] Creates a Warp node.
 * \param [in] graph The reference to the graph.
 * \param [in] input The input computation method type.
@@ -223,7 +269,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 * \param [in] num_camera_columns The number of camera columns (optional).
 * \param [in] alpha_value The alpha value writte in the a channel of RGBA (optional).
 * \param [in] flags The flags used for the kernel, e.g. for interpolation method (0: bilinear, 1: bicubic) (optional).
-* \param [out] outputExpComp The output image for exposure compensation, which contains invalid flags.
+* \param [out] outputExpComp The output image for exposure compensation, which contains invalid flags (optional).
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -238,9 +284,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 * \param [in] input The input image.
 * \param [in] input The weight image.
 * \param [out] output The output image.
-* \param [out/optional] output The output U8 image containing the X plane of output RGBX
-* \param [in/optional] input The number of camera columns (uint32 scalar)
-* \param [in/optional] input The external alpha value (uint32 scalar)
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */

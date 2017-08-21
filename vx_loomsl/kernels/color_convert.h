@@ -28,7 +28,7 @@ THE SOFTWARE.
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The kernel registration functions.
-vx_status color_convert_general_publish(vx_context context); // for UYVY, YUYV, V210, V216
+vx_status color_convert_publish(vx_context context); // for UYVY, YUYV, V210, V216
 vx_status color_convert_from_NV12_publish(vx_context context); // for NV12 input
 vx_status color_convert_from_IYUV_publish(vx_context context); // for IYUV input
 vx_status color_convert_to_NV12_publish(vx_context context); // for NV12 output
@@ -93,11 +93,14 @@ std::string ConvertRGB2toNV12();
 std::string ConvertRGB2toIYUV();
 std::string ConvertRGB2toV216();
 std::string ReadAndConvertRGB2toV210();
+std::string ConvertRGB2toRGB4();
+std::string ConvertRGB2toRGB4AndDegamma();
 std::string ConvertRGB4toUYVY();
 std::string ConvertRGB4toYUYV();
 std::string ConvertRGB4toNV12();
 std::string ConvertRGB4toIYUV();
 std::string ConvertRGB4toV216();
+std::string ConvertRGB4toRGB2();
 std::string ReadAndConvertRGB4toV210();
 std::string GammaAndConvertRGB4toUYVY();
 std::string GammaAndConvertRGB4toYUYV();
@@ -105,6 +108,7 @@ std::string GammaAndConvertRGB4toNV12();
 std::string GammaAndConvertRGB4toIYUV();
 std::string GammaAndConvertRGB4toV216();
 std::string ReadAndGammaAndConvertRGB4toV210();
+std::string GammaAndConvertRGB4toRGB2();
 // Write output to buffer ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 std::string Write2x8PixelsToRGB2buffer();
 std::string Write1x4PixelsToRGB2buffer();

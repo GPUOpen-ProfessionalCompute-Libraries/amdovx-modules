@@ -199,7 +199,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReleaseContext(ls_context * pStitc
 //  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV, VX_DF_IMAGE_V210_AMD, VX_DF_IMAGE_V216_AMD
 //  - buffer_width must be multiple of 16
 //  - buffer_height must be multiple of 2
-//  - Note that 16 bit flow is not supported when output format is VX_DF_IMAGE_RGB
 //  - Note that this function must be called before lsInitialize call
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height);
@@ -207,7 +206,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 //! \brief Set the stitched input camera image buffer format and dimensions
 //  - num_camera_rows: number of image tile rows inside the buffer (veritical direction)
 //  - num_camera_columns: number of image tile columns inside the buffer (horizontal direction)
-//  - Note that 16 bit flow is not supported when input format is VX_DF_IMAGE_RGB
 //  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV, VX_DF_IMAGE_V210_AMD, VX_DF_IMAGE_V216_AMD
 //  - buffer_width must be multiple of 16 and less than 8K
 //  - buffer_height must be multiple of 2 and less than 8K

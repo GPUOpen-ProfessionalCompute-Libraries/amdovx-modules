@@ -458,6 +458,39 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 	}
 }
 
+vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags)
+{
+	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
+	vxQueryImage(input, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format));
+	vxQueryImage(output, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format));
+
+	if (input_format == VX_DF_IMAGE_NV12){
+		vx_image y_channel = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
+		vx_image uv_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
+		return stitchColorConvertFromNV12Node(graph, y_channel, uv_channel, output, flags);
+	}
+	else if (input_format == VX_DF_IMAGE_IYUV){
+		vx_image y_channel = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
+		vx_image u_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
+		vx_image v_channel = vxCreateImageFromChannel(input, VX_CHANNEL_V);
+		return stitchColorConvertFromIYUVNode(graph, y_channel, u_channel, v_channel, output, flags);
+	}
+	else if (output_format == VX_DF_IMAGE_NV12){
+		vx_image y_channel = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
+		vx_image uv_channel = vxCreateImageFromChannel(output, VX_CHANNEL_U);
+		return stitchColorConvertToNV12Node(graph, input, y_channel, uv_channel, flags);
+	}
+	else if (output_format == VX_DF_IMAGE_IYUV){
+		vx_image y_channel = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
+		vx_image u_channel = vxCreateImageFromChannel(output, VX_CHANNEL_U);
+		vx_image v_channel = vxCreateImageFromChannel(output, VX_CHANNEL_V);
+		return stitchColorConvertToIYUVNode(graph, input, y_channel, u_channel, v_channel, flags);
+	}
+	else{
+		return CreateColorConvertNode(graph, input, output, flags);
+	}
+}
+
 //! \brief Function to set default values to global attributes
 static void ResetLiveStitchGlobalAttributes()
 {
@@ -1807,7 +1840,7 @@ static vx_status CreateImageFromROI(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->encode_dst_imgs[i] = vxCreateImageFromROI(stitch->encodetileOutput[outputTileID], &stitch->dst_encode_tile_rect[i]));
 
 		// color covert the image ROI's
-		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = stitchColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i],stitch->color_convert_flags));
+		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = CreateColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i],stitch->color_convert_flags));
 	}
 	return VX_SUCCESS;
 }
@@ -2282,11 +2315,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-		if (stitch->output_buffer_format == VX_DF_IMAGE_RGB || stitch->output_buffer_format == VX_DF_IMAGE_RGB){
-			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
-			ls_printf("WARNING: RGB format is not supported by the 16bit mode, a 8 bit flow will be used instead. Supported formats are UYVY, YUYV, NV12, IYUV, V210, V216.\n");
-		}
-		else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
+		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
@@ -2606,7 +2635,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	stitch->rgb_input = stitch->Img_input;
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
 		// needs input color conversion
-		stitch->InputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
+		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
 		stitch->rgb_input = stitch->Img_input_rgb;
 	}
@@ -2631,7 +2660,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// needs output color conversion
 		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
 			if (stitch->output_tiles == 1){ 
-				stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
+				stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
 				ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 			}
 			else{
@@ -2641,7 +2670,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 		}
 		else{
-			stitch->OutputColorConvertNode = stitchColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
+			stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
 			ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 		}
 		stitch->rgb_output = stitch->Img_output_rgb;
@@ -3791,7 +3820,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			stitch->chromaKey_mask_generation_node, stitch->chromaKey_merge_node,
 		};
 		const char * kernelNameList[] = {
-			"com.amd.loomsl.color_convert_general", "org.khronos.openvx.remap", "com.amd.loomsl.color_convert_general",
+			"com.amd.loomsl.color_convert", "org.khronos.openvx.remap", "com.amd.loomsl.color_convert",
 			"com.amd.loomsl.warp", "com.amd.loomsl.expcomp_compute_gainmatrix", "com.amd.loomsl.expcomp_solvegains", "com.amd.loomsl.expcomp_applygains", "com.amd.loomsl.merge",
 			"org.khronos.openvx.sobel_3x3", "org.khronos.openvx.magnitude", "org.khronos.openvx.phase", "org.khronos.openvx.convert_depth",
 			"com.amd.loomsl.seamfind_scene_detect", "com.amd.loomsl.seamfind_cost_generate", "com.amd.loomsl.seamfind_cost_accumulate", "com.amd.loomsl.seamfind_path_trace", "com.amd.loomsl.seamfind_set_weights",
