@@ -430,14 +430,14 @@ static void ResetLiveStitchGlobalAttributes()
 	if (!g_live_stitch_attr_initialized) {
         g_live_stitch_attr_initialized = true;
         memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));
-        // exposure compensation default
+        // exposure compensation defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE] = 0.01f;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE] = 100.0f;
-        // seam find default
+        // seam find defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;
@@ -455,21 +455,21 @@ static void ResetLiveStitchGlobalAttributes()
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD] = 20;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL] = 5;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD] = 46;
-        // multi-band blend default
+        // multi-band blend defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
-        // tiled output default attributes
+        // tiled output defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] = 3840;
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] = 2160;
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y] = 3840;
-        // chroma key default
+        // chroma key defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
         g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
         // temporal filter default
         g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
-        // LoomIO specific attributes
+        // LoomIO specific defaults
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
