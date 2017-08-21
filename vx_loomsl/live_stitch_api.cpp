@@ -430,12 +430,14 @@ static void ResetLiveStitchGlobalAttributes()
 	if (!g_live_stitch_attr_initialized) {
         g_live_stitch_attr_initialized = true;
         memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));
+        // exposure compensation default
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE] = 0.01f;
         g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE] = 100.0f;
+        // seam find default
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;
@@ -453,9 +455,9 @@ static void ResetLiveStitchGlobalAttributes()
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD] = 20;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL] = 5;
         g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD] = 46;
+        // multi-band blend default
         g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
-        g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal;
         // tiled output default attributes
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
         g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
@@ -465,12 +467,12 @@ static void ResetLiveStitchGlobalAttributes()
         // chroma key default
         g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
         g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
+        // temporal filter default
+        g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
         // LoomIO specific attributes
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
         g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
-        // Temporal Filter
-        g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
     }
 }
 static std::vector<std::string> split(std::string str, char delimiter) {
