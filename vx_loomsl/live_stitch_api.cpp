@@ -428,50 +428,50 @@ static void ResetLiveStitchGlobalAttributes()
 {
 	// set default settings only once
 	if (!g_live_stitch_attr_initialized) {
-		g_live_stitch_attr_initialized = true;
-		memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE] = 0.01f;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE] = 100.0f;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_THRESHOLD] = 25;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY] = -1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_FREQUENCY] = 6000;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_QUALITY] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_STAGGER] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN] = 120;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL] = 5;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL] = 5;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR] = 0.15f;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD] = 20;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL] = 5;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD] = 46;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal;
-		// frame encoding default attributes
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] = 3840;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] = 2160;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y] = 3840;
-		// chroma key default
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
-		// LoomIO specific attributes
-		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
-		// Temporal Filter
-		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
-	}
+        g_live_stitch_attr_initialized = true;
+        memset(g_live_stitch_attr, 0, sizeof(g_live_stitch_attr));
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE] = 0.01f;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE] = 100.0f;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAMFIND] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COST_SELECT] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_REFRESH] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_THRESHOLD] = 25;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY] = -1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_FREQUENCY] = 6000;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_QUALITY] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_STAGGER] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN] = 120;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL] = 5;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL] = 5;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR] = 0.15f;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD] = 20;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL] = 5;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD] = 46;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS] = 4;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] = (float)stitching_mode_normal;
+        // tiled output default attributes
+        g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] = 3840;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] = 2160;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y] = 3840;
+        // chroma key default
+        g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
+        // LoomIO specific attributes
+        g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
+        g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
+        // Temporal Filter
+        g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
+    }
 }
 static std::vector<std::string> split(std::string str, char delimiter) {
 	std::stringstream ss(str);
