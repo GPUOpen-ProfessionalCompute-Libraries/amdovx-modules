@@ -52,8 +52,8 @@ The below example demonstrates how to stitch images from these cameras into a 4K
       loadBufferFromMultipleImages(buf[0],"CAM%02d.bmp",3,1,VX_DF_IMAGE_RGB,1920,1080*3);
 
       # set input and output buffers and stitch a frame
-      lsSetCameraBuffer(context, &buf[0],1);
-      lsSetOutputBuffer(context, &buf[1],1);
+      lsSetCameraBuffer(context, &buf[0], 1);
+      lsSetOutputBuffer(context, &buf[1], 1);
       lsScheduleFrame(context);
       lsWaitForCompletion(context);
 
