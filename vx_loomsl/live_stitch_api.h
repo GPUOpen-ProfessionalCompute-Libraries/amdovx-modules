@@ -46,63 +46,63 @@ THE SOFTWARE.
 //  - the default values of these attributes will be good enough for most applications
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API 
 enum {
-	LIVE_STITCH_ATTR_PROFILER                 =    0,   // profiler attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_EXPCOMP                  =    1,   // exp-comp attribute: 0:OFF 1:Global 2:GlobalUser  4:BlockUser
-	LIVE_STITCH_ATTR_SEAMFIND                 =    2,   // seamfind attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_SEAM_REFRESH             =    3,   // seamfind seam refresh attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_SEAM_COST_SELECT         =    4,   // seamfind cost generate attribute: 0:OpenVX Sobel Mag/Phase 1:Optimized Sobel Mag/Phase
-	LIVE_STITCH_ATTR_MULTIBAND                =    5,   // multiband attribute: 0:OFF 1:ON
-	LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS       =    6,   // multiband attribute: numbands 2-6
-	LIVE_STITCH_ATTR_STITCH_MODE              =    7,   // stitch mode: 0:normal 1:quick (default: normal)
-	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
-	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
-	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 1)
-	LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY       =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default -1)
-	LIVE_STITCH_ATTR_SEAM_FREQUENCY           =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation. (default 6000)
-	LIVE_STITCH_ATTR_SEAM_QUALITY             =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 1)
-	LIVE_STITCH_ATTR_SEAM_STAGGER             =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames (default 1)
-	LIVE_STITCH_ATTR_SEAM_LOCK                =   17,   // Seam lock (default: 0)
-	LIVE_STITCH_ATTR_SEAM_FLAGS               =   18,   // Seam flags (default: 0)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE      =   20,   // Seam find special case for circular fisheye on equator (default: enabled)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN    =   21,   // min HFOV in degrees (default: 120)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL   =   22,   // pitch tolerance in degrees (default: 5)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL     =   23,   // yaw tolerance in degrees (default: 5)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR  =   24,   // max horizontal overlap ratio (default: 0.25)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD  =   25,   // max vertical overlap in degrees (default: 20)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL  =   26,   // top and bottom camera pitch tolerance (default: 5)
-	LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD  =   27,   // top and bottom camera vertical overlap clamp in degrees for equaor cameras (default: 0)
-	LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS     =   29,   // multiband attribute: padding pixel count (default: 0)
-	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W       =   30,   // exp-comp attribute: gain image width (default: 1)
-	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H       =   31,   // exp-comp attribute: gain image height (default: 1)
-	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION  =   32,   // LoomIO: auxiliary data buffer selection. 0:default 1:camera 2:overlay.
-	LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE  =   33,   // LoomIO: camera auxiliary data buffer size in bytes.
-	LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE =   34,   // LoomIO: overlay auxiliary data buffer size in bytes.
-	LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE  =   35,   // LoomIO: display auxiliary data buffer size in bytes.
-	LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C		  =	  36,   // exp-comp attribute: gain image num channels (default: 1)
-	LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE	  =	  37,   // exp-comp attribute: alpha value (variance of gain)
-	LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE		  =   38,   // exp-comp attribute: beta value (variance of mean intensity)
-	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X		  =	  40,   // number of horizontal tiles in the output (default: 1)
-	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y		  =   41,   // number of veritical tiles in the output (default: 1)
-	LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap  =   42,   // overlap pixel count (default: 0)
-	LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE =   43,   // tiled buffer default value (default: 0)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH     =   44,   // encoder buffer width (default: 3840)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT    =   45,   // encoder buffer height (default: 2160)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y  =   46,   // encoder buffer stride_y (default: 2160)
-	LIVE_STITCH_ATTR_CHROMA_KEY				  =   50,   // chroma key enable: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_CHROMA_KEY_VALUE		  =   51,   // chroma key value: 0 - N (default: 8454016 - Green 0x80FF80)
-	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
-	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
-	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
-	// Dynamic LoomSL attributes
-	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
-	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
-	// ... reserved for LoomSL internal attributes
-	LIVE_STITCH_ATTR_RESERVED_CORE_END        =  127,   // reserved first 128 attributes for LoomSL internal attributes
-	LIVE_STITCH_ATTR_RESERVED_EXT_BEGIN       =  128,   // start of reserved attributes for extensions
-	// ... reserved for extension attributes
-	LIVE_STITCH_ATTR_MAX_COUNT                =  256    // total number of attributes
+    LIVE_STITCH_ATTR_PROFILER                 =    0,   // profiler attribute: 0:OFF 1:ON
+    LIVE_STITCH_ATTR_EXPCOMP                  =    1,   // exp-comp attribute: 0:OFF 1:Global 2:GlobalUser  4:BlockUser
+    LIVE_STITCH_ATTR_SEAMFIND                 =    2,   // seamfind attribute: 0:OFF 1:ON
+    LIVE_STITCH_ATTR_SEAM_REFRESH             =    3,   // seamfind seam refresh attribute: 0:OFF 1:ON
+    LIVE_STITCH_ATTR_SEAM_COST_SELECT         =    4,   // seamfind cost generate attribute: 0:OpenVX Sobel Mag/Phase 1:Optimized Sobel Mag/Phase
+    LIVE_STITCH_ATTR_MULTIBAND                =    5,   // multiband attribute: 0:OFF 1:ON
+    LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS       =    6,   // multiband attribute: numbands 2-6
+    LIVE_STITCH_ATTR_STITCH_MODE              =    7,   // stitch mode: 0:normal 1:quick (default: normal)
+    LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
+    LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
+    LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 1)
+    LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY       =   13,   // Horizontal seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default -1)
+    LIVE_STITCH_ATTR_SEAM_FREQUENCY           =   14,   // Seam frequecy: 0 - N Frames. Frequency of seam calculation. (default 6000)
+    LIVE_STITCH_ATTR_SEAM_QUALITY             =   15,   // Seam quality, quality: 0 - N Flag.   0:Disable Edgeness 1:Enable Edgeness (default 1)
+    LIVE_STITCH_ATTR_SEAM_STAGGER             =   16,   // Seam stagger: 0 - N Frames. Stagger the seam calculation by N frames (default 1)
+    LIVE_STITCH_ATTR_SEAM_LOCK                =   17,   // Seam lock (default: 0)
+    LIVE_STITCH_ATTR_SEAM_FLAGS               =   18,   // Seam flags (default: 0)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE      =   20,   // Seam find special case for circular fisheye on equator (default: enabled)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN    =   21,   // min HFOV in degrees (default: 120)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL   =   22,   // pitch tolerance in degrees (default: 5)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL     =   23,   // yaw tolerance in degrees (default: 5)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR  =   24,   // max horizontal overlap ratio (default: 0.25)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD  =   25,   // max vertical overlap in degrees (default: 20)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL  =   26,   // top and bottom camera pitch tolerance (default: 5)
+    LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD  =   27,   // top and bottom camera vertical overlap clamp in degrees for equaor cameras (default: 0)
+    LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS     =   29,   // multiband attribute: padding pixel count (default: 0)
+    LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W       =   30,   // exp-comp attribute: gain image width (default: 1)
+    LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H       =   31,   // exp-comp attribute: gain image height (default: 1)
+    LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION  =   32,   // LoomIO: auxiliary data buffer selection. 0:default 1:camera 2:overlay.
+    LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE  =   33,   // LoomIO: camera auxiliary data buffer size in bytes.
+    LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE =   34,   // LoomIO: overlay auxiliary data buffer size in bytes.
+    LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE  =   35,   // LoomIO: display auxiliary data buffer size in bytes.
+    LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C       =   36,   // exp-comp attribute: gain image num channels (default: 1)
+    LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE      =   37,   // exp-comp attribute: alpha value (variance of gain)
+    LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE       =   38,   // exp-comp attribute: beta value (variance of mean intensity)
+    LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X        =   40,   // number of horizontal tiles in the output (default: 1)
+    LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y        =   41,   // number of veritical tiles in the output (default: 1)
+    LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap  =   42,   // overlap pixel count (default: 0)
+    LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE =   43,   // tiled buffer default value (default: 0)
+    LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH     =   44,   // encoder buffer width (default: 3840)
+    LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT    =   45,   // encoder buffer height (default: 2160)
+    LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y  =   46,   // encoder buffer stride_y (default: 2160)
+    LIVE_STITCH_ATTR_CHROMA_KEY               =   50,   // chroma key enable: 0:OFF 1:ON (default:0)
+    LIVE_STITCH_ATTR_CHROMA_KEY_VALUE         =   51,   // chroma key value: 0 - N (default: 8454016 - Green 0x80FF80)
+    LIVE_STITCH_ATTR_CHROMA_KEY_TOL           =   52,   // chroma key tol: 0 - N (default: 25)
+    LIVE_STITCH_ATTR_CHROMA_KEY_EED           =   53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
+    LIVE_STITCH_ATTR_NOISE_FILTER             =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
+    LIVE_STITCH_ATTR_USE_CPU_FOR_INIT         =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
+    LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT       =   57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
+    // Dynamic LoomSL attributes
+    LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
+    LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA      =   65,   // temporal filter variable: 0 - 1 (default:1)
+    // ... reserved for LoomSL internal attributes
+    LIVE_STITCH_ATTR_RESERVED_CORE_END        =  127,   // reserved first 128 attributes for LoomSL internal attributes
+    LIVE_STITCH_ATTR_RESERVED_EXT_BEGIN       =  128,   // start of reserved attributes for extensions
+    // ... reserved for extension attributes
+    LIVE_STITCH_ATTR_MAX_COUNT                =  256    // total number of attributes
 };
 
 
