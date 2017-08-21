@@ -367,7 +367,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph g
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandMergeNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
+VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandBlendNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input, vx_image weight_img, vx_array valid_arr, vx_image output);
 
 /*! \brief [Graph] Creates a stitchMultiBandHalfScaleGaussian node.
@@ -406,6 +406,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 * \param [in] input2 src image2
 * \param [in] valid_arr Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [out] output (img)
+* \param [in] flag Defines if the output should be clamped to positiv values
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -481,6 +482,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 * \param [in] seam_path     The input array of seam path .
 * \param [in] seam_pref     The input array of seam preference.
 * \param [out] output       The weight image.
+* \param [in] flags			Debug flags.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */

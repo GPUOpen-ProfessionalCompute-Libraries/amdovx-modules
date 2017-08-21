@@ -1250,7 +1250,7 @@ vx_status exposure_comp_applygains_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.expcomp_applygains",
 		AMDOVX_KERNEL_STITCHING_EXPCOMP_APPLYGAINS,
 		exposure_comp_applygains_kernel,
-		6,
+		7,
 		exposure_comp_applygains_input_validator,
 		exposure_comp_applygains_output_validator,
 		nullptr,

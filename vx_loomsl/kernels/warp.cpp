@@ -1060,7 +1060,7 @@ vx_status warp_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.warp",
 		AMDOVX_KERNEL_STITCHING_WARP,
 		warp_kernel,
-		10,
+		11,
 		warp_input_validator,
 		warp_output_validator,
 		nullptr,

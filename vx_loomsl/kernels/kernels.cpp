@@ -612,7 +612,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_sc
 /***********************************************************************************************************************************
 Stitch Multiband blending nodes.
 ************************************************************************************************************************************/
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandMergeNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
+VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandBlendNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input, vx_image weight_img, vx_array valid_arr, vx_image output)
 {
 	vx_scalar numCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cameras);

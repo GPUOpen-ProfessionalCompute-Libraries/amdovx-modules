@@ -2912,7 +2912,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 			// reconstruct Laplacian after blending with corresponding weights: for band = num_bands-1, laplacian and gaussian is the same
 			int i = stitch->num_bands - 1;
-			stitch->pStitchMultiband[i].BlendNode = stitchMultiBandMergeNode(stitch->graphStitch, stitch->num_cameras, stitch->pStitchMultiband[i].valid_array_offset,
+			stitch->pStitchMultiband[i].BlendNode = stitchMultiBandBlendNode(stitch->graphStitch, stitch->num_cameras, stitch->pStitchMultiband[i].valid_array_offset,
 				stitch->pStitchMultiband[i].DstPyrImgGaussian, stitch->pStitchMultiband[i].WeightPyrImgGaussian, stitch->blend_offsets, stitch->pStitchMultiband[i].DstPyrImgLaplacianRec);
 			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[i].BlendNode);
 			--i;
