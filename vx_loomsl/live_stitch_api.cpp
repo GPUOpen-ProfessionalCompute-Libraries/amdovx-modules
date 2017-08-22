@@ -2581,9 +2581,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_output = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out, ptr, VX_MEMORY_TYPE_OPENCL));
 		}
 	}
-	if (stitch->output_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS;}
+	if (stitch->output_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS; }
 	// create temporary images when extra color conversion is needed
-	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
+	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 			ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB4_AMD));
 		}
@@ -2633,7 +2633,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	// build the input and output processing parts of stitch graph
 	stitch->color_convert_flags = (vx_uint8)stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE];
 	stitch->rgb_input = stitch->Img_input;
-	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB) {
+	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION]==2) {
 		// needs input color conversion
 		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
@@ -2656,7 +2656,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		stitch->rgb_input = (vx_image)vxGetReferenceFromDelay(stitch->noiseFilterImageDelay, 0);
 	}
 	stitch->rgb_output = stitch->Img_output;
-	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
+	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		// needs output color conversion
 		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
 			if (stitch->output_tiles == 1){ 
