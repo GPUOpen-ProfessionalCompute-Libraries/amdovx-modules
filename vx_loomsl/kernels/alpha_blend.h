@@ -30,4 +30,8 @@ THE SOFTWARE.
 //! \brief The kernel registration functions.
 vx_status alpha_blend_publish(vx_context context);
 
+std::string Create_AMD_unpack();
+std::string Create_AMD_unpackAB();
+std::string Create_AMD_pack15();
+
 #endif //__ALPHA_BLEND_H__

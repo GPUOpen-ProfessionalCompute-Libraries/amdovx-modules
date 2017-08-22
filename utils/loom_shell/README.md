@@ -48,9 +48,10 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         lsSetCameraBufferStride(context,stride);
         lsSetOutputBufferStride(context,stride);
         lsSetOverlayBufferStride(context,stride);
-        lsSetCameraBuffer(context,&buf[#]|NULL);
-        lsSetOutputBuffer(context,&buf[#]|NULL);
-        lsSetOverlayBuffer(context,&buf[#]|NULL);
+        lsSetCameraBuffer(context,&buf[#]|NULL,number_buffers);
+        lsSetOutputBuffer(context,&buf[#]|NULL,number_buffers);
+        lsSetOverlayBuffer(context,&buf[#]|NULL,number_buffers);
+        lsSetChromaKeyBuffer(context,&buf[#]|NULL,number_buffers);
         showCameraBufferStride(context);
         showOutputBufferStride(context);
         showOverlayBufferStride(context);
@@ -68,8 +69,8 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         loadBufferFromImage(buf[#],"image.bmp",format,width,height,stride);
         saveBufferToMultipleImages(buf[#],"image%02d.bmp",rows,columns,format,width,height,stride);
         loadBufferFromMultipleImages(buf[#],"image%02d.bmp",rows,columns,format,width,height,stride);
-        loadBuffer(buf[#],"image.bin");
-        saveBuffer(buf[#],"image.bin");
+        loadBuffer(buf[#],"image.bin"[,offset]); // default: 0
+        saveBuffer(buf[#],"image.bin"[,flags]); // flags: 0:write 1:append, deault: 0
     ~ OpenVX/OpenVX contexts (advanced)
         createOpenCLContext("platform","device",&opencl_context);
         createOpenVXContext(&openvx_context);
@@ -127,7 +128,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
 | module          | LoomIO plug-in: OpenVX module name
 | kernelName      | LoomIO plug-in: OpenVX kernel name
 | kernelArguments | LoomIO plug-in: custom kernel arguments
-| offset          | start index of an attribute
+| offset          | start index of an attribute, see [settings](../../vx_loomsl/doc/settings.md)
 | count           | number of attributes
 | value           | value of attribute
 | contextCount    | number of stitch instances in context[] allocated using "ls_context context[N];"
@@ -162,8 +163,8 @@ The below example demonstrates how to stitch images from these cameras into a 4K
     loadBufferFromMultipleImages(buf[0],"CAM%02d.bmp",3,1,VX_DF_IMAGE_RGB,1920,1080*3);
 
     # set input and output buffers and stitch a frame
-    lsSetCameraBuffer(context, &buf[0]);
-    lsSetOutputBuffer(context, &buf[1]);
+    lsSetCameraBuffer(context, &buf[0], 1);
+    lsSetOutputBuffer(context, &buf[1], 1);
     run(context, 1);
 
     # save the stitched output into "output.bmp"
@@ -203,8 +204,8 @@ Align these test input images using PTGui Pro and save the project into "myrig.p
     loadBufferFromMultipleImages(buf[0], "CAM%02d.bmp", 16, 1, VX_DF_IMAGE_RGB, 1920, 1080*16);
     
     # process camera inputs from buf[0] into stitched output in buf[1]
-    lsSetCameraBuffer(context, &buf[0]);
-    lsSetCameraBuffer(context, &buf[1]);
+    lsSetCameraBuffer(context, &buf[0], 1);
+    lsSetCameraBuffer(context, &buf[1], 1);
     run(context, 1);
     
     # save the output

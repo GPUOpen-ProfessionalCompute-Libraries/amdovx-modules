@@ -781,86 +781,95 @@ int CLoomShellParser::OnCommand()
 	else if (!_stricmp(command, "lsSetCameraBuffer")) {
 		// parse the command
 		vx_uint32 contextIndex = 0, bufIndex = 0;
+		vx_uint32 num_buffers;
 		bool useNull = false;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetCameraBuffer(ls[#],&buf[#]|NULL)";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetCameraBuffer(ls[#],&buf[#]|NULL,number_buffers)";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
-		if (!_stricmp(s, ",null)")) {
+		if (!_stricmp(s, ",null")) {
 			useNull = true;
 		}
 		else {
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
-			SYNTAX_CHECK(ParseSkip(s, ")"));
-		}
+		}			
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_buffers));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		// process the command
 		if (useNull) {
-			vx_status status = lsSetCameraBuffer(context_[contextIndex], nullptr);
-			if (status) return Error("ERROR: lsSetCameraBuffer(%s[%d],NULL) failed (%d)", name_ls, contextIndex, status);
+			vx_status status = lsSetCameraBuffer(context_[contextIndex], nullptr, num_buffers);
+			if (status) return Error("ERROR: lsSetCameraBuffer(%s[%d],NULL,number_buffers) failed (%d)", name_ls, contextIndex, status);
 			Message("..lsSetCameraBuffer: set NULL for %s[%d]\n", name_ls, contextIndex);
 		}
 		else {
-			vx_status status = lsSetCameraBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex]);
-			if (status) return Error("ERROR: lsSetCameraBuffer(%s[%d],%s[%d]) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
+			vx_status status = lsSetCameraBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex], num_buffers);
+			if (status) return Error("ERROR: lsSetCameraBuffer(%s[%d],%s[%d],number_buffers) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
 			Message("..lsSetCameraBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
 		}
 	}
 	else if (!_stricmp(command, "lsSetOutputBuffer")) {
 		// parse the command
 		vx_uint32 contextIndex = 0, bufIndex = 0;
+		vx_uint32 num_buffers;
 		bool useNull = false;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetOutputBuffer(ls[#],&buf[#]|NULL)";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetOutputBuffer(ls[#],&buf[#]|NULL,number_buffers)";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
-		if (!_stricmp(s, ",null)")) {
+		if (!_stricmp(s, ",null")) {
 			useNull = true;
 		}
 		else {
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
-			SYNTAX_CHECK(ParseSkip(s, ")"));
-		}
+		}			
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_buffers));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		// process the command
 		if (useNull) {
-			vx_status status = lsSetOutputBuffer(context_[contextIndex], nullptr);
-			if (status) return Error("ERROR: lsSetOutputBuffer(%s[%d],NULL) failed (%d)", name_ls, contextIndex, status);
+			vx_status status = lsSetOutputBuffer(context_[contextIndex], nullptr, num_buffers);
+			if (status) return Error("ERROR: lsSetOutputBuffer(%s[%d],NULL,number_buffers) failed (%d)", name_ls, contextIndex, status);
 			Message("..lsSetOutputBuffer: set NULL for %s[%d]\n", name_ls, contextIndex);
 		}
 		else {
-			vx_status status = lsSetOutputBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex]);
-			if (status) return Error("ERROR: lsSetOutputBuffer(%s[%d],%s[%d]) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
+			vx_status status = lsSetOutputBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex], num_buffers);
+			if (status) return Error("ERROR: lsSetOutputBuffer(%s[%d],%s[%d],number_buffers) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
 			Message("..lsSetOutputBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
 		}
 	}
 	else if (!_stricmp(command, "lsSetOverlayBuffer")) {
 		// parse the command
 		vx_uint32 contextIndex = 0, bufIndex = 0;
+		vx_uint32 num_buffers;
 		bool useNull = false;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetOverlayBuffer(ls[#],&buf[#]|NULL)";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetOverlayBuffer(ls[#],&buf[#]|NULL,number_buffers)";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
-		if (!_stricmp(s, ",null)")) {
+		if (!_stricmp(s, ",null")) {
 			useNull = true;
 		}
 		else {
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
-			SYNTAX_CHECK(ParseSkip(s, ")"));
-		}
+		}			
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_buffers));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		// process the command
 		if (useNull) {
-			vx_status status = lsSetOverlayBuffer(context_[contextIndex], nullptr);
-			if (status) return Error("ERROR: lsSetOverlayBuffer(%s[%d],NULL) failed (%d)", name_ls, contextIndex, status);
+			vx_status status = lsSetOverlayBuffer(context_[contextIndex], nullptr, num_buffers);
+			if (status) return Error("ERROR: lsSetOverlayBuffer(%s[%d],NULL,number_buffers) failed (%d)", name_ls, contextIndex, status);
 			Message("..lsSetOverlayBuffer: set NULL for %s[%d]\n", name_ls, contextIndex);
 		}
 		else {
-			vx_status status = lsSetOverlayBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex]);
+			vx_status status = lsSetOverlayBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex], num_buffers);
 			if (status) return Error("ERROR: lsSetOverlayBuffer(%s[%d],%s[%d]) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
 			Message("..lsSetOverlayBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
 		}
@@ -868,28 +877,31 @@ int CLoomShellParser::OnCommand()
 	else if (!_stricmp(command, "lsSetChromaKeyBuffer")) {
 		// parse the command
 		vx_uint32 contextIndex = 0, bufIndex = 0;
+		vx_uint32 num_buffers;
 		bool useNull = false;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetChromaKeyBuffer(ls[#],&buf[#]|NULL)";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: lsSetChromaKeyBuffer(ls[#],&buf[#]|NULL,number_buffers)";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
-		if (!_stricmp(s, ",null)")) {
+		if (!_stricmp(s, ",null")) {
 			useNull = true;
 		}
 		else {
 			SYNTAX_CHECK(ParseSkip(s, ",&"));
 			SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
-			SYNTAX_CHECK(ParseSkip(s, ")"));
-		}
+		}			
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_buffers));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		// process the command
 		if (useNull) {
-			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], nullptr);
-			if (status) return Error("ERROR: lsSetChromaKeyBuffer(%s[%d],NULL) failed (%d)", name_ls, contextIndex, status);
+			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], nullptr,num_buffers);
+			if (status) return Error("ERROR: lsSetChromaKeyBuffer(%s[%d],NULL,number_buffers) failed (%d)", name_ls, contextIndex, status);
 			Message("..lsSetChromaKeyBuffer: set NULL for %s[%d]\n", name_ls, contextIndex);
 		}
 		else {
-			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex]);
+			vx_status status = lsSetChromaKeyBuffer(context_[contextIndex], &opencl_buf_mem_[bufIndex], num_buffers);
 			if (status) return Error("ERROR: lsSetChromaKeyBuffer(%s[%d],%s[%d]) failed (%d)", name_ls, contextIndex, name_buf, bufIndex, status);
 			Message("..lsSetChromaKeyBuffer: set OpenCL buffer %s[%d] for %s[%d]\n", name_buf, bufIndex, name_ls, contextIndex);
 		}
@@ -1409,7 +1421,7 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "loadBuffer") || !_stricmp(command, "saveBuffer")) {
 		// parse the command
-		vx_uint32 bufIndex = 0; char fileName[256];
+		vx_uint32 bufIndex = 0; char fileName[256]; vx_uint32 offsetOrFlag = 0;
 		const char * invalidSyntax = !_stricmp(command, "loadBuffer") ?
 			"ERROR: invalid syntax: expects: loadBuffer(buf,\"fileName.bin\");" :
 			"ERROR: invalid syntax: expects: saveBuffer(buf,\"fileName.bin\");";
@@ -1417,17 +1429,21 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseIndex(s, name_buf, bufIndex, num_opencl_buf_));
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
+		if (*s == ',') {
+			SYNTAX_CHECK(ParseSkip(s, ","));
+			SYNTAX_CHECK(ParseUInt(s, offsetOrFlag));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		if (bufIndex >= num_opencl_buf_) return Error("ERROR: OpenCL buffer out-of-range: expects: 0..%d", num_opencl_buf_ - 1);
 		if (!opencl_buf_mem_[bufIndex]) return Error("ERROR: OpenCL buffer %s[%d] doesn't exist", name_buf, bufIndex);
 		// process the command
 		if (!_stricmp(command, "loadBuffer")) {
-			vx_status status = loadBuffer(opencl_buf_mem_[bufIndex], fileName);
+			vx_status status = loadBuffer(opencl_buf_mem_[bufIndex], fileName, offsetOrFlag);
 			if (status) return status;
 		}
 		else {
-			vx_status status = saveBuffer(opencl_buf_mem_[bufIndex], fileName);
+			vx_status status = saveBuffer(opencl_buf_mem_[bufIndex], fileName, offsetOrFlag);
 			if (status) return status;
 		}
 	}

@@ -15,6 +15,7 @@ This software is provided under a MIT-style license,  see the file COPYRIGHT.txt
 * Overlay other videos on top of stitched video
 * Support for 3rd party *LoomIO* plug-ins for camera capture and stitched output
 * Support PtGui project export/import for camera calibration
+* Supports different [settings](doc/settings.md) to change quality and performance
 
 ## Live Stitch API: Simple Example
 Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses. 
@@ -51,8 +52,8 @@ The below example demonstrates how to stitch images from these cameras into a 4K
       loadBufferFromMultipleImages(buf[0],"CAM%02d.bmp",3,1,VX_DF_IMAGE_RGB,1920,1080*3);
 
       # set input and output buffers and stitch a frame
-      lsSetCameraBuffer(context, &buf[0]);
-      lsSetOutputBuffer(context, &buf[1]);
+      lsSetCameraBuffer(context, &buf[0], 1);
+      lsSetOutputBuffer(context, &buf[1], 1);
       lsScheduleFrame(context);
       lsWaitForCompletion(context);
 

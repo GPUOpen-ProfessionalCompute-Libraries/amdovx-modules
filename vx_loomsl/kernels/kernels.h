@@ -90,16 +90,15 @@ static inline vx_uint32 GetOneBitCount(vx_uint32 a)
 //////////////////////////////////////////////////////////////////////
 //! \brief The additional image formats supported by stitching module
 enum vx_df_image_amd_stitching_e {
-	VX_DF_IMAGE_Y210_AMD = VX_DF_IMAGE('Y', '2', '1', '0'),  // AGO image with YUV 4:2:2 10-bit (Y210)
-	VX_DF_IMAGE_Y212_AMD = VX_DF_IMAGE('Y', '2', '1', '2'),  // AGO image with YUV 4:2:2 12-bit (Y212)
-	VX_DF_IMAGE_Y216_AMD = VX_DF_IMAGE('Y', '2', '1', '6'),  // AGO image with YUV 4:2:2 16-bit (Y216)
+	VX_DF_IMAGE_V210_AMD = VX_DF_IMAGE('V', '2', '1', '0'),  // AGO image with YUV 4:2:2 10-bit (V210)
+	VX_DF_IMAGE_V216_AMD = VX_DF_IMAGE('V', '2', '1', '6'),  // AGO image with YUV 4:2:2 16-bit (V216)
 	VX_DF_IMAGE_RGB4_AMD = VX_DF_IMAGE('R', 'G', 'B', '4'),  // AGO image with RGB-48 16bit per channel (RGB4)
 };
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The list of kernels in the stitching library.
 enum vx_kernel_stitching_amd_e {
-	//! \brief The Color Convert with optional 2x2 scale down function kernel. Kernel name is "com.amd.loomsl.color_convert".
+	//! \brief The Color Convert function kernel. Kernel name is "com.amd.loomsl.color_convert".
 	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x001,
 
 	//! \brief The Warp function kernel. Kernel name is "com.amd.loomsl.warp".
@@ -132,9 +131,6 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.upscale_gaussian_add".
 	AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00b,
 
-	//! \brief The Half scale Gaussian kernel. Kernel name is "com.amd.loomsl.laplacian_reconstruct".
-	AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00c,
-
 	//! \brief The Seam Finding kernel 0. Kernel name is "com.amd.loomsl.seamfind_scene_detect".
 	AMDOVX_KERNEL_STITCHING_SEAMFIND_SCENE_DETECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x00d,
 
@@ -159,10 +155,7 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Seam Finding kernel 4. Kernel name is "com.amd.loomsl.chroma_key_mask_generation".
 	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MASK_GENERATION = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x015,
 
-	//! \brief The Seam Finding kernel. Kernel name is "com.amd.loomsl.chroma_key_merge".
-	AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x016,
-
-	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.color_convert".
+	//! \brief The Noise Filter at input. Kernel name is "com.amd.loomsl.noise_filter".
 	AMDOVX_KERNEL_STITCHING_NOISE_FILTER = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x017,
 
 	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.warp_eqr_to_aze".
@@ -179,6 +172,18 @@ enum vx_kernel_stitching_amd_e {
 
 	//! \brief The warp to sphere kernel. Kernel name is "com.amd.loomsl.extend_padding_vert".
 	AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_VERT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01c,
+
+	//! \brief The Color Convert with optional 2x2 scale down function kernel for NV12 input. Kernel name is "com.amd.loomsl.color_convert_from_NV12".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12 = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01d,
+
+	//! \brief The Color Convert with optional 2x2 scale down function kernel for IYUV input. Kernel name is "com.amd.loomsl.color_convert_from_IYUV".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01e,
+
+	//! \brief The Color Convert function kernel for NV12 output. Kernel name is "com.amd.loomsl.color_convert_to_NV12".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12 = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x01f,
+
+	//! \brief The Color Convert function kernel for IYUV output. Kernel name is "com.amd.loomsl.color_convert_to_IYUV".
+	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x020,
 
 	// TBD: remove
 
@@ -200,25 +205,76 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context);
 * \param [in] graph The reference to the graph.
 * \param [in] input The input image.
 * \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output);
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] inputY The Y plane of the input image.
+* \param [in] inputUV The UV plane of the input image.
+* \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromNV12Node(vx_graph graph, vx_image inputY, vx_image inputUV, vx_image output, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] inputY The Y plane of the input image.
+* \param [in] inputU The U plane of the input image.
+* \param [in] inputV The V plane of the input image.
+* \param [out] output The output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromIYUVNode(vx_graph graph, vx_image inputY, vx_image inputU, vx_image inputV, vx_image output, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] input The input image.
+* \param [out] outputY The Y plane of the output image.
+* \param [out] outputUV The UV plane of the output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToNV12Node(vx_graph graph, vx_image input, vx_image outputY, vx_image outputUV, vx_uint8 flags);
+
+/*! \brief [Graph] Creates a Color Convert node.
+* \param [in] graph The reference to the graph.
+* \param [in] input The input image.
+* \param [out] outputY The Y plane of the output image.
+* \param [out] outputU The U plane of the output image.
+* \param [out] outputV The V plane of the output image.
+* \param [in] flags Flag for linear color space.
+* \return <tt>\ref vx_node</tt>.
+* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx_image input, vx_image outputY, vx_image outputU, vx_image outputV, vx_uint8 flags);
 
 /*! \brief [Graph] Creates a Warp node.
 * \param [in] graph The reference to the graph.
 * \param [in] input The input computation method type.
 * \param [in] input The input scalar number of cameras.
 * \param [in] input The input array of StitchValidPixel.
-* \param [in] input The input array of StitchWarpRemap
+* \param [in] input The input array of StitchWarpRemap.
 * \param [in] input The input image.
 * \param [out] output The output image.
-* \param [in] num_camera_columns The number of camera columns (optional)
+* \param [out] outputLuma The luma output image, which can be used by seamfind.
+* \param [in] num_camera_columns The number of camera columns (optional).
+* \param [in] alpha_value The alpha value writte in the a channel of RGBA (optional).
+* \param [in] flags The flags used for the kernel, e.g. for interpolation method (0: bilinear, 1: bicubic) (optional).
+* \param [out] outputExpComp The output image for exposure compensation, which contains invalid flags (optional).
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam,
-	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns);
+	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns, vx_uint8 alpha_value, vx_uint8 flags, vx_image outputExpComp);
 
 /*! \brief [Graph] Creates a Stitch Merge node.
 * \param [in] graph The reference to the graph.
@@ -228,9 +284,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 * \param [in] input The input image.
 * \param [in] input The weight image.
 * \param [out] output The output image.
-* \param [out/optional] output The output U8 image containing the X plane of output RGBX
-* \param [in/optional] input The number of camera columns (uint32 scalar)
-* \param [in/optional] input The external alpha value (uint32 scalar)
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -239,12 +292,13 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera
 /*! \brief [Graph] Creates a AlphaBlend node.
 * \param [in] graph The reference to the graph.
 * \param [in] input_rgb Input RGB image.
-* \param [in] input_rgba Input RGBX image with alpha channel.
+* \param [in] input_rgba Input RGBX image with alpha channel or RGB image (if mask is used).
 * \param [out] output_rgb Output RGB image.
+* \param [in] input_mask Input mask image as alternative to an alpha channel
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb);
+VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb, vx_image mask_U8);
 
 /*! \brief [Graph] Creates a ExposureCompCalcErrorFn node.
 * \param [in] graph      The reference to the graph.
@@ -299,7 +353,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompApplyGainNode(vx_graph graph,
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras,
-	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity);
+	vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity, vx_uint8 flags);
 
 
 /*! \brief [Graph] Creates a stitchBlendMultiBandMerge node.
@@ -313,7 +367,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph g
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandMergeNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
+VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandBlendNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input, vx_image weight_img, vx_array valid_arr, vx_image output);
 
 /*! \brief [Graph] Creates a stitchMultiBandHalfScaleGaussian node.
@@ -352,25 +406,12 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 * \param [in] input2 src image2
 * \param [in] valid_arr Offsets/valid rect array (offsets will be useful for GPU kernel)
 * \param [out] output (img)
+* \param [in] flag Defines if the output should be clamped to positiv values
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
-
-/*! \brief [Graph] Creates a stitchMultiBandLaplacianReconstruct node.
-* \param [in] graph The reference to the graph.
-* \param [in] num_cameras The number of cameras
-* \param [in] blend_array_offs The start_offsets to valid_arr in #of elements
-* \param [in] input1 The src image1
-* \param [in] input2 The src image2
-* \param [in] valid_arr The offsets/valid rect array (offsets will be useful for GPU kernel)
-* \param [out] output image.
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output);
+	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output, vx_uint8 flag);
 
 /*! \brief [Graph] Creates a SeamFind Accumulate node K1 - GPU/CPU.
 * \param [in] graph The reference to the graph.
@@ -441,6 +482,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 * \param [in] seam_path     The input array of seam path .
 * \param [in] seam_pref     The input array of seam preference.
 * \param [out] output       The weight image.
+* \param [in] flags			Debug flags.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
@@ -472,18 +514,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_sc
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph, vx_uint32 ChromaKey, vx_uint32 ChromaKeyTol, vx_image input_rgb_img, vx_image output_mask_img);
-
-/*! \brief [Graph] Creates a stitch Chroma Key Merge Node- GPU/CPU.
-* \param [in] graph				The reference to the graph.
-* \param [in] input_rgb_img		The input stitched output image.
-* \param [in] input_chroma_img	The input Chroma image.
-* \param [in] input_mask_img	The input mask image.
-* \param [out] output			The output chorma merged image.
-* \return <tt>\ref vx_node</tt>.
-* \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
-*/
-VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img);
-
 
 /*! \brief [Graph] Creates a stitch Noise Filter Node- GPU.
 * \param [in] graph				The reference to the graph.

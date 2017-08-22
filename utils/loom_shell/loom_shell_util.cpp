@@ -926,7 +926,7 @@ vx_status saveBufferToMultipleImages(cl_mem mem, const char * fileName, vx_uint3
 	return VX_SUCCESS;
 }
 
-vx_status loadBuffer(cl_mem mem, const char * fileName)
+vx_status loadBuffer(cl_mem mem, const char * fileName, vx_uint32 offset)
 {
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
 	vx_uint32 size = globalClMem2SizeMap[mem];
@@ -935,7 +935,8 @@ vx_status loadBuffer(cl_mem mem, const char * fileName)
 	if (err) return Error("ERROR: clEnqueueMapBuffer() failed (%d)", err);
 	err = clFinish(cmdq); if (err) return Error("ERROR: clFinish() failed (%d)", err);
 	FILE * fp = fopen(fileName, "rb"); if (!fp) return Error("ERROR: unable to open: %s", fileName);
-	ERROR_CHECK_FREAD_(fread(img, 1, size, fp),size);
+	fseek(fp, offset, SEEK_SET);
+	ERROR_CHECK_FREAD_(fread(img, 1, size, fp), size);
 	fclose(fp);
 	err = clEnqueueUnmapMemObject(cmdq, mem, img, 0, NULL, NULL);
 	if (err) return Error("ERROR: clEnqueueUnmapMemObject failed (%d)", err);
@@ -944,12 +945,15 @@ vx_status loadBuffer(cl_mem mem, const char * fileName)
 	return VX_SUCCESS;
 }
 
-vx_status saveBuffer(cl_mem mem, const char * fileName)
+vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags)
 {
 	bool append = false;
-	if (fileName[0] == '+') {
+	if (flags&1) {
 		append = true;
+	}
+	else if (fileName[0] == '+') {
 		fileName++;
+		append = true;
 	}
 	cl_command_queue cmdq = GetCmdqCached(mem); if (!cmdq) return -1;
 	vx_uint32 size = globalClMem2SizeMap[mem];

@@ -43,16 +43,19 @@ THE SOFTWARE.
 SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 {
 	// register image formats
-	AgoImageFormatDescription desc = { 3, 1, 32, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL };
-	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_Y210_AMD, &desc);
-	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_Y212_AMD, &desc);
-	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_Y216_AMD, &desc);
+	AgoImageFormatDescription desc = { 3, 1, 128, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL, 6 };
+	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_V210_AMD, &desc);
+	desc = { 3, 1, 32, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL };
+	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_V216_AMD, &desc);
 	desc = { 3, 1, 48, VX_COLOR_SPACE_DEFAULT, VX_CHANNEL_RANGE_FULL };
 	vxSetContextImageFormatDescription(context, VX_DF_IMAGE_RGB4_AMD, &desc);
 	// register kernels
 	ERROR_CHECK_STATUS(color_convert_publish(context));
+	ERROR_CHECK_STATUS(color_convert_from_NV12_publish(context));
+	ERROR_CHECK_STATUS(color_convert_from_IYUV_publish(context));
+	ERROR_CHECK_STATUS(color_convert_to_NV12_publish(context));
+	ERROR_CHECK_STATUS(color_convert_to_IYUV_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
-	ERROR_CHECK_STATUS(exposure_compensation_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_solvegains_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_applygains_publish(context));
@@ -62,7 +65,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(half_scale_gaussian_publish(context));
 	ERROR_CHECK_STATUS(upscale_gaussian_subtract_publish(context));
 	ERROR_CHECK_STATUS(upscale_gaussian_add_publish(context));
-	ERROR_CHECK_STATUS(laplacian_reconstruct_publish(context));
 	ERROR_CHECK_STATUS(seamfind_model_publish(context));
 	ERROR_CHECK_STATUS(seamfind_scene_detect_publish(context));
 	ERROR_CHECK_STATUS(seamfind_cost_generate_publish(context));
@@ -72,7 +74,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(seamfind_analyze_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcRGBErrorFn_publish(context));
 	ERROR_CHECK_STATUS(chroma_key_mask_generation_publish(context));
-	ERROR_CHECK_STATUS(chroma_key_merge_publish(context));
 	ERROR_CHECK_STATUS(noise_filter_publish(context));
 	ERROR_CHECK_STATUS(warp_eqr_to_aze_publish(context));
 	ERROR_CHECK_STATUS(calc_lens_distortionwarp_map_publish(context));
@@ -201,29 +202,110 @@ OVX Stich Nodes
 /**
 * \brief Function to create Color Convert node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags)
 {
+	vx_node node;
 
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 	vx_reference params[] = {
 		(vx_reference)input,
-		(vx_reference)output
+		(vx_reference)output,
+		(vx_reference)s_flags
 	};
-	vx_node node = stitchCreateNode(graph,
+	node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT,
 		params,
 		dimof(params));
+	return node;
+}
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromNV12Node(vx_graph graph, vx_image inputY, vx_image inputUV, vx_image output, vx_uint8 flags)
+{
+	vx_node node;
 
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
+	vx_reference params[] = {
+		(vx_reference)inputY,
+		(vx_reference)inputUV,
+		(vx_reference)output,
+		(vx_reference)s_flags
+	};
+	node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromIYUVNode(vx_graph graph, vx_image inputY, vx_image inputU, vx_image inputV, vx_image output, vx_uint8 flags)
+{
+	vx_node node;
+
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
+	vx_reference params[] = {
+		(vx_reference)inputY,
+		(vx_reference)inputU,
+		(vx_reference)inputV,
+		(vx_reference)output,
+		(vx_reference)s_flags
+	};
+	node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_IYUV,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToNV12Node(vx_graph graph, vx_image input, vx_image outputY, vx_image outputUV, vx_uint8 flags)
+{
+	vx_node node;
+
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
+	vx_reference params[] = {
+		(vx_reference)input,
+		(vx_reference)outputY,
+		(vx_reference)outputUV,
+		(vx_reference)s_flags
+	};
+	node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_NV12,
+		params,
+		dimof(params));
+	return node;
+}
+
+VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx_image input, vx_image outputY, vx_image outputU, vx_image outputV, vx_uint8 flags)
+{
+	vx_node node;
+
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
+	vx_reference params[] = {
+		(vx_reference)input,
+		(vx_reference)outputY,
+		(vx_reference)outputU,
+		(vx_reference)outputV,
+		(vx_reference)s_flags
+	};
+	node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV,
+		params,
+		dimof(params));
 	return node;
 }
 
 /**
 * \brief Function to create Stitch Warp node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns)
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns, vx_uint8 alpha_value, vx_uint8 flags, vx_image outputExpComp)
 {
 	vx_scalar METHOD = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_ENUM, &method);
 	vx_scalar NUM_CAM = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
 	vx_scalar s_num_camera_columns = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_camera_columns);
+	vx_scalar s_alpha_value = NULL;
+	if (alpha_value != 0)
+	{
+		vx_scalar s_alpha_value = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &alpha_value);
+	}
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 
 	vx_reference params[] = {
 		(vx_reference)METHOD,
@@ -234,6 +316,9 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 		(vx_reference)output,
 		(vx_reference)outputLuma,
 		(vx_reference)s_num_camera_columns,
+		(vx_reference)s_alpha_value,
+		(vx_reference)s_flags,
+		(vx_reference)outputExpComp,
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_WARP,
@@ -269,12 +354,13 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMergeNode(vx_graph graph, vx_image camera
 /**
 * \brief Function to create Stitch AlphaBlendnode
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb)
+VX_API_ENTRY vx_node VX_API_CALL stitchAlphaBlendNode(vx_graph graph, vx_image input_rgb, vx_image input_rgba, vx_image output_rgb, vx_image mask_U8)
 {
 	vx_reference params[] = {
 		(vx_reference)input_rgb,
 		(vx_reference)input_rgba,
-		(vx_reference)output_rgb
+		(vx_reference)output_rgb,
+		(vx_reference)mask_U8
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_ALPHA_BLEND,
@@ -310,9 +396,10 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnNode(vx_graph grap
 /**
 * \brief Function to create Calculate RGB Error Function node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity)
+VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph graph, vx_uint32 numCameras, vx_image input, vx_array exp_data, vx_image mask, vx_matrix out_intensity, vx_uint8 flags)
 {
 	vx_scalar Num_Camera = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &numCameras);
+	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 
 	vx_reference params[] = {
 		(vx_reference)Num_Camera,
@@ -320,6 +407,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompCalcErrorFnRGBNode(vx_graph g
 		(vx_reference)exp_data,
 		(vx_reference)mask,
 		(vx_reference)out_intensity,
+		(vx_reference)s_flags
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_EXPCOMP_COMPUTE_GAINMAT_RGB,
@@ -524,7 +612,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindAnalyzeNode(vx_graph graph, vx_sc
 /***********************************************************************************************************************************
 Stitch Multiband blending nodes.
 ************************************************************************************************************************************/
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandMergeNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
+VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandBlendNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
 	vx_image input, vx_image weight_img, vx_array valid_arr, vx_image output)
 {
 	vx_scalar numCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cameras);
@@ -600,10 +688,11 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianSubtractNode(vx_g
 }
 
 VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output)
+	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output, vx_uint8 flag)
 {
 	vx_scalar numCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cameras);
 	vx_scalar array_offs = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &blend_array_offs);
+	vx_scalar flag_scalar = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flag);
 
 	vx_reference params[] = {
 		(vx_reference)numCam,
@@ -611,7 +700,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 		(vx_reference)input1,
 		(vx_reference)input2,
 		(vx_reference)valid_arr,
-		(vx_reference)output
+		(vx_reference)output,
+		(vx_reference)flag_scalar
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_UPSCALE_GAUSSIAN_ADD,
@@ -621,31 +711,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandUpscaleGaussianAddNode(vx_graph 
 	vxReleaseScalar(&numCam);
 	vxReleaseScalar(&array_offs);
 	return node;
-}
-
-VX_API_ENTRY vx_node VX_API_CALL stitchMultiBandLaplacianReconstructNode(vx_graph graph, vx_uint32 num_cameras, vx_uint32 blend_array_offs,
-	vx_image input1, vx_image input2, vx_array valid_arr, vx_image output)
-{
-	vx_scalar numCam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cameras);
-	vx_scalar array_offs = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &blend_array_offs);
-
-	vx_reference params[] = {
-		(vx_reference)numCam,
-		(vx_reference)array_offs,
-		(vx_reference)input1,
-		(vx_reference)input2,
-		(vx_reference)valid_arr,
-		(vx_reference)output
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_LAPLACIAN_RECONSTRUCT,
-		params,
-		dimof(params));
-
-	vxReleaseScalar(&numCam);
-	vxReleaseScalar(&array_offs);
-	return node;
-
 }
 
 /***********************************************************************************************************************************
@@ -669,22 +734,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMaskGeneratorNode(vx_graph graph
 
 	vxReleaseScalar(&CHROMA_KEY);
 	vxReleaseScalar(&TOLERANCE);
-	return node;
-}
-
-VX_API_ENTRY vx_node VX_API_CALL stitchChromaKeyMergeNode(vx_graph graph, vx_image input_rgb_img, vx_image input_chroma_img, vx_image input_mask_img, vx_image output_merged_img)
-{
-	vx_reference params[] = {
-		(vx_reference)input_rgb_img,
-		(vx_reference)input_chroma_img,
-		(vx_reference)input_mask_img,
-		(vx_reference)output_merged_img
-	};
-	vx_node node = stitchCreateNode(graph,
-		AMDOVX_KERNEL_STITCHING_CHROMA_KEY_MERGE,
-		params,
-		dimof(params));
-
 	return node;
 }
 

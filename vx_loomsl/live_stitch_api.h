@@ -95,6 +95,9 @@ enum {
 	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
 	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
+	LIVE_STITCH_ATTR_PRECISION	              =	  58,	// enables a 16bit flow from input to output color convert: 0:Auto-Detect 1:8-bit 2: 16-bit (default:0)
+	LIVE_STITCH_ATTR_WARP_INTERPOLATION       =   59,   // warp interpolation mode: 0: bilinear, 1: bicubic (default:0)
+	LIVE_STITCH_ATTR_LINEAR_COLORSPACE        =   60,   // the whole flow will use a linear colorspace: 0: Non linear, 1: linear (default:0)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
 	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
@@ -193,10 +196,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReleaseContext(ls_context * pStitc
 #endif
 
 //! \brief Set the stitched output image buffer format and dimensions
-//  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV
+//  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV, VX_DF_IMAGE_V210_AMD, VX_DF_IMAGE_V216_AMD
 //  - buffer_width must be multiple of 16
 //  - buffer_height must be multiple of 2
-//  - Note that output scale factor attribute is not supported when output format is VX_DF_IMAGE_RGB
 //  - Note that this function must be called before lsInitialize call
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height);
@@ -204,11 +206,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputConfig(ls_context stitch,
 //! \brief Set the stitched input camera image buffer format and dimensions
 //  - num_camera_rows: number of image tile rows inside the buffer (veritical direction)
 //  - num_camera_columns: number of image tile columns inside the buffer (horizontal direction)
-//  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV
+//  - supported formats: VX_DF_IMAGE_RGB, VX_DF_IMAGE_UYVY, VX_DF_IMAGE_YUYV, VX_DF_IMAGE_NV12, VX_DF_IMAGE_IYUV, VX_DF_IMAGE_V210_AMD, VX_DF_IMAGE_V216_AMD
 //  - buffer_width must be multiple of 16 and less than 8K
 //  - buffer_height must be multiple of 2 and less than 8K
 //  - dimensions of all image tiles inside the buffer must be same
-//  - Note that input scale factor attribute is not supported when input format is VX_DF_IMAGE_RGB
 //  - Note that this function must be called before lsInitialize call
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraConfig(ls_context stitch, vx_uint32 num_camera_rows, vx_uint32 num_camera_columns, vx_df_image buffer_format, vx_uint32 buffer_width, vx_uint32 buffer_height);
@@ -303,10 +304,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsReinitialize(ls_context stitch);
 //     chromaKey_buffer  - chroma key opencl buffer for equirectangular image
 //   Use of nullptr will return the control of previously set buffer
 //  - return VX_SUCCESS or error code (see log messages for further details)
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer);
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer);
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer);
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer);
+//  - for multiplanar images (NV12 or IYUV) every plane needs a seperate buffer
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetCameraBuffer(ls_context stitch, cl_mem * input_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch, cl_mem * output_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOverlayBuffer(ls_context stitch, cl_mem * overlay_buffer, vx_uint32 number_buffers);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetChromaKeyBuffer(ls_context stitch, cl_mem * chromaKey_buffer, vx_uint32 number_buffers);
 
 //! \brief Schedule a frame
 //  - only one frame can be scheduled at a time

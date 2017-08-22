@@ -73,7 +73,7 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 		}
 	}
 	else if (index == 3)
-	{ // input image of format RGBX
+	{ // input image of format RGBX or RGB4
 		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
@@ -87,7 +87,7 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGBX) {
+		if (input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: merge input image should be of RGBX type\n");
 		}
@@ -104,8 +104,10 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 		vx_image image = (vx_image)avxGetNodeParamRef(node, 3);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 width = 0, height = 0;
+		vx_df_image format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
@@ -114,9 +116,9 @@ static vx_status VX_CALLBACK merge_input_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_U8) {
+		if (input_format != VX_DF_IMAGE_U8 && (input_format != VX_DF_IMAGE_S16 || format == VX_DF_IMAGE_RGB || format == VX_DF_IMAGE_RGBX)) {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: merge input weight image should be of U008 type\n");
+			vxAddLogEntry((vx_reference)node, status, "ERROR: merge input weight image should be of U008 or S016 type\n");
 		}
 		else if ((input_width != width) || (input_height != height)) {
 			status = VX_ERROR_INVALID_DIMENSION;
@@ -139,8 +141,10 @@ static vx_status VX_CALLBACK merge_output_validator(vx_node node, vx_uint32 inde
 		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 input_width = 0, input_height = 0;
+		vx_df_image input_format = VX_DF_IMAGE_VIRT;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
+		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 		// set output image meta data
 		image = (vx_image)avxGetNodeParamRef(node, index);
@@ -159,9 +163,13 @@ static vx_status VX_CALLBACK merge_output_validator(vx_node node, vx_uint32 inde
 		{ // pick default output height as the input map height
 			output_height = input_height;
 		}
-		if ((output_format != VX_DF_IMAGE_RGB) && (output_format != VX_DF_IMAGE_RGBX))
+		if ((input_format == VX_DF_IMAGE_RGBX) && (output_format != VX_DF_IMAGE_RGB) && (output_format != VX_DF_IMAGE_RGBX))
 		{ // pick default output format RGB
 			output_format = VX_DF_IMAGE_RGB;
+		}
+		if (input_format == VX_DF_IMAGE_RGB4_AMD && output_format != VX_DF_IMAGE_RGB4_AMD)
+		{ // pick default output format RGB
+			output_format = VX_DF_IMAGE_RGB4_AMD;
 		}
 		// set output image meta data
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
@@ -200,12 +208,23 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 {
 	// get input and output image configurations
 	vx_uint32 width = 0, height = 0;
-	vx_df_image output_format = VX_DF_IMAGE_VIRT;
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 5);				// output image
+	vx_df_image output_format = VX_DF_IMAGE_VIRT, input_format = VX_DF_IMAGE_VIRT;
+
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 3);				// input image
+	ERROR_CHECK_OBJECT(image);
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+
+	image = (vx_image)avxGetNodeParamRef(node, 5);				// output image
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
+	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+	vx_df_image weight_format = VX_DF_IMAGE_VIRT;
+	image = (vx_image)avxGetNodeParamRef(node, 4);				// weight image
+	ERROR_CHECK_OBJECT(image);
+	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &weight_format, sizeof(weight_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 	// set kernel configuration
 	strcpy(opencl_kernel_function_name, "merge");
@@ -221,16 +240,37 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 	opencl_local_buffer_size_in_bytes = 0;
 
 	vx_float32 wt_mul_factor = 1.0f / 255.0f;
+	if (weight_format == VX_DF_IMAGE_S16)
+	{
+		wt_mul_factor = 1.0f / 32767.0f;
+	}
 	// kernel header and reading
+	opencl_kernel_code =
+		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n";
+	if (output_format == VX_DF_IMAGE_RGB || output_format == VX_DF_IMAGE_RGBX){
+		opencl_kernel_code +=
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			
+			"}\n"
+			"\n";
+	}
+	else{ //input_format == VX_DF_IMAGE_RGB4_AMD
+		opencl_kernel_code +=
+			"float3 amd_unpackA(uint src0, uint src1)\n"
+			"{\n"
+			"  return (float3)((float)(src0 & 0x7fff),(float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff));\n"
+			"}\n"
+			"float3 amd_unpackB(uint src0, uint src1)\n"
+			"{\n"
+			"  return (float3)((float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff), (float)((src1 >> 16) & 0x7fff));\n"
+			"}\n"
+			"\n";
+	}
 	char item[8192];
 	sprintf(item,
-		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-		"float4 amd_unpack(uint src)\n"
-		"{\n"
-		"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
-		"}\n"
-		"\n"
 		"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n" // opencl_local_work[0], opencl_local_work[1]
 		"void %s(uint camID0_img_width, uint camID0_img_height, __global uchar * camID0_img_buf, uint camID0_img_stride, uint camID0_img_offset,\n" // opencl_kernel_function_name
 		"        uint camID1_img_width, uint camID1_img_height, __global uchar * camID1_img_buf, uint camID1_img_stride, uint camID1_img_offset,\n"
@@ -241,87 +281,275 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 		"{\n"
 		"  int gx = get_global_id(0);\n"
 		"  int gy = get_global_id(1);\n"
-		"  float weight_mul_factor = %f;\n" // wt_mul_factor
+		"  float weight_mul_factor = %.10f;\n" // wt_mul_factor
 		"  if ((gx < %d) && (gy < %d)) {\n" // work_items[0], work_items[1]
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, wt_mul_factor, work_items[0], work_items[1]);
-	opencl_kernel_code = item;
+	opencl_kernel_code += item;
 
 	opencl_kernel_code +=
-		"  uint4 pRGB_out;\n"
 		"  camID0_img_buf += camID0_img_offset + gy * camID0_img_stride + (gx >> 1);\n"
 		"  uchar camIdSelect = *(__global uchar *)camID0_img_buf;\n"
-		"  uint4 pRGBX_in; float4 weights;\n"
-		"  float16 fa = 0;\n"
-		"  if(camIdSelect < 31) {\n"
-		"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx << 4));\n"
-		"    fa.s0123 += amd_unpack(pRGBX_in.s0);\n"
-		"    fa.s4567 += amd_unpack(pRGBX_in.s1);\n"
-		"    fa.s89AB += amd_unpack(pRGBX_in.s2);\n"
-		"    fa.sCDEF += amd_unpack(pRGBX_in.s3);\n"
-		"  }\n"
-		"  else if(camIdSelect > 31) {\n"
-		"    camID1_img_buf += camID1_img_offset + gy * camID1_img_stride + ((gx >> 1) << 1);\n"
-		"    ushort camID_struct = *(__global ushort *)camID1_img_buf;\n"
-		"    ushort camId = camID_struct & 0x1f;\n"
-		"    pRGBX_in = (uint4)0;  weights = (float4)0;\n"
-		"    if (camId < 31) {\n"
-		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"      weights *= weight_mul_factor;\n"
-		"    }\n"
-		"    fa.s0123 += weights.s0 * amd_unpack(pRGBX_in.s0); fa.s4567 += weights.s1 * amd_unpack(pRGBX_in.s1); fa.s89AB += weights.s2 * amd_unpack(pRGBX_in.s2); fa.sCDEF += weights.s3 * amd_unpack(pRGBX_in.s3);\n"
-		"    \n"
-		"    camId = (camID_struct >> 5) & 0x1f;\n"
-		"    weights = (float4)0;\n"
-		"    if (camId < 31) {\n"
-		"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"      weights *= weight_mul_factor;\n"
-		"    }\n"
-		"    fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-		"    if(camIdSelect > 128) {\n"
-		"      camId = (camID_struct >> 10) & 0x1f;\n"
-		"      weights = (float4)0;\n"
-		"      if (camId < 31) {\n"
-		"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"        weights *= weight_mul_factor;\n"
-		"      }\n"
-		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-		"    }\n\n"
-		"    if(camIdSelect > 129) {\n"
-		"      camID2_img_buf += camID2_img_offset + gy * camID2_img_stride + ((gx >> 1) << 1);\n"
-		"      camID_struct = *(__global ushort *)camID2_img_buf;\n"
-		"      camId = camID_struct & 0x1f;\n"
-		"      weights = (float4)0;\n"
-		"      if (camId < 31) {\n"
-		"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"        weights *= weight_mul_factor;\n"
-		"      }\n"
-		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-		"    }\n\n"
-		"    if(camIdSelect > 130) {\n"
-		"      camId = (camID_struct >> 5) & 0x1f;\n"
-		"       weights = (float4)0;\n"
-		"      if (camId < 31) {\n"
-		"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"        weights *= weight_mul_factor;\n"
-		"      }\n"
-		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-		"    }\n\n"
-		"    if(camIdSelect > 131) {\n"
-		"      camId = (camID_struct >> 10) & 0x1f;\n"
-		"      weights = (float4)0;\n"
-		"      if (camId < 31) {\n"
-		"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
-		"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
-		"        weights *= weight_mul_factor;\n"
-		"      }\n"
-		"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
-		"    }\n"
-		"  }\n\n";
+		"  float4 weights;\n";
+	if (output_format == VX_DF_IMAGE_RGB || output_format == VX_DF_IMAGE_RGBX)
+	{
+		opencl_kernel_code += 
+			"  float16 fa = 0;\n"
+			"  uint4 pRGB_out; uint4 pRGBX_in;\n"
+			"  if(camIdSelect < 31) {\n"
+			"    pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx << 4));\n"
+			"    fa.s0123 += amd_unpack(pRGBX_in.s0);\n"
+			"    fa.s4567 += amd_unpack(pRGBX_in.s1);\n"
+			"    fa.s89AB += amd_unpack(pRGBX_in.s2);\n"
+			"    fa.sCDEF += amd_unpack(pRGBX_in.s3);\n"
+			"  }\n"
+			"  else if(camIdSelect > 31) {\n"
+			"    camID1_img_buf += camID1_img_offset + gy * camID1_img_stride + ((gx >> 1) << 1);\n"
+			"    ushort camID_struct = *(__global ushort *)camID1_img_buf;\n"
+			"    ushort camId = camID_struct & 0x1f;\n"
+			"    pRGBX_in = (uint4)0;  weights = (float4)0;\n"
+			"    if (camId < 31) {\n"
+			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"      weights *= weight_mul_factor;\n"
+			"    }\n"
+			"    fa.s0123 += weights.s0 * amd_unpack(pRGBX_in.s0); fa.s4567 += weights.s1 * amd_unpack(pRGBX_in.s1); fa.s89AB += weights.s2 * amd_unpack(pRGBX_in.s2); fa.sCDEF += weights.s3 * amd_unpack(pRGBX_in.s3);\n"
+			"    \n"
+			"    camId = (camID_struct >> 5) & 0x1f;\n"
+			"    weights = (float4)0;\n"
+			"    if (camId < 31) {\n"
+			"      pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"      weights *= weight_mul_factor;\n"
+			"    }\n"
+			"    fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+			"    if(camIdSelect > 128) {\n"
+			"      camId = (camID_struct >> 10) & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"        weights *= weight_mul_factor;\n"
+			"      }\n"
+			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+			"    }\n\n"
+			"    if(camIdSelect > 129) {\n"
+			"      camID2_img_buf += camID2_img_offset + gy * camID2_img_stride + ((gx >> 1) << 1);\n"
+			"      camID_struct = *(__global ushort *)camID2_img_buf;\n"
+			"      camId = camID_struct & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"        weights *= weight_mul_factor;\n"
+			"      }\n"
+			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+			"    }\n\n"
+			"    if(camIdSelect > 130) {\n"
+			"      camId = (camID_struct >> 5) & 0x1f;\n"
+			"       weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"        weights *= weight_mul_factor;\n"
+			"      }\n"
+			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+			"    }\n\n"
+			"    if(camIdSelect > 131) {\n"
+			"      camId = (camID_struct >> 10) & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGBX_in = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx << 4));\n"
+			"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+			"        weights *= weight_mul_factor;\n"
+			"      }\n"
+			"      fa.s0123 = mad((float4)weights.s0, amd_unpack(pRGBX_in.s0), fa.s0123); fa.s4567 = mad((float4)weights.s1, amd_unpack(pRGBX_in.s1), fa.s4567); fa.s89AB = mad((float4)weights.s2, amd_unpack(pRGBX_in.s2), fa.s89AB); fa.sCDEF = mad((float4)weights.s3, amd_unpack(pRGBX_in.s3), fa.sCDEF);\n"
+			"    }\n"
+			"  }\n\n";
+	}
+	else { //RGB4
+		opencl_kernel_code +=
+			"  float8 fa1 = (float8)0; float4 fa2 = (float4)0;\n";
+		if (weight_format == VX_DF_IMAGE_S16){
+			opencl_kernel_code +=
+				"  uint2 weights_in; \n";
+		}
+			opencl_kernel_code +=
+				"  uint4 pRGB_in0; uint2 pRGB_in1;\n"
+				"  if(camIdSelect < 31) {\n"
+				"    pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx * 24));\n"
+				"    pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camIdSelect) * ip_stride) + (gx * 24) + 16);\n"
+				"    fa1.s012 += amd_unpackA(pRGB_in0.s0,pRGB_in0.s1);\n"
+				"    fa1.s345 += amd_unpackB(pRGB_in0.s1,pRGB_in0.s2);\n"
+				"    fa1.s67  += (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f));\n"
+				"    fa2.s0   += clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f);\n"
+				"    fa2.s123 += amd_unpackB(pRGB_in1.s0,pRGB_in1.s1);\n"
+				"  }\n"
+				"  else if(camIdSelect > 31) {\n"
+				"    camID1_img_buf += camID1_img_offset + gy * camID1_img_stride + ((gx >> 1) << 1);\n"
+				"    ushort camID_struct = *(__global ushort *)camID1_img_buf;\n"
+				"    ushort camId = camID_struct & 0x1f;\n"
+				"    pRGB_in0 = (uint4)0; pRGB_in1 = (uint2)0; weights = (float4)0;\n"
+				"    if (camId < 31) {\n"
+				"      pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+				"      pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"      weights *= weight_mul_factor;\n"
+				"    }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"      weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"      weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"				
+				"      weights *= weight_mul_factor;\n"
+				"    }\n";
+		}
+		opencl_kernel_code +=
+			"    fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"    fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"    fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"    fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"    fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"    \n"
+			"    camId = (camID_struct >> 5) & 0x1f;\n"
+			"    weights = (float4)0;\n"
+			"    if (camId < 31) {\n"
+			"      pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+			"      pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"      weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"      weights *= weight_mul_factor;\n"
+				"    }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"      weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"      weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"			
+				"      weights *= weight_mul_factor;\n"
+				"    }\n";
+		}
+		opencl_kernel_code +=
+			"    fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"    fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"    fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"    fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"    fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"    \n"
+			"    if(camIdSelect > 128) {\n"
+			"      camId = (camID_struct >> 10) & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+			"        pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"        weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"        weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		opencl_kernel_code +=
+			"      fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"      fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"      fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"      fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"      fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"     \n"
+			"    }\n\n"
+			"    if(camIdSelect > 129) {\n"
+			"      camID2_img_buf += camID2_img_offset + gy * camID2_img_stride + ((gx >> 1) << 1);\n"
+			"      camID_struct = *(__global ushort *)camID2_img_buf;\n"
+			"      camId = camID_struct & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+			"        pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"        weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"        weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		opencl_kernel_code +=
+			"      fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"      fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"      fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"      fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"      fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"      \n"
+			"    }\n\n"
+			"    if(camIdSelect > 130) {\n"
+			"      camId = (camID_struct >> 5) & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+			"        pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"        weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"        weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		opencl_kernel_code +=
+			"      fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"      fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"      fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"      fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"      fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"      \n"
+			"    }\n\n"
+			"    if(camIdSelect > 131) {\n"
+			"      camId = (camID_struct >> 10) & 0x1f;\n"
+			"      weights = (float4)0;\n"
+			"      if (camId < 31) {\n"
+			"        pRGB_in0 = *(__global uint4 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24));\n"
+			"        pRGB_in1 = *(__global uint2 *) (ip_buf + ip_offset + ((gy + op_height * camId) * ip_stride) + (gx * 24) + 16);\n";
+		if (weight_format == VX_DF_IMAGE_U8){
+			opencl_kernel_code +=
+				"        weights = convert_float4(*(__global uchar4 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 2)));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		else{
+			opencl_kernel_code +=
+				"        weights_in = *(__global uint2 *) (wt_buf + wt_offset + ((gy + op_height * camId) * wt_stride) + (gx << 3));\n"
+				"        weights = (float4)((weights_in.s0 & 0x7fff), ((weights_in.s0 >> 16) & 0x7fff), (weights_in.s1 & 0x7fff), ((weights_in.s1 >> 16) & 0x7fff));\n"
+				"        weights *= weight_mul_factor;\n"
+				"      }\n";
+		}
+		opencl_kernel_code +=
+			"      fa1.s012 = mad((float3)weights.s0, amd_unpackA(pRGB_in0.s0,pRGB_in0.s1), fa1.s012); \n"
+			"      fa1.s345 = mad((float3)weights.s1, amd_unpackB(pRGB_in0.s1,pRGB_in0.s2), fa1.s345); \n"
+			"      fa1.s67  = mad((float2)weights.s2, (float2)(clamp((float)(pRGB_in0.s3 & 0x7fff),0.0f,32767.0f), clamp((float)((pRGB_in0.s3 >> 16) & 0x7fff),0.0f,32767.0f)), fa1.s67); \n"
+			"      fa2.s0   = mad(weights.s2, clamp((float)(pRGB_in1.s0 & 0x7fff),0.0f,32767.0f), fa2.s0); \n"
+			"      fa2.s123 = mad((float3)weights.s3, amd_unpackB(pRGB_in1.s0,pRGB_in1.s1), fa2.s123); \n"
+			"      \n"
+			"    }\n"
+			"  }\n\n";
+	}
+
 	if (output_format == VX_DF_IMAGE_RGB) {
 		opencl_kernel_code +=
 			"  pRGB_out.s0 = amd_pack(fa.s0124); pRGB_out.s1 = amd_pack(fa.s5689); pRGB_out.s2 = amd_pack(fa.sACDE);\n"
@@ -332,7 +560,7 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 			"  }\n"
 			"}";
 	}
-	else { // RGBX out
+	else if (output_format == VX_DF_IMAGE_RGBX) {
 		opencl_kernel_code +=
 			"  uint Xmask = 0xff000000;\n"
 			"  pRGB_out.s0 = amd_pack(fa.s0123); pRGB_out.s0 |= Xmask;\n"
@@ -340,8 +568,25 @@ static vx_status VX_CALLBACK merge_opencl_codegen(
 			"  pRGB_out.s2 = amd_pack(fa.s89AB); pRGB_out.s2 |= Xmask;\n"
 			"  pRGB_out.s3 = amd_pack(fa.sCDEF); pRGB_out.s3 |= Xmask;\n"
 			"  if(camIdSelect != 31) {\n"
-			"    op_buf += op_offset + gy * op_stride + gx << 4;\n"
+			"    op_buf += op_offset + gy * op_stride + (gx << 4);\n"
 			"    *(__global uint4 *) op_buf = pRGB_out;\n"
+			"    }\n"
+			"  }\n"
+			"}";
+	}
+	else if (output_format == VX_DF_IMAGE_RGB4_AMD) {
+		opencl_kernel_code +=
+			"  uint4 pRGB_out0; uint2 pRGB_out1;\n"
+			"  pRGB_out0.s0 = (( (uint) clamp(fa1.s1,0.0f,32767.0f))<<16)+ (uint) clamp(fa1.s0,0.0f,32767.0f);\n"
+			"  pRGB_out0.s1 = (( (uint) clamp(fa1.s3,0.0f,32767.0f))<<16)+ (uint) clamp(fa1.s2,0.0f,32767.0f);\n"
+			"  pRGB_out0.s2 = (( (uint) clamp(fa1.s5,0.0f,32767.0f))<<16)+ (uint) clamp(fa1.s4,0.0f,32767.0f);\n"
+			"  pRGB_out0.s3 = (( (uint) clamp(fa1.s7,0.0f,32767.0f))<<16)+ (uint) clamp(fa1.s6,0.0f,32767.0f);\n"
+			"  pRGB_out1.s0 = (( (uint) clamp(fa2.s1,0.0f,32767.0f))<<16)+ (uint) clamp(fa2.s0,0.0f,32767.0f);\n"
+			"  pRGB_out1.s1 = (( (uint) clamp(fa2.s3,0.0f,32767.0f))<<16)+ (uint) clamp(fa2.s2,0.0f,32767.0f);\n"
+			"  if(camIdSelect != 31) {\n"
+			"    op_buf += op_offset + gy * op_stride + gx * 24;\n"
+			"    vstore4(pRGB_out0, 0, (__global uint *) op_buf);\n"
+			"    vstore2(pRGB_out1, 0, (__global uint *) (op_buf+16));\n"
 			"    }\n"
 			"  }\n"
 			"}";
