@@ -35,7 +35,6 @@ static unsigned char g_Linear2Gamma[1024];
 /////////////////////////////////////////////////////////////////////////////////////
 
 
-
 inline vx_uint32 count_nz_mean_single(vx_uint32 *p, uint32_t stride, int width, int height, uint32_t *psum)
 {
 	vx_uint32 cnt = 0, sum = 0;
@@ -271,6 +270,336 @@ inline vx_uint32 count_nz_mean_single_32x32(vx_uint32 *p, uint32_t stride, uint3
 inline uint8_t saturate_char(int n)
 {
 	return (n > 255) ? 255 : (n < 0) ? 0 : n;
+}
+
+vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pOverlap_roi, vx_array ExpCompOut, int numCameras)
+{
+	vx_int32 i;
+	ERROR_CHECK_OBJECT(ExpCompOut);
+	if (!numCameras)return VX_FAILURE;
+	vx_rectangle_t *rect_I;
+	vx_int32 x1, y1, x2, y2;
+	StitchOverlapPixelEntry ExpOut;
+	ERROR_CHECK_STATUS(vxTruncateArray(ExpCompOut, 0));
+	for (i = 0; i < numCameras; i++){
+		for (int j = i + 1; j < numCameras; j++){
+			int ID = (i * numCameras) + j;
+			rect_I = &pOverlap_roi[ID];
+			x1 = rect_I->start_x, x2 = rect_I->end_x;
+			y1 = rect_I->start_y, y2 = rect_I->end_y;
+			bool bValid = ((x1 < x2) && (y1 < y2));
+			if (bValid)	// intersect is true
+			{
+				for (int y = y1; y < y2; y += 32){
+					for (int x = x1; x < x2; x += 128){
+						ExpOut.camId0 = i;
+						ExpOut.start_x = x;
+						ExpOut.start_y = y;
+						ExpOut.end_x = ((x + 127) > x2) ? (x2 - x) : 127;
+						ExpOut.end_y = ((y + 31) > y2) ? (y2 - y) : 31;
+						ExpOut.camId1 = j;
+						ExpOut.camId2 = 0x1F;
+						ExpOut.camId3 = 0x1F;
+						ExpOut.camId4 = 0x1F;
+						ERROR_CHECK_STATUS(vxAddArrayItems(ExpCompOut, 1, &ExpOut, sizeof(ExpOut)));
+					}
+				}
+			}
+		}
+	}
+	return VX_SUCCESS;
+}
+vx_status Compute_StitchExpCompCalcValidEntry(vx_rectangle_t *pValid_roi, vx_array ExpCompOut, int numCameras, int Img_Height)
+{
+	StitchExpCompCalcEntry Exp_comp;
+	ERROR_CHECK_STATUS(vxTruncateArray(ExpCompOut, 0));
+	for (int i = 0; i < numCameras; i++){
+		vx_rectangle_t *pRect = pValid_roi + i;
+		unsigned int start_y = pRect->start_y;
+		unsigned int end_y = pRect->end_y;
+		for (unsigned int y = start_y; y < end_y; y += 32){
+			for (unsigned int x = pRect->start_x; x < pRect->end_x; x += 128){
+				Exp_comp.camId = i;
+				Exp_comp.dstX = (x >> 3);
+				Exp_comp.dstY = (y >> 1);
+				Exp_comp.end_x = ((x + 127) > pRect->end_x) ? (pRect->end_x - x) : 127;
+				Exp_comp.end_y = ((y + 31)  > end_y) ? (end_y - y) : 31;
+				Exp_comp.start_x = 0;
+				Exp_comp.start_y = 0;
+				ERROR_CHECK_STATUS(vxAddArrayItems(ExpCompOut, 1, &Exp_comp, sizeof(Exp_comp)));
+			}
+		}
+	}
+	return VX_SUCCESS;
+}
+
+
+//! \brief The input validator callback.
+static vx_status VX_CALLBACK exposure_compensation_input_validator(vx_node node, vx_uint32 index)
+{
+	vx_status status = VX_ERROR_INVALID_PARAMETERS;
+	// get reference for parameter at specified index
+	vx_reference ref = avxGetNodeParamRef(node, index);
+	ERROR_CHECK_OBJECT(ref);
+	// validate each parameter
+	if (index == 0 || index == 1)
+	{ // scalar of type VX_TYPE_FLOAT32
+		vx_enum type = VX_TYPE_INVALID;
+		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &type, sizeof(type)));
+		if (type == VX_TYPE_FLOAT32) {
+			status = VX_SUCCESS;
+		}
+		else {
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation scalar type should be an float32\n");
+		}
+		if (!index){
+			vx_float32 alpha = 0;
+			ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &alpha));
+			if (alpha < 1.0) {
+				status = VX_SUCCESS;
+			}
+			else {
+				status = VX_ERROR_INVALID_DIMENSION;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: exposure compensation alpha value is not valid\n");
+			}
+		}
+		else
+		{
+			vx_float32 beta = 0.0;
+			ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &beta));
+			if (beta >= 1.0) {		// todo: see if there is valid upper range for beta
+				status = VX_SUCCESS;
+			}
+			else {
+				status = VX_ERROR_INVALID_DIMENSION;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: exposure compensation beta value is not valid\n");
+			}
+		}
+		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+	}
+	else if (index == 2)
+	{ // array object of RECTANGLE type
+		vx_enum itemtype = VX_TYPE_INVALID;
+		vx_size capacity = 0;
+		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
+		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
+		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
+		if (itemtype != VX_TYPE_RECTANGLE) {
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation array type should be an rectangle\n");
+		}
+		else if (capacity == 0) {
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation array capacity should be positive\n");
+		}
+		else {
+			status = VX_SUCCESS;
+		}
+	}
+	else if (index == 3)
+	{ // image of format RGBX
+		// get num cameras
+		vx_array arr = (vx_array)avxGetNodeParamRef(node, 2);
+		ERROR_CHECK_OBJECT(arr);
+		vx_size capacity = 0;
+		ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
+		ERROR_CHECK_STATUS(vxReleaseArray(&arr));
+		vx_uint32 numCameras = (vx_uint32)capacity;
+		// check input image format and dimensions
+		vx_uint32 input_width = 0, input_height = 0;
+		vx_df_image input_format = VX_DF_IMAGE_VIRT;
+		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
+		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
+		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+		if (input_format != VX_DF_IMAGE_RGBX) {
+			status = VX_ERROR_INVALID_TYPE;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation doesn't support input image format: %4.4s\n", &input_format);
+		}
+		else if ((input_height % numCameras) != 0) {
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation invalid input image dimensions: %dx%d (height should be multiple of %d)\n", input_width, input_height, numCameras);
+		}
+		else {
+			status = VX_SUCCESS;
+		}
+	}
+	else if ((index == 4) && ref)
+	{ 
+		vx_enum type = VX_TYPE_INVALID;
+		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &type, sizeof(type)));
+		if (type == VX_TYPE_INT32) {
+			status = VX_SUCCESS;
+		}
+		vx_uint32 chan = 0;
+		ERROR_CHECK_STATUS(vxReadScalarValue((vx_scalar)ref, &chan));
+		if ((chan>>8)||(chan <= 3)) {
+			status = VX_SUCCESS;
+		}
+		else {
+			status = VX_ERROR_INVALID_DIMENSION;
+			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure compensation channel value is not valid\n");
+		}
+
+	}
+	return status;
+}
+
+//! \brief The output validator callback.
+static vx_status VX_CALLBACK exposure_compensation_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
+{
+	vx_status status = VX_ERROR_INVALID_PARAMETERS;
+	if (index == 5)
+	{ // image of format RGBX
+		// get image configuration
+		vx_image image = (vx_image)avxGetNodeParamRef(node, index);
+		if (image){
+			ERROR_CHECK_OBJECT(image);
+			vx_uint32 width = 0, height = 0;
+			ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+			ERROR_CHECK_STATUS(vxReleaseImage(&image));
+			// set output image meta data
+			vx_df_image format = VX_DF_IMAGE_RGBX;
+			ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+			ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+			status = VX_SUCCESS;
+		}
+	}
+	if (index == 6)
+	{ // optional parameter: array of block gains
+		vx_array arr = (vx_array)avxGetNodeParamRef(node, index);
+		if (arr){
+			// set the capacity and item_type of the array
+			vx_enum itemtype = VX_TYPE_INVALID;
+			vx_size capacity = 0;
+			ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
+			vx_image image = (vx_image)avxGetNodeParamRef(node, 3);
+			vx_uint32 width = 0, height = 0;
+			ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+			ERROR_CHECK_STATUS(vxReleaseArray(&arr));
+			if (capacity < (((width + 31) >> 5) * ((height + 31) >> 5))){
+				status = VX_ERROR_INVALID_DIMENSION;
+				return status;
+			}
+			if (itemtype == VX_TYPE_FLOAT32) {
+				ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
+				ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
+				status = VX_SUCCESS;
+			}
+			else
+			{
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: exp_comp_solve array type are not valid\n");
+			}
+		}
+	}
+	return status;
+}
+
+//! \brief The kernel initialize.
+static vx_status VX_CALLBACK exposure_compensation_initialize(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
+	vx_float32 alpha = 0, beta = 0;
+	vx_int32  channnel = -1;		// choose channel for gain compute (0:Y, 1:R 2:G 3:B)
+	vx_size size = sizeof(CExpCompensator);
+	vx_image img_in, img_out;
+	vx_array blockgain_arr;
+
+	CExpCompensator* exp_comp = new CExpCompensator();
+	// calcuate the number of images in the input
+	vx_array arr = (vx_array)avxGetNodeParamRef(node, 2);
+	img_in = (vx_image)avxGetNodeParamRef(node, 3);
+	img_out = (vx_image)avxGetNodeParamRef(node, 5);
+	blockgain_arr = (vx_array)avxGetNodeParamRef(node, 6);
+	vx_scalar scalar = (vx_scalar)parameters[0];
+	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &alpha));
+	scalar = (vx_scalar)parameters[1];
+	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &beta));
+	scalar = (vx_scalar)parameters[4];
+	if (scalar)
+		ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &channnel));
+	ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_SIZE, &size, sizeof(size)));
+	ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)))
+	ERROR_CHECK_STATUS(exp_comp->Initialize(node, alpha, beta, arr, img_in, img_out, blockgain_arr, channnel));
+	return VX_SUCCESS;
+}
+
+//! \brief The kernel deinitialize.
+static vx_status VX_CALLBACK exposure_compensation_deinitialize(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	vx_size		size;
+	if (!vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_SIZE, &size, sizeof(size)) && (size == sizeof(CExpCompensator)))
+	{
+		CExpCompensator * exp_comp = nullptr;
+		ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)));
+		if (exp_comp){
+			status = exp_comp->DeInitialize();
+		}
+		delete exp_comp;
+	}
+	return status;
+}
+
+//! \brief The kernel execution.
+static vx_status VX_CALLBACK exposure_compensation_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	vx_size		size;
+	vx_int32 channel = -1;
+	vx_array blockgain_arr = (vx_array)avxGetNodeParamRef(node, 6);
+	vx_scalar scalar = (vx_scalar)parameters[4];
+	if (scalar){
+		ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &channel));
+	}
+
+	if (!vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_SIZE, &size, sizeof(size)) && (size == sizeof(CExpCompensator)))
+	{
+		CExpCompensator * exp_comp = nullptr;
+		ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)));
+		if (exp_comp){
+			if (blockgain_arr)
+				status = exp_comp->ProcessBlockGains(blockgain_arr);
+			else
+				status = exp_comp->Process();
+		}
+		//	delete exp_comp;
+	}
+	return status;
+}
+
+//! \brief The kernel publisher.
+vx_status exposure_compensation_publish(vx_context context)
+{
+	// add kernel to the context with callbacks
+	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.exposure_compensation_model",
+		AMDOVX_KERNEL_STITCHING_EXPOSURE_COMPENSATION_MODEL,
+		exposure_compensation_kernel,
+		7,
+		exposure_compensation_input_validator,
+		exposure_compensation_output_validator,
+		exposure_compensation_initialize,
+		exposure_compensation_deinitialize);
+	ERROR_CHECK_OBJECT(kernel);
+
+	// set kernel parameters
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_OPTIONAL));
+	// finalize and release kernel object
+	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
+	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
+
+	return VX_SUCCESS;
 }
 
 CExpCompensator::CExpCompensator(int rows, int columns)
