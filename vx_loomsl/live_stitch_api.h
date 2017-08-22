@@ -93,7 +93,7 @@ enum {
 	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
 	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
+	LIVE_STITCH_ATTR_USE_CPU_FOR_INIT         =   56,   // use CPU kernels for initialize stitch: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)

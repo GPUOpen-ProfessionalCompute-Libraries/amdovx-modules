@@ -213,7 +213,7 @@ struct ls_context_t {
 	vx_uint32   SETUP_LOAD;                             // quick setup load flag variable
 	vx_bool     SETUP_LOAD_FILES_FOUND;                 // quick setup load files found flag variable
 	// data for Initialize tables
-	vx_uint32   FAST_INIT;
+	vx_uint32   USE_CPU_INIT;
 	StitchInitializeData *stitchInitData;
 	// attributes
 	vx_float32  live_stitch_attr[LIVE_STITCH_ATTR_MAX_COUNT];
@@ -476,8 +476,6 @@ static void ResetLiveStitchGlobalAttributes()
 		// Temporal Filter
 		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
-		// Quick Init
-		g_live_stitch_attr[LIVE_STITCH_ATTR_FAST_INIT] = 1;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT] = 0;
 	}
 }
@@ -1034,7 +1032,7 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 			stitch->overlapPadded[cam] = stitch->overlapValid[cam] + stitch->num_cameras*stitch->num_cameras;
 		}
 	}
-	if (stitch->FAST_INIT && !stitch->stitchInitData){
+	if (!stitch->USE_CPU_INIT && !stitch->stitchInitData){
 		vx_enum StitchCoord2dFloatType;
 		stitch->stitchInitData = new StitchInitializeData;
 		memset(stitch->stitchInitData, 0, sizeof(StitchInitializeData));
@@ -1124,7 +1122,7 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 	if (stitch->feature_enable_reinitialize)
 	{
 		// compute lens distortion and warp models
-		vx_status status = CalculateLensDistortionAndWarpMaps(stitch->FAST_INIT? stitch->stitchInitData:nullptr, stitch->num_cameras,
+		vx_status status = CalculateLensDistortionAndWarpMaps(!stitch->USE_CPU_INIT ? stitch->stitchInitData : nullptr, stitch->num_cameras,
 			stitch->camera_rgb_buffer_width / stitch->num_camera_columns,
 			stitch->camera_rgb_buffer_height / stitch->num_camera_rows,
 			stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
@@ -1443,7 +1441,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 			// when re-initialize support is not required, only allocate smallest buffers needed
 			// ------
 			// compute lens distortion and warp models
-			vx_status status = CalculateLensDistortionAndWarpMaps(stitch->FAST_INIT ? stitch->stitchInitData : nullptr, stitch->num_cameras,
+			vx_status status = CalculateLensDistortionAndWarpMaps(!stitch->USE_CPU_INIT ? stitch->stitchInitData : nullptr, stitch->num_cameras,
 				stitch->camera_rgb_buffer_width / stitch->num_camera_columns,
 				stitch->camera_rgb_buffer_height / stitch->num_camera_rows,
 				stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height,
@@ -2259,7 +2257,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 	}
 	// check attribute for fast init code
-	stitch->FAST_INIT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_FAST_INIT];
+	stitch->USE_CPU_INIT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_USE_CPU_FOR_INIT];
 	stitch->stitchInitData = nullptr;
 
 	if (stitch->num_overlays > 0) {
@@ -3000,7 +2998,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		}
 
 		// release fast GPU initialize elements
-		if (stitch->FAST_INIT){
+		if (!stitch->USE_CPU_INIT){
 			if (stitch->stitchInitData){
 				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
 				if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
