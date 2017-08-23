@@ -171,7 +171,7 @@ static vx_status VX_CALLBACK warp_output_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
-		if ((input_format == VX_DF_IMAGE_RGB || input_format == VX_DF_IMAGE_RGBX) && output_format != VX_DF_IMAGE_RGB && output_format != VX_DF_IMAGE_RGBX){
+		if ((input_format == VX_DF_IMAGE_RGB || input_format == VX_DF_IMAGE_RGBX) && output_format != VX_DF_IMAGE_RGBX){
 			// pick RGBX as default
 			output_format = VX_DF_IMAGE_RGBX;
 		}
@@ -996,17 +996,9 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	{
 		opencl_kernel_code += "    float3 RGBToY = (float3)(0.2126f, 0.7152f, 0.0722f);\n";
 	}
-	if (input_format == VX_DF_IMAGE_RGB && output_format == VX_DF_IMAGE_RGB){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgb2(s_alpha_value, bWriteU8Image) : warp_rgb2_bicubic_rgb2(s_alpha_value, bWriteU8Image);
-		opencl_kernel_code += write_4pixels_to_RGB();
-	}
-	else if (input_format == VX_DF_IMAGE_RGB && output_format == VX_DF_IMAGE_RGBX){
+	if (input_format == VX_DF_IMAGE_RGB && output_format == VX_DF_IMAGE_RGBX){
 		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgbx(s_alpha_value, bWriteU8Image) : warp_rgb2_bicubic_rgbx(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += write_4pixels_to_RGBX();
-	}
-	else if (input_format == VX_DF_IMAGE_RGBX && output_format == VX_DF_IMAGE_RGB){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgbx_bilinear_rgb2(bWriteU8Image) : warp_rgbx_bicubic_rgb2(bWriteU8Image);
-		opencl_kernel_code += write_4pixels_to_RGB();
 	}
 	else if (input_format == VX_DF_IMAGE_RGBX && output_format == VX_DF_IMAGE_RGBX){
 		opencl_kernel_code += useBilinearInterpolation ? warp_rgbx_bilinear_rgbx(bWriteU8Image) : warp_rgbx_bicubic_rgbx(bWriteU8Image);
@@ -1354,74 +1346,6 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image)
 
 	return output;
 }
-std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image){
-	std::string output =
-		"    uint3 px0, px1;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-		"    float mulFactor;\n"
-		"    // pixel[0]\n"
-		"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulFactor = 0.0f; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride));\n"
-		"    px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset);\n"
-		"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
-		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s012 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[1]\n"
-		"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulFactor = 0.0f; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride));\n"
-		"    px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset);\n"
-		"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
-		"    f.s3 *= mulFactor;\n"
-		"    outpix.s0 = amd_pack(f);\n"
-		"    f.s0 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s01 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[2]\n"
-		"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulFactor = 0.0f; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride));\n"
-		"    px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset);\n"
-		"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
-		"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s23 *= mulFactor;\n"
-		"    outpix.s1 = amd_pack(f);\n"
-		"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s0 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[3]\n"
-		"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 0; sy = 0; mulFactor = 0.0f; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 3; pt = ip_buf + (offset & ~3); px0 = vload3(0, (__global uint *)pt); px1 = vload3(0, (__global uint *)(pt + ip_stride));\n"
-		"    px0.s0 = amd_bytealign(px0.s1, px0.s0, offset); px0.s1 = amd_bytealign(px0.s2, px0.s1, offset); px1.s0 = amd_bytealign(px1.s1, px1.s0, offset); px1.s1 = amd_bytealign(px1.s2, px1.s1, offset);\n"
-		"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
-		"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s3 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s123 *= mulFactor;\n"
-		"    outpix.s2 = amd_pack(f);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-	}
-	return output;
-}
 std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 	std::string output =
 		"    uint2 px0, px1;\n"
@@ -1484,66 +1408,6 @@ std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 		if (bWriteU8Image) {
 			output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
 		}
-		return output;
-}
-std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image){
-	std::string output =
-		"    uint2 px0, px1;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-		"    float mulFactor;\n"
-		"    // pixel[0]\n"
-		"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s012 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[1]\n"
-		"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s3 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s3 *= mulFactor;\n"
-		"    outpix.s0 = amd_pack(f);\n"
-		"    f.s0 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s01 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[2]\n"
-		"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s2 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s3 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s23 *= mulFactor;\n"
-		"    outpix.s1 = amd_pack(f);\n"
-		"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s0 *= mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[3]\n"
-		"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 0; sy = 0; }\n"
-		"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride)); mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-		"    f.s1 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s2 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s3 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-		"    f.s123 *= mulFactor;\n"
-		"    outpix.s2 = amd_pack(f);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-	}
 		return output;
 }
 std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image){
@@ -1740,98 +1604,6 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image){
 			"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n";
 	return output;
 }
-std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image){
-	std::string output =
-		"    uint4 px;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-		"    float mulFactor; float3 tf;\n"
-		"    // pixel[0]\n"
-		"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 1 << QF; sy = 1 << QF; mulFactor = 0.0f; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 3, (int) 0, (int)ip_width*3); pt = ip_buf + (offset & ~3);\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 *ip_stride));                 px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf = interpolate_cubic_rgb(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + 1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s012 = tf * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[1]\n"
-		"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 1 << QF; sy = 1 << QF; mulFactor = 0.0f; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 3, (int) 0, (int)ip_width*3); pt = ip_buf + (offset & ~3);\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 *ip_stride));                 px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf = interpolate_cubic_rgb(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + 1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s3 = tf.s0 * mulFactor;\n"
-		"    outpix.s0 = amd_pack(f);\n"
-		"    f.s01 = tf.s12 * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[2]\n"
-		"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 1 << QF; sy = 1 << QF; mulFactor = 0.0f; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 3, (int) 0, (int)ip_width*3); pt = ip_buf + (offset & ~3);\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 *ip_stride));                 px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf = interpolate_cubic_rgb(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + 1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s23 = tf.s01 * mulFactor;\n"
-		"    outpix.s1 = amd_pack(f);\n"
-		"    f.s0 = tf.s2 * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[3]\n"
-		"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { sx = 1 << QF; sy = 1 << QF; mulFactor = 0.0f; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 3, (int) 0, (int)ip_width*3); pt = ip_buf + (offset & ~3);\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 *ip_stride));                 px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf = interpolate_cubic_rgb(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + 1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
-		"    tf += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s123 = tf * mulFactor;\n"
-		"    outpix.s2 = amd_pack(f);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-	}
-	return output;
-}
 std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 	std::string output =
 		"    uint4 px;\n"
@@ -1901,82 +1673,6 @@ std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 		"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 	if (bWriteU8Image) {
 		output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-	}
-	return output;
-}
-std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image){
-	std::string output =
-		"    uint4 px;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-		"    float mulFactor; float4 tf;\n"
-		"    // pixel[0]\n"
-		"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); tf  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             tf += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 tf += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1 * ip_stride)); tf += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s012 = tf.s012 * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[1]\n"
-		"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); tf  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             tf += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 tf += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   tf += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s3 = tf.s0 * mulFactor;\n"
-		"    outpix.s0 = amd_pack(f);\n"
-		"    f.s01 = tf.s12 * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[2]\n"
-		"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); tf  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             tf += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 tf += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   tf += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s23 = tf.s01 * mulFactor;\n"
-		"    outpix.s1 = amd_pack(f);\n"
-		"    f.s0 = tf.s2 * mulFactor;\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-	}
-	output +=
-		"    // pixel[3]\n"
-		"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; mulFactor = 1.0f;\n"
-		"    if(sx == 0xffff && sy == 0xffff) { mulFactor = 0.0f; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); tf  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             tf += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 tf += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   tf += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    f.s123 = tf.s012 * mulFactor;\n"
-		"    outpix.s2 = amd_pack(f);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
 	}
 	return output;
 }
@@ -2062,12 +1758,6 @@ std::string write_4pixels_to_RGBX(){
 	std::string output=
 		"    op_buf += op_offset + ((camera_id * op_image_height_offset + op_y) * op_stride) + (op_x << 5) + ((gid & 1) << 4);\n"
 		"    *(__global uint4 *) op_buf = outpix;\n";
-	return output;
-}
-std::string write_4pixels_to_RGB(){
-	std::string output =
-		"    op_buf += op_offset + ((camera_id * op_image_height_offset + op_y) * op_stride) + (op_x * 24) + ((gid & 1) * 12);\n"
-		"    *(__global uint3 *) (op_buf) = outpix.s012;\n";
 	return output;
 }
 std::string write_4pixels_to_RGB4(){
