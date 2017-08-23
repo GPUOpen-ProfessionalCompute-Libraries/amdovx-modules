@@ -23,8 +23,6 @@ THE SOFTWARE.
 #define _CRT_SECURE_NO_WARNINGS
 #include "warp.h"
 
-#define WRITE_LUMA_AS_A 1
-
 //! \brief The input validator callback.
 static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 {
@@ -43,7 +41,7 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		}
 		else {
 			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: warp num_cameras scalar type should be an ENUM\n");
+			vxAddLogEntry((vx_reference)node, status, "ERROR: warp grayscale method scalar type should be an ENUM\n");
 		}
 	}
 	if (index == 1)
@@ -334,15 +332,10 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	vx_uint32 num_cameras = 0, num_camera_columns = 1;
 	vx_uint8 flags = 0;
 	vx_size arr_capacity = 0;
-	vx_enum grayscale_compute_method;
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT, output_U_format = VX_DF_IMAGE_VIRT;
 	bool bWriteU8Image = false;
 	bool bWriteExpCompImage = false;
-	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);			// input scalar - grayscale compute method
-	ERROR_CHECK_OBJECT(scalar);
-	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &grayscale_compute_method));
-	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
-	scalar = (vx_scalar)avxGetNodeParamRef(node, 1);			// input scalar - num cameras
+	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 1);			// input scalar - num cameras
 	ERROR_CHECK_OBJECT(scalar);
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cameras));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
@@ -998,16 +991,17 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	if (bWriteU8Image || bWriteExpCompImage)
 	{
 		opencl_kernel_code += pixels4 ? "    float4 Yval;\n" : "    float2 Yval;\n";
-#if WRITE_LUMA_AS_A
+	}
+	if (input_format != VX_DF_IMAGE_RGBX || bWriteU8Image)
+	{
 		opencl_kernel_code += "    float3 RGBToY = (float3)(0.2126f, 0.7152f, 0.0722f);\n";
-#endif
 	}
 	if (input_format == VX_DF_IMAGE_RGB && output_format == VX_DF_IMAGE_RGB){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgb2(s_alpha_value, grayscale_compute_method, bWriteU8Image) : warp_rgb2_bicubic_rgb2(s_alpha_value, grayscale_compute_method, bWriteU8Image);
+		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgb2(s_alpha_value, bWriteU8Image) : warp_rgb2_bicubic_rgb2(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += write_4pixels_to_RGB();
 	}
 	else if (input_format == VX_DF_IMAGE_RGB && output_format == VX_DF_IMAGE_RGBX){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgbx(s_alpha_value, grayscale_compute_method, bWriteU8Image) : warp_rgb2_bicubic_rgbx(s_alpha_value, grayscale_compute_method, bWriteU8Image);
+		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgbx(s_alpha_value, bWriteU8Image) : warp_rgb2_bicubic_rgbx(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += write_4pixels_to_RGBX();
 	}
 	else if (input_format == VX_DF_IMAGE_RGBX && output_format == VX_DF_IMAGE_RGB){
@@ -1019,7 +1013,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		opencl_kernel_code += write_4pixels_to_RGBX();
 	}
 	else if (input_format == VX_DF_IMAGE_RGB4_AMD && output_format == VX_DF_IMAGE_RGB4_AMD){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgb4_bilinear_rgb4(s_alpha_value, grayscale_compute_method, bWriteU8Image) : warp_rgb4_bicubic_rgb4(s_alpha_value, grayscale_compute_method, bWriteU8Image);
+		opencl_kernel_code += useBilinearInterpolation ? warp_rgb4_bilinear_rgb4(s_alpha_value, bWriteU8Image) : warp_rgb4_bicubic_rgb4(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += pixels4 ? write_4pixels_to_RGB4() : write_2pixels_to_RGB4();
 	}
 	if (bWriteExpCompImage){
@@ -1266,7 +1260,7 @@ std::string get_warp_valid_info_2pixels(){
 
 
 // Do reading and wraping bilinear ------------------------------------------------------------------------------------------------------------
-std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint3 px0, px1;\n"
 		"    __global uchar * pt;\n"
@@ -1282,27 +1276,15 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-	if (s_alpha_value)
-	{
+	if (s_alpha_value){
 		output += "    f.s3 = (float) alpha;\n";
 	}
-	else
-	{
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-		}
+	else{
+		output += 
+			"    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 	}
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 		output += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n"
@@ -1315,27 +1297,15 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-	if (s_alpha_value)
-	{
+	if (s_alpha_value){
 		output += "    f.s3 = (float) alpha;\n";
 	}
-	else
-	{
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-		}
+	else{
+		output +=
+			"    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 	}
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 		output += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
@@ -1348,27 +1318,15 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-	if (s_alpha_value)
-	{
+	if (s_alpha_value){
 		output += "    f.s3 = (float) alpha;\n";
 	}
-	else
-	{
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-		}
+	else{
+		output +=
+			"    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 	}
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 		output += "    Yval.s2 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
@@ -1381,34 +1339,22 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack3(px0.s0) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack3(px1.s0) * mf.s0) * mf.s1;\n"
 		"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n";
-	if (s_alpha_value)
-	{
+	if (s_alpha_value){
 		output += "    f.s3 = (float) alpha;\n";
 	}
-	else
-	{
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-		}
+	else{
+		output +=
+			"    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 	}
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 		output += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n";
 
 	return output;
 }
-std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint3 px0, px1;\n"
 		"    __global uchar * pt;\n"
@@ -1425,18 +1371,7 @@ std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s012 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s0 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s0 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    Yval.s0 = sqrt(Yval.s0 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -1452,18 +1387,7 @@ std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s01 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s1 = (f.s3 + f.s0 + f.s1) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s1 = mad(f.s3, f.s3, mad(f.s0, f.s0, f.s1 * f.s1));\n"
-				"    Yval.s1 = sqrt(Yval.s1 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -1479,18 +1403,7 @@ std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s0 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s2 = (f.s2 + f.s3 + f.s0) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s2 = mad(f.s2, f.s2, mad(f.s3, f.s3, f.s0 * f.s0));\n"
-				"    Yval.s2 = sqrt(Yval.s2 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -1505,18 +1418,7 @@ std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    f.s123 *= mulFactor;\n"
 		"    outpix.s2 = amd_pack(f);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s3 = (f.s1 + f.s2 + f.s3) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s3 = mad(f.s1, f.s1, mad(f.s2, f.s2, f.s3 * f.s3));\n"
-				"    Yval.s3 = sqrt(Yval.s3 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	return output;
 }
@@ -1538,11 +1440,7 @@ std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
 			"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 			output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-			output += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    // pixel[1]\n"
@@ -1556,11 +1454,7 @@ std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
 			"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 			output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-			output += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    // pixel[2]\n"
@@ -1574,11 +1468,7 @@ std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
 			"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 			output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-			output += "    Yval.s2 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    // pixel[3]\n"
@@ -1592,11 +1482,7 @@ std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
 			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
 			"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 			output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-			output += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		return output;
 }
@@ -1615,11 +1501,7 @@ std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image){
 		"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s012 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s0 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -1633,11 +1515,7 @@ std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image){
 		"    f.s1 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s01 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s1 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -1651,11 +1529,7 @@ std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image){
 		"    f.s0 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
 		"    f.s0 *= mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s2 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -1668,15 +1542,11 @@ std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image){
 		"    f.s123 *= mulFactor;\n"
 		"    outpix.s2 = amd_pack(f);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s3 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 		return output;
 }
-std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint4 px0, px1;\n"
 		"    __global uchar * pt;\n"
@@ -1695,23 +1565,7 @@ std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    if(isSrcInvalid) {f.s012 = (float3)32768;}\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid){\n"
-			"       Yval.s0 = -10.0f;\n"
-			"    }else{\n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s0 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s0 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    Yval.s0 = sqrt(Yval.s0 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    }\n";
+			"    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -1730,23 +1584,7 @@ std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    if(isSrcInvalid) {f.s01 = (float2)32768;}\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid){\n"
-			"       Yval.s1 = -10.0f;\n"
-			"    }else{\n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s1 = (f.s3 + f.s0 + f.s1) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s1 = mad(f.s3, f.s3, mad(f.s0, f.s0, f.s1 * f.s1));\n"
-				"    Yval.s1 = sqrt(Yval.s1 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    }\n";
+			"    Yval.s1 = select(mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -1765,23 +1603,7 @@ std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    if(isSrcInvalid) {f.s0 = 32768;}\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid){\n"
-			"       Yval.s2 = -10.0f;\n"
-			"    }else{\n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s2 = (f.s2 + f.s3 + f.s0) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s2 = mad(f.s2, f.s2, mad(f.s3, f.s3, f.s0 * f.s0));\n"
-				"    Yval.s2 = sqrt(Yval.s2 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    }\n";
+			"    Yval.s2 = select(mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -1799,29 +1621,13 @@ std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_c
 		"    outpix1.s1 = (((uint)f.s3) << 16) + (uint)f.s2;\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid){\n"
-			"       Yval.s3 = -10.0f;\n"
-			"    }else{\n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s3 = (f.s1 + f.s2 + f.s3) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s3 = mad(f.s1, f.s1, mad(f.s2, f.s2, f.s3 * f.s3));\n"
-				"    Yval.s3 = sqrt(Yval.s3 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    }\n";
+			"    Yval.s3 = select(mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 		return output;
 }
 
 // Do reading and wraping bicubic ------------------------------------------------------------------------------------------------------------
-std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint4 px;\n"
 		"    __global uchar * pt;\n"
@@ -1843,27 +1649,14 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_co
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
 			"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n";
-		if (s_alpha_value)
-		{
+		if (s_alpha_value){
 			output += "    f.s3 = (float) alpha;\n";
 		}
-		else
-		{
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-			else
-			{
-				output +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-			}
+		else{
+			output += "    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";			
 		}
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-			output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 			output += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n"
@@ -1882,27 +1675,14 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_co
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
 			"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n";
-		if (s_alpha_value)
-		{
+		if (s_alpha_value){
 			output += "    f.s3 = (float) alpha;\n";
 		}
-		else
-		{
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-			else
-			{
-				output +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-			}
+		else{
+			output += "    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 		}
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-			output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 			output += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
@@ -1921,27 +1701,14 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_co
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
 			"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n";
-		if (s_alpha_value)
-		{
+		if (s_alpha_value){
 			output += "    f.s3 = (float) alpha;\n";
 		}
-		else
-		{
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-			else
-			{
-				output +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-			}
+		else{
+			output += "    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 		}
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-			output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 			output += "    Yval.s2 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n"
@@ -1960,33 +1727,20 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_co
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
 			"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride)); px.s0 = amd_bytealign(px.s1, px.s0, offset); px.s1 = amd_bytealign(px.s2, px.s1, offset); px.s2 = amd_bytealign(px.s3, px.s2, offset);\n"
 			"    f.s012 += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n";
-		if (s_alpha_value)
-		{
+		if (s_alpha_value){
 			output += "    f.s3 = (float) alpha;\n";
 		}
-		else
-		{
-			if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-				output += "    f.s3 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-			else
-			{
-				output +=
-					"    f.s3 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-					"    f.s3 = sqrt(f.s3 * 0.3333333333f);\n";
-			}
+		else{
+			output += "    f.s3 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
 		}
 		if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
-			output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
 			output += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 		}
 		output +=
 			"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n";
 	return output;
 }
-std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint4 px;\n"
 		"    __global uchar * pt;\n"
@@ -2009,18 +1763,7 @@ std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    tf += (interpolate_cubic_rgb(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    f.s012 = tf * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s0 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s0 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    Yval.s0 = sqrt(Yval.s0 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -2042,18 +1785,7 @@ std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    outpix.s0 = amd_pack(f);\n"
 		"    f.s01 = tf.s12 * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s1 = (f.s3 + f.s0 + f.s1) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s1 = mad(f.s3, f.s3, mad(f.s0, f.s0, f.s1 * f.s1));\n"
-				"    Yval.s1 = sqrt(Yval.s1 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -2075,18 +1807,7 @@ std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    outpix.s1 = amd_pack(f);\n"
 		"    f.s0 = tf.s2 * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s2 = (f.s2 + f.s3 + f.s0) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s2 = mad(f.s2, f.s2, mad(f.s3, f.s3, f.s0 * f.s0));\n"
-				"    Yval.s2 = sqrt(Yval.s2 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -2107,18 +1828,7 @@ std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    f.s123 = tf * mulFactor;\n"
 		"    outpix.s2 = amd_pack(f);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s3 = (f.s1 + f.s2 + f.s3) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s3 = mad(f.s1, f.s1, mad(f.s2, f.s2, f.s3 * f.s3));\n"
-				"    Yval.s3 = sqrt(Yval.s3 * 0.3333333333f);\n";
-		}
-#endif
 	}
 	return output;
 }
@@ -2142,11 +1852,7 @@ std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-		output += "    Yval.s0 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -2162,11 +1868,7 @@ std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-		output += "    Yval.s1 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -2182,11 +1884,7 @@ std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-		output += "    Yval.s2 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -2202,11 +1900,7 @@ std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
 		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-#else
-		output += "    Yval.s3 = select(f.s3, 0.0f, isSrcInvalid);\n";
-#endif
 	}
 	return output;
 }
@@ -2229,11 +1923,7 @@ std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image){
 		"    px = vload4(0, (__global uint *)(pt + row_offset.s1 * ip_stride)); tf += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
 		"    f.s012 = tf.s012 * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s0 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -2251,11 +1941,7 @@ std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image){
 		"    outpix.s0 = amd_pack(f);\n"
 		"    f.s01 = tf.s12 * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s1 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[2]\n"
@@ -2273,11 +1959,7 @@ std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image){
 		"    outpix.s1 = amd_pack(f);\n"
 		"    f.s0 = tf.s2 * mulFactor;\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s2 = mad(f.s2, RGBToY.s0, mad(f.s3, RGBToY.s1, f.s0 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s2 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	output +=
 		"    // pixel[3]\n"
@@ -2294,15 +1976,11 @@ std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image){
 		"    f.s123 = tf.s012 * mulFactor;\n"
 		"    outpix.s2 = amd_pack(f);\n";
 	if (bWriteU8Image) {
-#if WRITE_LUMA_AS_A
 		output += "    Yval.s3 = mad(f.s1, RGBToY.s0, mad(f.s2, RGBToY.s1, f.s3 * RGBToY.s2));\n";
-#else
-		output += "    Yval.s3 = mulFactor * ((amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1);\n";
-#endif
 	}
 	return output;
 }
-std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image){
+std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint8 px;\n"
 		"    __global uchar * pt;\n"
@@ -2337,22 +2015,7 @@ std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    else{f.s012 = clamp (tf.s012, 0.0f, 32767.0f);}\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid) { Yval.s0 = -10.0f; }\n"
-			"    else { \n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s0 = mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s0 = (f.s0 + f.s1 + f.s2) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s0 = mad(f.s0, f.s0, mad(f.s1, f.s1, f.s2 * f.s2));\n"
-				"    Yval.s0 = sqrt(Yval.s0 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    } \n";
+			"    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 	output +=
 		"    // pixel[1]\n"
@@ -2389,22 +2052,7 @@ std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_co
 		"    outpix.s2 = (((uint)f.s1) << 16) + (uint)f.s0;\n";
 	if (bWriteU8Image) {
 		output +=
-			"    if(isSrcInvalid) { Yval.s1 = -10.0f; }\n"
-			"    else { \n";
-#if WRITE_LUMA_AS_A
-		output += "    Yval.s1 = mad(f.s3, RGBToY.s0, mad(f.s0, RGBToY.s1, f.s1 * RGBToY.s2));\n";
-#else
-		if (grayscale_compute_method == STITCH_GRAY_SCALE_COMPUTE_METHOD_AVG)
-			output += "   Yval.s1 = (f.s3 + f.s0 + f.s1) * 0.3333333333f;\n";
-		else
-		{
-			output +=
-				"    Yval.s1 = mad(f.s3, f.s3, mad(f.s0, f.s0, f.s1 * f.s1));\n"
-				"    Yval.s1 = sqrt(Yval.s1 * 0.3333333333f);\n";
-		}
-#endif
-		output +=
-			"    } \n";
+			"    Yval.s1 = select(mad(f.s3, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), -10.0f , isSrcInvalid);\n";
 	}
 	return output;
 }

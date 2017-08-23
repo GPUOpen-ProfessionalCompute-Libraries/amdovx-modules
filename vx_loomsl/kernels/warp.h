@@ -116,17 +116,17 @@ vx_status GenerateWarpBuffers(
 std::string get_warp_valid_info_4pixels();
 std::string get_warp_valid_info_2pixels();
 // Do reading and wraping bilinear ------------------------------------------------------------------------------------------------------------
-std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
-std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
+std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image);
+std::string warp_rgb2_bilinear_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image);
 std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image);
 std::string warp_rgbx_bilinear_rgb2(bool bWriteU8Image);
-std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
+std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image);
 // Do reading and wraping bicubic ------------------------------------------------------------------------------------------------------------
-std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
-std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
+std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image);
+std::string warp_rgb2_bicubic_rgb2(vx_scalar s_alpha_value, bool bWriteU8Image);
 std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image);
 std::string warp_rgbx_bicubic_rgb2(bool bWriteU8Image);
-std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, vx_enum grayscale_compute_method, bool bWriteU8Image);
+std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image);
 // Write output -------------------------------------------------------------------------------------------------------------------------------
 std::string write_4pixels_to_RGBX();
 std::string write_4pixels_to_RGB();
