@@ -88,6 +88,7 @@ struct NeuralNetworkCommonHandle {
     int count;
     miopenHandle_t  miopen_handle;
     cl_command_queue cmdq;
+    bool exhaustiveSearch;
 };
 
 //////////////////////////////////////////////////////////////////////

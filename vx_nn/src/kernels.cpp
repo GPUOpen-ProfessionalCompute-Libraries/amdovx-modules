@@ -74,6 +74,18 @@ vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
     else {
         handle = new NeuralNetworkCommonHandle;
         memset(handle, 0, sizeof(*handle));
+        const char * searchEnvName = "NN_MIOPEN_SEARCH";
+#if _WIN32
+        char text[64] = { 0 };
+        if (GetEnvironmentVariableA(searchEnvName, text, (DWORD)sizeof(text)) > 0) {
+            handle->exhaustiveSearch = atoi(text) ? true : false;
+        }
+#else
+        const char * text = getenv(searchEnvName);
+        if (text) {
+            handle->exhaustiveSearch = atoi(text) ? true : false;
+        }
+#endif
         handle->count = 1;
         ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_ATTRIBUTE_AMD_OPENCL_COMMAND_QUEUE, &handle->cmdq, sizeof(handle->cmdq)));
         
