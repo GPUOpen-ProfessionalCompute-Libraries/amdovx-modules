@@ -93,7 +93,7 @@ enum {
 	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
 	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
+	LIVE_STITCH_ATTR_USE_CPU_FOR_INIT         =   56,   // use CPU kernels for initialize stitch: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_PRECISION	              =	  58,	// enables a 16bit flow from input to output color convert: 0:Auto-Detect 1:8-bit 2: 16-bit (default:0)
 	LIVE_STITCH_ATTR_WARP_INTERPOLATION       =   59,   // warp interpolation mode: 0: bilinear, 1: bicubic (default:0)
