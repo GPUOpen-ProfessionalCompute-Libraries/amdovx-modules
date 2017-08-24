@@ -68,7 +68,6 @@ static vx_status VX_CALLBACK chroma_key_mask_generation_input_validator(vx_node 
 static vx_status VX_CALLBACK chroma_key_mask_generation_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
-	vx_reference ref = avxGetNodeParamRef(node, index);
 	if (index == 3)
 	{ // Image object	
 		//Query Weight Image
@@ -396,7 +395,6 @@ static vx_status VX_CALLBACK chroma_key_merge_input_validator(vx_node node, vx_u
 static vx_status VX_CALLBACK chroma_key_merge_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
-	vx_reference ref = avxGetNodeParamRef(node, index);
 	if (index == 3)
 	{ // Image object	
 		//Query Weight Image
