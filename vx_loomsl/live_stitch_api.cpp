@@ -2307,10 +2307,18 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	{
 		if (stitch->output_buffer_format == VX_DF_IMAGE_V210_AMD || stitch->output_buffer_format == VX_DF_IMAGE_V216_AMD){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 2;
+			ls_printf("INFO: Precision was set to auto detect: Using 16 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
 		else{ // UYVY, YUYV, NV12, IYUV
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
+			ls_printf("INFO: Precision was set to auto detect: Using 8 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+		ls_printf("INFO: Precision was set to 8 bit flow.\n");
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+		ls_printf("INFO: Precision was set to 16 bit flow.\n");
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
@@ -2318,9 +2326,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
-		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
-		ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
+		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+			stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
+			ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+		}
+		else{
+			ls_printf("INFO: Linear colorspace will be used.\n");
+		}
 	}
 
 
@@ -2827,6 +2840,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// warping
 		stitch->alpha_value = 0;
 		stitch->warp_flags = (vx_uint8) stitch->live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION];
+		if (stitch->warp_flags = 1)
+			ls_printf("INFO: Bicubic warp will be performed");
 		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->warp_output_image, stitch->warp_luma_image, stitch->num_camera_columns, stitch->alpha_value, stitch->warp_flags, stitch->expcomp_luma16));
 
 		// exposure comp
