@@ -914,15 +914,12 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 	vx_uint32 camWidth = stitch->camera_rgb_buffer_width / stitch->num_camera_columns;
 	vx_uint32 camHeight = stitch->camera_rgb_buffer_height / stitch->num_camera_rows;
 	vx_uint32 numCamera = stitch->num_camera_rows;
-	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
-	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	// compute camera warp parameters and check for supported lens types
 	float Mcam[32 * 9], Tcam[32 * 3], fcam[32 * 2], Mr[3 * 3];
 	vx_status status = CalculateCameraWarpParameters(numCamera, camWidth, camHeight, &stitch->rig_par, stitch->camera_par, Mcam, Tcam, fcam, Mr);
 	if (status != VX_SUCCESS) return status;
 
 	vx_uint32 paddingPixelCount = stitch->stitchInitData->paddingPixelCount;
-	const camera_lens_params * lens = &stitch->camera_par[0].lens;
 
 	// add nodes to the graph and verify.
 	stitch->stitchInitData->params = { 0 };
@@ -1738,7 +1735,7 @@ static vx_status EncodeProcessImage(ls_context stitch)
 			vx_int32 tend_y = src_tile_start_y + src_tile_height + src_tile_overlap; if (tend_y >(vx_int32)stitch->output_rgb_buffer_height) { tend_y = (vx_int32)stitch->output_rgb_buffer_height; }
 			// destination tile rectangle
 			vx_int32 output_tstart_x = dst_tile_start_x, output_tend_x = dst_tile_start_x + dst_tile_width;
-			vx_int32 output_tstart_y = dst_tile_start_y, output_tend_y = dst_tile_start_y + dst_tile_height;
+			vx_int32 output_tstart_y = dst_tile_start_y;
 			// tile region warp around
 			if (tstart_x < 0){
 				// overlap rectangle
@@ -2344,7 +2341,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch, stitch->output_buffer_width,	stitch->output_buffer_height, stitch->output_buffer_format);
 		}
 		ERROR_CHECK_OBJECT_(stitch->Img_output);
-		vx_uint32 zero = 0;
 		ERROR_CHECK_OBJECT_(stitch->loomioOutputAuxData = vxCreateArray(stitch->context, VX_TYPE_UINT8, stitch->loomioOutputAuxDataLength));
 		vx_array loomioOutputAuxDataSource = nullptr;
 		if (stitch->loomioCameraAuxData && stitch->loomioOutputAuxSelection != 1) {
@@ -2538,7 +2534,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 		}
 		// instantiate specified node into the graph
-		vx_uint32 zero = 0;
 		ERROR_CHECK_OBJECT_(stitch->viewingMediaConfig = vxCreateScalar(stitch->context, VX_TYPE_STRING_AMD, stitch->loomio_viewing.kernelArguments));
 		ERROR_CHECK_OBJECT_(stitch->loomioViewingAuxData = vxCreateArray(stitch->context, VX_TYPE_UINT8, stitch->loomioOutputAuxDataLength));
 		vx_reference params[] = {
@@ -3428,13 +3423,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		else { memcpy(formatName, &stitch->camera_buffer_format, 4); formatName[4] = 0; }
 		fprintf(fp, "lsSetCameraConfig(context,%d,%d,%s,%d,%d);\n", stitch->num_camera_rows, stitch->num_camera_columns, formatName, stitch->camera_buffer_width, stitch->camera_buffer_height);
 		for (vx_uint32 i = 0; i < stitch->num_cameras; i++) {
-			camera_params camera_par = stitch->camera_par[i];
 			fprintf(fp, "lsSetCameraParams(context,%2d,&cam%02d_par);\n", i, i);
 		}
 		if (stitch->num_overlays > 0) {
 			fprintf(fp, "lsSetOverlayConfig(context,%d,%d,VX_DF_IMAGE_RGBX,%d,%d);\n", stitch->num_overlay_rows, stitch->num_overlay_columns, stitch->overlay_buffer_width, stitch->overlay_buffer_height);
 			for (vx_uint32 i = 0; i < stitch->num_overlays; i++) {
-				camera_params camera_par = stitch->overlay_par[i];
 				fprintf(fp, "lsSetOverlayParams(context,%2d,&ovr%02d_par\n", i, i);
 			}
 		}
