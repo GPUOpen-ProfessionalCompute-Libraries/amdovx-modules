@@ -479,15 +479,6 @@ static void ResetLiveStitchGlobalAttributes()
 		g_live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT] = 0;
 	}
 }
-static std::vector<std::string> split(std::string str, char delimiter) {
-	std::stringstream ss(str);
-	std::string tok;
-	std::vector<std::string> internal;
-	while (std::getline(ss, tok, delimiter)) {
-		internal.push_back(tok);
-	}
-	return internal;
-}
 static vx_status IsValidContext(ls_context stitch)
 {
 	if (!stitch || stitch->magic != LIVE_STITCH_MAGIC) return VX_ERROR_INVALID_REFERENCE;
