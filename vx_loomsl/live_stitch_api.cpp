@@ -487,7 +487,7 @@ vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_im
 		return stitchColorConvertToIYUVNode(graph, input, y_channel, u_channel, v_channel, flags);
 	}
 	else{
-		return CreateColorConvertNode(graph, input, output, flags);
+		return stitchColorConvertNode(graph, input, output, flags);
 	}
 }
 
@@ -1820,7 +1820,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 	return VX_SUCCESS;
 }
 /*****************************************************************************************************************************************
-functions to encode stitched output
+functions to tile stitched output
 *****************************************************************************************************************************************/
 static vx_status CreateImageFromROI(ls_context stitch)
 {
@@ -2656,16 +2656,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	stitch->rgb_output = stitch->Img_output;
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		// needs output color conversion
-		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
-			if (stitch->output_tiles == 1){ 
-				stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
-				ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
-			}
-			else{
-				// output needs to be encoded 
-				ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
-				ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
-			}
+		if (stitch->output_tiles != 1 && (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV)){
+			// output needs to be encoded 
+			ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
+			ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
 		}
 		else{
 			stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
