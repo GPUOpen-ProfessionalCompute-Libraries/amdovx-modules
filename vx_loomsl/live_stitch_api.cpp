@@ -2303,22 +2303,26 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 
 	/////////////////////////////////////////////////////////
 	// If 16bit mode is on auto detect > find right mode here:
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] > 2 || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] < 0){
+		stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
+		ls_printf("WARNING: Precision was set to invalid value. (Only 0: Auto detect, 1: 8 bit flow and 2: 16 bit flow are allowed.) Precision will be set to auto detect.\n");
+	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 0)
 	{
 		if (stitch->output_buffer_format == VX_DF_IMAGE_V210_AMD || stitch->output_buffer_format == VX_DF_IMAGE_V216_AMD){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 2;
-			ls_printf("INFO: Precision was set to auto detect: Using 16 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
+			ls_printf("OK: Precision was set to auto detect: Using 16 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
 		else{ // UYVY, YUYV, NV12, IYUV
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
-			ls_printf("INFO: Precision was set to auto detect: Using 8 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
+			ls_printf("OK: Precision was set to auto detect: Using 8 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
 	}
 	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
-		ls_printf("INFO: Precision was set to 8 bit flow.\n");
+		ls_printf("OK: Precision was set to 8 bit flow.\n");
 	}
 	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-		ls_printf("INFO: Precision was set to 16 bit flow.\n");
+		ls_printf("OK: Precision was set to 16 bit flow.\n");
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
@@ -2334,6 +2338,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		else{
 			ls_printf("INFO: Linear colorspace will be used.\n");
 		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] != 0){
+		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
+		ls_printf("WARNING: Linear colorspace was set to invalid value. (Only 0: Nonlinear and 1: Linear)\n");
 	}
 
 
