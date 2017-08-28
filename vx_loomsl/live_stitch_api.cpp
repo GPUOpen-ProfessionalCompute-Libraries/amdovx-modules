@@ -1770,7 +1770,8 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_U8, VX_MEMORY_TYPE_OPENCL));
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGBX, VX_MEMORY_TYPE_OPENCL));
 			}
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+			if (level != (stitch->num_bands-1))
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 		}
 		for (int level = 0; level < stitch->num_bands; level++) {
