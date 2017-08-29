@@ -686,10 +686,13 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
 			if (status != VX_SUCCESS)
 				return status;
-			sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
-			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
-			if (status != VX_SUCCESS)
-				return status;
+			if (level != (stitch->num_bands - 1))
+			{			
+				sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
+				status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
+				if (status != VX_SUCCESS)
+					return status;
+			}
 			sprintf(fileName, "%s-blend-pyr-lap-rec-%d.raw", fileNamePrefix, level);
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec, fileName);
 			if (status != VX_SUCCESS)
