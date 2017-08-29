@@ -2307,7 +2307,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 
 	/////////////////////////////////////////////////////////
 	// If 16bit mode is on auto detect > find right mode here:
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 2 || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 1 || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 0){
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 2 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 0){
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
 		ls_printf("WARNING: Precision was set to invalid value. (Only 0: Auto detect, 1: 8 bit flow and 2: 16 bit flow are allowed.) Precision will be set to auto detect.\n");
 	}
@@ -2853,7 +2853,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		stitch->alpha_value = 0;
 		stitch->warp_flags = (vx_uint8) stitch->live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION];
 		if (stitch->warp_flags = 1)
-			ls_printf("INFO: Bicubic warp will be performed");
+			ls_printf("INFO: Bicubic warp will be performed.\n");
 		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->warp_output_image, stitch->warp_luma_image, stitch->num_camera_columns, stitch->alpha_value, stitch->warp_flags, stitch->expcomp_luma16));
 
 		// exposure comp
