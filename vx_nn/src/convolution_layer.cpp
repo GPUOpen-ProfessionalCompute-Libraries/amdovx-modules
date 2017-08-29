@@ -136,9 +136,10 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     vx_size stride_h, stride_w;
     vx_size kernel_h, kernel_w;
 
-    kernel_h = weights_dims[1]; kernel_w = weights_dims[0];
-    stride_w = (input_dims[0] - (2 * pad_w) - (kernel_w)-(kernel_w - 1) * (dilation_w - 1) + output_dims[0]) / output_dims[0];
-    stride_h = (input_dims[1] - (2 * pad_h) - (kernel_h)-(kernel_h - 1) * (dilation_h - 1) + output_dims[1]) / output_dims[1];
+    kernel_h = weights_dims[1];
+    kernel_w = weights_dims[0];
+    stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / (output_dims[0] - 1)) : 1;
+    stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / (output_dims[1] - 1)) : 1;
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
@@ -166,12 +167,13 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
         vx_context   vxContext = vxGetContext((vx_reference)node);
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size * sizeof(vx_float32), NULL, NULL);
+        data->workspace_size = (data->workspace_size + 3) & ~3;
+        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
         if (!data->workspace) {
             return VX_FAILURE;
         }
         cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size * sizeof(vx_float32), 0, NULL, NULL);
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
         if(err) return VX_FAILURE;
     }
 

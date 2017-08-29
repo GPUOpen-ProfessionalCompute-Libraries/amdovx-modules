@@ -141,9 +141,10 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
 
     vx_size stride_h, stride_w;
     vx_size kernel_h, kernel_w;
-    kernel_h = weights_dims[1]; kernel_w = weights_dims[0];
-    stride_w = (output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1)) / (input_dims[0] - 1);
-    stride_h = (output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1)) / (input_dims[1] - 1);
+    kernel_h = weights_dims[1];
+    kernel_w = weights_dims[0];
+    stride_w = (input_dims[0] > 1) ? ((output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1)) / (input_dims[0] - 1)) : 1;
+    stride_h = (input_dims[1] > 1) ? ((output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1)) / (input_dims[1] - 1)) : 1;
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
@@ -172,12 +173,13 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
         cl_int err;
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, data->workspace_size * sizeof(vx_float32), NULL, &err);
+        data->workspace_size = (data->workspace_size + 3) & ~3;
+        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, data->workspace_size, NULL, &err);
         if(err!=0) return VX_FAILURE;
         if (!data->workspace) return VX_FAILURE;
 
         cl_float pattern = 0;
-        err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size * sizeof(vx_float32), 0, NULL,NULL);
+        err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL,NULL);
         if(err!=0) return VX_FAILURE;
     }
 
