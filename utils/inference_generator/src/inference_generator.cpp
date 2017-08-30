@@ -44,11 +44,9 @@ THE SOFTWARE.
 #define ENABLE_DIRECTIVE 0
 #endif
 
-void getLayerParams
-(
-        const caffe::LayerParameter& layer,
-        std::string& params
-        )
+void getLayerParams(
+    const caffe::LayerParameter& layer,
+    std::string& params)
 {
     if(layer.type() == "Convolution") {
         const caffe::ConvolutionParameter& conv = layer.convolution_param();
@@ -149,12 +147,10 @@ void getLayerParams
     }
 }
 
-int loadCaffeProtoTxt
-(
-        const char * prototxtFileName,
-        std::vector<std::vector<std::string>>& net,
-        int inputDim[4]
-)
+int loadCaffeProtoTxt(
+    const char * prototxtFileName,
+    std::vector<std::vector<std::string>>& net,
+    int inputDim[4])
 {
     // verify that the version of the library that we linked against is
     // compatible with the version of the headers we compiled against.
@@ -259,86 +255,84 @@ int loadCaffeProtoTxt
     return 0;
 }
 
-int calculateTensorDim
-(
-        std::vector<std::vector<std::string>>& net,
-        int inputDim[4],
-std::map<std::string,std::vector<int>>& tensorMap
-                                      )
+int calculateTensorDim(
+    std::vector<std::vector<std::string>>& net,
+    int inputDim[4],
+    std::map<std::string,std::vector<int>>& tensorMap)
 {
     tensorMap[net[0][4]] = std::vector<int>{inputDim[0], inputDim[1], inputDim[2], inputDim[3]};
 
-for(auto& node : net) {
-    auto&& type = node[0];
-    auto&& params = node[1];
-    auto&& output = node[3];
-    auto&& input = node[4];
-    auto&& it = tensorMap.find(input);
-    if(it == tensorMap.end()) {
-        error("calculateTensorDim: no dims found for %s\n", input.c_str());
-    }
-
-    auto&& idim = it->second;
-    int n = idim[0], c = idim[1], H = idim[2], W = idim[3];
-    int k = c, h = H, w = W;
-
-    if (n < 1 || c < 1 || H < 1 || W < 1)
-        error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, c, H, W, input.c_str());
-
-    if(type == "Convolution") {
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-        ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
-        w = ((W + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / stride_w) + 1;
-        h = ((H + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / stride_h) + 1;
-        tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
-        if(bias_term) {
-            tensorMap[output + "_B"] = std::vector<int>{k};
+    for(auto& node : net) {
+        auto&& type = node[0];
+        auto&& params = node[1];
+        auto&& output = node[3];
+        auto&& input = node[4];
+        auto&& it = tensorMap.find(input);
+        if(it == tensorMap.end()) {
+            error("calculateTensorDim: no dims found for %s\n", input.c_str());
         }
-    }
-    else if(type == "Deconvolution") {
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-        ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
-        w = stride_w * (W - 1) + dilation_w * (kernel_w - 1) + 1 - ( 2* pad_w );
-        h = stride_h * (H - 1) + dilation_h * (kernel_h - 1) + 1 - ( 2* pad_h );
-        tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
-        if(bias_term) {
-            tensorMap[output + "_B"] = std::vector<int>{k};
+
+        auto&& idim = it->second;
+        int n = idim[0], c = idim[1], H = idim[2], W = idim[3];
+        int k = c, h = H, w = W;
+
+        if (n < 1 || c < 1 || H < 1 || W < 1)
+            error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, c, H, W, input.c_str());
+
+        if(type == "Convolution") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            w = ((W + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / stride_w) + 1;
+            h = ((H + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / stride_h) + 1;
+            tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
+            if(bias_term) {
+                tensorMap[output + "_B"] = std::vector<int>{k};
+            }
         }
-    }
-    else if(type == "Pooling") {
-        std::stringstream ss(params);
-        int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
-        ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
-        w = static_cast<int>(ceil( static_cast<float> (W + 2 * pad_w + stride_w - kernel_w)/ stride_w));
-        h = static_cast<int>(ceil( static_cast<float> (H + 2 * pad_h + stride_h - kernel_h)/ stride_h));
-        if(pad_h > 0) if((h-1)*stride_h >= (H+pad_h)) h=h-1;
-        if(pad_w > 0) if((w-1)*stride_w >= (W+pad_w)) w=w-1;
-    }
-    else if(type == "InnerProduct") {
-        std::stringstream ss(params);
-        ss >> k;
-        w = 1;
-        h = 1;
-        tensorMap[output + "_W"] = std::vector<int>{k, c, H, W};
-    }
-    else if(type == "Concat") {
-        for(int i = 5; i < node.size(); i++) {
-            auto&& dim = tensorMap[node[i]];
-            k += dim[1];
-            if(dim[0] != n || dim[2] != H || dim[3] != W)
-                error("calculateTensorDim: Concat: got invalid dim %dx%dx%dx%d for %s (should be %dx*x%dx%d)\n", dim[0], dim[1], dim[2], dim[3], node[i].c_str(), n, H, W);
+        else if(type == "Deconvolution") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            w = stride_w * (W - 1) + dilation_w * (kernel_w - 1) + 1 - ( 2* pad_w );
+            h = stride_h * (H - 1) + dilation_h * (kernel_h - 1) + 1 - ( 2* pad_h );
+            tensorMap[output + "_W"] = std::vector<int>{k, c, kernel_h, kernel_w};
+            if(bias_term) {
+                tensorMap[output + "_B"] = std::vector<int>{k};
+            }
         }
+        else if(type == "Pooling") {
+            std::stringstream ss(params);
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
+            ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
+            w = static_cast<int>(ceil( static_cast<float> (W + 2 * pad_w + stride_w - kernel_w)/ stride_w));
+            h = static_cast<int>(ceil( static_cast<float> (H + 2 * pad_h + stride_h - kernel_h)/ stride_h));
+            if(pad_h > 0) if((h-1)*stride_h >= (H+pad_h)) h=h-1;
+            if(pad_w > 0) if((w-1)*stride_w >= (W+pad_w)) w=w-1;
+        }
+        else if(type == "InnerProduct") {
+            std::stringstream ss(params);
+            ss >> k;
+            w = 1;
+            h = 1;
+            tensorMap[output + "_W"] = std::vector<int>{k, c, H, W};
+        }
+        else if(type == "Concat") {
+            for(int i = 5; i < node.size(); i++) {
+                auto&& dim = tensorMap[node[i]];
+                k += dim[1];
+                if(dim[0] != n || dim[2] != H || dim[3] != W)
+                    error("calculateTensorDim: Concat: got invalid dim %dx%dx%dx%d for %s (should be %dx*x%dx%d)\n", dim[0], dim[1], dim[2], dim[3], node[i].c_str(), n, H, W);
+            }
+        }
+        else if(type == "SoftmaxWithLoss") {
+            output = node[5];
+        }
+        tensorMap[output] = std::vector<int>{n, k, h, w};
+        if(n < 1 || k < 1 || h < 1 || w < 1)
+            error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
     }
-    else if(type == "SoftmaxWithLoss") {
-        output = node[5];
-    }
-    tensorMap[output] = std::vector<int>{n, k, h, w};
-    if(n < 1 || k < 1 || h < 1 || w < 1)
-        error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
-}
-return 0;
+    return 0;
 }
 
 void formatFileName(std::string& str, const std::string& from, const std::string& to)
@@ -351,17 +345,15 @@ void formatFileName(std::string& str, const std::string& from, const std::string
     }
 }
 
-void writeGDF
-(
-        std::ostream& ofsGDF,
-        std::vector<std::vector<std::string>>& net,
-        std::map<std::string,std::vector<int>>& tensorMap,
-        std::string tensorType,
-        int fixedPointPosition,
-        std::string convertPolicy,
-        std::string roundPolicy,
-        bool isVirtualEnabled
-        )
+void writeGDF(
+    std::ostream& ofsGDF,
+    std::vector<std::vector<std::string>>& net,
+    std::map<std::string,std::vector<int>>& tensorMap,
+    std::string tensorType,
+    int fixedPointPosition,
+    std::string convertPolicy,
+    std::string roundPolicy,
+    bool isVirtualEnabled)
 {
     std::map<std::string,bool> tensorCheck;
     ofsGDF << "import vx_nn" << std::endl;
@@ -657,7 +649,7 @@ void writeGDF
         }
         else if(type == "Dropout") {
             //during inference dropout layer copies its input to output.
-            ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
+            ofsGDF << "node org.khronos.openvx.copy " << node[4] << " " << node[3] << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
@@ -671,7 +663,7 @@ void writeGDF
 #endif
         }
         else if(type == "Split") {
-            ofsGDF << "node com.amd.nn_extension.copy_layer " << node[4] << " " << node[3] << std::endl;
+            ofsGDF << "node org.khronos.openvx.copy " << node[4] << " " << node[3] << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
@@ -746,20 +738,17 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
     fclose(fs_bias);
 }
 
-
-void writeVXCode
-(
-        std::ostream& ofsCodeH,
-        std::ostream& ofsCodeC,
-        std::vector<std::vector<std::string>>& net,
-        std::map<std::string,std::vector<int>>& tensorMap,
-        std::string tensorType,
-        int fixedPosition,
-        std::string convertPolicy,
-        std::string roundPolicy,
-        bool isVirtualEnabled,
-        std::string codeType
-        )
+void writeVXCode(
+    std::ostream& ofsCodeH,
+    std::ostream& ofsCodeC,
+    std::vector<std::vector<std::string>>& net,
+    std::map<std::string,std::vector<int>>& tensorMap,
+    std::string tensorType,
+    int fixedPosition,
+    std::string convertPolicy,
+    std::string roundPolicy,
+    bool isVirtualEnabled,
+    std::string codeType)
 {
     if(codeType == "declaration") {
         ofsCodeH << "	vx_context context; " << std::endl;
@@ -1349,20 +1338,17 @@ void writeVXCode
     }
 }
 
-
-void generateCode
-(
-        std::ostream& ofsCodeH,
-        std::ostream& ofsCodeC,
-        std::ofstream& ofsCodeM,
-        std::vector<std::vector<std::string>>& net,
-        std::map<std::string,std::vector<int>>& tensorMap,
-        std::string tensorType,
-        int fixedPointPosition,
-        std::string convertPolicy,
-        std::string roundPolicy,
-        bool isVirtualEnabled
-        )
+void generateCode(
+    std::ostream& ofsCodeH,
+    std::ostream& ofsCodeC,
+    std::ofstream& ofsCodeM,
+    std::vector<std::vector<std::string>>& net,
+    std::map<std::string,std::vector<int>>& tensorMap,
+    std::string tensorType,
+    int fixedPointPosition,
+    std::string convertPolicy,
+    std::string roundPolicy,
+    bool isVirtualEnabled)
 {
     // TODO: this code needs to be verified
 
@@ -1579,14 +1565,12 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
     }
 }
 
-int loadCaffeModelFile
-(
-        const char* fileName,
-        std::vector<std::vector<std::string>>& net,
-        int inputDim[4],
-std::string outputFolder,
-int flags
-)
+int loadCaffeModelFile(
+    const char* fileName,
+    std::vector<std::vector<std::string>>& net,
+    int inputDim[4],
+    std::string outputFolder,
+    int flags)
 {
     //verify the version of protobuf library.
     GOOGLE_PROTOBUF_VERIFY_VERSION;
