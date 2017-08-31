@@ -40,15 +40,12 @@ typedef struct {
 //////////////////////////////////////////////////////////////////////
 //! \brief The overlap pixel entry.
 typedef struct {
-	vx_uint32 camId0  :  5; // destination buffer/camera ID
-	vx_uint32 start_x : 14; // destination start pixel x-coordinate
-	vx_uint32 start_y : 13; // destination start pixel y-coordinate
-	vx_uint32 end_x   :  7; // ending pixel x-coordinate within the 128x32 block
-	vx_uint32 end_y   :  5; // ending pixel y-coordinate within the 128x32 block
-	vx_uint32 camId1  :  5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId2  :  5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId3  :  5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
-	vx_uint32 camId4  :  5; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
+	vx_uint32 start_x : 16; // destination start pixel x-coordinate
+	vx_uint32 start_y : 16; // destination start pixel y-coordinate	
+	vx_uint32 camId0  :  8; // destination buffer/camera ID
+	vx_uint32 camId1  :  8; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
+	vx_uint32 end_x   :  8; // ending pixel x-coordinate within the 128x32 block
+	vx_uint32 end_y   :  8; // ending pixel y-coordinate within the 128x32 block
 } StitchOverlapPixelEntry;
 
 //////////////////////////////////////////////////////////////////////

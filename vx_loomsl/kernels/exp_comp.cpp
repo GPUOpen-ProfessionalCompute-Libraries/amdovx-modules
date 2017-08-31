@@ -298,9 +298,6 @@ vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pOverlap_roi, vx_array 
 						ExpOut.end_x = ((x + 127) > x2) ? (x2 - x) : 127;
 						ExpOut.end_y = ((y + 31) > y2) ? (y2 - y) : 31;
 						ExpOut.camId1 = j;
-						ExpOut.camId2 = 0x1F;
-						ExpOut.camId3 = 0x1F;
-						ExpOut.camId4 = 0x1F;
 						ERROR_CHECK_STATUS(vxAddArrayItems(ExpCompOut, 1, &ExpOut, sizeof(ExpOut)));
 					}
 				}
