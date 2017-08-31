@@ -39,10 +39,9 @@ enum {
 //  For dummy entries in the buffer for alignment to 32 items, the invalid items shall be (vx_uint32)0xFFFFFFFF
 typedef struct {
 	vx_uint32 camId     :  5; // destination buffer/camera ID
-	vx_uint32 reserved0 :  2; // reserved (shall be zero)
 	vx_uint32 allValid  :  1; // all 8 consecutive pixels are valid
-	vx_uint32 dstX      : 11; // destination pixel x-coordinate/8 (integer)
-	vx_uint32 dstY      : 13; // destination pixel y-coordinate   (integer)
+	vx_uint32 dstX      : 12; // destination pixel x-coordinate/8 (integer)
+	vx_uint32 dstY      : 14; // destination pixel y-coordinate   (integer)
 } StitchValidPixelEntry;
 
 //////////////////////////////////////////////////////////////////////

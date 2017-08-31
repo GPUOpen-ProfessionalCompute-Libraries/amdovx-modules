@@ -1235,7 +1235,7 @@ std::string get_warp_valid_info_4pixels(){
 		"    uint pixelEntry = *(__global uint*) valid_pix_buf;\n"
 		"    if(pixelEntry == 0xffffffff) return;\n"
 		"    uint4 map = *(__global uint4 *) warp_remap_buf;\n"
-		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 8) & 0x7ff; uint op_y = (pixelEntry >> 19) & 0x1fff;\n";
+		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 6) & 0xfff; uint op_y = (pixelEntry >> 18) & 0x3fff;\n";
 	return output;
 }
 std::string get_warp_valid_info_2pixels(){
@@ -1246,7 +1246,7 @@ std::string get_warp_valid_info_2pixels(){
 		"    uint pixelEntry = *(__global uint*) valid_pix_buf;\n"
 		"    if(pixelEntry == 0xffffffff) return;\n"
 		"    uint4 map = *(__global uint4 *) warp_remap_buf;\n"
-		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 8) & 0x7ff; uint op_y = (pixelEntry >> 19) & 0x1fff;\n";
+		"    uint camera_id = pixelEntry & 0x1f; uint op_x = (pixelEntry >> 6) & 0xfff; uint op_y = (pixelEntry >> 18) & 0x3fff;\n";
 	return output;
 }
 
