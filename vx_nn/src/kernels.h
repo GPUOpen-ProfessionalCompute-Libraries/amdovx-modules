@@ -72,15 +72,14 @@ enum nn_additional_library
 };
 enum user_kernel_e
 {
-    VX_KERNEL_ELEMENTWISE_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x001,
-    VX_KERNEL_BATCHNORMALISATION_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x002,
-    VX_KERNEL_CONCAT_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x003,
-    VX_KERNEL_COPY_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
-    VX_KERNEL_SLICE_LAYER = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x005,
-    VX_KERNEL_CONVERT_IMAGE_TO_TENSOR = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
-    VX_KERNEL_CONVERT_TENSOR_TO_IMAGE = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
+    VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD  = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x001,
+    VX_KERNEL_ARGMAX_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x002,
+    VX_KERNEL_CONVERT_IMAGE_TO_TENSOR_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x003,
+    VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
+    VX_KERNEL_ELEMENTWISE_LAYER_AMD          = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x005,
+    VX_KERNEL_CONCAT_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
+    VX_KERNEL_SLICE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
 };
-
 
 //////////////////////////////////////////////////////////////////////
 //! \brief Common data shared across all nodes in a graph
@@ -109,11 +108,11 @@ vx_status publishROIPoolingLayer(vx_context context);
 vx_status publishDeconvolutionLayer(vx_context context);
 vx_status publishElementwiseLayer(vx_context context);
 vx_status publishBatchNormalizationLayer(vx_context context);
+vx_status publishArgmaxLayer(vx_context context);
 vx_status publishConcatLayer(vx_context context);
-vx_status publishCopyLayer(vx_context context);
 vx_status publishSliceLayer(vx_context context);
-vx_status publishImageToTensorConvertKernel(vx_context context);
-vx_status publishTensorToImageConvertKernel(vx_context context);
+vx_status publishImageToTensorConvert(vx_context context);
+vx_status publishTensorToImageConvert(vx_context context);
 vx_status publishTensorAdd(vx_context context);
 vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);

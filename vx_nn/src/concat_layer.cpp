@@ -100,7 +100,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         vx_size opencl_local_work[],                   // [output] local_work[] for clEnqueueNDRangeKernel()
         vx_uint32& opencl_local_buffer_usage_mask,     // [output] reserved: must be ZERO
         vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
-)
+    )
 {
     //get tensor dimensions
     vx_size input1_dims[4], input2_dims[4], input3_dims[4], input4_dims[4],output_dims[4];
@@ -170,14 +170,15 @@ static vx_status VX_CALLBACK opencl_codegen(
 }
 
 //! \brief The kernel execution.
-static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
     return VX_ERROR_NOT_IMPLEMENTED;
 }
 
 //! \brief The kernel publisher.
-vx_status publishConcatLayer(vx_context context) {
-
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.concat_layer", VX_KERNEL_CONCAT_LAYER, host_kernel, 5, validateConcatLayer, nullptr, nullptr);
+vx_status publishConcatLayer(vx_context context)
+{
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.concat_layer", VX_KERNEL_CONCAT_LAYER_AMD, host_kernel, 5, validateConcatLayer, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -211,7 +212,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxConcatLayer(vx_graph graph, vx_tensor input1,
             (vx_reference)input4,
             (vx_reference)output
         };
-        node = createNode(graph, VX_KERNEL_CONCAT_LAYER, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_CONCAT_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }

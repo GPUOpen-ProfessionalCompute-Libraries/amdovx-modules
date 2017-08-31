@@ -24,7 +24,6 @@ THE SOFTWARE.
 
 static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
-
     //check tensor dims.
     vx_enum type;
     vx_size num_dims;
@@ -88,7 +87,7 @@ static vx_status VX_CALLBACK opencl_codegen(
 	vx_size opencl_local_work[],                   // [output] local_work[] for clEnqueueNDRangeKernel()
 	vx_uint32& opencl_local_buffer_usage_mask,     // [output] reserved: must be ZERO
 	vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
-)
+    )
 {
     //get tensor dimensions
     vx_size input_dims[4], output1_dims[4], output2_dims[4];
@@ -133,14 +132,15 @@ static vx_status VX_CALLBACK opencl_codegen(
 }
 
 //! \brief The kernel execution.
-static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
     return VX_ERROR_NOT_IMPLEMENTED;
 }
 
 //! \brief The kernel publisher.
-vx_status publishSliceLayer(vx_context context) {
-
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.slice_layer", VX_KERNEL_SLICE_LAYER, host_kernel, 3, validateSliceLayer, nullptr, nullptr);
+vx_status publishSliceLayer(vx_context context)
+{
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.slice_layer", VX_KERNEL_SLICE_LAYER_AMD, host_kernel, 3, validateSliceLayer, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -170,8 +170,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, v
             (vx_reference)output1,
             (vx_reference)output2
         };
-        node = createNode(graph, VX_KERNEL_SLICE_LAYER, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_SLICE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
-

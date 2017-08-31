@@ -85,7 +85,8 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK processBatchNormalizationLayer(vx_node node, const vx_reference * parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK processBatchNormalizationLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
     BatchNormLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
@@ -95,11 +96,10 @@ static vx_status VX_CALLBACK processBatchNormalizationLayer(vx_node node, const 
                                                                        data->output_desc, data->output_mem, data->bnScaleBiasMeanVarDesc, data->bnScale, data->bnBias, nullptr, nullptr, 0));
 
     return VX_SUCCESS;
-
 }
 
-static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
-
+static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
     BatchNormLayerLocalData * data = new BatchNormLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
@@ -134,7 +134,8 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
     BatchNormLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
@@ -147,9 +148,10 @@ static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, c
     return VX_SUCCESS;
 }
 
-vx_status publishBatchNormalizationLayer(vx_context context) {
+vx_status publishBatchNormalizationLayer(vx_context context)
+{
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.batch_norm_layer", VX_KERNEL_BATCHNORMALISATION_LAYER, processBatchNormalizationLayer, 4, validateBatchNormalizationLayer, initializeBatchNormalizationLayer, uninitializeBatchNormalizationLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.batch_normalization_layer", VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, processBatchNormalizationLayer, 4, validateBatchNormalizationLayer, initializeBatchNormalizationLayer, uninitializeBatchNormalizationLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -169,7 +171,8 @@ vx_status publishBatchNormalizationLayer(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxBatchNormalizationLayer(vx_graph graph, vx_tensor inputs, vx_tensor scale, vx_tensor bias, vx_tensor output) {
+VX_API_ENTRY vx_node VX_API_CALL vxBatchNormalizationLayer(vx_graph graph, vx_tensor inputs, vx_tensor scale, vx_tensor bias, vx_tensor output)
+{
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
@@ -179,7 +182,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxBatchNormalizationLayer(vx_graph graph, vx_te
             (vx_reference)bias,
             (vx_reference)output
         };
-        node = createNode(graph, VX_KERNEL_ELEMENTWISE_LAYER, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
