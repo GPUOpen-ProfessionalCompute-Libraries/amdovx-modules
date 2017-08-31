@@ -85,7 +85,8 @@ static vx_status VX_CALLBACK validateElementwiseLayer(vx_node node, const vx_ref
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK processElementwiseLayer(vx_node node, const vx_reference * parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK processElementwiseLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
     ElementwiseLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
@@ -96,8 +97,8 @@ static vx_status VX_CALLBACK processElementwiseLayer(vx_node node, const vx_refe
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
-
+static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
     ElementwiseLayerLocalData * data = new ElementwiseLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
@@ -135,7 +136,8 @@ static vx_status VX_CALLBACK initializeElementwiseLayer(vx_node node, const vx_r
     return VX_SUCCESS;
 }
 
-static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
     ElementwiseLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 	ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input1));
@@ -148,10 +150,11 @@ static vx_status VX_CALLBACK uninitializeElementwiseLayer(vx_node node, const vx
     return VX_SUCCESS;
 }
 
-vx_status publishElementwiseLayer(vx_context context) {
+vx_status publishElementwiseLayer(vx_context context)
+{
 
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.elementwise_layer", VX_KERNEL_ELEMENTWISE_LAYER, processElementwiseLayer, 6, validateElementwiseLayer, initializeElementwiseLayer, uninitializeElementwiseLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.elementwise_layer", VX_KERNEL_ELEMENTWISE_LAYER_AMD, processElementwiseLayer, 6, validateElementwiseLayer, initializeElementwiseLayer, uninitializeElementwiseLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -173,18 +176,18 @@ vx_status publishElementwiseLayer(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_float32 alpha1, vx_float32 alpha2, vx_float32 beta, vx_tensor output) {
+VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_float32 alpha1, vx_float32 alpha2, vx_float32 beta, vx_tensor output)
+{
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
         vx_scalar s_alpha1 = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha1, sizeof(alpha1));
         vx_scalar s_alpha2 = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha2, sizeof(alpha2));
         vx_scalar s_beta = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &beta, sizeof(beta));
-
-
         if (vxGetStatus((vx_reference)s_alpha1) == VX_SUCCESS &&
-                vxGetStatus((vx_reference)s_alpha2) == VX_SUCCESS &&
-                vxGetStatus((vx_reference)s_beta) == VX_SUCCESS) {
+            vxGetStatus((vx_reference)s_alpha2) == VX_SUCCESS &&
+            vxGetStatus((vx_reference)s_beta) == VX_SUCCESS)
+        {
 
             vx_reference params[] = {
                 (vx_reference)input1,
@@ -194,9 +197,11 @@ VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor in
                 (vx_reference)s_beta,
                 (vx_reference)output
             };
-            node = createNode(graph, VX_KERNEL_ELEMENTWISE_LAYER, params, sizeof(params) / sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_ELEMENTWISE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_alpha1);
+            vxReleaseScalar(&s_alpha2);
+            vxReleaseScalar(&s_beta);
         }
     }
     return node;
-
 }

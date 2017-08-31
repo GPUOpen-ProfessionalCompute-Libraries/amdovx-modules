@@ -34,11 +34,7 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     if (type != VX_TYPE_FLOAT32)
         return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    vx_df_image format;
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
-    if(format != VX_DF_IMAGE_VIRT && format != VX_DF_IMAGE_RGB && format != VX_DF_IMAGE_U8)
-        return VX_ERROR_INVALID_FORMAT;
-    if (input_dims[3] != 1 || (format == VX_DF_IMAGE_RGB && input_dims[2] != 3))
+    if (input_dims[3] != 1 || (input_dims[2] != 3 && input_dims[2] != 1))
         return VX_ERROR_INVALID_DIMENSION;
     vx_enum scalar_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
@@ -54,11 +50,7 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     // set output image configuration
     vx_uint32 width = (vx_uint32)input_dims[0];
     vx_uint32 height = (vx_uint32)input_dims[1];
-    if(format == VX_DF_IMAGE_VIRT) {
-        format = (input_dims[2] == 3) ? VX_DF_IMAGE_RGB : VX_DF_IMAGE_U8;
-    }
-    if(format == VX_DF_IMAGE_U8 && input_dims[2] >= 256)
-        return VX_ERROR_INVALID_FORMAT;
+    vx_df_image format = (input_dims[2] == 3) ? VX_DF_IMAGE_RGB : VX_DF_IMAGE_U8;
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
@@ -93,20 +85,20 @@ static vx_status VX_CALLBACK opencl_codegen(
     )
 {
     // get configuration
-    vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
+    vx_uint32 width, height;
     vx_df_image format;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
+    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
+    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
 
     // compute global work
-    vx_uint32 width_div_4 = (input_dims[0] + 3) / 4;
+    vx_uint32 width_div_4 = (width + 3) / 4;
     opencl_work_dim = 3;
     opencl_local_work[0] = 8;
     opencl_local_work[1] = 8;
     opencl_local_work[2] = 1;
     opencl_global_work[0] = (width_div_4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
-    opencl_global_work[1] = (input_dims[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
+    opencl_global_work[1] = (height + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
     opencl_global_work[2] = 1;
 
     // generate OpenCL C code
@@ -120,7 +112,7 @@ static vx_status VX_CALLBACK opencl_codegen(
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
-            "    if(x < %ld && y < %ld) {\n"
+            "    if(x < %d && y < %d) {\n"
             "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
             "        float4 r = *(__global float4 *)&i0_buf[reverse_channel_order ? 2 * i0_stride.s2 : 0];\n"
             "        float4 g = *(__global float4 *)&i0_buf[                              i0_stride.s2  ];\n"
@@ -135,7 +127,7 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + y * o0_stride + x * 3]);\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1]);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
         opencl_kernel_code = item;
     }
     else {
@@ -143,33 +135,23 @@ static vx_status VX_CALLBACK opencl_codegen(
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, float a, float b, uint reverse_channel_order)\n"
+            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, float ka, float kb, uint reverse_channel_order)\n"
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
-            "    if(x < %ld && y < %ld) {\n"
+            "    if(x < %d && y < %d) {\n"
             "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
-            "        uint4 cmax = (uint4)0;\n"
-            "        float4 fmax = *(__global float4 *)i0_buf;\n"
-            "        for(uint c = 1; c < %ld; c++) {\n"
-            "            i0_buf += i0_stride.s2;\n"
-            "            float4 f = *(__global float4 *)i0_buf;\n"
-            "            if(f.s0 > fmax.s0) cmax.s0 = c;\n"
-            "            if(f.s1 > fmax.s1) cmax.s1 = c;\n"
-            "            if(f.s2 > fmax.s2) cmax.s2 = c;\n"
-            "            if(f.s3 > fmax.s3) cmax.s3 = c;\n"
-            "        }\n"
-            "        if(reverse_channel_order) cmax = (uint4)%ld - cmax;\n"
-            "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
-            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = imax;\n"
+            "        float4 i = *(__global float4 *)i0_buf;\n"
+            "        i = i * (float4)ka + (float4)kb;\n"
+            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = amd_pack((float4)(i.s0, i.s1, i.s2, i.s3));\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2], input_dims[2] - 1);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
         opencl_kernel_code = item;
     }
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "KERNEL tensor_to_image output " << input_dims[0] << "x" << input_dims[1] << " " << std::endl;
+    std::cout << "KERNEL tensor_to_image output " << width << "x" << height << " " << std::endl;
 #endif
 
     return VX_SUCCESS;
@@ -182,9 +164,9 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 }
 
 //! \brief The kernel publisher.
-vx_status publishTensorToImageConvertKernel(vx_context context)
+vx_status publishTensorToImageConvert(vx_context context)
 {
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.convert_tensor_to_image", VX_KERNEL_CONVERT_TENSOR_TO_IMAGE, host_kernel, 5, validateTensorToImageKernel, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.convert_tensor_to_image", VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD, host_kernel, 5, validateTensorToImageKernel, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -222,7 +204,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_t
                 (vx_reference)b,
                 (vx_reference)s
             };
-            node = createNode(graph, VX_KERNEL_CONVERT_TENSOR_TO_IMAGE, params, sizeof(params) / sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD, params, sizeof(params) / sizeof(params[0]));
             vxReleaseScalar(&a);
             vxReleaseScalar(&b);
             vxReleaseScalar(&s);
