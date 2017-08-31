@@ -231,8 +231,8 @@ static vx_status VX_CALLBACK multiband_blend_opencl_codegen(
 		"	int grp_id = get_global_id(0)>>4, lx = get_local_id(0), ly = get_local_id(1);\n"
 		"	if (grp_id < pG_num) {\n"
 		"	uint2 offs = ((__global uint2 *)(pG_buf+pG_offs))[grp_id+arr_offs];\n"
-		"	uint camera_id = offs.x & 0x1f; uint gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); uint gy = ly + (offs.x >> 19);\n"
-		"	bool outputValid = (lx*4 <= (offs.y & 0xFF)) && (ly <= ((offs.y >> 8) & 0xFF));\n"
+		"	uint camera_id = offs.s1 & 0x3f; uint gx = (lx<<2) + ((offs.s0) & 0xffff); uint gy = ly + (offs.s0 >> 16);\n"
+		"	bool outputValid = (lx*4 <= ((offs.s1 >> 6) & 0x3F)) && (ly <= ((offs.y >> 12) & 0xf));\n"
 		"	op_buf  += op_offset + mad24(gy, op_stride, gx*6);\n"
 		"	ip_buf += (camera_id * ip_stride*%d);\n"
 		"	wt_buf += (camera_id * wt_stride*%d);\n"
@@ -469,8 +469,8 @@ vx_uint32 GenerateBlendBuffers(
 					entry->skip_x = (x < start_x) ? (start_x - x) : 0;
 					entry->skip_y = 0;
 					// check if the workgroup is processing border pixels, store it in high bits of skip_y
-					entry->skip_y |= ((!x) | (((x + 64) << level) >= (vx_int32)eqrWidth)) << 6;
-					entry->skip_y |= ((!y) | (((y + 16) << level) >= (vx_int32)eqrHeight)) << 7;
+					entry->boarder  = ((!x) | (((x + 64) << level) >= (vx_int32)eqrWidth));
+					entry->boarder |= ((!y) | (((y + 16) << level) >= (vx_int32)eqrHeight)) << 1;
 				}
 			}
 		}
