@@ -49,6 +49,11 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    if(parameters[2]) {
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_WIDTH, &width, sizeof(width)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_HEIGHT, &height, sizeof(height)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    }
 
     return VX_SUCCESS;
 }
@@ -98,36 +103,60 @@ static vx_status VX_CALLBACK opencl_codegen(
 
     // generate OpenCL C code
     strcpy(opencl_kernel_function_name, "argmax");
-    if(format == VX_DF_IMAGE_U8) {
-        char item[8192];
+    char item[8192];
+    if(parameters[2]) {
         sprintf(item,
             "#pragma opencl extension cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset)\n"
+            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, uint o1_width, uint o1_height, __global uchar * o1_buf, uint o1_stride, uint o1_offset)\n"
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
             "    if(x < %ld && y < %ld) {\n"
             "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
-            "        uint4 cmax = (uint4)0;\n"
-            "        float4 fmax = *(__global float4 *)i0_buf;\n"
-            "        for(uint c = 1; c < %ld; c++) {\n"
-            "            i0_buf += i0_stride.s2;\n"
-            "            float4 f = *(__global float4 *)i0_buf;\n"
-            "            if(f.s0 > fmax.s0) cmax.s0 = c;\n"
-            "            if(f.s1 > fmax.s1) cmax.s1 = c;\n"
-            "            if(f.s2 > fmax.s2) cmax.s2 = c;\n"
-            "            if(f.s3 > fmax.s3) cmax.s3 = c;\n"
+            "        uint4 cmax, cmax1;\n"
+            "        float4 f, fmax, fmax1;\n"
+            "        fmax = *(__global float4 *)i0_buf;\n"
+            "        i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
+            "        cmax1.s0 = (f.s0 > fmax.s0) ? 0 : 1;\n"
+            "         cmax.s0 = (f.s0 > fmax.s0) ? 1 : 0;\n"
+            "        fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 :    f.s0;\n"
+            "         fmax.s0 = (f.s0 > fmax.s0) ?    f.s0 : fmax.s0;\n"
+            "        cmax1.s1 = (f.s1 > fmax.s1) ? 0 : 1;\n"
+            "         cmax.s1 = (f.s1 > fmax.s1) ? 1 : 0;\n"
+            "        fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 :    f.s1;\n"
+            "         fmax.s1 = (f.s1 > fmax.s1) ?    f.s1 : fmax.s1;\n"
+            "        cmax1.s2 = (f.s2 > fmax.s2) ? 0 : 1;\n"
+            "         cmax.s2 = (f.s2 > fmax.s2) ? 1 : 0;\n"
+            "        fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 :    f.s2;\n"
+            "         fmax.s2 = (f.s2 > fmax.s2) ?    f.s2 : fmax.s2;\n"
+            "        cmax1.s3 = (f.s3 > fmax.s3) ? 0 : 1;\n"
+            "         cmax.s3 = (f.s3 > fmax.s3) ? 1 : 0;\n"
+            "        fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 :    f.s3;\n"
+            "         fmax.s3 = (f.s3 > fmax.s3) ?    f.s3 : fmax.s3;\n"
+            "        for(uint c = 2; c < %ld; c++) {\n"
+            "            i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
+            "            cmax1.s0 = (f.s0 > fmax.s0) ? cmax.s0 : ((f.s0 > fmax1.s0) ? c    : cmax1.s0);\n"
+            "            fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 : ((f.s0 > fmax1.s0) ? f.s0 : fmax1.s0);\n"
+            "            cmax.s0  = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
+            "            fmax.s0  = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
+            "            cmax1.s1 = (f.s1 > fmax.s1) ? cmax.s1 : ((f.s1 > fmax1.s1) ? c    : cmax1.s1);\n"
+            "            fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 : ((f.s1 > fmax1.s1) ? f.s1 : fmax1.s1);\n"
+            "            cmax.s1  = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
+            "            fmax.s1  = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
+            "            cmax1.s2 = (f.s2 > fmax.s2) ? cmax.s2 : ((f.s2 > fmax1.s2) ? c    : cmax1.s2);\n"
+            "            fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 : ((f.s2 > fmax1.s2) ? f.s2 : fmax1.s2);\n"
+            "            cmax.s2  = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
+            "            fmax.s2  = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
+            "            cmax1.s3 = (f.s3 > fmax.s3) ? cmax.s3 : ((f.s3 > fmax1.s3) ? c    : cmax1.s3);\n"
+            "            fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 : ((f.s3 > fmax1.s3) ? f.s3 : fmax1.s3);\n"
+            "            cmax.s3  = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
+            "            fmax.s3  = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
             "        }\n"
-            "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
-            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = imax;\n"
-            "    }\n"
-            "}\n"
             , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2]);
         opencl_kernel_code = item;
     }
-    else if(format == VX_DF_IMAGE_U16) {
-        char item[8192];
+    else {
         sprintf(item,
             "#pragma opencl extension cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
@@ -142,20 +171,45 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        for(uint c = 1; c < %ld; c++) {\n"
             "            i0_buf += i0_stride.s2;\n"
             "            float4 f = *(__global float4 *)i0_buf;\n"
-            "            if(f.s0 > fmax.s0) cmax.s0 = c;\n"
-            "            if(f.s1 > fmax.s1) cmax.s1 = c;\n"
-            "            if(f.s2 > fmax.s2) cmax.s2 = c;\n"
-            "            if(f.s3 > fmax.s3) cmax.s3 = c;\n"
+            "            cmax.s0 = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
+            "            fmax.s0 = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
+            "            cmax.s1 = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
+            "            fmax.s1 = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
+            "            cmax.s2 = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
+            "            fmax.s2 = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
+            "            cmax.s3 = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
+            "            fmax.s3 = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
             "        }\n"
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2]);
+        opencl_kernel_code = item;
+    }
+    if(format == VX_DF_IMAGE_U8) {
+        opencl_kernel_code +=
+            "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
+            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = imax;\n";
+        if(parameters[2]) {
+            opencl_kernel_code +=
+                "        uint imax1 = cmax1.s0 + (cmax1.s1 << 8) + (cmax1.s2 << 16) + (cmax1.s3 << 24);\n"
+                "        *(__global uint *)&o1_buf[o1_offset + y * o1_stride + x] = imax1;\n";
+        }
+    }
+    else if(format == VX_DF_IMAGE_U16) {
+        opencl_kernel_code +=
             "        uint2 imax;\n"
             "        imax.s0 = cmax.s0 + (cmax.s1 << 16);\n"
             "        imax.s1 = cmax.s2 + (cmax.s3 << 16);\n"
-            "        *(__global uint2 *)&o0_buf[o0_offset + y * o0_stride + x * 2] = imax;\n"
-            "    }\n"
-            "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2]);
-        opencl_kernel_code = item;
+            "        *(__global uint2 *)&o0_buf[o0_offset + y * o0_stride + x * 2] = imax;\n";
+        if(parameters[2]) {
+            opencl_kernel_code +=
+                "        uint2 imax1;\n"
+                "        imax1.s0 = cmax1.s0 + (cmax1.s1 << 16);\n"
+                "        imax1.s1 = cmax1.s2 + (cmax1.s3 << 16);\n"
+                "        *(__global uint2 *)&o1_buf[o1_offset + y * o1_stride + x * 2] = imax1;\n";
+        }
     }
+    opencl_kernel_code +=
+        "    }\n"
+        "}\n";
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "KERNEL argmax_layer output " << input_dims[0] << "x" << input_dims[1] << " " << std::endl;
@@ -173,7 +227,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishArgmaxLayer(vx_context context)
 {
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.argmax_layer", VX_KERNEL_ARGMAX_LAYER_AMD, host_kernel, 2, validateKernel, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.argmax_layer", VX_KERNEL_ARGMAX_LAYER_AMD, host_kernel, 3, validateKernel, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -184,6 +238,7 @@ vx_status publishArgmaxLayer(vx_context context)
     // set kernel parameters.
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
 
     // finalize and release kernel object.
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -192,14 +247,15 @@ vx_status publishArgmaxLayer(vx_context context)
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_image output0, vx_image output1)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
         vx_reference params[] = {
             (vx_reference)input,
-            (vx_reference)output
+            (vx_reference)output0,
+            (vx_reference)output1
         };
         node = createNode(graph, VX_KERNEL_ARGMAX_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
