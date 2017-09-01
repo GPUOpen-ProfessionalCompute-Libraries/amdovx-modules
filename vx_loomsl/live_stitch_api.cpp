@@ -487,7 +487,7 @@ vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_im
 		return stitchColorConvertToIYUVNode(graph, input, y_channel, u_channel, v_channel, flags);
 	}
 	else{
-		return CreateColorConvertNode(graph, input, output, flags);
+		return stitchColorConvertNode(graph, input, output, flags);
 	}
 }
 
@@ -686,10 +686,13 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
 			if (status != VX_SUCCESS)
 				return status;
-			sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
-			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
-			if (status != VX_SUCCESS)
-				return status;
+			if (level != (stitch->num_bands - 1))
+			{			
+				sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
+				status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
+				if (status != VX_SUCCESS)
+					return status;
+			}
 			sprintf(fileName, "%s-blend-pyr-lap-rec-%d.raw", fileNamePrefix, level);
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec, fileName);
 			if (status != VX_SUCCESS)
@@ -1770,7 +1773,8 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_U8, VX_MEMORY_TYPE_OPENCL));
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGBX, VX_MEMORY_TYPE_OPENCL));
 			}
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+			if (level != (stitch->num_bands-1))
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 		}
 		for (int level = 0; level < stitch->num_bands; level++) {
@@ -1820,7 +1824,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 	return VX_SUCCESS;
 }
 /*****************************************************************************************************************************************
-functions to encode stitched output
+functions to tile stitched output
 *****************************************************************************************************************************************/
 static vx_status CreateImageFromROI(ls_context stitch)
 {
@@ -2303,14 +2307,26 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 
 	/////////////////////////////////////////////////////////
 	// If 16bit mode is on auto detect > find right mode here:
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 2 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 0){
+		stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
+		ls_printf("WARNING: Precision was set to invalid value. (Only 0: Auto detect, 1: 8 bit flow and 2: 16 bit flow are allowed.) Precision will be set to auto detect.\n");
+	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 0)
 	{
 		if (stitch->output_buffer_format == VX_DF_IMAGE_V210_AMD || stitch->output_buffer_format == VX_DF_IMAGE_V216_AMD){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 2;
+			ls_printf("OK: Precision was set to auto detect: Using 16 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
 		else{ // UYVY, YUYV, NV12, IYUV
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
+			ls_printf("OK: Precision was set to auto detect: Using 8 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+		ls_printf("OK: Precision was set to 8 bit flow.\n");
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+		ls_printf("OK: Precision was set to 16 bit flow.\n");
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
@@ -2318,9 +2334,18 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
+		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+			stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
+			ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+		}
+		else{
+			ls_printf("INFO: Linear colorspace will be used.\n");
+		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] != 0){
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
-		ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+		ls_printf("WARNING: Linear colorspace was set to invalid value. (Only 0: Nonlinear and 1: Linear)\n");
 	}
 
 
@@ -2656,16 +2681,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	stitch->rgb_output = stitch->Img_output;
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		// needs output color conversion
-		if (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
-			if (stitch->output_tiles == 1){ 
-				stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
-				ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
-			}
-			else{
-				// output needs to be encoded 
-				ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
-				ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
-			}
+		if (stitch->output_tiles != 1 && (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV)){
+			// output needs to be encoded 
+			ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
+			ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
 		}
 		else{
 			stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
@@ -2833,6 +2852,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// warping
 		stitch->alpha_value = 0;
 		stitch->warp_flags = (vx_uint8) stitch->live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION];
+		if (stitch->warp_flags = 1)
+			ls_printf("INFO: Bicubic warp will be performed.\n");
 		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->warp_output_image, stitch->warp_luma_image, stitch->num_camera_columns, stitch->alpha_value, stitch->warp_flags, stitch->expcomp_luma16));
 
 		// exposure comp
