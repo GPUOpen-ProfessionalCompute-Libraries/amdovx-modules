@@ -25,35 +25,50 @@ THE SOFTWARE.
 static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check input configuration
-    vx_enum type;
+    vx_enum type, format;
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    if (num_dims < 2)
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
+    if (num_dims != 4 && num_dims != 3)
         return VX_ERROR_INVALID_DIMENSION;
     if (type != VX_TYPE_FLOAT32)
         return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if (input_dims[3] != 1)
-        return VX_ERROR_INVALID_DIMENSION;
-    vx_df_image format;
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
-    if(format == VX_DF_IMAGE_U8 && input_dims[2] > 255)
-        return VX_ERROR_INVALID_FORMAT;
-    if(format == VX_DF_IMAGE_VIRT)
-        format = (input_dims[2] < 256) ? VX_DF_IMAGE_U8 : VX_DF_IMAGE_U16;
 
-    // set output image configuration
-    vx_uint32 width = (vx_uint32)input_dims[0];
-    vx_uint32 height = (vx_uint32)input_dims[1];
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
-    if(parameters[2]) {
-        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_WIDTH, &width, sizeof(width)));
-        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_HEIGHT, &height, sizeof(height)));
-        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    // check output object type and set configuration
+    ERROR_CHECK_STATUS(vxQueryReference(parameters[1], VX_REFERENCE_TYPE, &type, sizeof(type)));
+    if (type == VX_TYPE_IMAGE) {
+        if (input_dims[3] != 1) // only batch size of 1
+            return VX_ERROR_INVALID_DIMENSION;
+        vx_df_image format;
+        ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+        if(format == VX_DF_IMAGE_U8 && input_dims[2] > 255)
+            return VX_ERROR_INVALID_FORMAT;
+        if(format == VX_DF_IMAGE_VIRT)
+            format = (input_dims[2] < 256) ? VX_DF_IMAGE_U8 : VX_DF_IMAGE_U16;
+        vx_uint32 width = (vx_uint32)input_dims[0];
+        vx_uint32 height = (vx_uint32)input_dims[1];
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
     }
+    else if (type == VX_TYPE_TENSOR) {
+        vx_size output_num_dims, output_dims[4] = { 1, 1, 1, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
+        if (output_dims[2] != 1 && output_dims[2] != 2) // top_k must be 1 or 2
+            return VX_ERROR_INVALID_DIMENSION;
+        if(type == VX_TYPE_UINT8 && input_dims[2] > 255)
+            return VX_ERROR_INVALID_FORMAT;
+        if(type != VX_TYPE_UINT8 && type != VX_TYPE_UINT16 && type != VX_TYPE_INT16)
+            return VX_ERROR_INVALID_FORMAT;
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
+    }
+    else
+        return VX_ERROR_INVALID_PARAMETERS;
 
     return VX_SUCCESS;
 }
@@ -85,36 +100,59 @@ static vx_status VX_CALLBACK opencl_codegen(
     )
 {
     // get configuration
-    vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
-    vx_df_image format;
+    vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 }, top_k = 1;
+    vx_enum output_obj_type, output_data_type = VX_TYPE_UINT16;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    ERROR_CHECK_STATUS(vxQueryReference(parameters[1], VX_REFERENCE_TYPE, &output_obj_type, sizeof(output_obj_type)));
+    if(output_obj_type == VX_TYPE_IMAGE) {
+        vx_df_image format;
+        ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+        if(format == VX_DF_IMAGE_U8)
+            output_data_type = VX_TYPE_UINT8;
+        else if(format == VX_DF_IMAGE_U16)
+            output_data_type = VX_TYPE_UINT16;
+    }
+    else {
+        vx_size num_dims_output, output_dims[4] = { 1, 1, 1, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims_output, sizeof(num_dims_output)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*num_dims_output));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &output_data_type, sizeof(output_data_type)));
+        top_k = output_dims[2];
+    }
 
     // compute global work
-    vx_uint32 width_div_4 = (input_dims[0] + 3) / 4;
     opencl_work_dim = 3;
     opencl_local_work[0] = 8;
     opencl_local_work[1] = 8;
     opencl_local_work[2] = 1;
-    opencl_global_work[0] = (width_div_4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+    opencl_global_work[0] = ((input_dims[0] + 3) / 4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
     opencl_global_work[1] = (input_dims[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
     opencl_global_work[2] = 1;
 
     // generate OpenCL C code
     strcpy(opencl_kernel_function_name, "argmax");
     char item[8192];
-    if(parameters[2]) {
+    sprintf(item,
+        "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+        "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+        "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, %s)\n"
+        "{\n"
+        "    uint x = get_global_id(0) * 4;\n"
+        "    uint y = get_global_id(1);\n"
+        "    uint z = get_global_id(2);\n"
+        "    if(x < %ld && y < %ld) {\n"
+            "        i0_buf += i0_offset + z * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        uint4 cmax;\n"
+        , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name
+        , (output_obj_type == VX_TYPE_IMAGE) ?
+            "uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset" :
+            "__global uchar * o0_buf, uint o0_offset, uint4 o0_stride"
+        , input_dims[0], input_dims[1]);
+    opencl_kernel_code = item;
+    if(top_k == 2) {
         sprintf(item,
-            "#pragma opencl extension cl_amd_media_ops : enable\n"
-            "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, uint o1_width, uint o1_height, __global uchar * o1_buf, uint o1_stride, uint o1_offset)\n"
-            "{\n"
-            "    uint x = get_global_id(0) * 4;\n"
-            "    uint y = get_global_id(1);\n"
-            "    if(x < %ld && y < %ld) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
-            "        uint4 cmax, cmax1;\n"
+            "        uint4 cmax1;\n"
             "        float4 f, fmax, fmax1;\n"
             "        fmax = *(__global float4 *)i0_buf;\n"
             "        i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
@@ -153,20 +191,12 @@ static vx_status VX_CALLBACK opencl_codegen(
             "            cmax.s3  = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
             "            fmax.s3  = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
             "        }\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2]);
-        opencl_kernel_code = item;
+            , input_dims[2]);
+        opencl_kernel_code += item;
     }
-    else {
+    else if (top_k == 1) {
         sprintf(item,
-            "#pragma opencl extension cl_amd_media_ops : enable\n"
-            "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset)\n"
-            "{\n"
-            "    uint x = get_global_id(0) * 4;\n"
-            "    uint y = get_global_id(1);\n"
-            "    if(x < %ld && y < %ld) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
-            "        uint4 cmax = (uint4)0;\n"
+            "        cmax = (uint4)0;\n"
             "        float4 fmax = *(__global float4 *)i0_buf;\n"
             "        for(uint c = 1; c < %ld; c++) {\n"
             "            i0_buf += i0_stride.s2;\n"
@@ -180,31 +210,39 @@ static vx_status VX_CALLBACK opencl_codegen(
             "            cmax.s3 = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
             "            fmax.s3 = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
             "        }\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, input_dims[0], input_dims[1], input_dims[2]);
-        opencl_kernel_code = item;
+            , input_dims[2]);
+        opencl_kernel_code += item;
     }
-    if(format == VX_DF_IMAGE_U8) {
+    if(output_data_type == VX_TYPE_UINT8) {
+        opencl_kernel_code +=
+            (output_obj_type == VX_TYPE_IMAGE) ?
+                "        o0_buf += o0_offset +                    y * o0_stride    + x;\n" :
+                "        o0_buf += o0_offset + z * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0;\n";
         opencl_kernel_code +=
             "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
-            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = imax;\n";
-        if(parameters[2]) {
+            "        *(__global uint *)o0_buf = imax;\n";
+        if(top_k == 2) {
             opencl_kernel_code +=
                 "        uint imax1 = cmax1.s0 + (cmax1.s1 << 8) + (cmax1.s2 << 16) + (cmax1.s3 << 24);\n"
-                "        *(__global uint *)&o1_buf[o1_offset + y * o1_stride + x] = imax1;\n";
+                "        *(__global uint *)&o0_buf[o0_stride.s2] = imax;\n";
         }
     }
-    else if(format == VX_DF_IMAGE_U16) {
+    else if(output_data_type == VX_TYPE_UINT16) {
+        opencl_kernel_code +=
+            (output_obj_type == VX_TYPE_IMAGE) ?
+                "        o0_buf += o0_offset +                    y * o0_stride    + x * 2;\n" :
+                "        o0_buf += o0_offset + z * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0;\n";
         opencl_kernel_code +=
             "        uint2 imax;\n"
             "        imax.s0 = cmax.s0 + (cmax.s1 << 16);\n"
             "        imax.s1 = cmax.s2 + (cmax.s3 << 16);\n"
-            "        *(__global uint2 *)&o0_buf[o0_offset + y * o0_stride + x * 2] = imax;\n";
-        if(parameters[2]) {
+            "        *(__global uint2 *)o0_buf = imax;\n";
+        if(top_k == 2) {
             opencl_kernel_code +=
                 "        uint2 imax1;\n"
                 "        imax1.s0 = cmax1.s0 + (cmax1.s1 << 16);\n"
                 "        imax1.s1 = cmax1.s2 + (cmax1.s3 << 16);\n"
-                "        *(__global uint2 *)&o1_buf[o1_offset + y * o1_stride + x * 2] = imax1;\n";
+                "        *(__global uint2 *)&o0_buf[o0_stride.s2] = imax1;\n";
         }
     }
     opencl_kernel_code +=
@@ -227,7 +265,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishArgmaxLayer(vx_context context)
 {
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.argmax_layer", VX_KERNEL_ARGMAX_LAYER_AMD, host_kernel, 3, validateKernel, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.argmax_layer", VX_KERNEL_ARGMAX_LAYER_AMD, host_kernel, 2, validateKernel, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -237,8 +275,7 @@ vx_status publishArgmaxLayer(vx_context context)
 
     // set kernel parameters.
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
-    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_REFERENCE, VX_PARAMETER_STATE_REQUIRED));
 
     // finalize and release kernel object.
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -247,15 +284,14 @@ vx_status publishArgmaxLayer(vx_context context)
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_image output0, vx_image output1)
+VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_reference output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
         vx_reference params[] = {
             (vx_reference)input,
-            (vx_reference)output0,
-            (vx_reference)output1
+            (vx_reference)output
         };
         node = createNode(graph, VX_KERNEL_ARGMAX_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
