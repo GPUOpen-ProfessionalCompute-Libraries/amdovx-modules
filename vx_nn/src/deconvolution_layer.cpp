@@ -174,7 +174,7 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
         cl_int err;
         data->workspace_size = (data->workspace_size + 3) & ~3;
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, data->workspace_size, NULL, &err);
+        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, &err);
         if(err!=0) return VX_FAILURE;
         if (!data->workspace) return VX_FAILURE;
 
@@ -212,7 +212,7 @@ static vx_status VX_CALLBACK uninitializeDeconvolutionLayer(vx_node node, const 
 {
     DeconvolutionLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
+    if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->deconv_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

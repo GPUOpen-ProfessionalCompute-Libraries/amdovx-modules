@@ -182,7 +182,7 @@ static vx_status VX_CALLBACK uninitializeFullyConnectedLayer(vx_node node, const
 {
     FullyConnectedLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(clReleaseMemObject(data->workspace) != 0 ) return VX_FAILURE;
+    if(data->workspace && clReleaseMemObject(data->workspace) != 0 ) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->convdesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));

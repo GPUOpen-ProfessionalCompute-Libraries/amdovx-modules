@@ -172,7 +172,7 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 {
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(clReleaseMemObject(data->pooling_workspace) != 0) return VX_FAILURE;
+    if(data->pooling_workspace && clReleaseMemObject(data->pooling_workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
