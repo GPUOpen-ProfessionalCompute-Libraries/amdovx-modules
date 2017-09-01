@@ -224,7 +224,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         if(top_k == 2) {
             opencl_kernel_code +=
                 "        uint imax1 = cmax1.s0 + (cmax1.s1 << 8) + (cmax1.s2 << 16) + (cmax1.s3 << 24);\n"
-                "        *(__global uint *)&o0_buf[o0_stride.s2] = imax;\n";
+                "        *(__global uint *)&o0_buf[o0_stride.s2] = imax1;\n";
         }
     }
     else if(output_data_type == VX_TYPE_UINT16) {
