@@ -1585,7 +1585,14 @@ int loadCaffeModelFile(
     bool isSuccess = net_parameter.ParseFromIstream(&input);
     if(isSuccess) {
         std::cout << "CaffeModel Read Successful" << std::endl;
-        parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
+        int layer_param_size = net_parameter.layer_size();
+        if(layer_param_size > 0) {
+		parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
+        }
+        else {
+		std::cerr << "ERROR: [Unsupported caffemodel] please upgrade this caffemodel, currently uses deprecated V1LayerParameters." << std::endl;
+		return -1;
+        }
     }
     else {
         std::cerr << "CaffeModel Read Failed" << std::endl;
