@@ -26,10 +26,10 @@ struct NormalizationLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenLRNMode_t mode;
     miopenLRNDescriptor_t lrnDesc;
-    unsigned int N;
-    double alpha;
-    double beta;
-    double bias;
+    unsigned int normN;
+    double normAlpha;
+    double normBeta;
+    double normBias;
     miopenTensorDescriptor_t input_desc;
     cl_mem input_mem;
     miopenTensorDescriptor_t output_desc;
@@ -86,8 +86,9 @@ static vx_status VX_CALLBACK processNormalizationLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
+    float alpha = 1.0f, beta = 0.0f;
     //Apply Normalization forward.
-    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, data->workspace));
+    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, data->workspace));
     return VX_SUCCESS;
 }
 
@@ -104,7 +105,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     vx_nn_norm_type_e type;
     vx_float32 alpha = 0, beta = 0, bias = 1;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[1], &type, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &data->N, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &data->normN, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &beta, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     if(parameters[6]){
@@ -118,9 +119,9 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
         data->mode = miopenLRNCrossChannel;
     }
 
-    data->alpha = alpha;
-    data->beta  = beta;
-    data->bias  = bias;
+    data->normAlpha = alpha;
+    data->normBeta  = beta;
+    data->normBias  = bias;
 
     //Input and Output descriptors.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
@@ -130,7 +131,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 
     //LRN Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateLRNDescriptor(&data->lrnDesc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->N, data->alpha, data->beta, data->bias));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSetLRNDescriptor(data->lrnDesc, data->mode, data->normN, data->normAlpha, data->normBeta, data->normBias));
 
     //Input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
@@ -156,7 +157,7 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "lrn input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "LRN Mode : " << data->mode << std::endl;
-    std::cout << "Alpha " << data->alpha << " Beta " << data->beta << " N " << data->N << " K " << data->bias << std::endl;
+    std::cout << "Alpha " << data->normAlpha << " Beta " << data->normBeta << " N " << data->normN << " K " << data->normBias << std::endl;
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 

@@ -24,8 +24,9 @@ THE SOFTWARE.
 struct ActivationLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenActivationMode_t mode;
-    double alpha;
-    double beta;
+    double activAlpha;
+    double activBeta;
+    double activPower;
     miopenTensorDescriptor_t inputDescriptor;
     miopenTensorDescriptor_t outputDescriptor;
     miopenActivationDescriptor_t activationDesc;
@@ -79,8 +80,9 @@ static vx_status VX_CALLBACK processActivationLayer(vx_node node, const vx_refer
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
+    float alpha = 1.0f, beta = 0.0f;
     //miopen activation forward call.
-    ERROR_CHECK_MIOPEN_STATUS((miopenActivationForward(miopenHandle, data->activationDesc, &data->alpha, data->inputDescriptor, data->input_mem, &data->beta, data->outputDescriptor, data->output_mem)));
+    ERROR_CHECK_MIOPEN_STATUS((miopenActivationForward(miopenHandle, data->activationDesc, &alpha, data->inputDescriptor, data->input_mem, &beta, data->outputDescriptor, data->output_mem)));
 
     return VX_SUCCESS;
 }
@@ -118,12 +120,13 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     else if (activationMode == VX_NN_ACTIVATION_SOFTRELU) {
         data->mode = miopenActivationSOFTRELU;
     }
-    data->alpha = 1;
-    data->beta = 0;
+    data->activAlpha = 1.0;
+    data->activBeta = 0.0;
+    data->activPower = 1.0;
 
     //activation Descriptor.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateActivationDescriptor(&data->activationDesc)));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSetActivationDescriptor(data->activationDesc, data->mode, 1, 0, 0)));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSetActivationDescriptor(data->activationDesc, data->mode, data->activAlpha, data->activBeta, data->activPower)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
