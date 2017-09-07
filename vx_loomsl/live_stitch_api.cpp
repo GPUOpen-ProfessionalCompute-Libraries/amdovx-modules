@@ -124,6 +124,10 @@ struct ls_context_t {
 	bool        context_is_external;            // To avoid releaseing external OpenVX context
 	vx_context  context;                        // OpenVX context
 	vx_graph    graphStitch;                    // OpenVX graph for stitching
+	// OpenCL buffer count
+	vx_size     opencl_mem_alloc_count;         // count number of opencl buffers allocaded by LOOM
+	vx_size     opencl_mem_alloc_size;          // count memory of opencl buffers allocaded by LOOM
+	vx_size     opencl_mem_release_count;       // count number of opencl buffer released by LOOM
 	// internal buffer sizes
 	ls_internal_table_size_info table_sizes;	// internal table sizes
 	vx_image	rgb_input, rgb_output;			// internal images
@@ -445,6 +449,8 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 		vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
 		cl_int err = CL_SUCCESS;
 		cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
+		stitch->opencl_mem_alloc_count++;
+		stitch->opencl_mem_alloc_size += size;
 		if (!clImg || err){
 			ls_printf("clCreateBuffer of size %d failed(%d)\n", (int)size, err);
 			return nullptr;
@@ -1983,6 +1989,13 @@ LIVE_STITCH_API_ENTRY ls_context VX_API_CALL lsCreateContext()
 		memcpy(stitch->live_stitch_attr, g_live_stitch_attr, sizeof(stitch->live_stitch_attr));
 		stitch->magic = LIVE_STITCH_MAGIC;
 	}
+
+	/////////////////////////////////////////////////////////
+	// Reset OpenCL counter:
+	stitch->opencl_mem_alloc_count = 0;
+	stitch->opencl_mem_alloc_size = 0;
+	stitch->opencl_mem_release_count = 0;
+
 	return stitch;
 }
 
@@ -3240,6 +3253,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		//Graph & Context
 		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
 		if (stitch->context && !stitch->context_is_external) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
+
+
+		if (stitch->opencl_mem_alloc_count > 0) {
+			ls_printf("OK: OpenCL buffer usage within LOOM: " VX_FMT_SIZE ", " VX_FMT_SIZE "/" VX_FMT_SIZE "\n",
+				stitch->opencl_mem_alloc_size, stitch->opencl_mem_release_count, stitch->opencl_mem_alloc_count);
+		}
 
 		delete stitch;
 		*pStitch = nullptr;
