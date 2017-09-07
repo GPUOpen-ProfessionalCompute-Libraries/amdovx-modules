@@ -25,8 +25,8 @@ THE SOFTWARE.
 struct PoolingLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenPoolingDescriptor_t pool_desc;
-    double alpha;
-    double beta;
+    float alpha;
+    float beta;
     miopenTensorDescriptor_t input_desc;
     miopenTensorDescriptor_t output_desc;
     cl_mem input_mem;
