@@ -124,9 +124,10 @@ struct ls_context_t {
 	bool        context_is_external;            // To avoid releaseing external OpenVX context
 	vx_context  context;                        // OpenVX context
 	vx_graph    graphStitch;                    // OpenVX graph for stitching
-	// OpenCL buffer count
-	vx_size     opencl_mem_alloc_count;         // count number of opencl buffers allocaded by LOOM
-	vx_size     opencl_mem_alloc_size;          // count memory of opencl buffers allocaded by LOOM
+	// OpenCL buffer
+	cl_mem      opencl_mem_alloc[32];           // array of all opencl buffers allocated by LOOM
+	vx_size     opencl_mem_alloc_count;         // count number of opencl buffers allocated by LOOM
+	vx_size     opencl_mem_alloc_size;          // count memory of opencl buffers allocated by LOOM
 	vx_size     opencl_mem_release_count;       // count number of opencl buffer released by LOOM
 	// internal buffer sizes
 	ls_internal_table_size_info table_sizes;	// internal table sizes
@@ -449,6 +450,7 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 		vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
 		cl_int err = CL_SUCCESS;
 		cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
+		stitch->opencl_mem_alloc[stitch->opencl_mem_alloc_count - stitch->opencl_mem_release_count] = clImg;
 		stitch->opencl_mem_alloc_count++;
 		stitch->opencl_mem_alloc_size += size;
 		if (!clImg || err){
@@ -1992,6 +1994,7 @@ LIVE_STITCH_API_ENTRY ls_context VX_API_CALL lsCreateContext()
 
 	/////////////////////////////////////////////////////////
 	// Reset OpenCL counter:
+	*stitch->opencl_mem_alloc = { NULL };
 	stitch->opencl_mem_alloc_count = 0;
 	stitch->opencl_mem_alloc_size = 0;
 	stitch->opencl_mem_release_count = 0;
@@ -3241,6 +3244,15 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->validPixelOverlayMap) { delete[] stitch->validPixelOverlayMap; stitch->validPixelOverlayMap = nullptr; }
 		if (stitch->overlayIndexTmpBuf) { delete[] stitch->overlayIndexTmpBuf; stitch->overlayIndexTmpBuf = nullptr; }
 		if (stitch->overlayIndexBuf) { delete[] stitch->overlayIndexBuf; stitch->overlayIndexBuf = nullptr; }
+
+		// release openCL buffers
+		for (int i = 0; i < 32; i++){
+			if (stitch->opencl_mem_alloc[i] != NULL){
+				clReleaseMemObject(stitch->opencl_mem_alloc[i]);
+				stitch->opencl_mem_alloc[i] = NULL;
+				stitch->opencl_mem_release_count++;
+			}
+		}
 
 		// debug aux dumps
 		if (stitch->loomioAuxDumpFile) {
