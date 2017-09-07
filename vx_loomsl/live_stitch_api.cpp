@@ -1168,6 +1168,26 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 	}
 	return VX_SUCCESS;
 }
+
+static vx_status ReleaseStitchInitData(ls_context stitch)
+{
+	if (stitch->stitchInitData){
+		if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
+		if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
+		if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->DefaultCamMap));
+		if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->ValidPixelMap));
+		if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->PaddedPixMap));
+		if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->SrcCoordMap));
+		if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
+		if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
+		if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
+		if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
+		delete[] stitch->stitchInitData;
+		stitch->stitchInitData = nullptr;
+	}
+	return VX_SUCCESS;
+}
+
 static vx_status AllocateLensModelBuffersForOverlay(ls_context stitch)
 {
 	stitch->overlaySrcMap = new StitchCoord2dFloat[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_overlays];
@@ -1635,6 +1655,9 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				return status;
 			}
 		}
+
+		// Release used buffers
+		ERROR_CHECK_STATUS(ReleaseStitchInitData(stitch));		
 	}
 	else
 	{
@@ -3236,20 +3259,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 
 		// release fast GPU initialize elements
 		if (!stitch->USE_CPU_INIT){
-			if (stitch->stitchInitData){
-				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
-				if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
-				if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->DefaultCamMap));
-				if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->ValidPixelMap));
-				if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->PaddedPixMap));
-				if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->SrcCoordMap));
-				if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
-				if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
-				if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
-				if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
-				delete[] stitch->stitchInitData;
-				stitch->stitchInitData = nullptr;
-			}
+			ReleaseStitchInitData(stitch);
 		}
 
 		// release internal buffers
