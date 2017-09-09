@@ -100,7 +100,7 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
 	if(parameters[2]) {
 		ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
-	}
+    }
 
     return VX_SUCCESS;
 }
@@ -138,8 +138,8 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
     kernel_h = weights_dims[1];
     kernel_w = weights_dims[0];
-    stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1)) / (output_dims[0] - 1)) : 1;
-    stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1)) / (output_dims[1] - 1)) : 1;
+    stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w - (kernel_w - 1) * (dilation_w - 1) + (output_dims[0] / 2)) / (output_dims[0] - 1)) : 1;
+    stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1) + (output_dims[1] / 2)) / (output_dims[1] - 1)) : 1;
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
