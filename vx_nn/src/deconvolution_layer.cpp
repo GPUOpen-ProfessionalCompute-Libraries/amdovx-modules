@@ -143,8 +143,8 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     vx_size kernel_h, kernel_w;
     kernel_h = weights_dims[1];
     kernel_w = weights_dims[0];
-    stride_w = (input_dims[0] > 1) ? ((output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1) + (input_dims[0] / 2)) / (input_dims[0] - 1)) : 1;
-    stride_h = (input_dims[1] > 1) ? ((output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1) + (input_dims[1] / 2)) / (input_dims[1] - 1)) : 1;
+    stride_w = (input_dims[0] > 1) ? ((output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1) + ((input_dims[0] - 1) / 2)) / (input_dims[0] - 1)) : 1;
+    stride_h = (input_dims[1] > 1) ? ((output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1) + ((input_dims[1] - 1) / 2)) / (input_dims[1] - 1)) : 1;
 
     //input, weight and output descriptors.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
