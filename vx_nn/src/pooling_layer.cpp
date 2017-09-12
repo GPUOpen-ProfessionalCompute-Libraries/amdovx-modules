@@ -25,8 +25,8 @@ THE SOFTWARE.
 struct PoolingLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenPoolingDescriptor_t pool_desc;
-    double alpha;
-    double beta;
+    float alpha;
+    float beta;
     miopenTensorDescriptor_t input_desc;
     miopenTensorDescriptor_t output_desc;
     cl_mem input_mem;
@@ -142,8 +142,8 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &pad_w, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &pad_h, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
-    stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w) / (output_dims[0] - 1)) : 1;
-    stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h) / (output_dims[1] - 1)) : 1;
+    stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w + ((output_dims[0] - 1) / 2)) / (output_dims[0] - 1)) : 1;
+    stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
 
     ERROR_CHECK_MIOPEN_STATUS(miopenSet2dPoolingDescriptor(data->pool_desc, data->mode, kernel_h, kernel_w, pad_h, pad_w, stride_h , stride_w));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
