@@ -612,10 +612,9 @@ static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool&
 		{ (vx_reference)stitch->camera_remap,          false, false, "remap-input.raw" },
 		{ (vx_reference)stitch->overlay_remap,         false, false, "remap-overlay.raw" },
 		// intermediate temporary data
-		{ (vx_reference)stitch->Img_input,             true,  false, "camera-input.raw" },
-		{ (vx_reference)stitch->Img_overlay,           true,  false, "overlay-input.raw" },
-		{ (vx_reference)stitch->Img_overlay_rgba,      true,  false, "overlay-warped.raw" },
-		{ (vx_reference)stitch->chroma_key_input_img,  true,  false, "chromakey-input.raw" },
+		{ (vx_reference)stitch->Img_input,             false,  false, "camera-input.raw" },
+		{ (vx_reference)stitch->Img_overlay,           false,  false, "overlay-input.raw" },
+		{ (vx_reference)stitch->chroma_key_input_img,  false,  false, "chromakey-input.raw" },
 		{ (vx_reference)stitch->Img_output,            true,  false, "stitch-output.raw" },
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
@@ -657,9 +656,8 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 		(vx_reference)stitch->overlay_remap,
 		// intermediate temporary data
 		(vx_reference)stitch->Img_input,
-		(vx_reference)stitch->chroma_key_input_img,
 		(vx_reference)stitch->Img_overlay,
-		(vx_reference)stitch->Img_overlay_rgba,
+		(vx_reference)stitch->chroma_key_input_img,
 		(vx_reference)stitch->Img_output,
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
@@ -4170,7 +4168,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		}
 		fclose(fp);
 		ls_printf("OK: lsExportConfiguration: created %s\n", fileName);
-		return DumpInternalTables(stitch, fileNamePrefixForTables, true);
+		return DumpInternalTables(stitch, fileNamePrefixForTables, false);
 	}
 	else if (!_stricmp(exportType, "data")) {
 		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
