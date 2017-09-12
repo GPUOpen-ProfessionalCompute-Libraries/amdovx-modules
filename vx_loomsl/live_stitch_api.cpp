@@ -2338,7 +2338,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
 		}
 		else{
-			ls_printf("INFO: Linear colorspace will be used.\n");
+			ls_printf("OK: Linear colorspace will be used.\n");
 		}
 	}
 	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] != 0){
@@ -2850,8 +2850,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// warping
 		stitch->alpha_value = 0;
 		stitch->warp_flags = (vx_uint8) stitch->live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION];
-		if (stitch->warp_flags = 1)
-			ls_printf("INFO: Bicubic warp will be performed.\n");
+		if (stitch->warp_flags == 1)
+			ls_printf("OK: Bicubic warp will be performed.\n");
 		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, 1, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->warp_output_image, stitch->warp_luma_image, stitch->num_camera_columns, stitch->alpha_value, stitch->warp_flags, stitch->expcomp_luma16));
 
 		// exposure comp
