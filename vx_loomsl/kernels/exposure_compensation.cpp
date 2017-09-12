@@ -1070,7 +1070,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
 				"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
 				"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
-				"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack16(fout.s1,fout.s1));\n"
+				"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack16(fout.s1,fout.s2));\n"
 				"}\n"
 				"\n";
 		}
