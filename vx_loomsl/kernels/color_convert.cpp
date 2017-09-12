@@ -3153,8 +3153,8 @@ std::string ConvertRGB4toRGB2()
 		"    uint4 pRGB0;\n"
 		"    float mulfactor = 255.0f/32767.0f;\n"
 		"    float4 f; f.s0 = 0;\n"
-		"    f.s012 = amd_unpackA(L0.s0,L0.s1)*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = amd_unpackB(L0.s1,L0.s2); pRGB0.s1 = amd_pack(f);\n"
-		"    f.s012 = amd_unpackA(L0.s3,L1.s0)*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = amd_unpackB(L1.s0,L1.s1); pRGB0.s3 = amd_pack(f);\n";
+		"    f.s012 = amd_unpackA(L0.s0,L0.s1)*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = amd_unpackB(L0.s1,L0.s2)*(float3)mulfactor; pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = amd_unpackA(L0.s3,L1.s0)*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = amd_unpackB(L1.s0,L1.s1)*(float3)mulfactor; pRGB0.s3 = amd_pack(f);\n";
 	return output;
 }
 std::string GammaAndConvertRGB4toRGB2()
@@ -3163,8 +3163,8 @@ std::string GammaAndConvertRGB4toRGB2()
 		"    uint4 pRGB0;\n"
 		"    float mulfactor = 255.0f/32767.0f;\n"
 		"    float4 f; f.s0 = 0;\n"
-		"    f.s012 = gamma3(amd_unpackA(L0.s0,L0.s1))*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L0.s1,L0.s2)); pRGB0.s1 = amd_pack(f);\n"
-		"    f.s012 = gamma3(amd_unpackA(L0.s3,L1.s0))*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L1.s0,L1.s1)); pRGB0.s3 = amd_pack(f);\n";
+		"    f.s012 = gamma3(amd_unpackA(L0.s0,L0.s1))*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L0.s1,L0.s2))*(float3)mulfactor; pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = gamma3(amd_unpackA(L0.s3,L1.s0))*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L1.s0,L1.s1))*(float3)mulfactor; pRGB0.s3 = amd_pack(f);\n";
 	return output;
 }
 
