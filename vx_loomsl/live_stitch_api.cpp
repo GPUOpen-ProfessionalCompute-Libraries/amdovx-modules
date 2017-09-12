@@ -2612,7 +2612,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		}
 	}
-	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
+	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		vx_uint32 output_img_width =  stitch->output_buffer_width;
 		vx_uint32 output_img_height = stitch->output_buffer_height;
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
