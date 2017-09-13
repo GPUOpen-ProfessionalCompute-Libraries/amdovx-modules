@@ -1678,8 +1678,15 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 		opencl_kernel_code +=
 			"			uint	pWt_width, uint	pWt_height, __global uchar *pWt_buf, uint pWt_stride, uint	pWt_offs,\n";
 	}
+	opencl_kernel_code +=
+		"			__global int * pAMat, uint cols, uint rows\n";
+	if (s_flags)
+	{
+		opencl_kernel_code +=
+			"			,uint flags\n";
+	}
 	sprintf(item,
-		"			__global int * pAMat, uint cols, uint rows)\n"
+		"			)\n"
 		"{\n"
 		"	int grp_id = get_global_id(0)>>4;\n"
 		"   if (grp_id < exp_data_num) {\n"
