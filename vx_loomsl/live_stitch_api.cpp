@@ -4307,8 +4307,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetExpCompGains(ls_context stitch,
 		return VX_ERROR_INVALID_PARAMETERS;
 	}
 	// Check for bias, convert bias into used range
-	if (num_entries == stitch->num_cameras * 4){
-		for (int i = 0; i < stitch->num_cameras; i++){
+	if (num_entries == stitch->num_cameras * 12){
+		for (int i = 0; i < 3*(int)stitch->num_cameras; i++){
 			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 				gains[i * 4 + 3] = gains[i * 4 + 3] * 32767;
 			}
