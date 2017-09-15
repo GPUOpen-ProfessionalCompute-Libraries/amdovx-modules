@@ -3397,7 +3397,7 @@ std::string Degamma()
 	std::string output =
 		"float degamma(float input)\n"
 		"{\n"
-		"  return (input>1325.42515)? powr(mad(input,0.0032642399669f,5.88276430479f),2.2f) : input*0.07739938080495356f;\n"//( Csrgb * (32767^(1/2.2)/32767)* (1/1.055) + 0.055*32767^(1/2.2)* (1/1.055) ) ^ 2.2, Csrgb*(1/12.92)
+		"  return (input>1325.42515)? powr(mad(input,0.002201622270595392f,3.967730631733f),2.4f) : input*0.07739938080495356f;\n"//( Csrgb * (32767^(1/2.4)/32767)* (1/1.055) + 0.055*32767^(1/2.4)* (1/1.055) ) ^ 2.4, Csrgb*(1/12.92)
 		"}\n"
 		"\n";
 	return output;
@@ -3407,7 +3407,7 @@ std::string Gamma()
 	std::string output =
 		"float gamma(float input)\n"
 		"{\n"
-		"  return (input>102.5869236)? mad(powr(input,0.4545454545454545f),306.3500263865486f,-1802.185f) : input*12.92f;\n"//( ( Clinear^(1/2.2) * (1.055)*(32767/32767^(1/2.2)) - 0.055 * 32767 , Csrgb*12.92
+		"  return (input>102.5869236)? mad(powr(input,0.41666667f),454.21052164846f,-1802.185f) : input*12.92f;\n"//( ( Clinear^(1/2.4) * (1.055)*(32767/32767^(1/2.4)) - 0.055 * 32767 , Csrgb*12.92
 		"}\n"
 		"\n";
 	return output;
