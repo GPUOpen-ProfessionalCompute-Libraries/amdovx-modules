@@ -3857,6 +3857,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		else if (stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
 			kernelNameList[2] = "com.amd.loomsl.color_convert_to_IYUV";
 		}
+		if (stitch->EXPO_COMP == 2){
+			kernelNameList[4] = "com.amd.loomsl.expcomp_compute_gainmatrix_rgb";
+		}
 		std::map<vx_node, std::string> nodeMap;
 		for (vx_size i = 0; i < dimof(nodeObjList); i++) {
 			if (nodeObjList[i]) {
@@ -3929,10 +3932,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 				fprintf(fp, "type ExpCompValidEntryType userstruct:%d\n", (int)sizeof(StitchOverlapPixelEntry));
 				fprintf(fp, "type ExpCompCalcEntryType userstruct:%d\n", (int)sizeof(StitchExpCompCalcEntry));
 				fprintf(fp, "data expCompValidTable = array:ExpCompValidEntryType,%d\n", (int)stitch->table_sizes.expCompValidTableSize);
-				if (stitch->EXPO_COMP < 3) fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
-				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras);
-				fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				if (stitch->EXPO_COMP < 3)
+				{
+					fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
+					fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras*stitch->EXPO_COMP_GAINC);
 				fprintf(fp, "data expCompCountMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				}
+				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras*stitch->EXPO_COMP_GAINC);
+				
 				if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 					fprintf(fp, "data exp_comp_output_image = image:%d,%d,RGB4\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
 					fprintf(fp, "data Exp_Comp_S16 = image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
