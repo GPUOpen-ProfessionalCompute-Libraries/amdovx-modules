@@ -31,7 +31,7 @@ std::string GetTransformationFunctions16bit(){
 		"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
 		"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
 		"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
-		"  return (uint2)(amd_pack16(fout.s0,fout.s1),amd_pack16(fout.s2,0));\n"
+		"  return (uint2)(amd_pack15(fout.s0,fout.s1),amd_pack15(fout.s2,0));\n"
 		"}\n"
 		"\n"
 		"uint2 RGBTran_16B(uint src0, uint src1, uint src2, float4 r4, float4 g4, float4 b4) {\n"
@@ -40,12 +40,12 @@ std::string GetTransformationFunctions16bit(){
 		"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
 		"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
 		"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
-		"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack16(fout.s1,fout.s2));\n"
+		"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack15(fout.s1,fout.s2));\n"
 		"}\n"
 		"\n";
 	return output;
 }
-std::string Create_amd_unpackab()
+std::string create_amd_unpackab()
 {
 	std::string output =
 		"float3 amd_unpackA(uint src0, uint src1)\n"
@@ -55,6 +55,16 @@ std::string Create_amd_unpackab()
 		"float3 amd_unpackB(uint src0, uint src1)\n"
 		"{\n"
 		"  return (float3)((float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff), (float)((src1 >> 16) & 0x7fff));\n"
+		"}\n"
+		"\n";
+	return output;
+}
+std::string create_amd_pack15()
+{
+	std::string output =
+		"uint amd_pack15(float src0, float src1)\n"
+		"{\n"
+		"  return ( ( ( (uint) clamp(src1,0.0f,32767.0f))<<16) + (uint) clamp(src0,0.0f,32767.0f) );\n"
 		"}\n"
 		"\n";
 	return output;
@@ -136,7 +146,7 @@ static vx_status VX_CALLBACK color_correct_output_validator(vx_node node, vx_uin
 	if (index == 3)
 	{ // image of format RGB2 or RGB4
 		// get image configuration
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
 		ERROR_CHECK_OBJECT(image);
 		vx_uint32 input_width = 0, input_height = 0;
 		vx_df_image input_format = VX_DF_IMAGE_VIRT;
@@ -201,7 +211,7 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 {
 	// get input and output image configurations
 	vx_uint32 num_cameras = 0, num_camera_columns = 1;
-	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 1);			// input scalar - num cameras
+	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);			// input scalar - num cameras
 	ERROR_CHECK_OBJECT(scalar);
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cameras));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
@@ -212,12 +222,12 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 
 	vx_uint32 input_width = 0, input_height = 0, output_width = 0, output_height = 0;
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 0);
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 2);
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &input_width, sizeof(input_width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
-	image = (vx_image)avxGetNodeParamRef(node, 1);
+	image = (vx_image)avxGetNodeParamRef(node, 3);
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
@@ -250,8 +260,16 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 	
 	//Define help functions for 16 bit
 	if (input_format == VX_DF_IMAGE_RGB4_AMD){ 
-		opencl_kernel_code += Create_amd_unpackab(); 
+		opencl_kernel_code += create_amd_unpackab(); 
+		opencl_kernel_code += create_amd_pack15();
 		opencl_kernel_code += GetTransformationFunctions16bit();
+	}
+	else{
+		opencl_kernel_code +=
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n";
 	}
 
 	char item[8192];
@@ -276,7 +294,7 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 		"  int gx = get_global_id(0)<<2;\n"
 		"  int gy = get_global_id(1);\n"
 		"  int cam_id = get_global_id(2);\n"
-		"  if ((gx < %d) && (gy < %d) && (gy < %d)) {\n" // work_items[0], work_items[1], work_items[2]
+		"  if ((gx < (%d<<2)) && (gy < %d) && (cam_id < %d)) {\n" // work_items[0], work_items[1], work_items[2]
 		, work_items[0], work_items[1], work_items[2]);
 	opencl_kernel_code += item;
 
@@ -314,8 +332,8 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 			"  pRGB0.s1 = amd_pack(fout);\n"
 			"  fout.s0 = mad(fin2.s2, b4.s0, mad(fin2.s3, b4.s1, mad(fin1.s0, b4.s2, b4.s3)));\n"
 			"  fout.s1 = mad(fin1.s1, r4.s0, mad(fin1.s2, r4.s1, mad(fin1.s3, r4.s2, r4.s3)));\n"
-			"  fout.s1 = mad(fin1.s1, g4.s0, mad(fin1.s2, g4.s1, mad(fin1.s3, g4.s2, g4.s3)));\n"
-			"  fout.s1 = mad(fin1.s1, b4.s0, mad(fin1.s2, b4.s1, mad(fin1.s3, b4.s2, b4.s3)));\n"
+			"  fout.s2 = mad(fin1.s1, g4.s0, mad(fin1.s2, g4.s1, mad(fin1.s3, g4.s2, g4.s3)));\n"
+			"  fout.s3 = mad(fin1.s1, b4.s0, mad(fin1.s2, b4.s1, mad(fin1.s3, b4.s2, b4.s3)));\n"
 			"  pRGB0.s2 = amd_pack(fout);\n"
 			"  pRGB_out_buf += pRGB_out_offset + (gy * pRGB_out_stride) + (gx * 3);\n"
 			"  *(__global uint2 *) pRGB_out_buf    = pRGB0.s01;\n"
@@ -323,7 +341,7 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 			"  }\n"
 			"}\n";
 	}
-	else if (input_format == VX_DF_IMAGE_RGB4_AMD){
+	else{ // if (input_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code +=
 			"  uint4 L0;\n"
 			"  uint2 L1;\n"
