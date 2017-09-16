@@ -185,6 +185,9 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Color Convert function kernel for IYUV output. Kernel name is "com.amd.loomsl.color_convert_to_IYUV".
 	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x020,
 
+	//! \brief The Color Correct function kernel. Kernel name is "com.amd.loomsl.color_correct".
+	AMDOVX_KERNEL_STITCHING_COLOR_CORRECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x021,
+
 	// TBD: remove
 
 	//! \brief The Exposure Compensation kernel. Kernel name is "com.amd.loomsl.exposure_compensation_model".

@@ -36,6 +36,7 @@ list(APPEND SOURCES
 	kernels/alpha_blend.cpp
 	kernels/chroma_key.cpp
 	kernels/color_convert.cpp
+	kernels/color_correct.cpp
 	kernels/exp_comp.cpp
 	kernels/exposure_compensation.cpp
 	kernels/kernels.cpp
