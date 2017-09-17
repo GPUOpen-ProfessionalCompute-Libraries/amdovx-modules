@@ -131,9 +131,9 @@ struct ls_context_t {
 	vx_remap    overlay_remap;                  // remap table for overlay
 	vx_remap    camera_remap;                   // remap table for camera (in simple stitch mode)
 	vx_image    Img_input, Img_output, Img_overlay;
-	vx_image    Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba;
-	vx_node     InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode;
-	vx_array    ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array;
+	vx_image    Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba, Img_color_corrected;
+	vx_node     InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode, ColorCorrectNode;
+	vx_array    ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array, color_correct_gain_array;
 	vx_matrix   overlap_matrix, A_matrix;
 	vx_image    warp_output_image, exp_comp_output_image, expcomp_luma16, weight_image, cam_id_image, group1_image, group2_image;
 	vx_node     WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
@@ -183,7 +183,7 @@ struct ls_context_t {
     #define MAX_TILE_IMG 16
 	vx_uint32   output_encode_buffer_width;             // buffer width after encode conversion
 	vx_uint32   output_encode_buffer_height;            // buffer height after encode conversion
-	vx_uint32   output_tiles;                    // total number of encode tiles
+	vx_uint32   output_tiles;                           // total number of encode tiles
 	vx_uint32   num_encode_sections;                    // total number of encode sectional images
 	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];      // encode intermediate images
 	vx_image    encode_dst_imgs[MAX_TILE_IMG];          // encode intermediate images
@@ -2504,21 +2504,21 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->outputMediaConfig = vxCreateScalar(stitch->context, VX_TYPE_STRING_AMD, stitch->loomio_output.kernelArguments));
 		if ((stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV) &&
 			(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] != 1.0f ||
-				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f)){
-				// set buffer to encode tile width and height
-				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
-				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
-					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
-				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
-					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] * stitch->output_tiles);
-				// create virtual image
-				stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch,
-					stitch->output_encode_buffer_width,
-					stitch->output_encode_buffer_height,
-					stitch->output_buffer_format);
+			stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f)){
+			// set buffer to encode tile width and height
+			stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
+			stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
+				/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
+			stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
+				/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] * stitch->output_tiles);
+			// create virtual image
+			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch,
+				stitch->output_encode_buffer_width,
+				stitch->output_encode_buffer_height,
+				stitch->output_buffer_format);
 		}
 		else{
-			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch, stitch->output_buffer_width,	stitch->output_buffer_height, stitch->output_buffer_format);
+			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch, stitch->output_buffer_width, stitch->output_buffer_height, stitch->output_buffer_format);
 		}
 		ERROR_CHECK_OBJECT_(stitch->Img_output);
 		vx_uint32 zero = 0;
@@ -2547,13 +2547,13 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			void *ptr[3] = { nullptr, nullptr, nullptr };
 			// encode activated
 			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] != 1.0f ||
-				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f){		
+				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f){
 				// create the encoded tiled output
 				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
 				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
-					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]) ;
+					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 
 				// create output buffer
 				addr_out[0].dim_x = stitch->output_encode_buffer_width;	addr_out[0].dim_y = stitch->output_encode_buffer_height;
@@ -2588,7 +2588,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 					addr_out[2].stride_x = 1; addr_out[2].stride_y = stitch->output_buffer_stride_in_bytes >> 1;
 				}
 				ERROR_CHECK_OBJECT_(stitch->Img_output = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
-			}			
+			}
 		}
 		else{
 			// create RGB/YUV buffer
@@ -2603,7 +2603,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 	}
 	if (stitch->output_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS; }
-	// create temporary images when extra color conversion is needed
+	// create temporary images when extra input color conversion is needed
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 			ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB4_AMD));
@@ -2612,8 +2612,19 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		}
 	}
+	// create temporary images when extra color correction is needed
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_COLOR_CORRECTION] == 1) {
+		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+			ERROR_CHECK_OBJECT_(stitch->Img_color_corrected = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB4_AMD));
+		}
+		else{ // 8bit mode
+			ERROR_CHECK_OBJECT_(stitch->Img_color_corrected = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
+		}
+		stitch->color_correct_gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * 12);
+	}
+	// create temporary images when extra output color conversion is needed
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
-		vx_uint32 output_img_width =  stitch->output_buffer_width;
+		vx_uint32 output_img_width = stitch->output_buffer_width;
 		vx_uint32 output_img_height = stitch->output_buffer_height;
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 			ERROR_CHECK_OBJECT_(stitch->Img_output_rgb = vxCreateImage(stitch->context, output_img_width, output_img_height, VX_DF_IMAGE_RGB4_AMD));
@@ -2652,13 +2663,19 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 	////////////////////////////////////////////////////////////////////////
 	// build the input and output processing parts of stitch graph
+	// input color convert
 	stitch->color_convert_flags = (vx_uint8)stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE];
 	stitch->rgb_input = stitch->Img_input;
-	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION]==2) {
-		// needs input color conversion
+	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) { // needs input color conversion
 		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
 		stitch->rgb_input = stitch->Img_input_rgb;
+	}
+	// input color correction
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_COLOR_CORRECTION] == 1){
+		stitch->ColorCorrectNode = stitchColorCorrectNode(stitch->graphStitch, stitch->num_cameras, stitch->color_correct_gain_array, stitch->rgb_input, stitch->Img_color_corrected, stitch->num_camera_columns);
+		ERROR_CHECK_OBJECT(stitch->ColorCorrectNode);
+		stitch->rgb_input = stitch->Img_color_corrected;
 	}
 	// temporal filter for camera noise correction
 	stitch->NOISE_FILTER = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER];
@@ -4325,6 +4342,32 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetExpCompGains(ls_context stitch,
 		}
 	}
 	ERROR_CHECK_STATUS_(vxCopyArrayRange(stitch->gain_array, 0, num_entries, sizeof(vx_float32), gains, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
+	return VX_SUCCESS;
+}
+
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetColorCorrectGains(ls_context stitch, size_t num_entries, vx_float32 * gains)
+{
+	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
+	if (!stitch->live_stitch_attr[LIVE_STITCH_ATTR_COLOR_CORRECTION] || !stitch->color_correct_gain_array)
+		return VX_ERROR_NOT_SUPPORTED;
+	vx_size count;
+	ERROR_CHECK_STATUS_(vxQueryArray(stitch->color_correct_gain_array, VX_ARRAY_NUMITEMS, &count, sizeof(count)));
+	if (num_entries != count) {
+		ls_printf("ERROR: lsSetColorCorrectGains: expects num_entries to be %d: got %d\n", (vx_uint32)count, (vx_uint32)num_entries);
+		return VX_ERROR_INVALID_PARAMETERS;
+	}
+	// Check for bias, convert bias into used range
+	if (num_entries == stitch->num_cameras * 12){
+		for (int i = 0; i < 3 * (int)stitch->num_cameras; i++){
+			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+				gains[i * 4 + 3] = gains[i * 4 + 3] * 32767;
+			}
+			else{
+				gains[i * 4 + 3] = gains[i * 4 + 3] * 255;
+			}
+		}
+	}
+	ERROR_CHECK_STATUS_(vxCopyArrayRange(stitch->color_correct_gain_array, 0, num_entries, sizeof(vx_float32), gains, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
 	return VX_SUCCESS;
 }
 

@@ -296,15 +296,17 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx
 /**
 * \brief Function to create Stitch Color Correct node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchColorCorrectNode(vx_graph graph, vx_uint32 num_cam, vx_array in_gains, vx_image input, vx_image output)
+VX_API_ENTRY vx_node VX_API_CALL stitchColorCorrectNode(vx_graph graph, vx_uint32 num_cam, vx_array in_gains, vx_image input, vx_image output, vx_uint32 num_camera_columns)
 {
 	vx_node node;
 	vx_scalar s_num_cam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
+	vx_scalar s_num_camera_columns = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_camera_columns);
 	vx_reference params[] = {
 		(vx_reference)s_num_cam,
 		(vx_reference)in_gains,
 		(vx_reference)input,
 		(vx_reference)output,
+		(vx_reference)s_num_camera_columns
 	};
 	node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_COLOR_CORRECT,
