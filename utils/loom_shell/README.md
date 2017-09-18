@@ -1,7 +1,7 @@
 # Radeon LoomShell
 
 ## DESCRIPTION
-LoomShell is an interpreter that enables stitching 360 degree videos using a script. It provides direct access to 
+LoomShell is an interpreter that enables stitching 360 degree videos using a script. It provides direct access to
 Live Stitch API by encapsulating the calls to enable rapid prototyping.
 
 ## Command-line Usage
@@ -91,6 +91,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         showExpCompGains(context,num_entries);
         loadExpCompGains(context,num_entries,\"gains.txt\");
         saveExpCompGains(context,num_entries,\"gains.txt\");
+        loadColorCorrectGains(context,num_entries,\"gains.txt\");
     ~ miscellaneous
         help
         include "script.lss"
@@ -134,7 +135,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
 | contextCount    | number of stitch instances in context[] allocated using "ls_context context[N];"
 
 ## Example #1: Simple Example
-Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses. 
+Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses.
 The below example demonstrates how to stitch images from these cameras into a 4K Equirectangular buffer.
 
     # define camera orientation and lens parameters
@@ -176,11 +177,11 @@ The below example demonstrates how to stitch images from these cameras into a 4K
     lsReleaseContext(&context);
 
 ## Example #2: Stitching Workflow using PTGui Pro Tool for Camera Calibration
-It is easy to import camera parameters from PTGui Pro project file (.pts) into loom_shell. 
+It is easy to import camera parameters from PTGui Pro project file (.pts) into loom_shell.
 In this example, let's consider a 360 rig that has 16 1080p cameras.
 
 ### Step 1: Calibrate cameras
-Save test input images from all cameras into BMP files: "CAM00.bmp", "CAM01.bmp", "CAM02.bmp", ..., and "CAM15.bmp". 
+Save test input images from all cameras into BMP files: "CAM00.bmp", "CAM01.bmp", "CAM02.bmp", ..., and "CAM15.bmp".
 Align these test input images using PTGui Pro and save the project into "myrig.pts" (it should be in ASCII text format).
 
 ### Step 2: Use the below script to generate stitched 4K output
@@ -192,30 +193,30 @@ Align these test input images using PTGui Pro and save the project into "myrig.p
     lsImportConfiguration(context, "pts", "myrig.pts");
     showConfiguration(context, "loom_shell");
     lsInitialize(context);
-    
+
     # create buffers for input and output
     cl_context opencl_context;
     cl_mem mem[2];
     lsGetOpenCLContext(context, &opencl_context);
     createBuffer(opencl_context, 3*1920*1080*16, &buf[0]);
     createBuffer(opencl_context, 3*3840*1920, &buf[1]);
-    
+
     # load input images into buf[0]
     loadBufferFromMultipleImages(buf[0], "CAM%02d.bmp", 16, 1, VX_DF_IMAGE_RGB, 1920, 1080*16);
-    
+
     # process camera inputs from buf[0] into stitched output in buf[1]
     lsSetCameraBuffer(context, &buf[0], 1);
     lsSetCameraBuffer(context, &buf[1], 1);
     run(context, 1);
-    
+
     # save the output
     saveBufferToImage(buf[1], "output.bmp", VX_DF_IMAGE_RGB, 3840, 1920);
-    
+
     # release all resources
     releaseBuffer(&buf[0]);
     releaseBuffer(&buf[1]);
     lsReleaseContext(&context);
-    
+
 ## Example #3: Real-time Live Stitch using LoomIO
 This example makes use of a 3rd party LoomIO plug-ins for live camera capture and display.
 
@@ -228,10 +229,10 @@ This example makes use of a 3rd party LoomIO plug-ins for live camera capture an
     lsSetCameraModule(context, "vx_loomio_bm", "com.amd.loomio_bm.capture", "30,0,0,16");
     lsSetOutputModule(context, "vx_loomio_bm", "com.amd.loomio_bm.display", "30,0,0");
     lsInitialize(context);
-    
+
     # process live from camera until aborted by input capture plug-in
     run(context, 0);
-    
+
     # release the context
     lsReleaseContext(&context);
 
@@ -264,4 +265,3 @@ Below is the C code generated from script in Example#3.
 
         return 0;
     }
-
