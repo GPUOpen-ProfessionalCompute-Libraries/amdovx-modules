@@ -4,14 +4,14 @@
 
 int calculate_color_correction(params parameter){
 	// Read input image
-	Mat *image = read_input(parameter);
-	if (image == NULL)
+	Mat image = read_input(parameter);
+	if (image.data == NULL)
 		return -1;
 
 	// Get gray image
 	Mat image_gray;
-	image_gray.create(image->rows, image->cols, CV_8UC1);
-	cvtColor(*image, image_gray, COLOR_RGB2GRAY);
+	image_gray.create(image.rows, image.cols, CV_8UC1);
+	cvtColor(image, image_gray, COLOR_RGB2GRAY);
 
 	// Find Canny edges
 	Mat image_edges;
@@ -83,7 +83,7 @@ int calculate_color_correction(params parameter){
 		return -1;
 
 	// Find Orientation, Count rects around
-	if(!list.find_orientation())
+	if(list.find_orientation())
 		return -1;
 
 	// Create point lists
@@ -94,7 +94,7 @@ int calculate_color_correction(params parameter){
 	if (parameter.show_images || parameter.save_images){
 		Mat warped_image;
 		Mat warped_rotated_image;
-		if (list.create_transformation_parameters(*image, &warped_image, &warped_rotated_image) == -1){
+		if (list.create_transformation_parameters(image, &warped_image, &warped_rotated_image) == -1){
 			return -1;
 		}
 		if (parameter.show_images){
@@ -109,13 +109,13 @@ int calculate_color_correction(params parameter){
 	}
 	else if (parameter.colorchart_image_filename){
 		Mat warped_rotated_image;
-		if (list.create_transformation_parameters(*image, NULL, &warped_rotated_image) == -1){
+		if (list.create_transformation_parameters(image, NULL, &warped_rotated_image) == -1){
 			return -1;
 		}
 		imwrite(parameter.colorchart_image_filename, warped_rotated_image);
 	}
 	else{
-		if (list.create_transformation_parameters(*image, NULL, NULL) == -1){
+		if (list.create_transformation_parameters(image, NULL, NULL) == -1){
 			return -1;
 		}
 	}
@@ -124,9 +124,9 @@ int calculate_color_correction(params parameter){
 	// Get color values from the input image
 	Mat_<Vec3f> degamma_image;
 	if (parameter.linear)
-		degamma_image = degamma(*image);
+		degamma_image = degamma(image);
 	else
-		image->copyTo(degamma_image);
+		image.copyTo(degamma_image);
 	vector<Vec3f> image_colors;
 	image_colors = list.generate_color_vector(degamma_image);
 

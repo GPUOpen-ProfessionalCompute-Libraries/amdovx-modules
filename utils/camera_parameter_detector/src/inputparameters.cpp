@@ -32,6 +32,7 @@ int params::read(int argc, char ** argv){
 		}
 		if (std::string(argv[i]) == "--help") {
 			printhelp();
+			return -1;
 		}
 		if (std::string(argv[i]) == "--output") {
 			if (i + 1 < argc) { 
@@ -100,17 +101,16 @@ int params::read(int argc, char ** argv){
 			linear = false;
 		}
 		if (std::string(argv[i]) == "--colorspace") {
-			if (i + 1 < argc) {
-				i++;
-				if (string(argv[++i]) == "RGB")
+			if (i++ < argc) {
+				if (string(argv[i]) == "RGB")
 					colorspace = 0;
-				if (string(argv[++i]) == "YUV")
+				else if (string(argv[i]) == "YUV")
 					colorspace = 1;
-				if (string(argv[++i]) == "UV")
+				else if (string(argv[i]) == "UV")
 					colorspace = 2;
-				if (string(argv[++i]) == "XYZ")
+				else if (string(argv[i]) == "XYZ")
 					colorspace = 3;
-				if (string(argv[++i]) == "XZ")
+				else if (string(argv[i]) == "XZ")
 					colorspace = 4;
 			}
 			else {
@@ -153,7 +153,7 @@ int printhelp(){
 	printf("Necessary arguments:\n");
 	printf("--input \t\t\tfilename\t an input image as jpg, raw or other formats accepted by OpenCV, for raw please specify width and height\n");
 	printf("\nOptional arguments:\n"
-		"--help print this helptext"
+		"--help \t\t\t\t\t\t print this helptext"
 		"\nFilenames:\n"
 		"--output \t\t\tfilename \t define an output image, which will be color corrected\n"
 		"--colorchartImg \t\tfilename \t defines a filename to save the image of the cutted and rotated colorchart\n"
@@ -165,7 +165,7 @@ int printhelp(){
 		"--apply \t\t\t\t\t do not look for a colorchart, expects a correctionMatrixOpenCV\n"
 		"--saveImg \t\t\t\t\t saves intermediate images in same folder\n"
 		"--showImg \t\t\t\t\t shows intermediate images\n"
-		"--gamma_corrected \t\t\t\t\t\t uses the gamma corrected value instead of converting them into linear colorspace"
+		"--gamma_corrected \t\t\t\t uses the gamma corrected value instead of converting them into linear colorspace\n"
 		"--colorspace \t\t\tspace \t\t define colorspace to calculate correction matrix in, possible options: RGB, YUV, UV, XYZ\n");
 	return 0;
 }

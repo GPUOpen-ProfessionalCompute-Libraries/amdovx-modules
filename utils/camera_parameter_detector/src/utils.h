@@ -8,7 +8,7 @@
 using namespace cv;
 using namespace std;
 
-Mat *read_input(params parameter);
+Mat read_input(params parameter);
 
 vector<Vec3f> create_real_colors();
 

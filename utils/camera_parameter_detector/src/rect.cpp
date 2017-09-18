@@ -247,8 +247,8 @@ rectangular::rectangular(Mat *image, int x, int y){
 			{
 				search_status = DIRECTIONS_CHECK_UP_RIGHT;
 				break;
-				this->cornerPoints.push_back(lastPoint);
 			}
+			this->cornerPoints.push_back(lastPoint);
 		}
 
 		if (search_status == DIRECTIONS_CHECK_UP_RIGHT){

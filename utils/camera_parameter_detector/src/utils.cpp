@@ -110,7 +110,7 @@ vector<Vec3f> create_real_colors(){
 	return real_colors;
 }
 
-Mat *read_input(params parameter){
+Mat read_input(params parameter){
 	// Create cv image
 	Mat image;
 
@@ -130,8 +130,9 @@ Mat *read_input(params parameter){
 		fopen_s(&fp, parameter.input_image_filename, "rb");
 		if (fp == NULL)
 		{
+			image.data = NULL;
 			printf("ERROR: \t Input filename (%s) is invalid\n", parameter.input_image_filename);
-			return NULL;
+			return image;
 		}
 		imagedata = (char*)malloc(sizeof(char)* framesize);
 		fread(imagedata, sizeof(char), framesize, fp);
@@ -143,5 +144,5 @@ Mat *read_input(params parameter){
 		cvtColor(input_image, image, COLOR_RGB2BGR);
 	}
 	printf("OK: \t Read input (%s)\n", parameter.input_image_filename);
-	return &image;
+	return image;
 }

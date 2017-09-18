@@ -2,8 +2,8 @@
 
 int apply_color_correction(params parameter){
 	// Read input image
-	Mat *image = read_input(parameter);
-	if (image == NULL)
+	Mat image = read_input(parameter);
+	if (image.data == NULL)
 		return -1;
 
 	// Construct correction matrix
@@ -12,9 +12,9 @@ int apply_color_correction(params parameter){
 	// Apply correction
 	Mat_<Vec3f> degamma_image;
 	if (parameter.linear)
-		degamma_image = degamma(*image);
+		degamma_image = degamma(image);
 	else
-		image->copyTo(degamma_image);
+		image.copyTo(degamma_image);
 	correction.apply(&degamma_image);
 
 	Mat gamma_image;
@@ -25,5 +25,6 @@ int apply_color_correction(params parameter){
 
 	// Write output
 	imwrite(parameter.output_image_filename, gamma_image);
+	printf("OK: \t Sucessful\n");
 	return 0;
 }
