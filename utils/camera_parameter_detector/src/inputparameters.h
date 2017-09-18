@@ -8,8 +8,8 @@ using namespace std;
 class params{
 public:
 	// Values:
-	params();
 	char* input_image_filename;
+	bool input_image_type_OpenCV;
 	int height;
 	int width;
 	char* output_image_filename;
@@ -23,6 +23,7 @@ public:
 	bool linear;
 
 	// Functions:
+	params();
 	int read(int argc, char ** argv);
 	int check();
 };

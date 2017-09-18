@@ -7,7 +7,7 @@ rectangular::rectangular(Mat *image, int x, int y){
 	int width = image->cols;
 	int height = image->rows;
 
-	// Search for corners
+	// Init values for search
 	Point lastPoint;
 	lastPoint.x = x;
 	lastPoint.y = y;
@@ -19,213 +19,188 @@ rectangular::rectangular(Mat *image, int x, int y){
 	this->valid = true;
 
 	int skipped_pixels = 0;
-	int search_status = 10; 
-	// 0: Search Done, 10: Search right, 20: Search Down, 30: Search Left, 40: Search Up
-	//                 11: Check right > Down, 21: Check Down > Left
-	//                 12: Skipping right
-	//                 13: Remove skipped pixels
-	//                 15: Search Right Again
-	//                 16: Check right
+	int search_status = 10;
 
-	while (search_status != 0){
-		while (search_status == 10 || search_status == 12 || search_status == 15){ // Search Right
-			if (search_status == 15 && (!(lastPoint.x < (startPoint.x - 1) || lastPoint.x >(startPoint.x + 1) || lastPoint.y < (startPoint.y - 1) || lastPoint.y >(startPoint.y + 1))))
-			{
+	// Start looping
+	while (search_status != DIRECTIONS_SEARCH_DONE){
+		while (search_status == DIRECTIONS_SEARCH_RIGHT || search_status == DIRECTIONS_SKIPPING_RIGHT || search_status == DIRECTIONS_SEARCH_RIGHT_2){ // Search Right
+			if (search_status == DIRECTIONS_SEARCH_RIGHT_2 && (!(lastPoint.x < (startPoint.x - 1) || lastPoint.x >(startPoint.x + 1) || lastPoint.y < (startPoint.y - 1) || lastPoint.y >(startPoint.y + 1))))
+			{ // Check if end is reached
 				this->valid = true;
-				search_status = 0;
+				search_status = DIRECTIONS_SEARCH_DONE;
 				break;
 			}
 			if (lastPoint.x == width - 1 || (lastPoint.y < height - 3 && image->at<uchar>(Point(lastPoint.x, lastPoint.y + 1)) > 250 && image->at<uchar>(Point(lastPoint.x, lastPoint.y + 2)) > 250 && lastPoint.x > (this->leftTopCorner.x + 5)))
-			{
-				if (search_status == 15)
-				{
+			{ // Check if turn is necessary (edge reached, or turn probable
+				if (search_status == DIRECTIONS_SEARCH_RIGHT_2){
 					this->valid = false;
-					search_status = 0;
+					search_status = DIRECTIONS_SEARCH_DONE;
 					break;
 				}
 				else{
-					search_status = 11;
+					search_status = DIRECTIONS_CHECK_RIGHT_DOWN;
 					break;
 				}
 			}
 			else if (image->at<uchar>(Point(lastPoint.x + 1, lastPoint.y)) > 250)
-			{
+			{ // Check for next point same height
 				lastPoint.x++;
 				skipped_pixels = 0;
-				search_status = (search_status == 12) ? 10 : search_status;
+				search_status = (search_status == DIRECTIONS_SKIPPING_RIGHT) ? DIRECTIONS_SEARCH_RIGHT : search_status;
 			}
 			else if (image->at<uchar>(Point(lastPoint.x + 1, max(0, lastPoint.y - 1))) > 250)
-			{
+			{ // Check for next point smaller height
 				lastPoint.x++;
 				lastPoint.y = max(0, lastPoint.y - 1);
 				skipped_pixels = 0;
-				search_status = (search_status == 12) ? 10 : search_status;
-			}			
+				search_status = (search_status == DIRECTIONS_SKIPPING_RIGHT) ? DIRECTIONS_SEARCH_RIGHT : search_status;
+			}
 			else if (image->at<uchar>(Point(lastPoint.x + 1, min(height - 1, lastPoint.y + 1))) > 250)
-			{
+			{ // Check for next point bigger height
 				lastPoint.x++;
 				lastPoint.y = min(height - 1, lastPoint.y + 1);
 				skipped_pixels = 0;
-				search_status = (search_status == 12) ? 10 : search_status;
+				search_status = (search_status == DIRECTIONS_SKIPPING_RIGHT) ? DIRECTIONS_SEARCH_RIGHT : search_status;
 			}
-			else if (search_status == 10)
-			{
-				search_status = 11;
+			// If no next point found
+			else if (search_status == DIRECTIONS_SEARCH_RIGHT || search_status == DIRECTIONS_SKIPPING_RIGHT){
+				search_status = DIRECTIONS_CHECK_RIGHT_DOWN;
 				break;
 			}
-			else if (search_status == 12){
-				search_status = 11;
+			else if (search_status == DIRECTIONS_SEARCH_RIGHT_2){
+				search_status = DIRECTIONS_CHECK_RIGHT_2;
 				break;
 			}
-			else if (search_status == 15){
-				search_status = 16;
-				break;
-			}				
 			this->cornerPoints.push_back(lastPoint);
 		}
 
-		if (search_status == 11)
+		if (search_status == DIRECTIONS_CHECK_RIGHT_DOWN)
 		{
-			if (this->leftTopCorner.x+5 > lastPoint.x)
-			{
-				search_status = 0;
+			if (this->leftTopCorner.x + 3 > lastPoint.x)
+			{ // If to close to last turn point > not valid
+				search_status = DIRECTIONS_SEARCH_DONE;
 				this->valid = false;
 			}
 			else{
 				this->rightTopCorner = lastPoint;
-				search_status = 20;
+				search_status = DIRECTIONS_SEARCH_DOWN;
 			}
 		}
 
-		if (search_status == 16)
+		if (search_status == DIRECTIONS_CHECK_RIGHT_2)
 		{
 			if (this->leftTopCorner.x == lastPoint.x)
 			{
 				if (lastPoint.y == 0 || skipped_pixels >= max_skip_pixel){
-					search_status = 0;
+					search_status = DIRECTIONS_SEARCH_DONE;
 					this->valid = false;
 				}
-				else{
+				else{ // Try to skipp pixels when going up
 					lastPoint.y--;
 					skipped_pixels = 1;
-					search_status = 42;
+					search_status = DIRECTIONS_SKIPPING_UP;
 				}
 			}
 			else{
-				search_status = 0;
+				search_status = DIRECTIONS_SEARCH_DONE;
 				this->valid = false;
 			}
 		}
 
-		while (search_status == 20 || search_status == 22){ // Search Down
+		while (search_status == DIRECTIONS_SEARCH_DOWN || search_status == DIRECTIONS_SKIPPING_DOWN){ // Search Down
 			if (lastPoint.y == height - 1 || (lastPoint.x > 2 && image->at<uchar>(Point(lastPoint.x - 1, lastPoint.y)) > 250 && image->at<uchar>(Point(lastPoint.x - 2, lastPoint.y)) > 250 && lastPoint.y > (this->rightTopCorner.y + 5)))
-			{
-				search_status = 21;
+			{ // Check if turn is necessary either due to edge or probable turn
+				search_status = DIRECTIONS_CHECK_DOWN_LEFT;
 				break;
 			}
-			if (image->at<uchar>(Point(lastPoint.x, lastPoint.y + 1)) > 250)
-			{
+			if (image->at<uchar>(Point(lastPoint.x, lastPoint.y + 1)) > 250){
 				lastPoint.y++;
 				skipped_pixels = 0;
-				search_status = 20;
+				search_status = DIRECTIONS_SEARCH_DOWN;
 			}
-			else if (image->at<uchar>(Point(min(lastPoint.x + 1, width - 1), lastPoint.y + 1)) > 250)
-			{
+			else if (image->at<uchar>(Point(min(lastPoint.x + 1, width - 1), lastPoint.y + 1)) > 250){
 				lastPoint.x = min(lastPoint.x + 1, width - 1);
 				lastPoint.y++;
 				skipped_pixels = 0;
-				search_status = 20;
+				search_status = DIRECTIONS_SEARCH_DOWN;
 			}
-			else if (image->at<uchar>(Point(max(0, lastPoint.x - 1), lastPoint.y + 1)) > 250)
-			{
+			else if (image->at<uchar>(Point(max(0, lastPoint.x - 1), lastPoint.y + 1)) > 250){
 				lastPoint.x = max(0, lastPoint.x - 1);
 				lastPoint.y++;
 				skipped_pixels = 0;
-				search_status = 20;
-			}			
-			else if (search_status == 20)
-			{
-				search_status = 21;
-				break;
+				search_status = DIRECTIONS_SEARCH_DOWN;
 			}
-			else if (search_status == 22){
-				search_status = 21;
+			else
+			{ // if nothing is found, leave loop
+				search_status = DIRECTIONS_CHECK_DOWN_LEFT;
 				break;
 			}
 			this->cornerPoints.push_back(lastPoint);
 		}
 
-		if (search_status == 21)
+		if (search_status == DIRECTIONS_CHECK_DOWN_LEFT)
 		{
 			if (this->rightTopCorner.y == lastPoint.y)
-			{
-				if (lastPoint.x == width-1 || skipped_pixels >= max_skip_pixel){
-					search_status = 0;
+			{ // if distance is to last turn point is too small
+				if (lastPoint.x == width - 1 || skipped_pixels >= max_skip_pixel){
+					search_status = DIRECTIONS_SEARCH_DONE;
 					this->valid = false;
 				}
-				else{
+				else{ // Init skipping
 					lastPoint.x++;
 					skipped_pixels++;
-					search_status = 12;
-				}			
+					search_status = DIRECTIONS_SKIPPING_RIGHT;
+				}
 			}
 			else{
 				this->rightBottomCorner = lastPoint;
-				search_status = 30;
+				search_status = DIRECTIONS_SEARCH_LEFT;
 			}
 		}
 
-		while (search_status == 30 || search_status == 32)
+		while (search_status == DIRECTIONS_SEARCH_LEFT || search_status == DIRECTIONS_SKIPPING_LEFT)
 		{
 			if (lastPoint.x == 0 || (lastPoint.y > 2 && image->at<uchar>(Point(lastPoint.x, lastPoint.y - 1)) && image->at<uchar>(Point(lastPoint.x, lastPoint.y - 2)) > 250 && lastPoint.x < (this->rightBottomCorner.x - 5)))
 			{
-				search_status = 31;
+				search_status = DIRECTIONS_CHECK_LEFT_UP;
 				break;
 			}
-			if (image->at<uchar>(Point(lastPoint.x - 1, lastPoint.y)) > 250)
-			{
+			if (image->at<uchar>(Point(lastPoint.x - 1, lastPoint.y)) > 250){
 				lastPoint.x--;
 				skipped_pixels = 0;
-				search_status = 30;
-			}	
-			else if (image->at<uchar>(Point(lastPoint.x - 1, min(height - 1, lastPoint.y + 1))) > 250)
-			{
+				search_status = DIRECTIONS_SEARCH_LEFT;
+			}
+			else if (image->at<uchar>(Point(lastPoint.x - 1, min(height - 1, lastPoint.y + 1))) > 250){
 				lastPoint.x--;
 				lastPoint.y = min(height - 1, lastPoint.y + 1);
 				skipped_pixels = 0;
-				search_status = 30;
+				search_status = DIRECTIONS_SEARCH_LEFT;
 			}
-			else if (image->at<uchar>(Point(lastPoint.x - 1, max(0, lastPoint.y - 1))) > 250)
-			{
+			else if (image->at<uchar>(Point(lastPoint.x - 1, max(0, lastPoint.y - 1))) > 250){
 				lastPoint.x--;
 				lastPoint.y = max(0, lastPoint.y - 1);
 				skipped_pixels = 0;
-				search_status = 30;
+				search_status = DIRECTIONS_SEARCH_LEFT;
 			}
-			else if (search_status == 30)
-			{
-				search_status = 31;
-				break;
-			}
-			else if (search_status == 32){
-				search_status = 31;
+			else{
+				search_status = DIRECTIONS_CHECK_LEFT_UP;
 				break;
 			}
 			this->cornerPoints.push_back(lastPoint);
 		}
 
-		if (search_status == 31)
+		if (search_status == DIRECTIONS_CHECK_LEFT_UP)
 		{
 			if (this->rightBottomCorner.x == lastPoint.x)
 			{
 				if (lastPoint.y == height - 1 || skipped_pixels >= max_skip_pixel){
-					search_status = 0;
+					search_status = DIRECTIONS_SEARCH_DONE;
 					this->valid = false;
 				}
 				else{
 					lastPoint.y++;
 					skipped_pixels++;
-					search_status = 22;
+					search_status = DIRECTIONS_SKIPPING_DOWN;
 				}
 			}
 			else{
@@ -234,69 +209,64 @@ rectangular::rectangular(Mat *image, int x, int y){
 			}
 		}
 
-		while (search_status == 40 || search_status == 42)
+		while (search_status == DIRECTIONS_SEARCH_UP || search_status == DIRECTIONS_SKIPPING_UP)
 		{
-			if (search_status == 40 && (!(lastPoint.x < (startPoint.x - 1) || lastPoint.x >(startPoint.x + 1) || lastPoint.y < (startPoint.y - 1) || lastPoint.y >(startPoint.y + 1))))
-			{
+			if (search_status == DIRECTIONS_SEARCH_UP && (!(lastPoint.x < (startPoint.x - 1) || lastPoint.x >(startPoint.x + 1) || lastPoint.y < (startPoint.y - 1) || lastPoint.y >(startPoint.y + 1))))
+			{ // Check if starting point is reached
 				this->valid = true;
-				search_status = 0;
+				search_status = DIRECTIONS_SEARCH_DONE;
 				break;
 			}
 			if (lastPoint.y == 0 || (lastPoint.x < width - 3 && image->at<uchar>(Point(lastPoint.x + 1, lastPoint.y)) > 250 && image->at<uchar>(Point(lastPoint.x + 2, lastPoint.y)) > 250 && lastPoint.y < (this->leftBottomCorner.y - 5)))
 			{
-				search_status = 41;
+				search_status = DIRECTIONS_CHECK_UP_RIGHT;
 				break;
 			}
 			else if (image->at<uchar>(Point(lastPoint.x, lastPoint.y - 1)) > 250)
 			{
 				lastPoint.y--;
 				skipped_pixels = 0;
-				search_status = 40;
+				search_status = DIRECTIONS_SEARCH_UP;
 			}
 			else if (image->at<uchar>(Point(max(0, lastPoint.x - 1), lastPoint.y - 1)) > 250)
 			{
 				lastPoint.x = max(0, lastPoint.x - 1);
 				lastPoint.y--;
 				skipped_pixels = 0;
-				search_status = 40;
+				search_status = DIRECTIONS_SEARCH_UP;
 			}
-			
+
 			else if (image->at<uchar>(Point(min(width - 1, lastPoint.x + 1), lastPoint.y - 1)) > 250)
 			{
 				lastPoint.x = min(width - 1, lastPoint.x + 1);
 				lastPoint.y--;
 				skipped_pixels = 0;
-				search_status = 40;
+				search_status = DIRECTIONS_SEARCH_UP;
 			}
-			else if (search_status == 40)
+			else
 			{
-				search_status = 41;
+				search_status = DIRECTIONS_CHECK_UP_RIGHT;
 				break;
+				this->cornerPoints.push_back(lastPoint);
 			}
-			else if (search_status == 42){
-				search_status = 41;
-				break;
-			}
-			this->cornerPoints.push_back(lastPoint);
 		}
 
-		if (search_status == 41)
-		{
+		if (search_status == DIRECTIONS_CHECK_UP_RIGHT){
 			if (this->leftBottomCorner.y == lastPoint.y)
 			{
 				if (lastPoint.x == 0 || skipped_pixels >= max_skip_pixel){
-					search_status = 0;
+					search_status = DIRECTIONS_SEARCH_DONE;
 					this->valid = false;
 				}
 				else{
 					lastPoint.x--;
 					skipped_pixels++;
-					search_status = 32;
+					search_status = DIRECTIONS_SKIPPING_LEFT;
 				}
 			}
 			else{
 				this->leftTopCorner = lastPoint;
-				search_status = 15;
+				search_status = DIRECTIONS_SEARCH_RIGHT_2;
 			}
 		}
 	}
@@ -307,7 +277,7 @@ rectangular::rectangular(Mat *image, int x, int y){
 		this->center.y = (float)(leftTopCorner.y + rightTopCorner.y + rightBottomCorner.y + leftBottomCorner.y) / 4;
 		this->numberOfNearObjects = 0;
 
-		this->lengthBottomVertex = distance_between_points(rightBottomCorner,leftBottomCorner);
+		this->lengthBottomVertex = distance_between_points(rightBottomCorner, leftBottomCorner);
 		this->lengthTopVertex = distance_between_points(rightTopCorner, leftTopCorner);
 		this->lengthLeftVertex = distance_between_points(leftBottomCorner, leftTopCorner);
 		this->lengthRightVertex = distance_between_points(rightBottomCorner, rightTopCorner);
@@ -320,6 +290,7 @@ rectangular::rectangular(Mat *image, int x, int y){
 }
 
 rectangular::rectangular(vector<Point> list){
+	// Extract corner points from list
 	int biggerX;
 	int biggerY;
 	for (int i = 0; i < 4; i++){
@@ -341,12 +312,7 @@ rectangular::rectangular(vector<Point> list){
 			rightBottomCorner = list.at(i);
 	}
 
-
-	/*leftTopCorner = list.at(0);
-	rightTopCorner = list.at(3);
-	rightBottomCorner = list.at(2);
-	leftBottomCorner = list.at(1);*/
-
+	// Construct other values
 	this->center.x = (float)(leftTopCorner.x + rightTopCorner.x + rightBottomCorner.x + leftBottomCorner.x) / 4;
 	this->center.y = (float)(leftTopCorner.y + rightTopCorner.y + rightBottomCorner.y + leftBottomCorner.y) / 4;
 	this->numberOfNearObjects = 0;
@@ -380,7 +346,6 @@ int rectangular::SetCorner(cv::Mat *input, int value){
 	for (int i = 0; i < cornerPoints.size(); i++)
 	{
 		input->at<uchar>(Point(cornerPoints.at(i).x, cornerPoints.at(i).y)) = value;
-		//input.at<uchar>(cv::Point(cornerPoints.at(i).x, cornerPoints.at(i).y)) = 50;
 	}
 	input->at<uchar>(rightTopCorner) = (value-70);
 	input->at<uchar>(leftTopCorner) = (value - 70);
@@ -403,7 +368,6 @@ float rectangular::RelationSquare(){
 	return abs(lengthLeftRight / lengthTopBottom - 1);
 }
 
-
 int rectangular::CalcNumberOfNearObjects(std::vector<rectangular> inputList){
 	int counter = 0;
 	float sizeRelation;
@@ -420,7 +384,8 @@ int rectangular::CalcNumberOfNearObjects(std::vector<rectangular> inputList){
 int rectangular::countRectsAround(std::vector<rectangular> inputList){
 	for (int i=0; i < inputList.size(); i++){
 		Point otherCenter = inputList.at(i).center;
-		int counterLeftRight = (int)round((this->center.x - otherCenter.x) / (this->meanVertex*1.2));
+		// Calculate how many rects could between this and the other one, in x and in y direction
+		int counterLeftRight = (int)round((this->center.x - otherCenter.x) / (this->meanVertex*1.2)); 
 		if (counterLeftRight < 0 && abs(counterLeftRight) > rectsRight) rectsRight = abs(counterLeftRight);
 		if (counterLeftRight > 0 && abs(counterLeftRight) > rectsLeft) rectsLeft = abs(counterLeftRight);
 		int counterAboveBelow = (int)round((this->center.y - otherCenter.y) / (this->meanVertex*1.2));
@@ -449,65 +414,65 @@ int rectangular::CreatePointlists(vector<Point2f> *obj, vector<Point2f> *scene, 
 	
 	// Get the keypoints from the good matches
 	Point2f point;
-	// leftTopCorner
+	// Src: leftTopCorner
 	point.x = (float)this->leftTopCorner.x;
 	point.y = (float)this->leftTopCorner.y;
 	scene->push_back(point);
 	if (orientation > 0){
-		// LeftTopCorner
+		// Dst: LeftTopCorner
 		point.x = (float)this->destRectsLeft * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)this->destRectsAbove * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	else{
-		// LeftBottomCorner
+		// Dst: LeftBottomCorner
 		point.x = (float)this->destRectsLeft * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)(this->destRectsAbove + 1) * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	obj->push_back(point);
 
-	// RightTopCorner
+	// Src: RightTopCorner
 	point.x = (float)this->rightTopCorner.x;
 	point.y = (float)this->rightTopCorner.y;
 	scene->push_back(point);
 	if (orientation > 0){
-		// RightTopCorner
+		// Dst: RightTopCorner
 		point.x = (float)(this->destRectsLeft + 1) * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)this->destRectsAbove * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	else{
-		// LeftTopCorner
+		// Dst: LeftTopCorner
 		point.x = (float)this->destRectsLeft * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)this->destRectsAbove * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	obj->push_back(point);
 
-	// RightBottomCorner
+	// Src: RightBottomCorner
 	point.x = (float)this->rightBottomCorner.x;
 	point.y = (float)this->rightBottomCorner.y;
 	scene->push_back(point);
 	if (orientation > 0){
-		// RightBottomCorner
+		// Dst: RightBottomCorner
 		point.x = (float)(this->destRectsLeft + 1) * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)(this->destRectsAbove + 1) * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	else{
-		// RightTopCorner
+		// Dst: RightTopCorner
 		point.x = (float)(this->destRectsLeft + 1) * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)this->destRectsAbove * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	obj->push_back(point);
 
-	// LeftBottomCorner
+	// Src: LeftBottomCorner
 	point.x = (float)this->leftBottomCorner.x;
 	point.y = (float)this->leftBottomCorner.y;
 	scene->push_back(point);
 	if (orientation > 0){
-		// LeftBottomCorner
+		// Dst: LeftBottomCorner
 		point.x = (float)this->destRectsLeft * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)(this->destRectsAbove + 1) * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}
 	else{
-		// RightBottomCorner
+		// Dst: RightBottomCorner
 		point.x = (float)(this->destRectsLeft + 1) * sizeOfRect + (float)max(0, this->destRectsLeft - 1) * sizeBetweenRects;
 		point.y = (float)(this->destRectsAbove + 1) * sizeOfRect + (float)max(0, this->destRectsAbove - 1) * sizeBetweenRects;
 	}

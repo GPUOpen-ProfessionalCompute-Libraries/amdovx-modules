@@ -1,12 +1,53 @@
 #include "color_correction_matrix.hpp"
 
-#include <iostream>
+//#include <iostream>
 
-color_correction_matrix::color_correction_matrix(vector<Vec3f>real_colors, vector<Vec3f> image_colors, int mode){
-	switch (mode){
+color_correction_matrix::color_correction_matrix(){
+	values.create(3, 4, CV_32FC1);
+}
+color_correction_matrix::color_correction_matrix(char* filename){
+	FileStorage file(filename, FileStorage::READ);
+
+	// Write to file!
+	file["Color Correction Matrx"] >> values;
+}
+
+int color_correction_matrix::set_colorspace(int value){
+	switch (value){
+	case 0:
+		colorspace_conversion_matrix = RGB_Colorspace();
+		calculation_mode = 0;
+		printf("OK: \t Will use RGB\n");
+		break;
+	case 1:
+		colorspace_conversion_matrix = YUV_Colorspace();
+		calculation_mode = 0;
+		printf("OK: \t Will use YUV\n");
+		break;
+	case 2:
+		colorspace_conversion_matrix = YUV_Colorspace();
+		calculation_mode = 1;
+		printf("OK: \t Will use UV\n");
+		break;
+	case 3:
+		colorspace_conversion_matrix = XYZ_Colorspace();
+		calculation_mode = 0;
+		printf("OK: \t Will use XYZ\n");
+		break;
+	case 4:
+		colorspace_conversion_matrix = XYZ_Colorspace();
+		calculation_mode = 2;
+		printf("OK: \t Will use XZ\n");
+		break;
+	}
+	return 0;
+}
+int color_correction_matrix::calculate(vector<Vec3f>real_colors, vector<Vec3f> image_colors){
+	colorspace_conversion(&real_colors);
+	colorspace_conversion(&image_colors);
+	switch (calculation_mode){
 	case 0:
 	{
-			  values.create(3, 4, CV_32FC1);
 			  Mat real_colors_mat;
 			  real_colors_mat = construct3xk_from_vectorlist(real_colors);
 			  //	cout << real_colors_mat << endl;
@@ -31,7 +72,6 @@ color_correction_matrix::color_correction_matrix(vector<Vec3f>real_colors, vecto
 		break;
 	case 1:
 	{
-			  values.create(3, 4, CV_32FC1);
 			  values.setTo(0);
 			  Mat real_colors_mat;
 			  real_colors_mat = construct2xk_from_vectorlist(real_colors,1,2);
@@ -60,7 +100,6 @@ color_correction_matrix::color_correction_matrix(vector<Vec3f>real_colors, vecto
 		break;
 	case 2:
 	{
-			  values.create(3, 4, CV_32FC1);
 			  values.setTo(0);
 			  Mat real_colors_mat;
 			  real_colors_mat = construct2xk_from_vectorlist(real_colors, 0, 2);
@@ -94,13 +133,8 @@ color_correction_matrix::color_correction_matrix(vector<Vec3f>real_colors, vecto
 	}
 		break;
 	}
-}
-
-color_correction_matrix::color_correction_matrix(char* filename){
-	FileStorage file(filename, FileStorage::READ);
-
-	// Write to file!
-	file["Color Correction Matrx"] >> values;
+	change_colorspace();
+	return 0;
 }
 
 int color_correction_matrix::apply(Mat_<Vec3f> *image){
@@ -147,18 +181,37 @@ int color_correction_matrix::save_to_LOOM_file(char* filename){
 	return 0;
 }
 
-int color_correction_matrix::change_colorspace(Mat_<float> conversion_matrix_from_new){
-	if (conversion_matrix_from_new.rows != 3 || conversion_matrix_from_new.cols != 3){
+int color_correction_matrix::change_colorspace(){
+	if (colorspace_conversion_matrix.rows != 3 || colorspace_conversion_matrix.cols != 3){
 		printf("conversion matrix has wrong dimensions");
 		return 0;
 	}
 	Mat_<float> conversion_matrix_to_new;
-	invert(conversion_matrix_from_new, conversion_matrix_to_new);
+	invert(colorspace_conversion_matrix, conversion_matrix_to_new);
 
 	values.col(3) = conversion_matrix_to_new * values.col(3);
-	values.colRange(0, 3) = conversion_matrix_to_new * values.colRange(0, 3) * conversion_matrix_from_new;
+	values.colRange(0, 3) = conversion_matrix_to_new * values.colRange(0, 3) * colorspace_conversion_matrix;
 
 	return 0;
+}
+
+Vec3f color_correction_matrix::colorspace_conversion(Vec3f input){
+	if (colorspace_conversion_matrix.rows != 3 || colorspace_conversion_matrix.cols != 3){
+		printf("conversion matrix has wrong dimensions");
+		return 0;
+	}
+	Vec3f output;
+	output[0] = colorspace_conversion_matrix.at<float>(0, 0) * input[0] + colorspace_conversion_matrix.at<float>(0, 1) * input[1] + colorspace_conversion_matrix.at<float>(0, 2) * input[2];
+	output[1] = colorspace_conversion_matrix.at<float>(1, 0) * input[0] + colorspace_conversion_matrix.at<float>(1, 1) * input[1] + colorspace_conversion_matrix.at<float>(1, 2) * input[2];
+	output[2] = colorspace_conversion_matrix.at<float>(2, 0) * input[0] + colorspace_conversion_matrix.at<float>(2, 1) * input[1] + colorspace_conversion_matrix.at<float>(2, 2) * input[2];
+	return output;
+}
+
+int color_correction_matrix::colorspace_conversion(vector<Vec3f> *input){
+	for (int i = 0; i < input->size(); i++){
+		input->at(i) = (colorspace_conversion(input->at(i)));
+	}
+	return 1;
 }
 
 Mat construct4xk_from_vectorlist(vector<Vec3f> input){
@@ -202,5 +255,29 @@ Mat construct2xk_from_vectorlist(vector<Vec3f> input, int col1, int col2){
 		output.at<float>(0, i) = input.at(i)[col1];
 		output.at<float>(1, i) = input.at(i)[col2];
 	}
+	return output;
+}
+
+Mat_<float> YUV_Colorspace(){
+	Mat_<float> output(3, 3, CV_32FC1);
+	output.at<float>(0, 0) = 0.299f;    output.at<float>(0, 1) = 0.587f;	output.at<float>(0, 2) = 0.114f;
+	output.at<float>(1, 0) = -0.14713f;	output.at<float>(1, 1) = -0.28886f;	output.at<float>(1, 2) = 0.436f;
+	output.at<float>(2, 0) = 0.615f;	output.at<float>(2, 1) = -0.51499f;	output.at<float>(2, 2) = -0.10001f;
+	return output;
+}
+
+Mat_<float> RGB_Colorspace(){
+	Mat_<float> output(3, 3, CV_32FC1);
+	output.at<float>(0, 0) = 1; output.at<float>(0, 1) = 0;	output.at<float>(0, 2) = 0;
+	output.at<float>(1, 0) = 0;	output.at<float>(1, 1) = 1;	output.at<float>(1, 2) = 0;
+	output.at<float>(2, 0) = 0;	output.at<float>(2, 1) = 0;	output.at<float>(2, 2) = 1;
+	return output;
+}
+
+Mat_<float> XYZ_Colorspace(){
+	Mat_<float> output(3, 3, CV_32FC1);
+	output.at<float>(0, 0) = 0.4124f; output.at<float>(0, 1) = 0.3576f; output.at<float>(0, 2) = 0.1805f;
+	output.at<float>(1, 0) = 0.2126f; output.at<float>(1, 1) = 0.7152f; output.at<float>(1, 2) = 0.0722f;
+	output.at<float>(2, 0) = 0.0193f; output.at<float>(2, 1) = 0.1192f; output.at<float>(2, 2) = 0.9505f;
 	return output;
 }

@@ -1,10 +1,14 @@
 #include<vector>
 #include<opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/video.hpp>
+#include<opencv2/highgui/highgui.hpp>
+#include "inputparameters.h"
 
 
 using namespace cv;
 using namespace std;
+
+Mat *read_input(params parameter);
 
 vector<Vec3f> create_real_colors();
 
@@ -14,11 +18,5 @@ vector<Vec3f> degamma(vector<Vec3f> input);
 Vec3f degamma(Vec3b intensity_in);
 Mat gamma(Mat image);
 Vec3b gamma(Vec3f intensity_in);
-
-Vec3f colorspace_conversion(Mat_<float> conversion_matrix, Vec3f input);
-int colorspace_conversion(Mat_<float> conversion_matrix, vector<Vec3f> *input);
-Mat_<float> YUV_Colorspace();
-Mat_<float> RGB_Colorspace();
-Mat_<float> XYZ_Colorspace();
 
 int show_image(char* name, Mat *image);

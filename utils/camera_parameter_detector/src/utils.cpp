@@ -110,45 +110,38 @@ vector<Vec3f> create_real_colors(){
 	return real_colors;
 }
 
-Vec3f colorspace_conversion(Mat_<float> conversion_matrix, Vec3f input){
-	if (conversion_matrix.rows != 3 || conversion_matrix.cols != 3){
-		printf("conversion matrix has wrong dimensions");
-		return 0;
+Mat *read_input(params parameter){
+	// Create cv image
+	Mat image;
+
+	// Read input data
+	if (parameter.input_image_type_OpenCV){
+		image = imread(parameter.input_image_filename);
+		parameter.width = image.cols;
+		parameter.height = image.rows;
 	}
-	Vec3f output;
-	output[0] = conversion_matrix.at<float>(0, 0) * input[0] + conversion_matrix.at<float>(0, 1) * input[1] + conversion_matrix.at<float>(0, 2) * input[2];
-	output[1] = conversion_matrix.at<float>(1, 0) * input[0] + conversion_matrix.at<float>(1, 1) * input[1] + conversion_matrix.at<float>(1, 2) * input[2];
-	output[2] = conversion_matrix.at<float>(2, 0) * input[0] + conversion_matrix.at<float>(2, 1) * input[1] + conversion_matrix.at<float>(2, 2) * input[2];
-	return output;
-}
+	else{ // Input format raw:
+		Mat input_image;
+		input_image.create(parameter.height, parameter.width, CV_8UC3);
 
-int colorspace_conversion(Mat_<float> conversion_matrix, vector<Vec3f> *input){
-	for (int i = 0; i < input->size(); i++){
-		input->at(i) = (colorspace_conversion(conversion_matrix, input->at(i)));
+		FILE *fp = NULL;
+		char *imagedata = NULL;
+		int framesize = parameter.width*parameter.height * 3;
+		fopen_s(&fp, parameter.input_image_filename, "rb");
+		if (fp == NULL)
+		{
+			printf("ERROR: \t Input filename (%s) is invalid\n", parameter.input_image_filename);
+			return NULL;
+		}
+		imagedata = (char*)malloc(sizeof(char)* framesize);
+		fread(imagedata, sizeof(char), framesize, fp);
+		memcpy(input_image.data, imagedata, framesize);
+		free(imagedata);
+		fclose(fp);
+
+		image.create(parameter.height, parameter.width, CV_8UC3);
+		cvtColor(input_image, image, COLOR_RGB2BGR);
 	}
-	return 1;
-}
-
-Mat_<float> YUV_Colorspace(){
-	Mat_<float> output(3,3,CV_32FC1);
-	output.at<float>(0, 0) = 0.299f;    output.at<float>(0, 1) = 0.587f;	output.at<float>(0, 2) = 0.114f;
-	output.at<float>(1, 0) = -0.14713f;	output.at<float>(1, 1) = -0.28886f;	output.at<float>(1, 2) = 0.436f;
-	output.at<float>(2, 0) = 0.615f;	output.at<float>(2, 1) = -0.51499f;	output.at<float>(2, 2) = -0.10001f;
-	return output;
-}
-
-Mat_<float> RGB_Colorspace(){
-	Mat_<float> output(3, 3, CV_32FC1);
-	output.at<float>(0, 0) = 1; output.at<float>(0, 1) = 0;	output.at<float>(0, 2) = 0;
-	output.at<float>(1, 0) = 0;	output.at<float>(1, 1) = 1;	output.at<float>(1, 2) = 0;
-	output.at<float>(2, 0) = 0;	output.at<float>(2, 1) = 0;	output.at<float>(2, 2) = 1;
-	return output;
-}
-
-Mat_<float> XYZ_Colorspace(){
-	Mat_<float> output(3, 3, CV_32FC1);
-	output.at<float>(0, 0) = 0.4124f; output.at<float>(0, 1) = 0.3576f; output.at<float>(0, 2) = 0.1805f;
-	output.at<float>(1, 0) = 0.2126f; output.at<float>(1, 1) = 0.7152f; output.at<float>(1, 2) = 0.0722f;
-	output.at<float>(2, 0) = 0.0193f; output.at<float>(2, 1) = 0.1192f; output.at<float>(2, 2) = 0.9505f;
-	return output;
+	printf("OK: \t Read input (%s)\n", parameter.input_image_filename);
+	return &image;
 }

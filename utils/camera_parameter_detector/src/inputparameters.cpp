@@ -1,7 +1,8 @@
 #include "inputparameters.h"
 
 params::params(){
-	input_image_filename = nullptr ;
+	input_image_filename = nullptr;
+	input_image_type_OpenCV = true;
 	height = 0; width = 0;
 	output_image_filename = nullptr;
 	colorchart_image_filename = nullptr;
@@ -33,8 +34,8 @@ int params::read(int argc, char ** argv){
 			printhelp();
 		}
 		if (std::string(argv[i]) == "--output") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				output_image_filename = argv[++i]; // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) { 
+				output_image_filename = argv[++i];
 			}
 			else {
 				std::cerr << "--output option requires one argument." << std::endl;
@@ -42,35 +43,35 @@ int params::read(int argc, char ** argv){
 			}
 		}		
 		if (std::string(argv[i]) == "--colorchartImg") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				colorchart_image_filename = argv[++i]; // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) { 
+				colorchart_image_filename = argv[++i];
 			}
-			else { // Uh-oh, there was no argument to the destination option.
+			else { 
 				std::cerr << "--colorchartImg option requires one argument." << std::endl;
 				return -1;
 			}
 		}	
 		if (std::string(argv[i]) == "--correctionMatrixOpenCV") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				correction_matrix_OpenCV_filename = argv[++i]; // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) { 
+				correction_matrix_OpenCV_filename = argv[++i]; 
 			}
-			else { // Uh-oh, there was no argument to the destination option.
+			else { 
 				std::cerr << "--correctionMatrixOpenCV option requires one argument." << std::endl;
 				return -1;
 			}
 		}
 		if (std::string(argv[i]) == "--correctionMatrixLoom") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				correction_matrix_LOOM_filename = argv[++i]; // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) {
+				correction_matrix_LOOM_filename = argv[++i];
 			}
-			else { // Uh-oh, there was no argument to the destination option.
+			else {
 				std::cerr << "--correctionMatrixLoom option requires one argument." << std::endl;
 				return -1;
 			}
 		}	
 		if (std::string(argv[i]) == "--width") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				width = atoi(argv[++i]); // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) {
+				width = atoi(argv[++i]);
 			}
 			else {
 				std::cerr << "--width option requires one argument." << std::endl;
@@ -78,8 +79,8 @@ int params::read(int argc, char ** argv){
 			}
 		}
 		if (std::string(argv[i]) == "--height") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
-				height = atoi(argv[++i]); // Increment 'i' so we don't get the argument as the next argv[i].
+			if (i + 1 < argc) {
+				height = atoi(argv[++i]);
 			}
 			else { 
 				std::cerr << "--height option requires one argument." << std::endl;
@@ -99,7 +100,7 @@ int params::read(int argc, char ** argv){
 			linear = false;
 		}
 		if (std::string(argv[i]) == "--colorspace") {
-			if (i + 1 < argc) { // Make sure we aren't at the end of argv!
+			if (i + 1 < argc) {
 				i++;
 				if (string(argv[++i]) == "RGB")
 					colorspace = 0;
@@ -132,6 +133,19 @@ int params::check(){
 		std::cerr << "For applying a color correction matrix, a color correction matrix in a for OpenCV readable format is necessary!\n" << std::endl;
 		return -1;
 	}
+	if (!compute && !output_image_filename){
+		std::cerr << "For applying a color correction matrix, a output filename needs to be specified!\n" << std::endl;
+		return -1;
+	}
+	if (string(input_image_filename).substr(string(input_image_filename).length() - 3) == "raw")
+	{
+		input_image_type_OpenCV = false;
+		if (width == 0 || height == 0){
+			std::cerr << "For an input of type raw, a width and height are necessary!\n" << std::endl;
+			return -1;
+		}
+	}
+
 	return 0;
 }
 

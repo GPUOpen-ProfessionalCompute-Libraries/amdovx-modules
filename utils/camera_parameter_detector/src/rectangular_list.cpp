@@ -1,8 +1,6 @@
 #include "rectangular_list.hpp"
 
-#include <iostream>
-
-int rectangular_list::create_from_image(Mat *image){
+int rectangular_list::create_from_image(Mat *image){ // Using selfwritten detection function
 	for (int y = 0; y < image->rows; y++)
 	{
 		for (int x = 0; x < image->cols; x++)
@@ -21,7 +19,7 @@ int rectangular_list::create_from_image(Mat *image){
 	return check_resulting_list("Finished looking for rects");
 }
 
-int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only > not in used due to bad performance
+int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only > not in used due to bad results
 	square_list.clear();
 	vector<vector<Point> > contours;
 	findContours(image, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
@@ -155,7 +153,7 @@ int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only
 
 int rectangular_list::drawSquares(Mat& image, char *wndname)
 {
-	if (square_list.size() != rect_list.size()){
+	if (square_list.size() != rect_list.size()){ // If rects are not in square list, add them
 		for (int i = 0; i < rect_list.size(); i++)
 		{
 			square_list.push_back(rect_list.at(i).output_pointlist());
@@ -168,9 +166,9 @@ int rectangular_list::drawSquares(Mat& image, char *wndname)
 		polylines(image, &p, &n, 1, true, Scalar(0, 255, 0), 3, LINE_AA);
 	}
 
+	// Show image
 	imshow(wndname, image); 
 	waitKey(0);
-
 
 	return 0;
 }
@@ -278,7 +276,6 @@ int rectangular_list::create_transformation_parameters(Mat input_image, Mat *out
 		transformation_parameters.at<float>(0, 2) = -1 * transformation_parameters.at<float>(0, 2) + 6 * size_of_rect + 5 * size_between_rect;
 		transformation_parameters.at<float>(1, 2) = -1 * transformation_parameters.at<float>(1, 2) + 4 * size_of_rect + 3 * size_between_rect;
 		printf("OK: \t rotated\n");
-		//cout << transformation_parameters << endl;
 	}
 	
 	if (output_image_rotated != NULL){
@@ -310,7 +307,6 @@ int rectangular_list::size(){
 }
 
 
-
 int rectangular_list::calc_maxNearObjects(){
 	for (int i = 0; i < rect_list.size(); i++){
 		rect_list.at(i).CalcNumberOfNearObjects(rect_list);
@@ -331,7 +327,7 @@ int rectangular_list::check_resulting_list(char* text){
 	return 0;
 }
 
-Vec3f calculate_color(Point center, Mat Transformation, Mat image, int predicted_size){
+Vec3f rectangular_list::calculate_color(Point center, Mat Transformation, Mat image, int predicted_size){
 	// get real center
 	Point warped_center;
 	float divisor = Transformation.at<float>(0, 0) * Transformation.at<float>(1, 1) - Transformation.at<float>(0, 1) * Transformation.at<float>(1, 0);
@@ -427,10 +423,8 @@ Vec3f calculate_color(Point center, Mat Transformation, Mat image, int predicted
 			small_variance = false;
 		}
 	}
-	//printf("Found %d out of %d\n", counter, predicted_size);
 	return mean;
 }
-
 
 static double angle(Point pt1, Point pt2, Point pt0)
 {
