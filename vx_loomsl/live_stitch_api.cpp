@@ -2620,7 +2620,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		else{ // 8bit mode
 			ERROR_CHECK_OBJECT_(stitch->Img_color_corrected = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		}
-		stitch->color_correct_gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * 12);
+		ERROR_CHECK_OBJECT_(stitch->color_correct_gain_array = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, stitch->num_cameras * 12));
+		vx_float32 zero = 0.0f; // initialize gain_array with default gains as zero
+		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->color_correct_gain_array, stitch->num_cameras * 12, &zero, 0));
 	}
 	// create temporary images when extra output color conversion is needed
 	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {

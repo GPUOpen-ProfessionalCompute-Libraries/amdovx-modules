@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 
 #define _CRT_SECURE_NO_WARNINGS
-#include "color_convert.h"
+#include "color_correct.h"
 // Transformation Function
 std::string GetTransformationFunctions16bit(){
 	std::string output =
@@ -233,7 +233,7 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 
-	vx_scalar s_num_camera_columns = (vx_scalar)parameters[7];
+	vx_scalar s_num_camera_columns = (vx_scalar)parameters[4];
 	if (s_num_camera_columns) {
 		// read num_camera_columns
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_num_camera_columns, &num_camera_columns));
@@ -242,7 +242,7 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 	// set kernel configuration
 	vx_uint32 work_items[3];
 	work_items[0] = (input_width + (3*num_camera_columns -1)) / (4*num_camera_columns);
-	work_items[1] = (input_height + num_cameras-1) / num_cameras;
+	work_items[1] = (input_height + (num_cameras / num_camera_columns) - 1) / (num_cameras / num_camera_columns);
 	work_items[2] = num_cameras;
 	strcpy(opencl_kernel_function_name, "color_correct");
 	opencl_work_dim = 3;
@@ -298,12 +298,15 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 		, work_items[0], work_items[1], work_items[2]);
 	opencl_kernel_code += item;
 
-	sprintf(item,
+	opencl_kernel_code +=
 		"    pG_buf += pG_offs;\n"
 		"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
-		"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n"
-		"    gy = cam_id * %d + gy;\n", input_height/num_cameras);
-	opencl_kernel_code += item;
+		"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n";
+	if ((num_cameras / num_camera_columns) != 1){
+		sprintf(item,
+			"    gy = cam_id * %d + gy;\n", input_height / (num_cameras / num_camera_columns));
+		opencl_kernel_code += item;
+	}
 	if (num_camera_columns != 1){
 		sprintf(item,
 			"    gx = cam_id * %d + gx;\n", input_width / num_camera_columns);
@@ -389,11 +392,11 @@ vx_status color_correct_publish(vx_context context)
 	ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_CODEGEN_CALLBACK, &opencl_codegen_callback_f, sizeof(opencl_codegen_callback_f)));
 
 	// set kernel parameters
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT,  VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT,  VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT,  VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT,  VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
