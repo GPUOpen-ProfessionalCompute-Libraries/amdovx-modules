@@ -1634,7 +1634,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	}
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[5];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
@@ -1690,7 +1690,6 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 		"{\n"
 		"	int grp_id = get_global_id(0)>>4;\n"
 		"   if (grp_id < exp_data_num) {\n"
-		"	__local uchar gamma2Linear[256];\n"
 		"	__local uint4  sumI[256], sumJ[256];\n"
 		"	uint2 offs = ((__global uint2 *)(exp_data+exp_data_offs))[grp_id];\n"
 		"	uint size = (uint)(pIn_stride*%d);\n"
@@ -1706,18 +1705,14 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	opencl_kernel_code +=
 		"	int lx = get_local_id(0);\n"
 		"	int ly = get_local_id(1);\n"
-		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
-		"	gamma2Linear[lid] = g_Gamma2LinearLookUp[lid];\n"
-		"	barrier(CLK_LOCAL_MEM_FENCE);\n";
-	if (input_format == VX_DF_IMAGE_RGBX){
+		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n";
+	if (!linearColorSpace)
 		opencl_kernel_code +=
-			"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n";
-	}
-	else{//VX_DF_IMAGE_RGB4_AMD
-		opencl_kernel_code +=
-			"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n";
-	}
+		"	__local uchar gamma2Linear[256];\n"
+		"	gamma2Linear[lid] = g_Gamma2LinearLookUp[lid];\n";
 	opencl_kernel_code +=
+		"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+		"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n"
 		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
 		"	if (isValid) {\n"
 		"		global uint *pI, *pJ;\n"
