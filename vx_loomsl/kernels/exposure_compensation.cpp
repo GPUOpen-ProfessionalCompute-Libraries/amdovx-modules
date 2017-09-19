@@ -1639,7 +1639,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool linearColorSpace = (flags & 1) ? false : true;
+	bool linearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 height_one = (vx_uint32)(input_height / num_cameras);
