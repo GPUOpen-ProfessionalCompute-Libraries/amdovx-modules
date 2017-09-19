@@ -2304,7 +2304,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	ERROR_CHECK_STATUS_(IsValidContextAndNotInitialized(stitch));
 
 	/////////////////////////////////////////////////////////
-	// If 16bit mode is on auto detect > find right mode here:
+	// Check attributes
+	// Precision, define value in case of auto detect
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 2 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 0){
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
 		ls_printf("WARNING: Precision was set to invalid value. (Only 0: Auto detect, 1: 8 bit flow and 2: 16 bit flow are allowed.) Precision will be set to auto detect.\n");
@@ -2332,6 +2333,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
+	// Check for linear colorspace
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
@@ -2345,7 +2347,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
 		ls_printf("WARNING: Linear colorspace was set to invalid value. (Only 0: Nonlinear and 1: Linear)\n");
 	}
-
+	// check attribute for fast init code
+	stitch->USE_CPU_INIT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_USE_CPU_FOR_INIT];
+	if (stitch->USE_CPU_INIT)
+		ls_printf("OK: Use CPU Init, will be slow\n");
+	stitch->stitchInitData = nullptr;
 
 	/////////////////////////////////////////////////////////
 	// pick default stitch mode and aux data length
@@ -2375,7 +2381,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_STATUS_(vxDirective((vx_reference)stitch->graphStitch, VX_DIRECTIVE_AMD_ENABLE_PROFILE_CAPTURE));
 	}
 
-	// creating OpenVX image objects for input & output OpenCL buffers
+	/////////////////////////////////////////////////////////
+	// creating OpenVX image objects for input, overlay, chromakey & output OpenCL buffers
+	// Create camera images
 	if (strlen(stitch->loomio_camera.kernelName) > 0) {
 		// load OpenVX module (if specified)
 		if (strlen(stitch->loomio_camera.module) > 0) {
@@ -2428,12 +2436,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_input = vxCreateImageFromHandle(stitch->context, stitch->camera_buffer_format, &addr_in, ptr, VX_MEMORY_TYPE_OPENCL));
 		}
 	}
-	// check attribute for fast init code
-	stitch->USE_CPU_INIT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_USE_CPU_FOR_INIT];
-	stitch->stitchInitData = nullptr;
-
+	// Create Overlay images
 	if (stitch->num_overlays > 0) {
-		// create overlay image
 		if (strlen(stitch->loomio_overlay.kernelName) > 0) {
 			// load OpenVX module (if specified)
 			if (strlen(stitch->loomio_overlay.module) > 0) {
@@ -2490,6 +2494,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			if (stitch->overlayIndexBuf) { delete[] stitch->overlayIndexBuf; stitch->overlayIndexBuf = nullptr; }
 		}
 	}
+	// Create output images
 	if (strlen(stitch->loomio_output.kernelName) > 0) {
 		// load OpenVX module (if specified)
 		if (strlen(stitch->loomio_output.module) > 0) {
@@ -2603,6 +2608,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 	}
 	if (stitch->output_tiles > 4){ ls_printf("ERROR: lsInitialize: Max Encode Tiles supported is 4\n"); return VX_ERROR_INVALID_PARAMETERS; }
+
 	// create temporary images when extra color conversion is needed
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
@@ -2622,7 +2628,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_output_rgb = vxCreateImage(stitch->context, output_img_width, output_img_height, VX_DF_IMAGE_RGB));
 		}
 	}
-	// process chroma key
+
+	// Create chroma key images
 	stitch->CHROMA_KEY = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY];
 	if (stitch->CHROMA_KEY){
 		// create chroma key RGB buffer
@@ -2650,12 +2657,13 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->chroma_key_erode_mask_img = vxCreateVirtualImage(stitch->graphStitch, output_img_width, output_img_height, VX_DF_IMAGE_U8));
 		}
 	}
+
 	////////////////////////////////////////////////////////////////////////
 	// build the input and output processing parts of stitch graph
+	// Input processing
 	stitch->color_convert_flags = (vx_uint8)stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE];
 	stitch->rgb_input = stitch->Img_input;
-	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION]==2) {
-		// needs input color conversion
+	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION]==2) { // needs input color conversion
 		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
 		stitch->rgb_input = stitch->Img_input_rgb;
@@ -2676,11 +2684,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->noiseFilterNode);
 		stitch->rgb_input = (vx_image)vxGetReferenceFromDelay(stitch->noiseFilterImageDelay, 0);
 	}
+	// Output processing
 	stitch->rgb_output = stitch->Img_output;
-	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
-		// needs output color conversion
-		if (stitch->output_tiles != 1 && (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV)){
-			// output needs to be encoded 
+	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) { // needs output color conversion
+		if (stitch->output_tiles != 1 && (stitch->output_buffer_format == VX_DF_IMAGE_NV12 || stitch->output_buffer_format == VX_DF_IMAGE_IYUV)){ // output needs to be encoded 
 			ERROR_CHECK_STATUS_(ROIProcessImage(stitch));
 			ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
 		}
@@ -2709,8 +2716,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 		stitch->rgb_output = stitch->chroma_key_input_RGB_img;
 	}
-	if (stitch->Img_overlay) {
-		// need add overlay
+	if (stitch->Img_overlay) { // need add overlay
 		ERROR_CHECK_OBJECT_(stitch->nodeOverlayRemap = vxRemapNode(stitch->graphStitch, stitch->Img_overlay, stitch->overlay_remap, VX_INTERPOLATION_TYPE_BILINEAR, stitch->Img_overlay_rgba));
 		ERROR_CHECK_OBJECT_(stitch->nodeOverlayBlend = stitchAlphaBlendNode(stitch->graphStitch, stitch->Img_overlay_rgb, stitch->Img_overlay_rgba, stitch->rgb_output,NULL));
 		stitch->rgb_output = stitch->Img_overlay_rgb;
@@ -2859,6 +2865,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		vx_image merge_weight = stitch->weight_image;
 		if (stitch->EXPO_COMP) {
 			if (stitch->EXPO_COMP == 1) {
+				ls_printf("OK: Use Exposure Compensation on luma.\n");
 				if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 					ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnNode(stitch->graphStitch, stitch->num_cameras, stitch->expcomp_luma16, stitch->OverlapPixelEntry, stitch->valid_mask_image, stitch->A_matrix));
 				}
@@ -2868,14 +2875,19 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				ERROR_CHECK_OBJECT_(stitch->ExpcompSolveGainNode = stitchExposureCompSolveForGainNode(stitch->graphStitch, stitch->alpha, stitch->beta, stitch->A_matrix, stitch->overlap_matrix, stitch->gain_array));
 			}
 			else if (stitch->EXPO_COMP == 2) {
+				ls_printf("OK: Use Exposure Compensation on RGB.\n");
 				ERROR_CHECK_OBJECT_(stitch->ExpcompComputeGainNode = stitchExposureCompCalcErrorFnRGBNode(stitch->graphStitch, stitch->num_cameras, stitch->warp_output_image, stitch->OverlapPixelEntry, stitch->valid_mask_image, stitch->A_matrix, stitch->color_convert_flags));
 				ERROR_CHECK_OBJECT_(stitch->ExpcompSolveGainNode = stitchExposureCompSolveForGainNode(stitch->graphStitch, stitch->alpha, stitch->beta, stitch->A_matrix, stitch->overlap_matrix, stitch->gain_array));
+			}
+			else{
+				ls_printf("OK: Use Exposure Compensation with external gains.\n");
 			}
 			ERROR_CHECK_OBJECT_(stitch->ExpcompApplyGainNode = stitchExposureCompApplyGainNode(stitch->graphStitch, stitch->warp_output_image, stitch->gain_array, stitch->valid_array, stitch->num_cameras, stitch->EXPO_COMP_GAINW, stitch->EXPO_COMP_GAINH, stitch->exp_comp_output_image));
 			// update merge input
 			merge_input = stitch->exp_comp_output_image;
 		}
 		if (stitch->SEAM_FIND) {
+			ls_printf("OK: Use SeamFind.\n");
 			if (stitch->SEAM_REFRESH)
 			{
 				//SeamFind Step 1: Seam Refresh 
@@ -2915,6 +2927,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		}
 		// create data objects and nodes for multiband blending
 		if (stitch->MULTIBAND_BLEND){
+			ls_printf("OK: Use Multiband with %d levels.\n",stitch->num_bands);
 			// create Laplacian pyramids.
 			for (int i = 1; i < stitch->num_bands; i++) {
 				stitch->pStitchMultiband[i].WeightHSGNode = stitchMultiBandHalfScaleGaussianNode(stitch->graphStitch, stitch->num_cameras, stitch->pStitchMultiband[i].valid_array_offset,
