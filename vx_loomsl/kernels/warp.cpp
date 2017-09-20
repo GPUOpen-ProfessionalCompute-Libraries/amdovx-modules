@@ -899,8 +899,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	}
 	sprintf(item,
 		"__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n" // opencl_local_work[0]
-		"void %s(uint grayscale_compute_method,\n" // opencl_kernel_function_name
-		"        uint num_cameras,\n"
+		"void %s(uint num_cameras,\n" // opencl_kernel_function_name
 		"        __global char * valid_pix_buf, uint valid_pix_buf_offset, uint valid_pix_num_items,\n"
 		"        __global char * warp_remap_buf, uint warp_remap_buf_offset, uint warp_remap_num_items,\n"
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
@@ -912,25 +911,25 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			",\n"
 			"        uint op_u8_width, uint op_u8_height, __global uchar * op_u8_buf, uint op_u8_stride, uint op_u8_offset";
 	}
+	if (bWriteExpCompImage){
+		opencl_kernel_code +=
+			",\n"
+			"        uint op_s16_width, uint op_s16_height, __global uchar * op_s16_buf, uint op_s16_stride, uint op_s16_offset";
+	}	
 	if (s_num_camera_columns) {
 		opencl_kernel_code +=
 			",\n"
 			"        uint num_camera_columns";
 	}
-	if (s_alpha_value) {
-		opencl_kernel_code +=
-			",\n"
-			"        uint alpha";
-	}
 	if (s_flags) {
 		opencl_kernel_code +=
 			",\n"
 			"        uint flags";
-	}
-	if (bWriteExpCompImage){
+	}	
+	if (s_alpha_value) {
 		opencl_kernel_code +=
 			",\n"
-			"        uint op_s16_width, uint op_s16_height, __global uchar * op_s16_buf, uint op_s16_stride, uint op_s16_offset";
+			"        uint alpha";
 	}
 	sprintf(item,
 		")\n"
@@ -1028,7 +1027,7 @@ vx_status warp_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.warp",
 		AMDOVX_KERNEL_STITCHING_WARP,
 		warp_kernel,
-		11,
+		10,
 		warp_input_validator,
 		warp_output_validator,
 		nullptr,
