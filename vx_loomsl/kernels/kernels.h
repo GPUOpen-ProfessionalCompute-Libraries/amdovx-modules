@@ -289,8 +289,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorCorrectNode(vx_graph graph, vx_uint3
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam,
-	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns, vx_uint8 alpha_value, vx_uint8 flags, vx_image outputExpComp);
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_uint32 num_cam,
+	vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_image outputExpComp, vx_uint32 num_camera_columns, vx_uint8 flags, vx_uint8 alpha_value);
 
 /*! \brief [Graph] Creates a Stitch Merge node.
 * \param [in] graph The reference to the graph.
