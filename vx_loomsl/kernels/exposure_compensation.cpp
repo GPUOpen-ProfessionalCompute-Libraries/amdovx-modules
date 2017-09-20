@@ -1070,7 +1070,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
 				"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
 				"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
-				"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack16(fout.s1,fout.s1));\n"
+				"  return (uint2)(src2+(((uint)clamp(fout.s0,0.0f,32767.0f))<<16),amd_pack16(fout.s1,fout.s2));\n"
 				"}\n"
 				"\n";
 		}
@@ -1125,16 +1125,16 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 				"      uint8 r0; uint4 r1; uint2 u;\n"
 				"      r0 =  *(__global uint8 *)pIn_buf;\n"
 				"      r1 =  *(__global uint4 *)(pIn_buf+32);\n"
-				"      u      = RGBTranA(r0.s0, r0.s1, r4, g4 , b4); r0.s0 = u.s0;\n"
-				"      r0.s12 = RGBTranB(r0.s1, u.s2, u.s1, r4, g4 , b4);\n"
-				"      u      = RGBTranA(r0.s3, r0.s4, r4, g4 , b4); r0.s3 = u.s0;\n"
-				"      r0.s45 = RGBTranB(r0.s4, r0.s5, u.s1, r4, g4 , b4);\n"
-				"      u      = RGBTranA(r0.s6, r0.s7, r4, g4 , b4); r0.s6 = u.s0;\n"
-				"      u      = RGBTranB(r0.s7, r1.s0, u.s1, r4, g4 , b4); r0.s7 = u.s0; r1.s0 = u.s1;\n"
-				"      u      = RGBTranA(r1.s1, r1.s2, r4, g4 , b4); r1.s1 = u.s0;\n"
-				"      r1.s23 = RGBTranB(r1.s2, r1.s3, u.s1, r4, g4 , b4);\n"
+				"      u      = RGBTran_16A(r0.s0, r0.s1, r4, g4 , b4); r0.s0 = u.s0;\n"
+				"      r0.s12 = RGBTran_16B(r0.s1, r0.s2, u.s1, r4, g4 , b4);\n"
+				"      u      = RGBTran_16A(r0.s3, r0.s4, r4, g4 , b4); r0.s3 = u.s0;\n"
+				"      r0.s45 = RGBTran_16B(r0.s4, r0.s5, u.s1, r4, g4 , b4);\n"
+				"      u      = RGBTran_16A(r0.s6, r0.s7, r4, g4 , b4); r0.s6 = u.s0;\n"
+				"      u      = RGBTran_16B(r0.s7, r1.s0, u.s1, r4, g4 , b4); r0.s7 = u.s0; r1.s0 = u.s1;\n"
+				"      u      = RGBTran_16A(r1.s1, r1.s2, r4, g4 , b4); r1.s1 = u.s0;\n"
+				"      r1.s23 = RGBTran_16B(r1.s2, r1.s3, u.s1, r4, g4 , b4);\n"
 				"      *(__global uint8 *)(pOut_buf) = r0;\n"
-				"      *(__global uint4 *)(pOut_buf+32) = r0;\n"
+				"      *(__global uint4 *)(pOut_buf+32) = r1;\n"
 				"    }\n"
 				"  }\n"
 				"}\n";
@@ -1634,12 +1634,12 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	}
 
 	// Check for linear colorspace method
-	vx_uint8 flags;
+	vx_uint8 flags = 0;
 	vx_scalar s_flags = (vx_scalar)parameters[5];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
-	bool linearColorSpace = (flags & 1) ? false : true;
+	bool linearColorSpace = (flags & 1) ? true : false;
 
 	// set kernel configuration
 	vx_uint32 height_one = (vx_uint32)(input_height / num_cameras);
@@ -1678,12 +1678,18 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 		opencl_kernel_code +=
 			"			uint	pWt_width, uint	pWt_height, __global uchar *pWt_buf, uint pWt_stride, uint	pWt_offs,\n";
 	}
+	opencl_kernel_code +=
+		"			__global int * pAMat, uint cols, uint rows\n";
+	if (s_flags)
+	{
+		opencl_kernel_code +=
+			"			,uint flags\n";
+	}
 	sprintf(item,
-		"			__global int * pAMat, uint cols, uint rows)\n"
+		"			)\n"
 		"{\n"
 		"	int grp_id = get_global_id(0)>>4;\n"
 		"   if (grp_id < exp_data_num) {\n"
-		"	__local uchar gamma2Linear[256];\n"
 		"	__local uint4  sumI[256], sumJ[256];\n"
 		"	uint2 offs = ((__global uint2 *)(exp_data+exp_data_offs))[grp_id];\n"
 		"	uint size = (uint)(pIn_stride*%d);\n"
@@ -1699,18 +1705,14 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	opencl_kernel_code +=
 		"	int lx = get_local_id(0);\n"
 		"	int ly = get_local_id(1);\n"
-		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
-		"	gamma2Linear[lid] = g_Gamma2LinearLookUp[lid];\n"
-		"	barrier(CLK_LOCAL_MEM_FENCE);\n";
-	if (input_format == VX_DF_IMAGE_RGBX){
+		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n";
+	if (!linearColorSpace)
 		opencl_kernel_code +=
-			"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n";
-	}
-	else{//VX_DF_IMAGE_RGB4_AMD
-		opencl_kernel_code +=
-			"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n";
-	}
+		"	__local uchar gamma2Linear[256];\n"
+		"	gamma2Linear[lid] = g_Gamma2LinearLookUp[lid];\n";
 	opencl_kernel_code +=
+		"	barrier(CLK_LOCAL_MEM_FENCE);\n"
+		"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n"
 		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
 		"	if (isValid) {\n"
 		"		global uint *pI, *pJ;\n"

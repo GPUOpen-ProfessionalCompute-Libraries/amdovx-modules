@@ -612,10 +612,9 @@ static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool&
 		{ (vx_reference)stitch->camera_remap,          false, false, "remap-input.raw" },
 		{ (vx_reference)stitch->overlay_remap,         false, false, "remap-overlay.raw" },
 		// intermediate temporary data
-		{ (vx_reference)stitch->Img_input,             true,  false, "camera-input.raw" },
-		{ (vx_reference)stitch->Img_overlay,           true,  false, "overlay-input.raw" },
-		{ (vx_reference)stitch->Img_overlay_rgba,      true,  false, "overlay-warped.raw" },
-		{ (vx_reference)stitch->chroma_key_input_img,  true,  false, "chromakey-input.raw" },
+		{ (vx_reference)stitch->Img_input,             false,  false, "camera-input.raw" },
+		{ (vx_reference)stitch->Img_overlay,           false,  false, "overlay-input.raw" },
+		{ (vx_reference)stitch->chroma_key_input_img,  false,  false, "chromakey-input.raw" },
 		{ (vx_reference)stitch->Img_output,            true,  false, "stitch-output.raw" },
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
@@ -657,9 +656,8 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 		(vx_reference)stitch->overlay_remap,
 		// intermediate temporary data
 		(vx_reference)stitch->Img_input,
-		(vx_reference)stitch->chroma_key_input_img,
 		(vx_reference)stitch->Img_overlay,
-		(vx_reference)stitch->Img_overlay_rgba,
+		(vx_reference)stitch->chroma_key_input_img,
 		(vx_reference)stitch->Img_output,
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
@@ -686,10 +684,13 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
 			if (status != VX_SUCCESS)
 				return status;
-			sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
-			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
-			if (status != VX_SUCCESS)
-				return status;
+			if (level != (stitch->num_bands - 1))
+			{			
+				sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
+				status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacian, fileName);
+				if (status != VX_SUCCESS)
+					return status;
+			}
 			sprintf(fileName, "%s-blend-pyr-lap-rec-%d.raw", fileNamePrefix, level);
 			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec, fileName);
 			if (status != VX_SUCCESS)
@@ -1770,7 +1771,8 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_U8, VX_MEMORY_TYPE_OPENCL));
 				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGBX, VX_MEMORY_TYPE_OPENCL));
 			}
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+			if (level != (stitch->num_bands-1))
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
 		}
 		for (int level = 0; level < stitch->num_bands; level++) {
@@ -2303,14 +2305,26 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 
 	/////////////////////////////////////////////////////////
 	// If 16bit mode is on auto detect > find right mode here:
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 2 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] != 0){
+		stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
+		ls_printf("WARNING: Precision was set to invalid value. (Only 0: Auto detect, 1: 8 bit flow and 2: 16 bit flow are allowed.) Precision will be set to auto detect.\n");
+	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 0)
 	{
 		if (stitch->output_buffer_format == VX_DF_IMAGE_V210_AMD || stitch->output_buffer_format == VX_DF_IMAGE_V216_AMD){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 2;
+			ls_printf("OK: Precision was set to auto detect: Using 16 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
 		else{ // UYVY, YUYV, NV12, IYUV
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
+			ls_printf("OK: Precision was set to auto detect: Using 8 bit flow due to %4.4s output format.\n", &stitch->output_buffer_format);
 		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+		ls_printf("OK: Precision was set to 8 bit flow.\n");
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+		ls_printf("OK: Precision was set to 16 bit flow.\n");
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
@@ -2318,9 +2332,18 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1 && stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
+		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 1){
+			stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
+			ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+		}
+		else{
+			ls_printf("OK: Linear colorspace will be used.\n");
+		}
+	}
+	else if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] != 0){
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
-		ls_printf("WARNING: Linear Colorspace is only supported for 16bit flow.\n");
+		ls_printf("WARNING: Linear colorspace was set to invalid value. (Only 0: Nonlinear and 1: Linear)\n");
 	}
 
 
@@ -2589,7 +2612,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_OBJECT_(stitch->Img_input_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		}
 	}
-	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB) {
+	if (stitch->output_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2) {
 		vx_uint32 output_img_width =  stitch->output_buffer_width;
 		vx_uint32 output_img_height = stitch->output_buffer_height;
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
@@ -2827,6 +2850,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// warping
 		stitch->alpha_value = 0;
 		stitch->warp_flags = (vx_uint8) stitch->live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION];
+		if (stitch->warp_flags == 1)
+			ls_printf("OK: Bicubic warp will be performed.\n");
 		ERROR_CHECK_OBJECT_(stitch->WarpNode = stitchWarpNode(stitch->graphStitch, stitch->num_cameras, stitch->ValidPixelEntry, stitch->WarpRemapEntry, stitch->rgb_input, stitch->warp_output_image, stitch->warp_luma_image, stitch->expcomp_luma16, stitch->num_camera_columns, stitch->warp_flags, stitch->alpha_value));
 
 		// exposure comp
@@ -3832,6 +3857,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		else if (stitch->output_buffer_format == VX_DF_IMAGE_IYUV){
 			kernelNameList[2] = "com.amd.loomsl.color_convert_to_IYUV";
 		}
+		if (stitch->EXPO_COMP == 2){
+			kernelNameList[4] = "com.amd.loomsl.expcomp_compute_gainmatrix_rgb";
+		}
 		std::map<vx_node, std::string> nodeMap;
 		for (vx_size i = 0; i < dimof(nodeObjList); i++) {
 			if (nodeObjList[i]) {
@@ -3904,10 +3932,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 				fprintf(fp, "type ExpCompValidEntryType userstruct:%d\n", (int)sizeof(StitchOverlapPixelEntry));
 				fprintf(fp, "type ExpCompCalcEntryType userstruct:%d\n", (int)sizeof(StitchExpCompCalcEntry));
 				fprintf(fp, "data expCompValidTable = array:ExpCompValidEntryType,%d\n", (int)stitch->table_sizes.expCompValidTableSize);
-				if (stitch->EXPO_COMP < 3) fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
-				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras);
-				fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				if (stitch->EXPO_COMP < 3)
+				{
+					fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
+					fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras*stitch->EXPO_COMP_GAINC);
 				fprintf(fp, "data expCompCountMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
+				}
+				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras*stitch->EXPO_COMP_GAINC);
+				
 				if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 					fprintf(fp, "data exp_comp_output_image = image:%d,%d,RGB4\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
 					fprintf(fp, "data Exp_Comp_S16 = image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
@@ -4143,7 +4175,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		}
 		fclose(fp);
 		ls_printf("OK: lsExportConfiguration: created %s\n", fileName);
-		return DumpInternalTables(stitch, fileNamePrefixForTables, true);
+		return DumpInternalTables(stitch, fileNamePrefixForTables, false);
 	}
 	else if (!_stricmp(exportType, "data")) {
 		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
@@ -4280,6 +4312,17 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetExpCompGains(ls_context stitch,
 	if (num_entries != count) {
 		ls_printf("ERROR: lsSetExpCompGains: expects num_entries to be %d: got %d\n", (vx_uint32)count, (vx_uint32)num_entries);
 		return VX_ERROR_INVALID_PARAMETERS;
+	}
+	// Check for bias, convert bias into used range
+	if (num_entries == stitch->num_cameras * 12){
+		for (int i = 0; i < 3*(int)stitch->num_cameras; i++){
+			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
+				gains[i * 4 + 3] = gains[i * 4 + 3] * 32767;
+			}
+			else{
+				gains[i * 4 + 3] = gains[i * 4 + 3] * 255;
+			}
+		}
 	}
 	ERROR_CHECK_STATUS_(vxCopyArrayRange(stitch->gain_array, 0, num_entries, sizeof(vx_float32), gains, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
 	return VX_SUCCESS;
