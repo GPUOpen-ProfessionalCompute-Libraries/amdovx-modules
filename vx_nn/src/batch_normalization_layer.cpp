@@ -28,7 +28,7 @@ struct BatchNormLayerLocalData {
     cl_mem input_mem;
     miopenTensorDescriptor_t output_desc;
     cl_mem output_mem;
-    double alpha, beta;
+    float alpha, beta;
     miopenTensorDescriptor_t bnScaleBiasMeanVarDesc;
     cl_mem bnScale, bnBias;
 };

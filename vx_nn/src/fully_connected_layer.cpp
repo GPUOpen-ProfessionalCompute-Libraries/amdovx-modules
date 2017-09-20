@@ -35,8 +35,8 @@ struct FullyConnectedLayerLocalData {
     cl_mem bias_mem;
     miopenConvFwdAlgorithm_t algo;
     size_t workspace_size;
-    double alpha;
-    double beta;
+    float alpha;
+    float beta;
     cl_mem workspace;
 };
 
