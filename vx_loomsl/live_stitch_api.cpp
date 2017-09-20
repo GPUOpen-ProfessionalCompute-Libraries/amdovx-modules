@@ -578,100 +578,106 @@ static vx_status IsValidContextAndNotInitialized(ls_context stitch)
 	if (stitch->initialized) return VX_ERROR_NOT_SUPPORTED;
 	return VX_SUCCESS;
 }
-static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool& isIntermediateTmpData, bool& isForCpuUseOnly)
+static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_reference* ref, const char** name, bool *isInitData, bool *isInputData, bool *isIntermediateTmpData, bool *isForCpuUseOnly, const char ** fileNameSuffix)
 {
 	struct {
 		vx_reference ref;
-		bool isIntermediateTmpData;
+		const char * name;
+		bool isInitData;
+		bool isInputData;
+		bool isIntermediateTmpData;  // Input + Intermediate = virtual!
 		bool isForCpuUseOnly;
 		const char * fileNameSuffix;
 	} refList[] = {
 		// intermediate tables and data that needs initialization
-		{ (vx_reference)stitch->ValidPixelEntry,       false, false, "warp-valid.bin" },
-		{ (vx_reference)stitch->WarpRemapEntry,        false, false, "warp-remap.bin" },
-		{ (vx_reference)stitch->warp_output_image,     false, false, "warp-rgby.raw" },
-		{ (vx_reference)stitch->cam_id_image,          false, false, "merge-camid.raw" },
-		{ (vx_reference)stitch->group1_image,          false, false, "merge-group1.raw" },
-		{ (vx_reference)stitch->group2_image,          false, false, "merge-group2.raw" },
-		{ (vx_reference)stitch->weight_image,          false, false, "merge-weight.raw" },
-		{ (vx_reference)stitch->valid_array,           false, false, "exp-valid.bin" },
-		{ (vx_reference)stitch->OverlapPixelEntry,     false, false, "exp-overlap.bin" },
-		{ (vx_reference)stitch->overlap_matrix,        false, true,  "exp-count.bin" },
-		{ (vx_reference)stitch->exp_comp_output_image, false, false, "exp-rgby.raw" },
-		{ (vx_reference)stitch->valid_mask_image,      false, false, "valid-mask.raw" },
-		{ (vx_reference)stitch->seamfind_valid_array,  false, false, "seam-valid.bin" },
-		{ (vx_reference)stitch->seamfind_weight_array, false, false, "seam-weight.bin" },
-		{ (vx_reference)stitch->seamfind_accum_array,  false, false, "seam-accum.bin" },
-		{ (vx_reference)stitch->seamfind_pref_array,   false, false, "seam-pref.bin" },
-		{ (vx_reference)stitch->seamfind_info_array,   false, false, "seam-info.bin" },
-		{ (vx_reference)stitch->seamfind_path_array,   false, false, "seam-path.bin" },
-		{ (vx_reference)stitch->seamfind_scene_array,  false, false, "seam-scene.bin" },
-		{ (vx_reference)stitch->seamfind_weight_image, false, false, "seam-mask.raw" },
-		{ (vx_reference)stitch->blend_mask_image,      false, false, "blend-mask.raw" },
-		{ (vx_reference)stitch->blend_offsets,         false, false, "blend-offsets.bin" },
-		{ (vx_reference)stitch->camera_remap,          false, false, "remap-input.raw" },
-		{ (vx_reference)stitch->overlay_remap,         false, false, "remap-overlay.raw" },
-		// intermediate temporary data
-		{ (vx_reference)stitch->Img_input,             false,  false, "camera-input.raw" },
-		{ (vx_reference)stitch->Img_overlay,           false,  false, "overlay-input.raw" },
-		{ (vx_reference)stitch->chroma_key_input_img,  false,  false, "chromakey-input.raw" },
-		{ (vx_reference)stitch->Img_output,            true,  false, "stitch-output.raw" },
+		{ (vx_reference)stitch->ValidPixelEntry,           "warp_valid",          true,  false, false, false, "warp-valid.bin" },
+		{ (vx_reference)stitch->WarpRemapEntry,            "warp_remap",          true,  false, false, false, "warp-remap.bin" },
+		{ (vx_reference)stitch->warp_output_image,         "warp_output",         true,  false, false, false, "warp-output.raw" },
+		{ (vx_reference)stitch->valid_array,               "exp_valid",           true,  false, false, false, "exp-valid.bin" },
+		{ (vx_reference)stitch->OverlapPixelEntry,         "exp_overlap",         true,  false, false, false, "exp-overlap.bin" },
+		{ (vx_reference)stitch->overlap_matrix,            "exp_count",           true,  false, false, true,  "exp-count.bin" },
+		{ (vx_reference)stitch->seamfind_valid_array,      "seam_valid",          true,  false, false, false, "seam-valid.bin" },
+		{ (vx_reference)stitch->seamfind_weight_array,     "seam_weight",         true,  false, false, false, "seam-weight.bin" },
+		{ (vx_reference)stitch->seamfind_pref_array,       "seam_pref",           true,  false, false, false, "seam-pref.bin" },
+		{ (vx_reference)stitch->seamfind_info_array,       "seam_info",           true,  false, false, false, "seam-info.bin" },
+		{ (vx_reference)stitch->seamfind_weight_image,     "seam_mask",           true,  false, false, false, "seam-mask.raw" },
+		{ (vx_reference)stitch->valid_mask_image,          "multi_valid_mask",    true,  false, false, false, "multi-valid-mask.raw" },
+		{ (vx_reference)stitch->blend_mask_image,          "multi_blend-mask",    true,  false, false, false, "multi-blend-mask.raw" },
+		{ (vx_reference)stitch->blend_offsets,             "multi_blend_offsets", true,  false, false, false, "multi-blend-offsets.bin" },
+		{ (vx_reference)stitch->weight_image,              "merge_weight",        true,  false, false, false, "merge-weight.raw" },
+		{ (vx_reference)stitch->cam_id_image,              "merge_camid",         true,  false, false, false, "merge-camid.raw" },
+		{ (vx_reference)stitch->group1_image,              "merge_group1",        true,  false, false, false, "merge-group1.raw" },
+		{ (vx_reference)stitch->group2_image,              "merge_group2",        true,  false, false, false, "merge-group2.raw" },
+		// IntermediateTmpData
+		{ (vx_reference)stitch->warp_luma_image,           "warp_luma_image",     false, true,  true,  false, "warp-luma-image.raw" },
+		{ (vx_reference)stitch->gain_array,                "exp_gain_array",      false, false, true,  false, "exp-gain-array.bin" },
+		{ (vx_reference)stitch->exp_comp_output_image,     "exp_rgby",            false, false, true,  false, "exp-rgby.raw" },
+		{ (vx_reference)stitch->A_matrix,                  "exp_compAMatrix",     false, false, true,  false, "exp-compAMatrix.bin" },
+		{ (vx_reference)stitch->seamfind_accum_array,      "seam_accum",          false, false, true,  false, "seam-accum.bin" },
+		{ (vx_reference)stitch->seamfind_path_array,       "seam_path",           false, false, true,  false, "seam-path.bin" },
+		{ (vx_reference)stitch->seamfind_scene_array,      "seam_scene",          false, false, true,  false, "seam-scene.bin" },
+		{ (vx_reference)stitch->sobelx_image,              "sobelx_image",        false, true,  true,  false, "sobelx-image.raw" },
+		{ (vx_reference)stitch->sobely_image,              "sobely_image",        false, true,  true,  false, "sobely-image.raw" },
+		{ (vx_reference)stitch->sobel_magnitude_s16_image, "sobel_mag_image16",   false, true,  true,  false, "sobel-mag-image16.raw" },
+		{ (vx_reference)stitch->sobel_magnitude_image,     "sobel_mag_image",     false, true,  true,  false, "sobel-mag-image.raw" },
+		{ (vx_reference)stitch->sobel_phase_image,         "sobel_phase_image",   false, true,  true,  false, "sobel-phase-image.raw" },
+		{ (vx_reference)stitch->Img_overlay_rgba,          "overlay_rgba",        false, false, true,  false, "overlay-rgba.raw" },
+		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         false, false, true,  false, "overlay-rgb.raw" },
+		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       false, false, true,  false, "remap-overlay.raw" },
+		{ (vx_reference)stitch->camera_remap,              "input_remap",         false, false, true,  false, "remap-input.raw" },		
+		{ (vx_reference)stitch->Img_output,                "stitch_output",       false, false, true,  false, "stitch-output.raw" },
+		// input data
+		{ (vx_reference)stitch->Img_input,                 "camera_input",        false, true,  false, false, "camera-input.raw" },
+		{ (vx_reference)stitch->Img_overlay,               "overlay_input",       false, true,  false, false, "overlay-input.raw" },
+		{ (vx_reference)stitch->chroma_key_input_img,      "chromakey_input",     false, true,  false, false, "chromakey-input.raw" },
 	};
-	for (vx_size i = 0; i < dimof(refList); i++) {
-		if (refList[i].ref && refList[i].ref == ref) {
-			isIntermediateTmpData = refList[i].isIntermediateTmpData;
-			isForCpuUseOnly = refList[i].isForCpuUseOnly;
-			return refList[i].fileNameSuffix;
-		}
-	}
-	return nullptr;
-}
-static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePrefix, bool dumpIntermediateTmpDataToo)
-{
-	vx_reference refList[] = {
-		// intermediate tables and data that needs initialization
-		(vx_reference)stitch->ValidPixelEntry,
-		(vx_reference)stitch->WarpRemapEntry,
-		(vx_reference)stitch->warp_output_image,
-		(vx_reference)stitch->cam_id_image,
-		(vx_reference)stitch->group1_image,
-		(vx_reference)stitch->group2_image,
-		(vx_reference)stitch->weight_image,
-		(vx_reference)stitch->valid_array,
-		(vx_reference)stitch->OverlapPixelEntry,
-		(vx_reference)stitch->overlap_matrix,
-		(vx_reference)stitch->exp_comp_output_image,
-		(vx_reference)stitch->valid_mask_image,
-		(vx_reference)stitch->seamfind_valid_array,
-		(vx_reference)stitch->seamfind_weight_array,
-		(vx_reference)stitch->seamfind_accum_array,
-		(vx_reference)stitch->seamfind_pref_array,
-		(vx_reference)stitch->seamfind_info_array,
-		(vx_reference)stitch->seamfind_path_array,
-		(vx_reference)stitch->seamfind_scene_array,
-		(vx_reference)stitch->seamfind_weight_image,
-		(vx_reference)stitch->blend_mask_image,
-		(vx_reference)stitch->blend_offsets,
-		(vx_reference)stitch->camera_remap,
-		(vx_reference)stitch->overlay_remap,
-		// intermediate temporary data
-		(vx_reference)stitch->Img_input,
-		(vx_reference)stitch->Img_overlay,
-		(vx_reference)stitch->chroma_key_input_img,
-		(vx_reference)stitch->Img_output,
-	};
-	for (vx_size i = 0; i < dimof(refList); i++) {
-		if (refList[i]) {
-			bool isIntermediateTmpData = false, isForCpuUseOnly = false;
-			const char * fileNameSuffix = GetFileNameSuffix(stitch, refList[i], isIntermediateTmpData, isForCpuUseOnly);
-			if (fileNameSuffix && (!isIntermediateTmpData || dumpIntermediateTmpDataToo)) {
-				char fileName[1024]; sprintf(fileName, "%s-%s", fileNamePrefix, fileNameSuffix);
-				vx_status status = DumpReference(refList[i], fileName);
-				if (status != VX_SUCCESS)
-					return status;
+	if (number == -1){
+		for (vx_size i = 0; i < dimof(refList); i++) {
+			if (refList[i].ref && refList[i].ref == *ref) {
+				if (name                  != NULL) *name                  = refList[i].name;
+				if (isInitData            != NULL) *isInitData            = refList[i].isInitData;
+				if (isInputData           != NULL) *isInputData           = refList[i].isInputData;
+				if (isIntermediateTmpData != NULL) *isIntermediateTmpData = refList[i].isIntermediateTmpData;
+				if (isForCpuUseOnly       != NULL) *isForCpuUseOnly       = refList[i].isForCpuUseOnly;
+				if (fileNameSuffix        != NULL) *fileNameSuffix        = refList[i].fileNameSuffix;
+				return VX_SUCCESS;
 			}
 		}
 	}
+	else{
+		if (number < dimof(refList)){
+			if (ref                   != NULL) *ref =                   refList[number].ref;
+			if (name                  != NULL) *name =                  refList[number].name;
+			if (isInitData            != NULL) *isInitData =            refList[number].isInitData;
+			if (isInputData           != NULL) *isInputData =           refList[number].isInputData;
+			if (isIntermediateTmpData != NULL) *isIntermediateTmpData = refList[number].isIntermediateTmpData;
+			if (isForCpuUseOnly       != NULL) *isForCpuUseOnly =       refList[number].isForCpuUseOnly;
+			if (fileNameSuffix        != NULL) *fileNameSuffix =        refList[number].fileNameSuffix;
+			return VX_SUCCESS;
+		}
+		return VX_ERROR_INVALID_VALUE;
+	}
+	return VX_ERROR_INVALID_REFERENCE;
+}
+static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePrefix, bool dumpIntermediateTmpDataToo)
+{
+	vx_reference ref;
+	bool isInit;
+	bool isInput;
+	bool isIntermediate;	
+	const char * fileNameSuffix;
+
+	vx_int32 i = 0;
+	while (GetReferenceInformation(stitch, i, &ref, NULL, &isInit, &isInput, &isIntermediate, NULL, &fileNameSuffix) == VX_SUCCESS){
+		if (((dumpIntermediateTmpDataToo && isIntermediate && !isInput) || (!dumpIntermediateTmpDataToo && isInput && !isIntermediate) || isInit) && ref != NULL){
+			char fileName[1024]; sprintf(fileName, "%s-%s", fileNamePrefix, fileNameSuffix);
+			vx_status status = DumpReference(ref, fileName);
+			if (status != VX_SUCCESS)
+				return status;
+		}
+		i++;
+	}
+
 	if (dumpIntermediateTmpDataToo && stitch->MULTIBAND_BLEND) {
 		for (vx_int32 level = 0; level < stitch->num_bands; level++) {
 			vx_status status;
@@ -795,8 +801,9 @@ static vx_status quickSetupDumpTables(ls_context stitch)
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
 		if (refList[i]) {
-			bool isIntermediateTmpData = false, isForCpuUseOnly = false;
-			const char * fileNameSuffix = GetFileNameSuffix(stitch, refList[i], isIntermediateTmpData, isForCpuUseOnly);
+			bool isIntermediateTmpData = false;
+			const char * fileNameSuffix;
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, NULL, NULL, &isIntermediateTmpData, NULL, &fileNameSuffix));
 			if (fileNameSuffix && (!isIntermediateTmpData)) {
 				char fileName[1024]; sprintf(fileName, "%s",fileNameSuffix);
 				vx_status status = DumpReference(refList[i], fileName);
@@ -974,8 +981,9 @@ static vx_status quickSetupLoadTables(ls_context stitch)
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
 		if (refList[i]) {
-			bool isIntermediateTmpData = false, isForCpuUseOnly = false;
-			const char * fileNameSuffix = GetFileNameSuffix(stitch, refList[i], isIntermediateTmpData, isForCpuUseOnly);
+			bool isIntermediateTmpData = false;
+			const char * fileNameSuffix;
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, NULL, NULL, &isIntermediateTmpData, NULL, &fileNameSuffix));
 			if (fileNameSuffix && (!isIntermediateTmpData)) {
 				char fileName[1024]; sprintf(fileName, "%s", fileNameSuffix);
 				vx_status status = loadReference(refList[i], fileName);
@@ -3606,7 +3614,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetViewingModule(ls_context stitch
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context stitch, const char * exportType, const char * fileName)
 {
 	ERROR_CHECK_STATUS_(IsValidContext(stitch));
-	if (!_stricmp(exportType, "loom_shell")) {
+	if (!_stricmp(exportType, "loom_shell")) { /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// loom_shell
 		FILE * fp = stdout;
 		if (fileName) {
 			fp = fopen(fileName, "w");
@@ -3723,7 +3731,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		if(fp != stdout)
 			fclose(fp);
 	}
-	else if (!_strnicmp(exportType, "pts", 3)) {
+	else if (!_strnicmp(exportType, "pts", 3)) { /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// pts
 		FILE * fp = stdout;
 		if (fileName) {
 			fp = fopen(fileName, "w");
@@ -3827,7 +3835,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 		if(fp != stdout)
 			fclose(fp);
 	}
-	else if (!_stricmp(exportType, "gdf")) {
+	else if (!_stricmp(exportType, "gdf")) { /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// GDF
 		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
 		if (_stricmp(fileName + strlen(fileName) - 4, ".gdf")) {
 			ls_printf("ERROR: lsExportConfiguration: gdf: requires fileName extension to be .gdf\n");
@@ -3840,6 +3848,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			if (fp != NULL)	fclose(fp);
 			return VX_FAILURE;
 		}
+		// Create lists for nodes
 		vx_node nodeObjList[] = {
 			stitch->InputColorConvertNode, stitch->SimpleStitchRemapNode, stitch->OutputColorConvertNode,
 			stitch->WarpNode, stitch->ExpcompComputeGainNode, stitch->ExpcompSolveGainNode, stitch->ExpcompApplyGainNode, stitch->MergeNode,
@@ -3893,168 +3902,12 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			}
 			nodeMap[stitch->pStitchMultiband[0].UpscaleAddNode] = "com.amd.loomsl.upscale_gaussian_add";
 		}
-		std::map<vx_reference, std::string> refSuffixList;
-		std::map<vx_reference, bool> refIsForCpuUseOnly;
-		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
-			vx_node node = it->first;
-			if (node) {
-				vx_uint32 paramCount;
-				ERROR_CHECK_STATUS_(vxQueryNode(node, VX_NODE_PARAMETERS, &paramCount, sizeof(paramCount)));
-				for (vx_uint32 paramIndex = 0; paramIndex < paramCount; paramIndex++) {
-					vx_reference ref = avxGetNodeParamRef(node, paramIndex);
-					if (vxGetStatus(ref) == VX_SUCCESS) {
-						if (refSuffixList.find(ref) == refSuffixList.end()) {
-							bool isIntermediateTmpData = false, isForCpuUseOnly = false;
-							const char * fileNameSuffix = GetFileNameSuffix(stitch, ref, isIntermediateTmpData, isForCpuUseOnly);
-							if (fileNameSuffix && !isIntermediateTmpData) {
-								refSuffixList[ref] = fileNameSuffix;
-								if (isForCpuUseOnly) {
-									refIsForCpuUseOnly[ref] = true;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
+
+
 		fprintf(fp, "import vx_loomsl\n");
 		std::map<vx_reference, std::string> refNameList;
-		if (stitch->stitching_mode == stitching_mode_normal) {
-			fprintf(fp, "type WarpValidPixelEntryType userstruct:%d\n", (int)sizeof(StitchValidPixelEntry));
-			fprintf(fp, "type WarpRemapEntryType userstruct:%d\n", (int)sizeof(StitchWarpRemapEntry));
-			fprintf(fp, "data warpValidPixelTable = array:WarpValidPixelEntryType,%d\n", (int)stitch->table_sizes.warpTableSize);
-			fprintf(fp, "data warpRemapTable = array:WarpRemapEntryType,%d\n", (int)stitch->table_sizes.warpTableSize); 
-			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-				fprintf(fp, "data warp_output_image = image:%d,%d,RGB4\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-			}
-			else{ //8 bit flow
-				fprintf(fp, "data warp_output_image = image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-			}
-			fprintf(fp, "data weight_image = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-			fprintf(fp, "data cam_id_image = image:%d,%d,U008\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
-			fprintf(fp, "data group1_image = image:%d,%d,U016\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
-			fprintf(fp, "data group2_image = image:%d,%d,U016\n", (stitch->output_rgb_buffer_width / 8), stitch->output_rgb_buffer_height);
-			refNameList[(vx_reference)stitch->ValidPixelEntry] = "warpValidPixelTable";
-			refNameList[(vx_reference)stitch->WarpRemapEntry] = "warpRemapTable";
-			refNameList[(vx_reference)stitch->warp_output_image] = "warp_output_image";
-			refNameList[(vx_reference)stitch->weight_image] = "weight_image";
-			refNameList[(vx_reference)stitch->cam_id_image] = "cam_id_image";
-			refNameList[(vx_reference)stitch->group1_image] = "group1_image";
-			refNameList[(vx_reference)stitch->group2_image] = "group2_image";
-			if (stitch->EXPO_COMP) {
-				fprintf(fp, "type ExpCompValidEntryType userstruct:%d\n", (int)sizeof(StitchOverlapPixelEntry));
-				fprintf(fp, "type ExpCompCalcEntryType userstruct:%d\n", (int)sizeof(StitchExpCompCalcEntry));
-				fprintf(fp, "data expCompValidTable = array:ExpCompValidEntryType,%d\n", (int)stitch->table_sizes.expCompValidTableSize);
-				if (stitch->EXPO_COMP < 3)
-				{
-					fprintf(fp, "data expCompCalcTable = array:ExpCompCalcEntryType,%d\n", (int)stitch->table_sizes.expCompOverlapTableSize);
-					fprintf(fp, "data expCompAMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras*stitch->EXPO_COMP_GAINC);
-				fprintf(fp, "data expCompCountMat = matrix:VX_TYPE_INT32,%d,%d\n", stitch->num_cameras, stitch->num_cameras);
-				}
-				fprintf(fp, "data expCompGain = array:VX_TYPE_FLOAT32,%d\n", (int)stitch->num_cameras*stitch->EXPO_COMP_GAINC);
-				
-				if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-					fprintf(fp, "data exp_comp_output_image = image:%d,%d,RGB4\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-					fprintf(fp, "data Exp_Comp_S16 = image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-					refNameList[(vx_reference)stitch->expcomp_luma16] = "Exp_Comp_S16";
-				}
-				else{ //8 bit flow
-					fprintf(fp, "data exp_comp_output_image = image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				}
-				refNameList[(vx_reference)stitch->valid_array] = "expCompValidTable";
-				if (stitch->EXPO_COMP < 3) refNameList[(vx_reference)stitch->OverlapPixelEntry] = "expCompCalcTable";
-				refNameList[(vx_reference)stitch->gain_array] = "expCompGain";
-				refNameList[(vx_reference)stitch->A_matrix] = "expCompAMat";
-				refNameList[(vx_reference)stitch->overlap_matrix] = "expCompCountMat";
-				refNameList[(vx_reference)stitch->exp_comp_output_image] = "exp_comp_output_image";
-			}
-			if (stitch->SEAM_FIND) {
-				fprintf(fp, "type SeamFindValidEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindValidEntry));
-				fprintf(fp, "type SeamFindWeightEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindWeightEntry));
-				fprintf(fp, "type SeamFindAccumEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindAccumEntry));
-				fprintf(fp, "type SeamFindPreferenceType userstruct:%d\n", (int)sizeof(StitchSeamFindPreference));
-				fprintf(fp, "type SeamFindInformationType userstruct:%d\n", (int)sizeof(StitchSeamFindInformation));
-				fprintf(fp, "type SeamFindPathEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindPathEntry));
-				fprintf(fp, "data seamFindValid = array:SeamFindValidEntryType,%d\n", (int)stitch->table_sizes.seamFindValidTableSize);
-				fprintf(fp, "data seamFindWeight = array:SeamFindWeightEntryType,%d\n", (int)stitch->table_sizes.seamFindWeightTableSize);
-				fprintf(fp, "data seamFindAccum = array:SeamFindAccumEntryType,%d\n", (int)stitch->table_sizes.seamFindAccumTableSize);
-				fprintf(fp, "data seamFindPref = array:SeamFindPreferenceType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
-				fprintf(fp, "data seamFindInfo = array:SeamFindInformationType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
-				fprintf(fp, "data seamFindPath = array:SeamFindPathEntryType,%d\n", (int)stitch->table_sizes.seamFindPathTableSize);
-				fprintf(fp, "data warpLuma = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				refNameList[(vx_reference)stitch->seamfind_valid_array] = "seamFindValid";
-				refNameList[(vx_reference)stitch->seamfind_weight_array] = "seamFindWeight";
-				refNameList[(vx_reference)stitch->seamfind_accum_array] = "seamFindAccum";
-				refNameList[(vx_reference)stitch->seamfind_pref_array] = "seamFindPref";
-				refNameList[(vx_reference)stitch->seamfind_info_array] = "seamFindInfo";
-				refNameList[(vx_reference)stitch->seamfind_path_array] = "seamFindPath";
-				refNameList[(vx_reference)stitch->warp_luma_image] = "warpLuma";
-				if (!stitch->SEAM_COST_SELECT) {
-					fprintf(fp, "data seamFindSobelX = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-					fprintf(fp, "data seamFindSobelY = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-					fprintf(fp, "data seamFindMagS16 = virtual-image:%d,%d,S016\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-					refNameList[(vx_reference)stitch->sobelx_image] = "seamFindSobelX";
-					refNameList[(vx_reference)stitch->sobely_image] = "seamFindSobelY";
-					refNameList[(vx_reference)stitch->sobel_magnitude_s16_image] = "seamFindMagS16";
-				}
-				fprintf(fp, "data seamFindMag = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				fprintf(fp, "data seamFindPhase = virtual-image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				fprintf(fp, "data seamFindWeightImage = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				fprintf(fp, "data seamFindCurFrame = scalar:VX_TYPE_UINT32,%d\n", stitch->current_frame_value);
-				refNameList[(vx_reference)stitch->sobel_magnitude_image] = "seamFindMag";
-				refNameList[(vx_reference)stitch->sobel_phase_image] = "seamFindPhase";
-				refNameList[(vx_reference)stitch->seamfind_weight_image] = "seamFindWeightImage";
-				refNameList[(vx_reference)stitch->current_frame] = "seamFindCurFrame";
-				if (stitch->SEAM_REFRESH) {
-					fprintf(fp, "type SeamFindSceneEntryType userstruct:%d\n", (int)sizeof(StitchSeamFindSceneEntry));
-					fprintf(fp, "data seamFindSceneTable = array:SeamFindSceneEntryType,%d\n", (int)stitch->table_sizes.seamFindPrefInfoTableSize);
-					fprintf(fp, "data seamFindSceneThreshold = scalar:VX_TYPE_UINT32,%d\n", stitch->scene_threshold_value);
-					refNameList[(vx_reference)stitch->seamfind_scene_array] = "seamFindSceneTable";
-					refNameList[(vx_reference)stitch->scene_threshold] = "seamFindSceneThreshold";
-				}
-				if (stitch->SEAM_COST_SELECT) {
-					vx_uint32 cost_enable = 1;
-					fprintf(fp, "data seamFindCost = scalar:VX_TYPE_UINT32,%d\n", cost_enable);
-					refNameList[(vx_reference)stitch->seam_cost_enable] = "seamFindCost";
-				}
-			}
-			if (stitch->MULTIBAND_BLEND) {
-				fprintf(fp, "type BlendValidEntryType userstruct:%d\n", (int)sizeof(StitchBlendValidEntry));
-				fprintf(fp, "data blendValidTable = array:BlendValidEntryType,%d\n", (int)stitch->table_sizes.blendOffsetTableSize);
-				refNameList[(vx_reference)stitch->blend_offsets] = "blendValidTable";
-			}
-			if (stitch->SEAM_FIND || stitch->EXPO_COMP) {
-				fprintf(fp, "data validMaskImage = image:%d,%d,U008\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras);
-				refNameList[(vx_reference)stitch->valid_mask_image] = "validMaskImage";
-			}
-		}
-		fprintf(fp, "data Img_input = image:%d,%d,%4.4s\n", stitch->camera_buffer_width, stitch->camera_buffer_height, (const char *)&stitch->camera_buffer_format);
-		fprintf(fp, "data Img_output = image:%d,%d,%4.4s\n", stitch->output_buffer_width, stitch->output_buffer_height, (const char *)&stitch->output_buffer_format);
-		refNameList[(vx_reference)stitch->Img_input] = "Img_input";
-		refNameList[(vx_reference)stitch->Img_output] = "Img_output";
-		if (stitch->CHROMA_KEY){
-			fprintf(fp, "data chromakey_input = image:%d,%d,RGB2\n", stitch->output_buffer_width, stitch->output_buffer_height);
-			refNameList[(vx_reference)stitch->chroma_key_input_img] = "chromakey_input";
-		}
-		if (stitch->overlay_remap) {
-			fprintf(fp, "data Img_overlay = image:%d,%d,RGBA\n", stitch->overlay_buffer_width, stitch->overlay_buffer_height);
-			fprintf(fp, "data Img_overlay_rgba = virtual-image:%d,%d,RGBA\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
-			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-				fprintf(fp, "data Img_overlay_rgb = virtual-image:%d,%d,RGB4\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
-			}
-			else{
-				fprintf(fp, "data Img_overlay_rgb = virtual-image:%d,%d,RGB2\n", stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
-			}
-			fprintf(fp, "data overlay_remap = remap:%d,%d,%d,%d\n", stitch->overlay_buffer_width, stitch->overlay_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
-			refNameList[(vx_reference)stitch->Img_overlay] = "Img_overlay";
-			refNameList[(vx_reference)stitch->Img_overlay_rgba] = "Img_overlay_rgba";
-			refNameList[(vx_reference)stitch->Img_overlay_rgb] = "Img_overlay_rgb";
-			refNameList[(vx_reference)stitch->overlay_remap] = "overlay_remap";
-		}
-		if (stitch->camera_remap) {
-			fprintf(fp, "data camera_remap = remap:%d,%d,%d,%d\n", stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height);
-			refNameList[(vx_reference)stitch->camera_remap] = "camera_remap";
-		}
+
+		// Create Images, Arrays, Matrixes
 		int genImageCount = 0, genScalarCount = 0;
 		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
 			vx_node node = it->first;
@@ -4067,7 +3920,46 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 						if (refNameList.find(ref) == refNameList.end()) {
 							vx_enum type;
 							ERROR_CHECK_STATUS_(vxQueryReference(ref, VX_REFERENCE_TYPE, &type, sizeof(type)));
-							if (type == VX_TYPE_IMAGE) {
+							const char* name;
+							bool isInput;
+							bool isTemporal;
+							if (GetReferenceInformation(stitch, -1, &ref, &name, NULL, &isInput, &isTemporal, NULL, NULL) == VX_SUCCESS){
+								if (type == VX_TYPE_IMAGE){
+									vx_uint32 width = 0, height = 0;
+									vx_df_image format = VX_DF_IMAGE_VIRT;
+									ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+									ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+									ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+									if (isTemporal && isInput){
+										fprintf(fp, "data %s = virtual-image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
+									}
+									else{
+										fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
+									}
+								}
+								else if (type == VX_TYPE_ARRAY){
+									vx_size itemsize = 0, numitems = 0;
+									vx_enum itemtype = VX_TYPE_INVALID;
+									ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
+									ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_NUMITEMS, &numitems, sizeof(numitems)));
+									ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
+									if (itemtype == VX_TYPE_FLOAT32){
+										fprintf(fp, "data %s = array:VX_TYPE_FLOAT32,%d\n", name, numitems);
+									}
+									else{
+										fprintf(fp, "type %sEntryType userstruct:%d\n", name, itemsize);
+										fprintf(fp, "data %s = array:%sEntryType,%d\n", name, name, numitems);
+									}
+								}
+								else if (type == VX_TYPE_MATRIX){
+									vx_size cols = 0, rows = 0;
+									ERROR_CHECK_STATUS(vxQueryMatrix((vx_matrix)ref, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
+									ERROR_CHECK_STATUS(vxQueryMatrix((vx_matrix)ref, VX_MATRIX_ATTRIBUTE_COLUMNS, &cols, sizeof(cols)));
+									fprintf(fp, "data %s = matrix:VX_TYPE_INT32,%d,%d\n", name, rows, cols);
+								}
+								refNameList[ref] = name;
+							}
+							else if (type == VX_TYPE_IMAGE) {
 								vx_uint32 width, height; vx_df_image format;
 								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_WIDTH, &width, sizeof(width)));
 								ERROR_CHECK_STATUS_(vxQueryImage((vx_image)ref, VX_IMAGE_HEIGHT, &height, sizeof(height)));
@@ -4099,42 +3991,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 				}
 			}
 		}
-		for (auto it = refSuffixList.begin(); it != refSuffixList.end(); it++) {
-			if (refNameList.find(it->first) == refNameList.end()) {
-				vx_enum type; char name[64] = { 0 }; const char * suffix = it->second.c_str();
-				ERROR_CHECK_STATUS_(vxQueryReference(it->first, VX_REFERENCE_TYPE, &type, sizeof(type)));
-				if (*suffix == '|') strcpy(name, suffix + 1);
-				else {
-					for (int i = 0; suffix[i]; i++) {
-						name[i] = (suffix[i] == '.' || suffix[i] == '-') ? '_' : suffix[i];
-					}
-				}
-				refNameList[it->first] = name;
-				if (type == VX_TYPE_IMAGE) {
-					vx_uint32 width, height; vx_df_image format;
-					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_WIDTH, &width, sizeof(width)));
-					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_HEIGHT, &height, sizeof(height)));
-					ERROR_CHECK_STATUS_(vxQueryImage((vx_image)it->first, VX_IMAGE_FORMAT, &format, sizeof(format)));
-					fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
-				}
-				else if (type == VX_TYPE_SCALAR) {
-					vx_enum data_type; char value[1024] = { 0 };
-					ERROR_CHECK_STATUS_(vxQueryScalar((vx_scalar)it->first, VX_SCALAR_TYPE, &data_type, sizeof(data_type)));
-					ERROR_CHECK_STATUS_(vxReadScalarValue((vx_scalar)it->first, value));
-					if (data_type == VX_TYPE_UINT32) fprintf(fp, "data %s = scalar:VX_TYPE_UINT32,%u\n", name, *(vx_uint32 *)value);
-					else if (data_type == VX_TYPE_ENUM) fprintf(fp, "data %s = scalar:VX_TYPE_ENUM,0x%08x\n", name, *(vx_enum *)value);
-					else if (data_type == VX_TYPE_INT32) fprintf(fp, "data %s = scalar:VX_TYPE_INT32,%d\n", name, *(vx_int32 *)value);
-					else if (data_type == VX_TYPE_FLOAT32) fprintf(fp, "data %s = scalar:VX_TYPE_FLOAT32,%f\n", name, *(vx_float32 *)value);
-					else if (data_type == VX_TYPE_STRING_AMD) fprintf(fp, "data %s = scalar:VX_TYPE_STRING_AMD,\"%s\"\n", name, value);
-					else { ls_printf("ERROR: lsExportConfiguration: gdf: unsupported scalar data type found: %d\n", data_type); return VX_FAILURE; }
-				}
-				else {
-					ls_printf("ERROR: lsExportConfiguration: gdf: internal error: one of the object type is not supported: %d\n", type);
-					return VX_FAILURE;
-				}
-			}
-		}
 		fprintf(fp, "\n");
+
+		// Print nodes
 		for (auto it = nodeMap.begin(); it != nodeMap.end(); it++) {
 			vx_node node = it->first;
 			if (node) {
@@ -4169,28 +4028,49 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 			}
 		}
 		fprintf(fp, "\n");
-		for (auto it = refSuffixList.begin(); it != refSuffixList.end(); it++) {
-			fprintf(fp, "init %s %s-%s\n", refNameList[it->first].c_str(), fileNamePrefixForTables, it->second.c_str());
+
+		// Print inits
+		vx_reference ref;
+		bool isInit;
+		const char* name;
+		const char* fileNameSuffix;
+		vx_int32 i = 0;
+		while (GetReferenceInformation(stitch, i, &ref, &name, &isInit, NULL, NULL, NULL, &fileNameSuffix) == VX_SUCCESS){
+			if (isInit && ref != NULL){
+				fprintf(fp, "init %s %s-%s\n", name, fileNamePrefixForTables, fileNameSuffix);
+			}
+			i++;
 		}
-		fprintf(fp, "read %s %s-camera-input.raw\n", refNameList[(vx_reference)stitch->Img_input].c_str(), fileNamePrefixForTables);
-		if (stitch->CHROMA_KEY){
-			fprintf(fp, "read %s %s-chromakey-input.raw\n", refNameList[(vx_reference)stitch->chroma_key_input_img].c_str(), fileNamePrefixForTables);
+
+		// Print reads
+		bool isInput;
+		bool isTemporal;
+		i = 0;
+		while (GetReferenceInformation(stitch, i, &ref, &name, NULL, &isInput, &isTemporal, NULL, &fileNameSuffix) == VX_SUCCESS){
+			if (isInput && !isTemporal && ref != NULL){
+				fprintf(fp, "read %s %s-%s\n", name, fileNamePrefixForTables, fileNameSuffix);
+			}
+			i++;
 		}
-		if (stitch->Img_overlay) {
-			fprintf(fp, "read %s %s-overlay-input.raw\n", refNameList[(vx_reference)stitch->Img_overlay].c_str(), fileNamePrefixForTables);
-		}
+
+		// Print write
 		fprintf(fp, "write %s %s-stitch-output.raw\n", refNameList[(vx_reference)stitch->Img_output].c_str(), fileNamePrefixForTables);
 		fprintf(fp, "\n");
-		for (auto it = refSuffixList.begin(); it != refSuffixList.end(); it++) {
-			if (refIsForCpuUseOnly.find(it->first) == refIsForCpuUseOnly.end() || !refIsForCpuUseOnly[it->first]) {
-				fprintf(fp, "directive %s VX_DIRECTIVE_AMD_COPY_TO_OPENCL\n", refNameList[it->first].c_str());
+
+		// Copy to opencl
+		bool isForCpuUseOnly;
+		i = 0;
+		while (GetReferenceInformation(stitch, i, &ref, &name, &isInit, NULL, NULL, &isForCpuUseOnly, NULL) == VX_SUCCESS){
+			if (isInit && !isForCpuUseOnly && ref != NULL){
+				fprintf(fp, "directive %s VX_DIRECTIVE_AMD_COPY_TO_OPENCL\n", name);
 			}
+			i++;
 		}
 		fclose(fp);
 		ls_printf("OK: lsExportConfiguration: created %s\n", fileName);
 		return DumpInternalTables(stitch, fileNamePrefixForTables, false);
 	}
-	else if (!_stricmp(exportType, "data")) {
+	else if (!_stricmp(exportType, "data")) { /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// data
 		ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
 		return DumpInternalTables(stitch, fileName, true);
 	}
