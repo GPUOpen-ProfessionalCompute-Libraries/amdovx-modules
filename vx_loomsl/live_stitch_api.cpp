@@ -608,6 +608,8 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->cam_id_image,              "merge_camid",         true,  false, false, false, "merge-camid.raw" },
 		{ (vx_reference)stitch->group1_image,              "merge_group1",        true,  false, false, false, "merge-group1.raw" },
 		{ (vx_reference)stitch->group2_image,              "merge_group2",        true,  false, false, false, "merge-group2.raw" },
+		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       true,  false, false, false, "remap-overlay.raw" },
+		{ (vx_reference)stitch->camera_remap,              "input_remap",         true,  false, false, false, "remap-input.raw" },	
 		// IntermediateTmpData
 		{ (vx_reference)stitch->warp_luma_image,           "warp_luma_image",     false, true,  true,  false, "warp-luma-image.raw" },
 		{ (vx_reference)stitch->gain_array,                "exp_gain_array",      false, false, true,  false, "exp-gain-array.bin" },
@@ -623,8 +625,6 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->sobel_phase_image,         "sobel_phase_image",   false, true,  true,  false, "sobel-phase-image.raw" },
 		{ (vx_reference)stitch->Img_overlay_rgba,          "overlay_rgba",        false, false, true,  false, "overlay-rgba.raw" },
 		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         false, false, true,  false, "overlay-rgb.raw" },
-		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       false, false, true,  false, "remap-overlay.raw" },
-		{ (vx_reference)stitch->camera_remap,              "input_remap",         false, false, true,  false, "remap-input.raw" },		
 		{ (vx_reference)stitch->Img_output,                "stitch_output",       false, false, true,  false, "stitch-output.raw" },
 		// input data
 		{ (vx_reference)stitch->Img_input,                 "camera_input",        false, true,  false, false, "camera-input.raw" },
@@ -801,10 +801,10 @@ static vx_status quickSetupDumpTables(ls_context stitch)
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
 		if (refList[i]) {
-			bool isIntermediateTmpData = false;
+			bool isInit = false;
 			const char * fileNameSuffix;
-			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, NULL, NULL, &isIntermediateTmpData, NULL, &fileNameSuffix));
-			if (fileNameSuffix && (!isIntermediateTmpData)) {
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix));
+			if (fileNameSuffix && (!isInit)) {
 				char fileName[1024]; sprintf(fileName, "%s",fileNameSuffix);
 				vx_status status = DumpReference(refList[i], fileName);
 				if (status != VX_SUCCESS)
@@ -981,10 +981,10 @@ static vx_status quickSetupLoadTables(ls_context stitch)
 	};
 	for (vx_size i = 0; i < dimof(refList); i++) {
 		if (refList[i]) {
-			bool isIntermediateTmpData = false;
+			bool isInit = false;
 			const char * fileNameSuffix;
-			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, NULL, NULL, &isIntermediateTmpData, NULL, &fileNameSuffix));
-			if (fileNameSuffix && (!isIntermediateTmpData)) {
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix));
+			if (fileNameSuffix && (!isInit)) {
 				char fileName[1024]; sprintf(fileName, "%s", fileNameSuffix);
 				vx_status status = loadReference(refList[i], fileName);
 				if (status != VX_SUCCESS)
@@ -3956,6 +3956,18 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 									ERROR_CHECK_STATUS(vxQueryMatrix((vx_matrix)ref, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
 									ERROR_CHECK_STATUS(vxQueryMatrix((vx_matrix)ref, VX_MATRIX_ATTRIBUTE_COLUMNS, &cols, sizeof(cols)));
 									fprintf(fp, "data %s = matrix:VX_TYPE_INT32,%d,%d\n", name, rows, cols);
+								}
+								else if (type == VX_TYPE_REMAP){
+									vx_uint32 src_width, src_height, dst_width, dst_height;
+									ERROR_CHECK_STATUS(vxQueryRemap((vx_remap)ref, VX_REMAP_ATTRIBUTE_SOURCE_WIDTH, &src_width, sizeof(src_width)));
+									ERROR_CHECK_STATUS(vxQueryRemap((vx_remap)ref, VX_REMAP_ATTRIBUTE_SOURCE_HEIGHT, &src_height, sizeof(src_height)));
+									ERROR_CHECK_STATUS(vxQueryRemap((vx_remap)ref, VX_REMAP_ATTRIBUTE_DESTINATION_WIDTH, &dst_width, sizeof(dst_width)));
+									ERROR_CHECK_STATUS(vxQueryRemap((vx_remap)ref, VX_REMAP_ATTRIBUTE_DESTINATION_HEIGHT, &dst_height, sizeof(dst_height)));
+									fprintf(fp, "data %s = remap:%d,%d,%d,%d\n", name, src_width, src_height, dst_width, dst_height);
+								}
+								else {
+									ls_printf("ERROR: lsExportConfiguration: gdf: unsupported object type detected as arg#%d of node: %s\n", paramIndex, it->second.c_str());
+									return VX_FAILURE;
 								}
 								refNameList[ref] = name;
 							}
