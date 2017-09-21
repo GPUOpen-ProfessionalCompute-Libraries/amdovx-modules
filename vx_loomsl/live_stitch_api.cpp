@@ -94,6 +94,7 @@ struct ls_context_t {
 	vx_df_image camera_buffer_format;           // camera buffer format (VX_DF_IMAGE_UYVY/YUYV/RGB)
 	vx_uint32   camera_buffer_width;            // camera buffer width
 	vx_uint32   camera_buffer_height;           // camera buffer height
+	vx_uint32   camera_buffer_stride_in_bytes;  // stride of each row in input opencl buffer
 	camera_params * camera_par;                 // individual camera parameters
 	vx_uint32   camera_rgb_buffer_width;        // camera buffer width after color conversion
 	vx_uint32   camera_rgb_buffer_height;       // camera buffer height after color conversion
@@ -102,6 +103,7 @@ struct ls_context_t {
 	vx_uint32   num_overlay_columns;			// overlay buffer height
 	vx_uint32   overlay_buffer_width;           // overlay buffer width
 	vx_uint32   overlay_buffer_height;          // overlay buffer height
+	vx_uint32   overlay_buffer_stride_in_bytes; // stride of each row in overlay opencl buffer (optional)
 	camera_params * overlay_par;                // individual overlay parameters
 	rig_params  rig_par;                        // rig parameters
 	vx_uint32   output_buffer_width;            // output equirectangular image width
@@ -109,17 +111,8 @@ struct ls_context_t {
 	vx_df_image output_buffer_format;           // output image format (VX_DF_IMAGE_UYVY/YUYV/RGB/NV12/IYUV)
 	vx_uint32   output_rgb_buffer_width;        // camera buffer width after color conversion
 	vx_uint32   output_rgb_buffer_height;       // camera buffer height after color conversion
-	cl_context  opencl_context;                 // OpenCL context for DGMA interop
-	vx_uint32   camera_buffer_stride_in_bytes;  // stride of each row in input opencl buffer
-	vx_uint32   overlay_buffer_stride_in_bytes; // stride of each row in overlay opencl buffer (optional)
 	vx_uint32   output_buffer_stride_in_bytes;  // stride of each row in output opencl buffer
-	// global options
-	vx_uint32   EXPO_COMP, SEAM_FIND;           // exposure comp seam find flags from environment variable
-	vx_uint32   SEAM_COST_SELECT;               // seam find cost generation flag from environment variable
-	vx_uint32   SEAM_REFRESH, SEAM_FLAGS;       // seamfind seam refresh flag from environment variable
-	vx_uint32   MULTIBAND_BLEND;                // multiband blend flag from environment variable
-	vx_uint32   EXPO_COMP_GAINW, EXPO_COMP_GAINH;// exposure comp module gain image width and height
-	vx_uint32   EXPO_COMP_GAINC;                // exposure comp gain array number of gain values per camera. For mode 4, this should be 12 which is default if not specified.
+	cl_context  opencl_context;                 // OpenCL context for DGMA interop	
 	// global OpenVX objects
 	bool        context_is_external;            // To avoid releaseing external OpenVX context
 	vx_context  context;                        // OpenVX context
@@ -127,21 +120,30 @@ struct ls_context_t {
 	// internal buffer sizes
 	ls_internal_table_size_info table_sizes;	// internal table sizes
 	vx_image	rgb_input, rgb_output;			// internal images
-	// data objects
-	vx_remap    overlay_remap;                  // remap table for overlay
+	// color convert data & node elements
+	vx_image    Img_input, Img_output, Img_input_rgb, Img_output_rgb;
+	vx_node     InputColorConvertNode, OutputColorConvertNode;	
+	vx_uint8    color_convert_flags;
+	// warp data & node elements
 	vx_remap    camera_remap;                   // remap table for camera (in simple stitch mode)
-	vx_image    Img_input, Img_output, Img_overlay;
-	vx_image    Img_input_rgb, Img_output_rgb, Img_overlay_rgb, Img_overlay_rgba;
-	vx_node     InputColorConvertNode, SimpleStitchRemapNode, OutputColorConvertNode;
-	vx_array    ValidPixelEntry, WarpRemapEntry, OverlapPixelEntry, valid_array, gain_array;
+	vx_array    ValidPixelEntry, WarpRemapEntry;
+	vx_image    warp_output_image;
+	vx_node     SimpleStitchRemapNode, WarpNode;
+	vx_uint8    alpha_value, warp_flags;
+	// exp comp data & node elements
+	vx_uint32   EXPO_COMP;                      // exposure comp flags from environment variable
+	vx_uint32   EXPO_COMP_GAINW, EXPO_COMP_GAINH;// exposure comp module gain image width and height
+	vx_uint32   EXPO_COMP_GAINC;                // exposure comp gain array number of gain values per camera. For mode 4, this should be 12 which is default if not specified.
+	vx_array    OverlapPixelEntry, valid_array, gain_array;
 	vx_matrix   overlap_matrix, A_matrix;
-	vx_image    warp_output_image, exp_comp_output_image, expcomp_luma16, weight_image, cam_id_image, group1_image, group2_image;
-	vx_node     WarpNode, ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode, MergeNode;
-	vx_node     nodeOverlayRemap, nodeOverlayBlend;
+	vx_image    exp_comp_output_image, expcomp_luma16;
+	vx_node     ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode;
 	vx_float32  alpha, beta;                    // needed for expcomp
 	vx_int32    * A_matrix_initial_value;       // needed for expcomp
-    vx_uint8    alpha_value, warp_flags, color_convert_flags;
 	// seamfind data & node elements
+	vx_uint32   SEAM_FIND;                      // exposure comp seam find flags from environment variable
+	vx_uint32   SEAM_COST_SELECT;               // seam find cost generation flag from environment variable
+	vx_uint32   SEAM_REFRESH, SEAM_FLAGS;       // seamfind seam refresh flag from environment variable
 	vx_array    overlap_rect_array, seamfind_valid_array, seamfind_weight_array, seamfind_accum_array, 
 				seamfind_pref_array, seamfind_info_array, seamfind_path_array, seamfind_scene_array;
 	vx_image    valid_mask_image, warp_luma_image, sobelx_image, sobely_image, sobel_magnitude_s16_image, 
@@ -152,11 +154,15 @@ struct ls_context_t {
 	vx_int32    current_frame_value;
 	vx_uint32   scene_threshold_value, SEAM_FIND_TARGET;
 	// multiband data elements
+	vx_uint32   MULTIBAND_BLEND;                // multiband blend flag from environment variable
 	vx_int32    num_bands;
 	vx_array    blend_offsets;
 	vx_image    blend_mask_image;
 	StitchMultibandData * pStitchMultiband;
 	vx_size     * multibandBlendOffsetIntoBuffer;
+	// merge data & node elements
+	vx_image    weight_image, cam_id_image, group1_image, group2_image;
+	vx_node     MergeNode;
 	// LoomIO support
 	vx_uint32   loomioOutputAuxSelection, loomioCameraAuxDataLength, loomioOverlayAuxDataLength, loomioOutputAuxDataLength;
 	vx_scalar   cameraMediaConfig, overlayMediaConfig, outputMediaConfig, viewingMediaConfig;
@@ -174,7 +180,10 @@ struct ls_context_t {
 	vx_rectangle_t * overlapValid[LIVE_STITCH_MAX_CAMERAS], *overlapPadded[LIVE_STITCH_MAX_CAMERAS];
 	vx_uint32   validCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS], paddedCamOverlapInfo[LIVE_STITCH_MAX_CAMERAS];
 	vx_int32    * overlapMatrixBuf;
-	// internal buffers for overlay models
+	// overlay model data & node & internal buffers
+	vx_remap    overlay_remap;                  // remap table for overlay
+	vx_image    Img_overlay, Img_overlay_rgb, Img_overlay_rgba;
+	vx_node     nodeOverlayRemap, nodeOverlayBlend;
 	StitchCoord2dFloat * overlaySrcMap;
 	vx_uint32   * validPixelOverlayMap;
 	vx_float32  * overlayIndexTmpBuf;
