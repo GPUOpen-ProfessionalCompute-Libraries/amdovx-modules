@@ -122,6 +122,7 @@ struct ls_context_t {
 	vx_image	rgb_input, rgb_output;			// internal images
 	// color convert data & node elements
 	vx_image    Img_input, Img_output, Img_input_rgb, Img_output_rgb;
+	vx_image    Img_input_planes[3], Img_output_planes[3];
 	vx_node     InputColorConvertNode, OutputColorConvertNode;	
 	vx_uint8    color_convert_flags;
 	// warp data & node elements
@@ -196,6 +197,7 @@ struct ls_context_t {
 	vx_uint32   num_encode_sections;                    // total number of encode sectional images
 	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];      // encode intermediate images
 	vx_image    encode_dst_imgs[MAX_TILE_IMG];          // encode intermediate images
+	vx_image    encode_dst_imgs_planes[MAX_TILE_IMG][3];// encode intermediate images planes
 	vx_image    encodetileOutput[MAX_TILE_IMG];         // encode tile output NV12 images
 	vx_rectangle_t src_encode_tile_rect[MAX_TILE_IMG];  // src encode rectangles 
 	vx_rectangle_t dst_encode_tile_rect[MAX_TILE_IMG];  // dst encode rectangles 
@@ -467,33 +469,33 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 	}
 }
 
-vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags)
+vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_image channels[3], vx_uint8 flags)
 {
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 	vxQueryImage(input, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format));
 	vxQueryImage(output, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format));
 
 	if (input_format == VX_DF_IMAGE_NV12){
-		vx_image y_channel = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
-		vx_image uv_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
-		return stitchColorConvertFromNV12Node(graph, y_channel, uv_channel, output, flags);
+		channels[0] = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
+		channels[1] = vxCreateImageFromChannel(input, VX_CHANNEL_U);
+		return stitchColorConvertFromNV12Node(graph, channels[0], channels[1], output, flags);
 	}
 	else if (input_format == VX_DF_IMAGE_IYUV){
-		vx_image y_channel = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
-		vx_image u_channel = vxCreateImageFromChannel(input, VX_CHANNEL_U);
-		vx_image v_channel = vxCreateImageFromChannel(input, VX_CHANNEL_V);
-		return stitchColorConvertFromIYUVNode(graph, y_channel, u_channel, v_channel, output, flags);
+		channels[0] = vxCreateImageFromChannel(input, VX_CHANNEL_Y);
+		channels[1] = vxCreateImageFromChannel(input, VX_CHANNEL_U);
+		channels[2] = vxCreateImageFromChannel(input, VX_CHANNEL_V);
+		return stitchColorConvertFromIYUVNode(graph, channels[0], channels[1], channels[2], output, flags);
 	}
 	else if (output_format == VX_DF_IMAGE_NV12){
-		vx_image y_channel = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
-		vx_image uv_channel = vxCreateImageFromChannel(output, VX_CHANNEL_U);
-		return stitchColorConvertToNV12Node(graph, input, y_channel, uv_channel, flags);
+		channels[0] = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
+		channels[1] = vxCreateImageFromChannel(output, VX_CHANNEL_U);
+		return stitchColorConvertToNV12Node(graph, input, channels[0], channels[1], flags);
 	}
 	else if (output_format == VX_DF_IMAGE_IYUV){
-		vx_image y_channel = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
-		vx_image u_channel = vxCreateImageFromChannel(output, VX_CHANNEL_U);
-		vx_image v_channel = vxCreateImageFromChannel(output, VX_CHANNEL_V);
-		return stitchColorConvertToIYUVNode(graph, input, y_channel, u_channel, v_channel, flags);
+		channels[0] = vxCreateImageFromChannel(output, VX_CHANNEL_Y);
+		channels[1] = vxCreateImageFromChannel(output, VX_CHANNEL_U);
+		channels[2] = vxCreateImageFromChannel(output, VX_CHANNEL_V);
+		return stitchColorConvertToIYUVNode(graph, input, channels[0], channels[1], channels[2], flags);
 	}
 	else{
 		return stitchColorConvertNode(graph, input, output, flags);
@@ -620,6 +622,8 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       true,  false, false, false, "remap-overlay.raw" },
 		{ (vx_reference)stitch->camera_remap,              "input_remap",         true,  false, false, false, "remap-input.raw" },	
 		// IntermediateTmpData
+		{ (vx_reference)stitch->Img_input_rgb,             "camera_input_rgb",    false, true,  true,  false, "camera-input-rgb.raw" },
+		{ (vx_reference)stitch->Img_output_rgb,            "stitch_rgb",          false, true,  true,  false, "stitch-rgb.raw" },
 		{ (vx_reference)stitch->warp_luma_image,           "warp_luma_image",     false, true,  true,  false, "warp-luma-image.raw" },
 		{ (vx_reference)stitch->gain_array,                "exp_gain_array",      false, false, true,  false, "exp-gain-array.bin" },
 		{ (vx_reference)stitch->exp_comp_output_image,     "exp_rgby",            false, false, true,  false, "exp-rgby.raw" },
@@ -1821,7 +1825,7 @@ static vx_status CreateImageFromROI(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->encode_dst_imgs[i] = vxCreateImageFromROI(stitch->encodetileOutput[outputTileID], &stitch->dst_encode_tile_rect[i]));
 
 		// color covert the image ROI's
-		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = CreateColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i],stitch->color_convert_flags));
+		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = CreateColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i], stitch->encode_dst_imgs_planes[i], stitch->color_convert_flags));
 	}
 	return VX_SUCCESS;
 }
@@ -2645,7 +2649,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	stitch->color_convert_flags = (vx_uint8)stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE];
 	stitch->rgb_input = stitch->Img_input;
 	if (stitch->camera_buffer_format != VX_DF_IMAGE_RGB || stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION]==2) { // needs input color conversion
-		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->color_convert_flags);
+		stitch->InputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->rgb_input, stitch->Img_input_rgb, stitch->Img_input_planes, stitch->color_convert_flags);
 		ERROR_CHECK_OBJECT_(stitch->InputColorConvertNode);
 		stitch->rgb_input = stitch->Img_input_rgb;
 	}
@@ -2673,7 +2677,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			ERROR_CHECK_STATUS_(CreateImageFromROI(stitch));
 		}
 		else{
-			stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->color_convert_flags);
+			stitch->OutputColorConvertNode = CreateColorConvertNode(stitch->graphStitch, stitch->Img_output_rgb, stitch->rgb_output, stitch->Img_output_planes, stitch->color_convert_flags);
 			ERROR_CHECK_OBJECT_(stitch->OutputColorConvertNode);
 		}
 		stitch->rgb_output = stitch->Img_output_rgb;
@@ -3062,6 +3066,10 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		// release image objects
 		if (stitch->Img_input) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input));
 		if (stitch->Img_output) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_output));
+		for (vx_uint32 i = 0; i < 3; i++){
+			if (stitch->Img_input_planes[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input_planes[i]));
+			if (stitch->Img_output_planes[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_output_planes[i]));
+		}
 		if (stitch->Img_input_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input_rgb));
 		if (stitch->Img_output_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_output_rgb));
 		if (stitch->Img_overlay) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay));
@@ -3185,6 +3193,9 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
 				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
 				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
+				for (vx_uint32 j = 0; j < 3; j++){
+					if (stitch->encode_dst_imgs_planes[i][j]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs_planes[i][j]));
+				}
 				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
 				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
 			}
@@ -3879,6 +3890,69 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 
 		fprintf(fp, "import vx_loomsl\n");
 		std::map<vx_reference, std::string> refNameList;
+
+		// Create extra images for colorconvert with multiplanar images
+		if (stitch->Img_input_planes[0] != NULL){
+			const char* name;
+			vx_uint32 width = 0, height = 0;
+			vx_df_image format = VX_DF_IMAGE_VIRT;
+			vx_reference ref = (vx_reference)stitch->Img_input;
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &ref, &name, NULL, NULL, NULL, NULL, NULL));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+			fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
+			refNameList[ref] = name;
+
+			char channel_name[50];
+			sprintf(channel_name, "%s_Y", name);
+			fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_Y\n", channel_name, name);
+			refNameList[(vx_reference)stitch->Img_input_planes[0]] = channel_name;
+			if (stitch->Img_input_planes[2] != NULL){
+				sprintf(channel_name, "%s_U", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_U\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_input_planes[1]] = channel_name;
+				sprintf(channel_name, "%s_V", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_V\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_input_planes[2]] = channel_name;
+			}
+			else{
+				sprintf(channel_name, "%s_UV", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_U\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_input_planes[1]] = channel_name;
+			}
+		}
+
+		if (stitch->Img_output_planes[0] != NULL){
+			const char* name;
+			vx_uint32 width = 0, height = 0;
+			vx_df_image format = VX_DF_IMAGE_VIRT;
+			vx_reference ref = (vx_reference)stitch->Img_output;
+			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &ref, &name, NULL, NULL, NULL, NULL, NULL));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &format, sizeof(format)));
+			fprintf(fp, "data %s = image:%d,%d,%4.4s\n", name, width, height, (const char *)&format);
+			refNameList[ref] = name;
+
+			char channel_name[50];
+			sprintf(channel_name, "%s_Y", name);
+			fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_Y\n", channel_name, name);
+			refNameList[(vx_reference)stitch->Img_output_planes[0]] = channel_name;
+			if (stitch->Img_output_planes[2] != NULL){
+				sprintf(channel_name, "%s_U", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_U\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_output_planes[1]] = channel_name;
+				sprintf(channel_name, "%s_V", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_V\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_output_planes[2]] = channel_name;
+			}
+			else{
+				sprintf(channel_name, "%s_UV", name);
+				fprintf(fp, "data %s = image-from-channel:%s,VX_CHANNEL_U\n", channel_name, name);
+				refNameList[(vx_reference)stitch->Img_output_planes[1]] = channel_name;
+			}
+		}
 
 		// Create Images, Arrays, Matrixes
 		int genImageCount = 0, genScalarCount = 0;
