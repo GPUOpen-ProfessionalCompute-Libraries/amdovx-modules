@@ -745,8 +745,14 @@ static vx_status SyncInternalTables(ls_context stitch)
 static vx_status quickSetupFilesLookup(ls_context stitch)
 {
 	FILE * fp = fopen("StitchTableSizes.txt", "r");	
-	if (!fp) { stitch->SETUP_LOAD_FILES_FOUND = vx_false_e; }
-	else{ stitch->SETUP_LOAD_FILES_FOUND = vx_true_e; }
+	if (!fp) { 
+		stitch->SETUP_LOAD_FILES_FOUND = vx_false_e; 
+		ls_printf("OK: Save init tables.\n");
+	}
+	else{ 
+		stitch->SETUP_LOAD_FILES_FOUND = vx_true_e; 
+		ls_printf("OK: Load init tables.\n");
+	}
 	if (fp != NULL) fclose(fp);
 	return VX_SUCCESS;
 }
@@ -767,56 +773,36 @@ static vx_status quickSetupDumpTableSizes(ls_context stitch)
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.seamFindValidTableSize); fprintf(fp, "\n");
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.seamFindWeightTableSize); fprintf(fp, "\n");
 	fprintf(fp, VX_FMT_SIZE, stitch->table_sizes.warpTableSize); fprintf(fp, "\n");
+	if (stitch->MULTIBAND_BLEND){
+		for (int i = 0; i < stitch->num_bands; i++){
+			fprintf(fp, VX_FMT_SIZE, stitch->multibandBlendOffsetIntoBuffer[i]); fprintf(fp, "\n");
+		}
+	}
 	fclose(fp);
 
 	return VX_SUCCESS;
 }
 static vx_status quickSetupDumpTables(ls_context stitch)
 {
-	vx_reference refList[] = {
-		(vx_reference)stitch->ValidPixelEntry,
-		(vx_reference)stitch->WarpRemapEntry,
-		(vx_reference)stitch->warp_output_image,
-		(vx_reference)stitch->cam_id_image,
-		(vx_reference)stitch->group1_image,
-		(vx_reference)stitch->group2_image,
-		(vx_reference)stitch->weight_image,
-		(vx_reference)stitch->valid_array,
-		(vx_reference)stitch->OverlapPixelEntry,
-		(vx_reference)stitch->overlap_matrix,
-		(vx_reference)stitch->exp_comp_output_image,
-		(vx_reference)stitch->valid_mask_image,
-		(vx_reference)stitch->seamfind_valid_array,
-		(vx_reference)stitch->seamfind_weight_array,
-		(vx_reference)stitch->seamfind_accum_array,
-		(vx_reference)stitch->seamfind_pref_array,
-		(vx_reference)stitch->seamfind_info_array,
-		(vx_reference)stitch->seamfind_path_array,
-		(vx_reference)stitch->seamfind_scene_array,
-		(vx_reference)stitch->seamfind_weight_image,
-		(vx_reference)stitch->blend_mask_image,
-		(vx_reference)stitch->blend_offsets,
-		(vx_reference)stitch->camera_remap,
-		(vx_reference)stitch->overlay_remap,
-	};
-	for (vx_size i = 0; i < dimof(refList); i++) {
-		if (refList[i]) {
-			bool isInit = false;
-			const char * fileNameSuffix;
-			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix));
-			if (fileNameSuffix && (!isInit)) {
-				char fileName[1024]; sprintf(fileName, "%s",fileNameSuffix);
-				vx_status status = DumpReference(refList[i], fileName);
-				if (status != VX_SUCCESS)
-					return status;
-			}
+	vx_reference ref;
+	bool isInit;
+	const char * fileNameSuffix;
+
+	vx_int32 i = 0;
+	while (GetReferenceInformation(stitch, i, &ref, NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix) == VX_SUCCESS){
+		if (isInit && ref != NULL){
+			char fileName[1024]; sprintf(fileName, "%s", fileNameSuffix);
+			vx_status status = DumpReference(ref, fileName);
+			if (status != VX_SUCCESS)
+				return status;
 		}
+		i++;
 	}
 	return VX_SUCCESS;
 }
 vx_status loadImage(vx_image img, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); 
+	FILE * fp = fopen(fileName, "rb"); 
 	if (!fp) {
 		ls_printf("ERROR: loadImage: unable to open: %s\n", fileName); 
 		if (fp != NULL)	fclose(fp); 
@@ -848,7 +834,7 @@ vx_status loadImage(vx_image img, const char * fileName)
 }
 vx_status loadArray(vx_array arr, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); 
+	FILE * fp = fopen(fileName, "rb"); 
 	if (!fp) {
 		ls_printf("ERROR: loadArray: unable to open: %s\n", fileName);
 		if (fp != NULL)	fclose(fp);
@@ -871,7 +857,7 @@ vx_status loadArray(vx_array arr, const char * fileName)
 }
 static vx_status loadMatrix(vx_matrix mat, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); 
+	FILE * fp = fopen(fileName, "rb"); 
 	if (!fp) { 
 		ls_printf("ERROR: loadMatrix: unable to read: %s\n", fileName);
 		if (fp != NULL)	fclose(fp);
@@ -880,18 +866,15 @@ static vx_status loadMatrix(vx_matrix mat, const char * fileName)
 	vx_size size;
 	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_SIZE, &size, sizeof(size)));
 	vx_uint8 * buf = new vx_uint8[size];
+	ERROR_CHECK_FREAD_(fread(buf, size, 1, fp),1);
 	ERROR_CHECK_STATUS_(vxCopyMatrix(mat, buf, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));
-	ERROR_CHECK_FREAD_(fread(buf, 4, size, fp),size);
 	delete[] buf;
 	fclose(fp);
-	vx_size rows, columns;
-	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_ROWS, &rows, sizeof(rows)));
-	ERROR_CHECK_STATUS_(vxQueryMatrix(mat, VX_MATRIX_COLUMNS, &columns, sizeof(columns)));
 	return VX_SUCCESS;
 }
 static vx_status loadRemap(vx_remap remap, const char * fileName)
 {
-	FILE * fp = fopen(fileName, "r"); 
+	FILE * fp = fopen(fileName, "rb"); 
 	if (!fp) { 
 		ls_printf("ERROR: loadRemap: unable to read: %s\n", fileName); 
 		if (fp != NULL)	fclose(fp);
@@ -947,50 +930,31 @@ static vx_status quickSetupLoadTableSizes(ls_context stitch)
 	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
 	readValue = fscanf(fp, VX_FMT_SIZE, &stitch->table_sizes.warpTableSize); 
 	if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+	if (stitch->MULTIBAND_BLEND){
+		ERROR_CHECK_ALLOC_(stitch->multibandBlendOffsetIntoBuffer = new vx_size[stitch->num_bands]());
+		for (int i = 0; i < stitch->num_bands; i++){
+			readValue = fscanf(fp, VX_FMT_SIZE, &stitch->multibandBlendOffsetIntoBuffer[i]);
+			if (!readValue) { ls_printf("ERROR: quickSetupLoadTableSizes: unable to read file\n"); return VX_FAILURE; }
+		}
+	}
 
 	return VX_SUCCESS;
 }
 static vx_status quickSetupLoadTables(ls_context stitch)
 {
-	vx_reference refList[] = {
-		// intermediate tables and data that needs initialization
-		(vx_reference)stitch->ValidPixelEntry,
-		(vx_reference)stitch->WarpRemapEntry,
-		(vx_reference)stitch->warp_output_image,
-		(vx_reference)stitch->cam_id_image,
-		(vx_reference)stitch->group1_image,
-		(vx_reference)stitch->group2_image,
-		(vx_reference)stitch->weight_image,
-		(vx_reference)stitch->valid_array,
-		(vx_reference)stitch->OverlapPixelEntry,
-		(vx_reference)stitch->overlap_matrix,
-		(vx_reference)stitch->exp_comp_output_image,
-		(vx_reference)stitch->valid_mask_image,
-		(vx_reference)stitch->seamfind_valid_array,
-		(vx_reference)stitch->seamfind_weight_array,
-		(vx_reference)stitch->seamfind_accum_array,
-		(vx_reference)stitch->seamfind_pref_array,
-		(vx_reference)stitch->seamfind_info_array,
-		(vx_reference)stitch->seamfind_path_array,
-		(vx_reference)stitch->seamfind_scene_array,
-		(vx_reference)stitch->seamfind_weight_image,
-		(vx_reference)stitch->blend_mask_image,
-		(vx_reference)stitch->blend_offsets,
-		(vx_reference)stitch->camera_remap,
-		(vx_reference)stitch->overlay_remap,
-	};
-	for (vx_size i = 0; i < dimof(refList); i++) {
-		if (refList[i]) {
-			bool isInit = false;
-			const char * fileNameSuffix;
-			ERROR_CHECK_STATUS(GetReferenceInformation(stitch, -1, &refList[i], NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix));
-			if (fileNameSuffix && (!isInit)) {
-				char fileName[1024]; sprintf(fileName, "%s", fileNameSuffix);
-				vx_status status = loadReference(refList[i], fileName);
-				if (status != VX_SUCCESS)
-					return status;
-			}
+	vx_reference ref;
+	bool isInit;
+	const char * fileNameSuffix;
+
+	vx_int32 i = 0;
+	while (GetReferenceInformation(stitch, i, &ref, NULL, &isInit, NULL, NULL, NULL, &fileNameSuffix) == VX_SUCCESS){
+		if (isInit && ref != NULL){
+			char fileName[1024]; sprintf(fileName, "%s", fileNameSuffix);
+			vx_status status = loadReference(ref, fileName);
+			if (status != VX_SUCCESS)
+				return status;
 		}
+		i++;
 	}
 	return VX_SUCCESS;
 }
@@ -2843,7 +2807,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			// quick setup files load
 			stitch->SETUP_LOAD = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT];
 			stitch->SETUP_LOAD_FILES_FOUND = vx_false_e;
-			if (stitch->MULTIBAND_BLEND || stitch->EXPO_COMP){ stitch->SETUP_LOAD = 0; }
+			//if (stitch->MULTIBAND_BLEND || stitch->EXPO_COMP){ stitch->SETUP_LOAD = 0; }
 			if (stitch->SETUP_LOAD){ 	
 				vx_status status = quickSetupFilesLookup(stitch);
 				if (status != VX_SUCCESS) {
