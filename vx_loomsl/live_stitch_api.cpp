@@ -636,8 +636,8 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->sobel_magnitude_s16_image, "sobel_mag_image16",   false, true,  true,  false, "sobel-mag-image16.raw" },
 		{ (vx_reference)stitch->sobel_magnitude_image,     "sobel_mag_image",     false, true,  true,  false, "sobel-mag-image.raw" },
 		{ (vx_reference)stitch->sobel_phase_image,         "sobel_phase_image",   false, true,  true,  false, "sobel-phase-image.raw" },
-		{ (vx_reference)stitch->Img_overlay_rgba,          "overlay_rgba",        false, false, true,  false, "overlay-rgba.raw" },
-		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         false, false, true,  false, "overlay-rgb.raw" },
+		{ (vx_reference)stitch->Img_overlay_rgba,          "overlay_rgba",        false, true,  true,  false, "overlay-rgba.raw" },
+		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         false, true,  true,  false, "overlay-rgb.raw" },
 		{ (vx_reference)stitch->Img_output,                "stitch_output",       false, false, true,  false, "stitch-output.raw" },
 		// input data
 		{ (vx_reference)stitch->Img_input,                 "camera_input",        false, true,  false, false, "camera-input.raw" },
@@ -695,8 +695,10 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 		if (((dumpIntermediateTmpDataToo && isIntermediate && !isInput) || (!dumpIntermediateTmpDataToo && isInput && !isIntermediate) || isInit) && ref != NULL){
 			char fileName[1024]; sprintf(fileName, "%s-%s", fileNamePrefix, fileNameSuffix);
 			vx_status status = DumpReference(ref, fileName);
-			if (status != VX_SUCCESS)
+			if (status != VX_SUCCESS){
+				ls_printf("ERROR: Not able to dump buffers, are some external buffers split? Split input buffers are not supported!\n");
 				return status;
+			}
 		}
 		i++;
 	}
