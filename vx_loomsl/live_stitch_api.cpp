@@ -644,6 +644,16 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->Img_overlay,               "overlay_input",       false, true,  false, false, "overlay-input.raw" },
 		{ (vx_reference)stitch->chroma_key_input_img,      "chromakey_input",     false, true,  false, false, "chromakey-input.raw" },
 	};
+	if (stitch->EXPO_COMP == 4){
+		vx_reference gain_ref = (vx_reference)stitch->gain_array;
+		for (vx_size i = 0; i < dimof(refList); i++) {
+			if (refList[i].ref == gain_ref) {
+				refList[i].isInputData = true;
+				refList[i].isIntermediateTmpData = false;
+			}
+		}
+	}
+
 	if (number == -1){
 		for (vx_size i = 0; i < dimof(refList); i++) {
 			if (refList[i].ref && refList[i].ref == *ref) {
@@ -1307,8 +1317,8 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->valid_array, validEntryCount));
 		if (stitch->EXPO_COMP < 3) {
 			ERROR_CHECK_STATUS_(vxTruncateArray(stitch->OverlapPixelEntry, overlapEntryCount));
-		}
-		ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->overlap_matrix, stitch->overlapMatrixBuf));
+			ERROR_CHECK_STATUS_(vxWriteMatrix(stitch->overlap_matrix, stitch->overlapMatrixBuf));
+		}		
 	}
 
 	if (stitch->SEAM_FIND)
@@ -1668,8 +1678,9 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 		ERROR_CHECK_OBJECT_(stitch->valid_array = vxCreateArray(stitch->context, StitchExpCompCalcEntryType, stitch->table_sizes.expCompValidTableSize));
 		if (stitch->EXPO_COMP < 3) {
 			ERROR_CHECK_OBJECT_(stitch->OverlapPixelEntry = vxCreateArray(stitch->context, StitchOverlapPixelEntryType, stitch->table_sizes.expCompOverlapTableSize));
+			ERROR_CHECK_OBJECT_(stitch->overlap_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
 		}
-		ERROR_CHECK_OBJECT_(stitch->overlap_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
+		
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 			ERROR_CHECK_OBJECT_(stitch->exp_comp_output_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGB4_AMD));
 		}
