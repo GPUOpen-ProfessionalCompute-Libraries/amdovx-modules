@@ -109,8 +109,11 @@ void getLayerParams(
         const caffe::BatchNormParameter& norm = layer.batch_norm_param();
         int use_global_stats = norm.use_global_stats();
         float eps = norm.eps();
+	int bias_term = 0, scale_term = 0;
         params =       std::to_string(eps)
-                + " " + std::to_string(use_global_stats);
+                + " " + std::to_string(use_global_stats)
+                + " " + std::to_string(bias_term)
+                + " " + std::to_string(scale_term);
     }
     else if(layer.type() == "Scale") {
         const caffe::ScaleParameter& scale = layer.scale_param();
@@ -330,6 +333,17 @@ int calculateTensorDim(
         else if(type == "SoftmaxWithLoss") {
             output = node[5];
         }
+	else if (type == "BatchNorm") {
+	    std::stringstream ss(params);
+	    int use_global_stats;
+	    float eps;
+	    ss >> eps >> use_global_stats;
+	    tensorMap[output + "_W"] = std::vector<int>{k};
+	    tensorMap[output + "_B"] = std::vector<int>{k};
+	    tensorMap[output + "_M"] = std::vector<int>{k};
+	    tensorMap[output + "_V"] = std::vector<int>{k};
+	}
+	
         tensorMap[output] = std::vector<int>{n, k, h, w};
         if(n < 1 || k < 1 || h < 1 || w < 1)
             error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
