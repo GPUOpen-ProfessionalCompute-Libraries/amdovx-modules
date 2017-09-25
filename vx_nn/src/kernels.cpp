@@ -64,6 +64,17 @@ vx_node createNode(vx_graph graph, vx_enum kernelEnum, vx_reference params[], vx
     return node;
 }
 
+vx_reference getNodeParameterByIndex(vx_node node, vx_uint32 index)
+{
+    vx_reference ref = NULL;
+    vx_parameter param = vxGetParameterByIndex(node, index);
+    if(vxGetStatus((vx_reference)param) == VX_SUCCESS) {
+        vxQueryParameter(param, VX_PARAMETER_REF, &ref, sizeof(ref));
+        vxReleaseParameter(&param);
+    }
+    return ref;
+}
+
 vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
 {
     NeuralNetworkCommonHandle * handle = NULL;
@@ -148,6 +159,19 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishTensorSubtraction(context));
     ERROR_CHECK_STATUS(publishTensorMultiply(context));
     ERROR_CHECK_STATUS(publishTensorConvertDepth(context));
+
+    // register drama rules
+    AgoNodeMergeRule softmax_rule = {
+        {
+            { VX_KERNEL_SOFTMAX_LAYER, { 1, 2 | AGO_MERGE_RULE_SOLITARY_FLAG } },
+            { VX_KERNEL_ARGMAX_LAYER_AMD, { 2 | AGO_MERGE_RULE_SOLITARY_FLAG, 3 } },
+        },
+        {
+            { VX_KERNEL_ARGMAX_LAYER_AMD, { 1, 3 } },
+        }
+    };
+    ERROR_CHECK_STATUS(vxSetContextAttribute(context, VX_CONTEXT_ATTRIBUTE_AMD_SET_MERGE_RULE, &softmax_rule, sizeof(softmax_rule)));
+
     return VX_SUCCESS;
 }
 
