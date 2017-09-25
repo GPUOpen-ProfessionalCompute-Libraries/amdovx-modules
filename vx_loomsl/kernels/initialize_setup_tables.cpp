@@ -136,7 +136,6 @@ static vx_status VX_CALLBACK calc_lens_distortionwarp_map_opencl_codegen(
 	vx_uint32 nCam = 0; vx_uint32 lens_type = 0;
 	vx_uint32 in_width = 0, in_height = 0;
 	vx_uint32 out_width = 0, out_height = 0;
-	vx_df_image format = VX_DF_IMAGE_VIRT;
 	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);		
 	ERROR_CHECK_OBJECT(scalar);
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &nCam));

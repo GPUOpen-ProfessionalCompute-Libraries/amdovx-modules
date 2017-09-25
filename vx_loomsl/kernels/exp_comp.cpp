@@ -165,7 +165,6 @@ inline vx_uint32 count_nz_mean_double_rgb(vx_uint32 *p, vx_uint32 *q, uint32_t s
 inline vx_uint32 count_nz_mean_double_32x32(vx_uint32 *p, vx_uint32 *q, uint32_t stride, uint32_t *psum, uint32_t *qsum, uint32_t channel)
 {
 	vx_uint32 cnt = 0, sum1 = 0, sum2 = 0;
-	float fsum1 = 0.0f, fsum2 = 0.0f;
 	if (!channel){
 		for (int i = 0; i < 32; i++){
 			for (int j = 0; j < 32; j++){
@@ -221,8 +220,7 @@ inline vx_uint32 count_nz_mean_double_32x32(vx_uint32 *p, vx_uint32 *q, uint32_t
 
 inline vx_uint32 count_nz_mean_single_32x32(vx_uint32 *p, uint32_t stride, uint32_t *psum, uint32_t channel)
 {
-	vx_uint32 cnt = 0, sum1 = 0, sum2 = 0;
-	float fsum1 = 0;
+	vx_uint32 cnt = 0, sum1 = 0;
 	if (!channel){
 		for (int i = 0; i < 32; i++){
 			for (int j = 0; j < 32; j++){
@@ -782,7 +780,7 @@ vx_status CExpCompensator::CompensateGains()
 		m_IMat[i][i] = 0.0f; m_NMat[i][i] = 0;
 		for (int j = i; j < (int)m_numImages; j++){
 			ISum = 0, JSum = 0, nz = 0;
-			if (m_pRoi_rect[i][j].start_x != -1)	{ // if intersect
+			if (m_pRoi_rect[i][j].start_x != 0xFFFFFFFF)	{ // if intersect
 				// find the i,j intersect rect
 				if (i == j){
 					vx_uint32 *pI = (vx_uint32 *)(base_ptr + (m_height*i + m_pRoi_rect[i][j].start_y)*m_stride + (m_pRoi_rect[i][j].start_x*m_stride_x));
@@ -858,7 +856,7 @@ vx_status CExpCompensator::CompensateGainsRGB(vx_int32 ref_img)
 		for (int j = i; j < (int)m_numImages; j++){
 			ISum[0] = ISum[1] = ISum[2] = 0; 
 			JSum[0] = JSum[1] = JSum[2] = 0; nz = 0;
-			if (m_pRoi_rect[i][j].start_x != -1)	{ // if intersect
+			if (m_pRoi_rect[i][j].start_x != 0xFFFFFFFF)	{ // if intersect
 				// find the i,j intersect rect
 				if (i == j){
 					vx_uint32 *pI = (vx_uint32 *)(base_ptr + (m_height*i + m_pRoi_rect[i][j].start_y)*m_stride + (m_pRoi_rect[i][j].start_x*m_stride_x));
@@ -982,7 +980,6 @@ vx_status CExpCompensator::CompensateGainsRGB(vx_int32 ref_img)
 vx_status CExpCompensator::CompensateBlockGains()
 {
 	vx_status status;
-	int i;
 	vx_uint32 num_blocks_w, num_blocks_h;
 
 	// Access full images for reading
@@ -1007,9 +1004,9 @@ vx_status CExpCompensator::CompensateBlockGains()
 			block_gain_info *BgInfo = &m_pblockgainInfo[blk_id];
 			BgInfo->b_dstX = bx, BgInfo->b_dstY = by;
 			vx_uint32 nz, ISum, JSum;
-			for (i = 0; i < (int)m_numImages; i++){
+			for (int i = 0; i < (int)m_numImages; i++){
 				for (int j = i; j < (int)m_numImages; j++){
-					if ((m_pRoi_rect[i][j].start_x != -1) && (by >= (m_pRoi_rect[i][j].start_y >> 5)) && (by < ((m_pRoi_rect[i][j].end_y+31) >> 5)) 
+					if ((m_pRoi_rect[i][j].start_x != 0xFFFFFFFF) && (by >= (m_pRoi_rect[i][j].start_y >> 5)) && (by < ((m_pRoi_rect[i][j].end_y + 31) >> 5))
 						&& (bx >= (m_pRoi_rect[i][j].start_x >> 5)) && (bx < ((m_pRoi_rect[i][j].end_x+31) >> 5))){
 						ISum = 0, JSum = 0, nz = 0;
 						// find the i,j intersect rect
@@ -1042,7 +1039,7 @@ vx_status CExpCompensator::CompensateBlockGains()
 	{
 		// generate augmented matrix[A/b] for solving gains
 		vx_uint32 N;
-		for (i = 0; i < (int)m_numImages; i++){
+		for (int i = 0; i < (int)m_numImages; i++){
 			memset(&m_AMat[i][0], 0, (m_numImages + 1)*sizeof(vx_float64));		//initialize
 			for (int j = 0; j < (int)m_numImages; ++j) {
 				N = pBg->Count[i][j];
@@ -1054,7 +1051,7 @@ vx_status CExpCompensator::CompensateBlockGains()
 			}
 		}
 		solve_gauss(m_AMat, m_Gains, m_numImages);
-		for (i = 0; i < (int)m_numImages; i++){
+		for (int i = 0; i < (int)m_numImages; i++){
 			vx_float32 *pblk = m_block_gain_buf + i*block_gain_buf_size;
 			*(pblk + pBg->b_dstY*m_blockgainsStride + pBg->b_dstX) = m_Gains[i];
 		}
@@ -1068,7 +1065,7 @@ vx_status CExpCompensator::CompensateBlockGains()
     // allocate temporary buffer for storing the filtered block coefficients.
 	vx_float32 *tmp = new vx_float32[m_blockgainsStride*num_blocks_h];
 	// calulate the overlapped ROI matrix [numImages][numImages]	// assumed constant for all the frames. new parameters need new initialization
-	for (i = 0; i < (int)m_numImages; i++){
+	for (int i = 0; i < (int)m_numImages; i++){
 		vx_rectangle_t *rect_I = &vxArrayItem(vx_rectangle_t, base_array, i, stride);
 		int start_y = (rect_I->start_y >> 5), end_y = (rect_I->end_y + 31) >> 5;
 		int start_x = (rect_I->start_x >> 5), end_x = (rect_I->end_x + 31) >> 5;
@@ -1347,7 +1344,6 @@ vx_status CExpCompensator::applygains_thread_func(vx_int32 img_num, char *in_bas
 
 vx_status CExpCompensator::ApplyBlockGains(void *in_base_addr)
 {
-	uint32_t num_threads = m_numImages - 1;
 	applygains_thread_func(0, (char *)in_base_addr);
 	applygains_thread_func(1, (char *)in_base_addr);
 	applygains_thread_func(2, (char *)in_base_addr);
@@ -1369,8 +1365,6 @@ vx_status CExpCompensator::applyblockgains_thread_func(vx_int32 img_num, char *i
 	vx_uint8 * base_ptr = nullptr;
 	ERROR_CHECK_STATUS(vxAccessImagePatch(m_OutputImage, &rect, 0, &addr, (void **)&base_ptr, VX_WRITE_ONLY));
 
-	vx_int32 width = mValidRect[img_num].end_x - mValidRect[img_num].start_x;
-	vx_int32 height = mValidRect[img_num].end_y - mValidRect[img_num].start_y;
 	vx_uint32 *pRGB = (vx_uint32 *)(in_base_addr + (img_num*m_height + mValidRect[img_num].start_y)*m_stride + (mValidRect[img_num].start_x*m_stride_x));
 	vx_uint32 *pDst = (vx_uint32 *)(base_ptr + mValidRect[img_num].start_y*addr.stride_y + mValidRect[img_num].start_x*addr.stride_x);
 	int b_startx = mValidRect[img_num].start_x >> 5;

@@ -229,7 +229,6 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 	void *weight_image_ptr = nullptr; vx_rectangle_t weight_rect;	vx_imagepatch_addressing_t weight_addr;
 	weight_rect.start_x = weight_rect.start_y = 0; weight_rect.end_x = width; weight_rect.end_y = height;
 	ERROR_CHECK_STATUS(vxAccessImagePatch(weight_image, &weight_rect, plane, &weight_addr, &weight_image_ptr, VX_READ_ONLY));
-	vx_uint8 *weight_ptr = (vx_uint8*)weight_image_ptr;
 
 	//Output Weight image - Variable 6
 	vx_image new_weight_image = (vx_image)parameters[6];
@@ -242,7 +241,6 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 	void *ptr1 = nullptr;	void *ptr2 = nullptr;
 	size_t len = output_weight_addr.stride_x * (output_weight_addr.dim_x * output_weight_addr.scale_x) / VX_SCALE_UNITY;
 
-#pragma omp parallel for
 	for (vx_uint32 y = 0; y < height; y += output_weight_addr.step_y)
 	{
 		ptr1 = vxFormatImagePatchAddress2d(weight_image_ptr, 0, y - output_weight_rect.start_y, &output_weight_addr);
@@ -267,14 +265,12 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 	vx_uint32 overlap_count = 0;
 
 	//Env Variable to Draw the Seam Found for verification
-	int DRAW_SEAM = 0, SEAM_ADJUST = 0, PRINT_COST = 0;
+	int DRAW_SEAM = 0, PRINT_COST = 0;
 	char textBuffer[256];
 	if (StitchGetEnvironmentVariable("DRAW_SEAM", textBuffer, sizeof(textBuffer))){ DRAW_SEAM = atoi(textBuffer); }
-	if (StitchGetEnvironmentVariable("SEAM_ADJUST", textBuffer, sizeof(textBuffer))){ SEAM_ADJUST = atoi(textBuffer); }
 	if (StitchGetEnvironmentVariable("PRINT_COST", textBuffer, sizeof(textBuffer))){ PRINT_COST = atoi(textBuffer); }
 
 	//Loop over all the overlap camera once
-#pragma omp parallel for shared(overlap_count)
 	for (vx_uint32 i = 0; i < NumCam; i++)
 		for (vx_uint32 j = i + 1; j < NumCam; j++)
 		{
@@ -286,7 +282,7 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 				vx_uint32 offset_2 = j * Img_height;
 
 				vx_int32 min_cost = 0X7FFFFFFF;
-				vx_uint32 min_x = -1, min_y = -1;
+				vx_int32 min_x = -1, min_y = -1;
 				int y_dir = Overlap_ROI[ID].end_y - Overlap_ROI[ID].start_y;
 				int x_dir = Overlap_ROI[ID].end_x - Overlap_ROI[ID].start_x;
 				/***********************************************************************************************************************************
@@ -295,7 +291,6 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 				if (y_dir >= x_dir)
 				{
 #if ENABLE_VERTICAL_SEAM
-#pragma omp parallel for shared(cost_array)
 					for (vx_uint32 ye = Overlap_ROI[ID].start_y; ye <= Overlap_ROI[ID].end_y; ye++)
 						for (vx_uint32 xe = Overlap_ROI[ID].start_x; xe <= Overlap_ROI[ID].end_x; xe++)
 						{
@@ -397,7 +392,6 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 						else{ i_val = 0; j_val = 255; }
 
 						//Weights manipulation to match the seam
-#pragma omp parallel for shared(i_val, j_val)
 						for (vx_int32 xe = Overlap_ROI[ID].end_x; xe >= (vx_int32)Overlap_ROI[ID].start_x; xe--)
 						{
 							vx_uint32 pixel_id_1 = ((min_y + offset_1) * Img_width) + xe;
@@ -451,7 +445,6 @@ static vx_status VX_CALLBACK seamfind_model_kernel(vx_node node, const vx_refere
 				else if (x_dir > y_dir)
 				{
 #if ENABLE_HORIZONTAL_SEAM
-#pragma omp parallel for shared(cost_array)
 					for (vx_uint32 xe = Overlap_ROI[ID].start_x; xe <= Overlap_ROI[ID].end_x; xe++)
 						for (vx_uint32 ye = Overlap_ROI[ID].start_y; ye <= Overlap_ROI[ID].end_y; ye++)
 						{
@@ -1089,11 +1082,10 @@ static vx_status VX_CALLBACK seamfind_scene_detect_kernel(vx_node node, const vx
 
 	//Get ENV Variables to override/set pref
 	char textBuffer[256];
-	int SEAM_THRESHOLD = 1500, VIEW_SCENE_CHANGE = 0, SCENE_DURATION = 150, SEAM_FREQUENCY = 300;
+	int SEAM_THRESHOLD = 1500, VIEW_SCENE_CHANGE = 0, SCENE_DURATION = 150;
 	if (StitchGetEnvironmentVariable("SEAM_THRESHOLD", textBuffer, sizeof(textBuffer))) { SEAM_THRESHOLD = atoi(textBuffer); }
 	if (StitchGetEnvironmentVariable("VIEW_SCENE_CHANGE", textBuffer, sizeof(textBuffer))) { VIEW_SCENE_CHANGE = atoi(textBuffer); }
 	if (StitchGetEnvironmentVariable("SCENE_DURATION", textBuffer, sizeof(textBuffer))) { SCENE_DURATION = atoi(textBuffer); }
-	if (StitchGetEnvironmentVariable("SEAM_FREQUENCY", textBuffer, sizeof(textBuffer))){ SEAM_FREQUENCY = atoi(textBuffer); }
 
 	//Live Updated Threshold value
 	if (Threshold_scalar){ SEAM_THRESHOLD = (int)((Threshold_scalar * (192 * 255)) * 0.01); }
@@ -1772,9 +1764,8 @@ static vx_status VX_CALLBACK seamfind_cost_accumulate_opencl_codegen(
 	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
 
 	// get developer configurations
-	int SEAM_FIND_MODE = 0, COST_SELECT = 0, SEAM_QUALITY = 1; // TBD: use scalar flags ** DANGER **
+	int COST_SELECT = 0, SEAM_QUALITY = 1; // Developer Flags
 	char textBuffer[256];
-	if (StitchGetEnvironmentVariable("SEAM_FIND_MODE", textBuffer, sizeof(textBuffer)))	{ SEAM_FIND_MODE = atoi(textBuffer); }
 	if (StitchGetEnvironmentVariable("COST_SELECT", textBuffer, sizeof(textBuffer)))	{ COST_SELECT = atoi(textBuffer); }
 	if (StitchGetEnvironmentVariable("SEAM_QUALITY", textBuffer, sizeof(textBuffer)))	{ SEAM_QUALITY = atoi(textBuffer); }
 
@@ -2688,14 +2679,13 @@ static vx_status VX_CALLBACK seamfind_path_trace_kernel(vx_node node, const vx_r
 	for (vx_uint32 i = 0; i < arr_numitems; i++)
 	{
 		vx_uint32 offset_1 = SeamFindInfo_ptr[i].cam_id_1 * height_eqr;
-		vx_uint32 offset_2 = SeamFindInfo_ptr[i].cam_id_2 * height_eqr;
 		int y_dir = SeamFindInfo_ptr[i].end_y - SeamFindInfo_ptr[i].start_y;
 		int x_dir = SeamFindInfo_ptr[i].end_x - SeamFindInfo_ptr[i].start_x;
 
 		vx_int32 min_cost = 0X7FFFFFFF;
 		vx_int32 min_x = -1, min_y = -1;
 
-		if (SeamFind_Pref[i].priority != -1 && ((SeamFind_Pref[i].start_frame == current_frame) || ((current_frame + 1) % (SeamFind_Pref[i].frequency + SeamFind_Pref[i].seam_type_num) == 0)))
+		if (SeamFind_Pref[i].priority != -1 && ((SeamFind_Pref[i].start_frame == (vx_int16)current_frame) || ((current_frame + 1) % (SeamFind_Pref[i].frequency + SeamFind_Pref[i].seam_type_num) == 0)))
 		{
 			/***********************************************************************************************************************************
 			Vertical SeamCut
@@ -3490,10 +3480,10 @@ static vx_status VX_CALLBACK seamfind_analyze_kernel(vx_node node, const vx_refe
 	ERROR_CHECK_STATUS(vxAccessArrayRange(Array_SeamFind_Pref, 0, SeamFind_Pref_max, &stride_pref, (void **)&SeamFind_Pref, VX_READ_ONLY));
 
 	vx_uint32 flag = 0;
-	for (int i = 0; i < SeamFind_Pref_max; i++)
+	for (int i = 0; i < (int)SeamFind_Pref_max; i++)
 	{
 		if (SeamFind_Pref[i].priority != -1){
-			if (SeamFind_Pref[i].start_frame == current_frame) flag++;
+			if (SeamFind_Pref[i].start_frame == (vx_int16)current_frame) flag++;
 			else if ((current_frame + 1) % (SeamFind_Pref[i].frequency + SeamFind_Pref[i].seam_type_num) == 0) flag++;
 
 			if (flag) break;
@@ -3866,7 +3856,6 @@ static inline vx_status GenerateSeamFindBuffersModel(
 			}
 			if (start_x < end_x && start_y < end_y) {
 				vx_uint32 offsetY_i = i * eqrHeight;
-				vx_uint32 offsetY_j = j * eqrHeight;
 				vx_int16 overlapWidth = end_x - start_x;
 				vx_int16 overlapHeight = end_y - start_y;
 				vx_int16 SEAM_TYPE = -1;

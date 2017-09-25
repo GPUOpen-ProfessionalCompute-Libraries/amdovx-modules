@@ -161,8 +161,8 @@ static void CalculatePaddedRegion(
 	vx_uint32 camMapBit = 1 << camId;
 	vx_uint32 loopPixels = (2 * paddingPixelCount) + 1;
 	// dilate using separable filter for (N x 1) & (1 x N)
-	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
-		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
+	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < eqrHeight; y_eqr++) {
+		for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr++, pixelPosition++) {
 			vx_uint32 val = 0;
 			vx_int32 X = (vx_int32)x_eqr - paddingPixelCount;
 			// get the neighborhood of (x_eqr,y_eqr)
@@ -181,8 +181,8 @@ static void CalculatePaddedRegion(
 			}
 		}
 	}
-	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < (int)eqrHeight; y_eqr++) {
-		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
+	for (vx_uint32 y_eqr = 0, pixelPosition = 0; y_eqr < eqrHeight; y_eqr++) {
+		for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr++, pixelPosition++) {
 			vx_uint32 val = 0;
 			vx_int32 Y = (vx_int32)y_eqr - paddingPixelCount;
 			// get the neighborhood of (x_eqr,y_eqr)
@@ -228,11 +228,11 @@ static void CalculateLensDistortionAndWarpMapsUsingLensModel(
 	float center_x = du0 + (float)camWidth * 0.5f, center_y = dv0 + (float)camHeight * 0.5f;
 	float rightMinus1 = right - 1, right2Minus2 = rightMinus1 * 2;
 	float bottomMinus1 = bottom - 1, bottom2Minus2 = bottomMinus1 * 2;
-	for (vx_uint32 y_eqr = 0, pixelPosition=0; y_eqr < (int)eqrHeight; y_eqr++) {
+	for (vx_uint32 y_eqr = 0, pixelPosition=0; y_eqr < eqrHeight; y_eqr++) {
 		float pe = (float)y_eqr * pi_by_h - (float)M_PI_2;
 		float sin_pe = sinf(pe);
 		float cos_pe = cosf(pe);
-		for (vx_uint32 x_eqr = 0; x_eqr < (int)eqrWidth; x_eqr++, pixelPosition++) {
+		for (vx_uint32 x_eqr = 0; x_eqr < eqrWidth; x_eqr++, pixelPosition++) {
 			float x_src = -1, y_src = -1;
 			float te = (float)x_eqr * pi_by_h - (float)M_PI;
 			float sin_te = sinf(te);
