@@ -619,8 +619,8 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->cam_id_image,              "merge_camid",         true,  false, false, false, "merge-camid.raw" },
 		{ (vx_reference)stitch->group1_image,              "merge_group1",        true,  false, false, false, "merge-group1.raw" },
 		{ (vx_reference)stitch->group2_image,              "merge_group2",        true,  false, false, false, "merge-group2.raw" },
-		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       true,  false, false, false, "remap-overlay.raw" },
-		{ (vx_reference)stitch->camera_remap,              "input_remap",         true,  false, false, false, "remap-input.raw" },	
+		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       true,  false, false, false, "overlay-remap.raw" },
+		{ (vx_reference)stitch->camera_remap,              "camera_remap",        true,  false, false, false, "camera-remap.raw" },	
 		// IntermediateTmpData
 		{ (vx_reference)stitch->Img_input_rgb,             "camera_input_rgb",    false, true,  true,  false, "camera-input-rgb.raw" },
 		{ (vx_reference)stitch->Img_output_rgb,            "stitch_rgb",          false, true,  true,  false, "stitch-rgb.raw" },
