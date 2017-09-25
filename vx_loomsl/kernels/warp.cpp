@@ -36,19 +36,6 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		vx_enum itemtype = VX_TYPE_INVALID;
 		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
 		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
-		if (itemtype == VX_TYPE_ENUM) {
-			status = VX_SUCCESS;
-		}
-		else {
-			status = VX_ERROR_INVALID_TYPE;
-			vxAddLogEntry((vx_reference)node, status, "ERROR: warp grayscale method scalar type should be an ENUM\n");
-		}
-	}
-	if (index == 1)
-	{ // object of SCALAR type
-		vx_enum itemtype = VX_TYPE_INVALID;
-		ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
-		ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
 		if (itemtype == VX_TYPE_UINT32) {
 			status = VX_SUCCESS;
 		}
@@ -57,7 +44,7 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 			vxAddLogEntry((vx_reference)node, status, "ERROR: warp num_cameras scalar type should be a UINT32\n");
 		}
 	}
-	else if (index == 2)
+	else if (index == 1)
 	{ // array object of StitchValidPixelEntry type
 		vx_size itemsize = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
@@ -71,7 +58,7 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
 		
 	}
-	else if (index == 3)
+	else if (index == 2)
 	{ // array object of StitchWarpRemapEntry type
 		vx_size itemsize = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
@@ -85,7 +72,7 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		ERROR_CHECK_STATUS(vxReleaseArray((vx_array *)&ref));
 
 	}
-	else if (index == 4)
+	else if (index == 3)
 	{ // image of format RGB or RGBX
 		// check input image format and dimensions
 		vx_uint32 input_width = 0, input_height = 0;
@@ -94,7 +81,7 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 		ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-		if (input_format != VX_DF_IMAGE_RGB && input_format != VX_DF_IMAGE_RGBX && input_format != VX_DF_IMAGE_RGB4_AMD) {
+		if (input_format != VX_DF_IMAGE_RGB && input_format != VX_DF_IMAGE_RGB4_AMD) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: warp doesn't support input image format: %4.4s\n", &input_format);
 		}
@@ -116,27 +103,6 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 		}
 	}
 	else if (index == 8)
-	{ // object of SCALAR type (UINT8) for alpha_value
-		status = VX_SUCCESS;
-		if (ref) {
-			vx_enum itemtype = VX_TYPE_INVALID;
-			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
-			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
-			if (itemtype != VX_TYPE_UINT8) {
-				status = VX_ERROR_INVALID_TYPE;
-				vxAddLogEntry((vx_reference)node, status, "ERROR: warp alpha_value scalar type should be a UINT8\n");
-			}
-			ref = avxGetNodeParamRef(node, 4);
-			vx_df_image input_format = VX_DF_IMAGE_VIRT;
-			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
-			ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
-			if (input_format != VX_DF_IMAGE_RGB) {
-				status = VX_ERROR_INVALID_PARAMETERS;
-				vxAddLogEntry((vx_reference)node, status, "ERROR: warp doesn't support external alpha_value for non RGB input image format\n");
-			}
-		}
-	}
-	else if (index == 9)
 	{ // object of SCALAR type (UINT8) for flags
 		status = VX_SUCCESS;
 		if (ref) {
@@ -149,6 +115,28 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 			}
 		}
 	}
+	else if (index == 9)
+	{ // object of SCALAR type (UINT8) for alpha_value
+		status = VX_SUCCESS;
+		if (ref) {
+			vx_enum itemtype = VX_TYPE_INVALID;
+			ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)ref, VX_SCALAR_ATTRIBUTE_TYPE, &itemtype, sizeof(itemtype)));
+			ERROR_CHECK_STATUS(vxReleaseScalar((vx_scalar *)&ref));
+			if (itemtype != VX_TYPE_UINT8) {
+				status = VX_ERROR_INVALID_TYPE;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: warp alpha_value scalar type should be a UINT8\n");
+			}
+			ref = avxGetNodeParamRef(node, 3);
+			vx_df_image input_format = VX_DF_IMAGE_VIRT;
+			ERROR_CHECK_STATUS(vxQueryImage((vx_image)ref, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
+			ERROR_CHECK_STATUS(vxReleaseImage((vx_image *)&ref));
+			if (input_format != VX_DF_IMAGE_RGB) {
+				status = VX_ERROR_INVALID_PARAMETERS;
+				vxAddLogEntry((vx_reference)node, status, "ERROR: warp doesn't support external alpha_value for non RGB input image format\n");
+			}
+		}
+	}
+	
 	return status;
 }
 
@@ -156,12 +144,12 @@ static vx_status VX_CALLBACK warp_input_validator(vx_node node, vx_uint32 index)
 static vx_status VX_CALLBACK warp_output_validator(vx_node node, vx_uint32 index, vx_meta_format meta)
 {
 	vx_status status = VX_ERROR_INVALID_PARAMETERS;
-	if (index == 5)
+	if (index == 4)
 	{ // image of format RGB or RGBX
 		vx_uint32 output_width = 0, output_height = 0;
 		vx_df_image output_format = VX_DF_IMAGE_VIRT, input_format = VX_DF_IMAGE_VIRT;
 		// get image configuration
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 5);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 3);
 		ERROR_CHECK_OBJECT(image);
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
@@ -185,12 +173,12 @@ static vx_status VX_CALLBACK warp_output_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 		status = VX_SUCCESS;
 	}
-	else if (index == 6)
+	else if (index == 5)
 	{ // optional image of format U8
 		vx_uint32 output_width = 0, output_height = 0, output_u8_width = 0, output_u8_height = 0;
 		vx_df_image output_u8_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 		// get image configuration
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 5);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 4);
 		ERROR_CHECK_OBJECT(image);
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
@@ -221,12 +209,12 @@ static vx_status VX_CALLBACK warp_output_validator(vx_node node, vx_uint32 index
 		ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(meta, VX_IMAGE_ATTRIBUTE_FORMAT, &output_u8_format, sizeof(output_u8_format)));
 		status = VX_SUCCESS;
 	}
-	else if (index == 10)
+	else if (index == 6)
 	{ // optional image of format S16 for exposure comp
 		vx_uint32 output_width = 0, output_height = 0, output_S16_width = 0, output_S16_height = 0;
 		vx_df_image output_S16_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT;
 		// get image configuration
-		vx_image image = (vx_image)avxGetNodeParamRef(node, 5);
+		vx_image image = (vx_image)avxGetNodeParamRef(node, 4);
 		ERROR_CHECK_OBJECT(image);
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &output_width, sizeof(output_width)));
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
@@ -282,14 +270,14 @@ static vx_status VX_CALLBACK warp_opencl_global_work_update(
 {
 	// Get the number of elements in the stitchWarpRemapEntry array
 	vx_size arr_numitems = 0;
-	vx_array arr = (vx_array)avxGetNodeParamRef(node, 2);				// input array
+	vx_array arr = (vx_array)avxGetNodeParamRef(node, 1);				// input array
 	ERROR_CHECK_OBJECT(arr);
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
 	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
 
 	// Check for interpolation method
 	vx_uint8 flags = 0;
-	vx_scalar s_flags = (vx_scalar)parameters[9];
+	vx_scalar s_flags = (vx_scalar)parameters[8];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
@@ -297,7 +285,7 @@ static vx_status VX_CALLBACK warp_opencl_global_work_update(
 
 	// Get input format
 	vx_df_image input_format = VX_DF_IMAGE_VIRT;
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 4);				// input image
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 3);				// input image
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
@@ -335,49 +323,51 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 	vx_df_image input_format = VX_DF_IMAGE_VIRT, output_format = VX_DF_IMAGE_VIRT, output_U_format = VX_DF_IMAGE_VIRT;
 	bool bWriteU8Image = false;
 	bool bWriteExpCompImage = false;
-	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 1);			// input scalar - num cameras
+	vx_scalar scalar = (vx_scalar)avxGetNodeParamRef(node, 0);			// input scalar - num cameras
 	ERROR_CHECK_OBJECT(scalar);
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &num_cameras));
 	ERROR_CHECK_STATUS(vxReleaseScalar(&scalar));
-	vx_array arr = (vx_array)avxGetNodeParamRef(node, 2);				// input array
+	vx_array arr = (vx_array)avxGetNodeParamRef(node, 1);				// input array
 	ERROR_CHECK_OBJECT(arr);
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_CAPACITY, &arr_capacity, sizeof(arr_capacity)));
 	ERROR_CHECK_STATUS(vxReleaseArray(&arr));
-	vx_image image = (vx_image)avxGetNodeParamRef(node, 4);				// input image
+	vx_image image = (vx_image)avxGetNodeParamRef(node, 3);				// input image
 	vx_uint32 input_height = 0, output_height = 0;
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &input_format, sizeof(input_format)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &input_height, sizeof(input_height)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
-	image = (vx_image)avxGetNodeParamRef(node, 5);						// output image
+	image = (vx_image)avxGetNodeParamRef(node, 4);						// output image
 	ERROR_CHECK_OBJECT(image);
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_format, sizeof(output_format)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &output_height, sizeof(output_height)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
 
 	// Check if output U8 image is specified
-	image = (vx_image)avxGetNodeParamRef(node, 6);
+	image = (vx_image)avxGetNodeParamRef(node, 5);
 	if (image != nullptr) {
 		bWriteU8Image = true;
 		ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_FORMAT, &output_U_format, sizeof(output_format)));
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 	}
 	// Check if output S16 image for exposure compensation is specified
-	image = (vx_image)avxGetNodeParamRef(node, 10);
+	image = (vx_image)avxGetNodeParamRef(node, 6);
 	if (image != nullptr) {
 		bWriteExpCompImage = true;
 		ERROR_CHECK_STATUS(vxReleaseImage(&image));
 	}
 
+	// read num_camera_columns
 	vx_scalar s_num_camera_columns = (vx_scalar)parameters[7];
-	if (s_num_camera_columns) {
-		// read num_camera_columns
+	if (s_num_camera_columns) {	
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_num_camera_columns, &num_camera_columns));
 	}
-	vx_scalar s_alpha_value = (vx_scalar)parameters[8];
+
+	// Read alpha value
+	vx_scalar s_alpha_value = (vx_scalar)parameters[9];
 
 	// Check for interpolation method
-	vx_scalar s_flags = (vx_scalar)parameters[9];
+	vx_scalar s_flags = (vx_scalar)parameters[8];
 	if (s_flags) {
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_flags, &flags));
 	}
@@ -903,18 +893,13 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		if (input_format == VX_DF_IMAGE_RGB){
 			opencl_kernel_code += Create_interpolate_cubic_rgb();
 		}
-		else if (input_format == VX_DF_IMAGE_RGBX){
-			opencl_kernel_code += Create_amd_unpack();
-			opencl_kernel_code += Create_interpolate_cubic_rgbx();
-		}
 		else if (input_format == VX_DF_IMAGE_RGB4_AMD){
 			opencl_kernel_code += Create_interpolate_cubic_rgb4();
 		}
 	}
 	sprintf(item,
 		"__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n" // opencl_local_work[0]
-		"void %s(uint grayscale_compute_method,\n" // opencl_kernel_function_name
-		"        uint num_cameras,\n"
+		"void %s(uint num_cameras,\n" // opencl_kernel_function_name
 		"        __global char * valid_pix_buf, uint valid_pix_buf_offset, uint valid_pix_num_items,\n"
 		"        __global char * warp_remap_buf, uint warp_remap_buf_offset, uint warp_remap_num_items,\n"
 		"        uint ip_width, uint ip_height, __global uchar * ip_buf, uint ip_stride, uint ip_offset,\n"
@@ -926,25 +911,25 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 			",\n"
 			"        uint op_u8_width, uint op_u8_height, __global uchar * op_u8_buf, uint op_u8_stride, uint op_u8_offset";
 	}
+	if (bWriteExpCompImage){
+		opencl_kernel_code +=
+			",\n"
+			"        uint op_s16_width, uint op_s16_height, __global uchar * op_s16_buf, uint op_s16_stride, uint op_s16_offset";
+	}	
 	if (s_num_camera_columns) {
 		opencl_kernel_code +=
 			",\n"
 			"        uint num_camera_columns";
 	}
-	if (s_alpha_value) {
-		opencl_kernel_code +=
-			",\n"
-			"        uint alpha";
-	}
 	if (s_flags) {
 		opencl_kernel_code +=
 			",\n"
 			"        uint flags";
-	}
-	if (bWriteExpCompImage){
+	}	
+	if (s_alpha_value) {
 		opencl_kernel_code +=
 			",\n"
-			"        uint op_s16_width, uint op_s16_height, __global uchar * op_s16_buf, uint op_s16_stride, uint op_s16_offset";
+			"        uint alpha";
 	}
 	sprintf(item,
 		")\n"
@@ -1000,10 +985,6 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		opencl_kernel_code += useBilinearInterpolation ? warp_rgb2_bilinear_rgbx(s_alpha_value, bWriteU8Image) : warp_rgb2_bicubic_rgbx(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += write_4pixels_to_RGBX();
 	}
-	else if (input_format == VX_DF_IMAGE_RGBX && output_format == VX_DF_IMAGE_RGBX){
-		opencl_kernel_code += useBilinearInterpolation ? warp_rgbx_bilinear_rgbx(bWriteU8Image) : warp_rgbx_bicubic_rgbx(bWriteU8Image);
-		opencl_kernel_code += write_4pixels_to_RGBX();
-	}
 	else if (input_format == VX_DF_IMAGE_RGB4_AMD && output_format == VX_DF_IMAGE_RGB4_AMD){
 		opencl_kernel_code += useBilinearInterpolation ? warp_rgb4_bilinear_rgb4(s_alpha_value, bWriteU8Image) : warp_rgb4_bicubic_rgb4(s_alpha_value, bWriteU8Image);
 		opencl_kernel_code += pixels4 ? write_4pixels_to_RGB4() : write_2pixels_to_RGB4();
@@ -1046,7 +1027,7 @@ vx_status warp_publish(vx_context context)
 	vx_kernel kernel = vxAddKernel(context, "com.amd.loomsl.warp",
 		AMDOVX_KERNEL_STITCHING_WARP,
 		warp_kernel,
-		11,
+		10,
 		warp_input_validator,
 		warp_output_validator,
 		nullptr,
@@ -1061,16 +1042,16 @@ vx_status warp_publish(vx_context context)
 
 	// set kernel parameters
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_ARRAY, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_REQUIRED));
+	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 8, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 9, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 10, VX_OUTPUT, VX_TYPE_IMAGE, VX_PARAMETER_STATE_OPTIONAL));
+	
 
 	// finalize and release kernel object
 	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -1346,70 +1327,6 @@ std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image)
 
 	return output;
 }
-std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image){
-	std::string output =
-		"    uint2 px0, px1;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-			"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
-			"    bool isSrcInvalid;"
-			"    // pixel[0]\n"
-			"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; isSrcInvalid = false;\n"
-			"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
-			"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride));\n"
-			"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-			"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-			"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-		if (bWriteU8Image) {
-			output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-		}
-		output +=
-			"    // pixel[1]\n"
-			"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; isSrcInvalid = false;\n"
-			"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
-			"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride));\n"
-			"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-			"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-			"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-		if (bWriteU8Image) {
-			output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-		}
-		output +=
-			"    // pixel[2]\n"
-			"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; isSrcInvalid = false;\n"
-			"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
-			"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride));\n"
-			"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-			"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-			"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-		if (bWriteU8Image) {
-			output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-		}
-		output +=
-			"    // pixel[3]\n"
-			"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; isSrcInvalid = false;\n"
-			"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 0; sy = 0; }\n"
-			"    offset = (sy >> QF) * ip_stride + (sx >> QF) * 4; pt = ip_buf + offset; px0 = vload2(0, (__global uint *)pt); px1 = vload2(0, (__global uint *)(pt + ip_stride));\n"
-			"    mf.s0 = (sx & QFB) * QFM; mf.s1 = (sy & QFB) * QFM; mf.s2 = 1.0f - mf.s0; mf.s3 = 1.0f - mf.s1;\n"
-			"    f.s0 = (amd_unpack0(px0.s0) * mf.s2 + amd_unpack0(px0.s1) * mf.s0) * mf.s3 + (amd_unpack0(px1.s0) * mf.s2 + amd_unpack0(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s1 = (amd_unpack1(px0.s0) * mf.s2 + amd_unpack1(px0.s1) * mf.s0) * mf.s3 + (amd_unpack1(px1.s0) * mf.s2 + amd_unpack1(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s2 = (amd_unpack2(px0.s0) * mf.s2 + amd_unpack2(px0.s1) * mf.s0) * mf.s3 + (amd_unpack2(px1.s0) * mf.s2 + amd_unpack2(px1.s1) * mf.s0) * mf.s1;\n"
-			"    f.s3 = (amd_unpack3(px0.s0) * mf.s2 + amd_unpack3(px0.s1) * mf.s0) * mf.s3 + (amd_unpack3(px1.s0) * mf.s2 + amd_unpack3(px1.s1) * mf.s0) * mf.s1;\n"
-			"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-		if (bWriteU8Image) {
-			output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-		}
-		return output;
-}
 std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image){
 	std::string output =
 		"    uint4 px0, px1;\n"
@@ -1602,78 +1519,6 @@ std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image){
 		}
 		output +=
 			"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n\n";
-	return output;
-}
-std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image){
-	std::string output =
-		"    uint4 px;\n"
-		"    __global uchar * pt;\n"
-		"    uint4 outpix;\n"
-		"    uint invalidPix = amd_pack((float4)(0.0f, 0.0f, 0.0f, 128.0f));\n"
-		"    bool isSrcInvalid;"
-		"    // pixel[0]\n"
-		"    sx = map.s0 & 0xffff; sy = (map.s0 >> 16) & 0xffff; isSrcInvalid = false;\n"
-		"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); f  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             f += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 f += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    outpix.s0 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s0 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-	}
-	output +=
-		"    // pixel[1]\n"
-		"    sx = map.s1 & 0xffff; sy = (map.s1 >> 16) & 0xffff; isSrcInvalid = false;\n"
-		"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); f  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             f += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 f += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    outpix.s1 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s1 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-	}
-	output +=
-		"    // pixel[2]\n"
-		"    sx = map.s2 & 0xffff; sy = (map.s2 >> 16) & 0xffff; isSrcInvalid = false;\n"
-		"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); f  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             f += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 f += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    outpix.s2 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s2 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-	}
-	output +=
-		"    // pixel[3]\n"
-		"    sx = map.s3 & 0xffff; sy = (map.s3 >> 16) & 0xffff; isSrcInvalid = false;\n"
-		"    if(sx == 0xffff && sy == 0xffff) {isSrcInvalid = true; sx = 1 << QF; sy = 1 << QF; }\n"
-		"    mf = compute_bicubic_coeffs((sx & QFB) * QFM); y = (sy & QFB) * QFM;\n"
-		"    offset = ((sy >> QF)) * ip_stride + clamp((int)((sx >> QF) - 1) * 4, (int) 0, (int)ip_width*4); pt = ip_buf + offset;\n"
-		"    if( (sy >> QF)==0){row_offset.s0=0;} else{row_offset.s0=1;}\n"
-		"    if( (sy >> QF)>(ip_image_height_offset-3)){row_offset.s1=1;} else{row_offset.s1=2;}\n"
-		"    px = vload4(0, (__global uint *)(pt - row_offset.s0 * ip_stride)); f  =  interpolate_cubic_rgbx(px, mf) * (-0.5f*y + y*y - 0.5f*y*y*y);\n"
-		"    px = vload4(0, (__global uint *)(pt));                             f += (interpolate_cubic_rgbx(px, mf) * (1.0f - 2.5f*y*y + 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + ip_stride));                 f += (interpolate_cubic_rgbx(px, mf) * (0.5f*y + 2.0f*y*y - 1.5f*y*y*y));\n"
-		"    px = vload4(0, (__global uint *)(pt + row_offset.s1*ip_stride));   f += (interpolate_cubic_rgbx(px, mf) * (-0.5f*y*y + 0.5f*y*y*y));\n"
-		"    outpix.s3 = select(amd_pack(f), invalidPix, isSrcInvalid);\n";
-	if (bWriteU8Image) {
-		output += "    Yval.s3 = select(mad(f.s0, RGBToY.s0, mad(f.s1, RGBToY.s1, f.s2 * RGBToY.s2)), 0.0f, isSrcInvalid);\n";
-	}
 	return output;
 }
 std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image){
@@ -1871,15 +1716,6 @@ std::string Create_interpolate_cubic_rgb(){
 		"  res += ((float3)(amd_unpack1(pix.s2), amd_unpack2(pix.s2), amd_unpack3(pix.s2))) * mf.s3;\n"
 		"  return(res);\n"
 		"}\n";
-	return output;
-}
-std::string Create_interpolate_cubic_rgbx(){
-	std::string output =
-		"float4 interpolate_cubic_rgbx(uint4 pix, float4 mf)\n"
-		"{\n"
-		"  return(mad(amd_unpack(pix.s0), (float4)mf.s0, mad(amd_unpack(pix.s1), (float4)mf.s1, mad(amd_unpack(pix.s2), (float4)mf.s2, amd_unpack(pix.s3) * mf.s3))));\n"
-		"}\n"
-		"\n";
 	return output;
 }
 std::string Create_amd_unpack15(){

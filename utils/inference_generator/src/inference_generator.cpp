@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define error(...) printf("ERROR: " __VA_ARGS__), exit(1)
 #define info(...)  printf("OK: " __VA_ARGS__)
@@ -701,7 +703,7 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
         formatFileName(layer_name,"/","_");
     }
 
-    std::string fileName_weights= outputFolder + "/weights/" + layer_name + ".f32";
+    std::string fileName_weights = outputFolder + "/weights/" + layer_name + ".f32";
     std::string fileName_bias = outputFolder + "/bias/" + layer_name + ".f32";
     FILE * fs_weights;
     FILE * fs_bias;
@@ -1458,7 +1460,7 @@ void generateCode(
 
 }
 
-void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder, int flags)
+void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder, int flags)
 {
     if(net_parameter.has_name())
         std::cout<<"Fetching the weights for : " << net_parameter.name()<< std::endl;
@@ -1477,7 +1479,8 @@ void fetchNetworkDetails(const caffe::NetParameter& net_parameter, std::vector<s
     }
 
     //extract layer information.
-    for(int i=0; i < net_parameter.layer_size() ;i++){
+    for(int i=0; i < net_parameter.layer_size() ;i++)
+    {
         const caffe::LayerParameter& layer_parameter = net_parameter.layer(i);
 
         caffe::Phase phase = layer_parameter.phase();
@@ -1578,15 +1581,21 @@ int loadCaffeModelFile(
     //read the caffemodel.
     caffe::NetParameter net_parameter;
     std:: cout<<"Reading the binary file from : "<< fileName<< std::endl;
-    {
-        std::fstream input(fileName, std::ios::in| std::ios::binary);
-        bool isSuccess = net_parameter.ParseFromIstream(&input);
-        if(isSuccess) {
-            std::cout<<"CaffeModel Read Successful" << std::endl;
-            fetchNetworkDetails(net_parameter,net,inputDim, outputFolder, flags);
-        }else {
-            std::cerr<<"CaffeModel Read Failed" << std::endl;
+    std::fstream input(fileName, std::ios::in| std::ios::binary);
+    bool isSuccess = net_parameter.ParseFromIstream(&input);
+    if(isSuccess) {
+        std::cout << "CaffeModel Read Successful" << std::endl;
+        int layer_param_size = net_parameter.layer_size();
+        if(layer_param_size > 0) {
+		parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
         }
+        else {
+		std::cerr << "ERROR: [Unsupported caffemodel] please upgrade this caffemodel, currently uses deprecated V1LayerParameters." << std::endl;
+		return -1;
+        }
+    }
+    else {
+        std::cerr << "CaffeModel Read Failed" << std::endl;
     }
     return 0;
 }
@@ -1633,6 +1642,7 @@ int main(int argc, char* argv[])
             outputFolder = argv[2];
             argc--;
             argv++;
+            mkdir(outputFolder.c_str(), 0777);
         }
         else if(!strcmp(argv[1], "--flags") && argc > 2) {
             flags = atoi(argv[2]);
@@ -1667,7 +1677,6 @@ int main(int argc, char* argv[])
     if(argc > 9) roundPolicy = argv[9];
     std::vector<std::vector<std::string>> net;
 
-
     if(flags != 1 && flags != 0 ) {
         printf("ERROR: flags can only take 0 or 1\n");
         return -1;
@@ -1675,7 +1684,13 @@ int main(int argc, char* argv[])
 
     // load caffe model (or just .prototxt)
     if(strstr(fileName,".caffemodel")) {
-        if(loadCaffeModelFile(fileName,net,inputDim, outputFolder, flags) < 0) {
+        // make sure that weights and bias folder are created
+        std::string dir = outputFolder + "/weights";
+        mkdir(dir.c_str(), 0777);
+        dir = outputFolder + "/bias";
+        mkdir(dir.c_str(), 0777);
+        // load caffe model
+        if(loadCaffeModelFile(fileName, net, inputDim, outputFolder, flags) < 0) {
             return -1;
         }
     }

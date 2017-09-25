@@ -295,9 +295,8 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx
 /**
 * \brief Function to create Stitch Warp node
 */
-VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_uint32 num_camera_columns, vx_uint8 alpha_value, vx_uint8 flags, vx_image outputExpComp)
+VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_uint32 num_cam, vx_array ValidPixelEntry, vx_array WarpRemapEntry, vx_image input, vx_image output, vx_image outputLuma, vx_image outputExpComp, vx_uint32 num_camera_columns, vx_uint8 flags, vx_uint8 alpha_value)
 {
-	vx_scalar METHOD = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_ENUM, &method);
 	vx_scalar NUM_CAM = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
 	vx_scalar s_num_camera_columns = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_camera_columns);
 	vx_scalar s_alpha_value = NULL;
@@ -308,25 +307,25 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_enum method, 
 	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 
 	vx_reference params[] = {
-		(vx_reference)METHOD,
 		(vx_reference)NUM_CAM,
 		(vx_reference)ValidPixelEntry,
 		(vx_reference)WarpRemapEntry,
 		(vx_reference)input,
 		(vx_reference)output,
 		(vx_reference)outputLuma,
-		(vx_reference)s_num_camera_columns,
-		(vx_reference)s_alpha_value,
-		(vx_reference)s_flags,
 		(vx_reference)outputExpComp,
+		(vx_reference)s_num_camera_columns,
+		(vx_reference)s_flags,
+		(vx_reference)s_alpha_value,	
 	};
 	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_WARP,
 		params,
 		dimof(params));
-	vxReleaseScalar(&METHOD);
 	vxReleaseScalar(&NUM_CAM);
 	vxReleaseScalar(&s_num_camera_columns);
+	vxReleaseScalar(&s_alpha_value);
+	vxReleaseScalar(&s_flags);
 	return node;
 }
 

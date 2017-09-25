@@ -24,8 +24,8 @@ THE SOFTWARE.
 
 struct SoftmaxLayerLocalData {
     NeuralNetworkCommonHandle * handle;
-    double alpha;
-    double beta;
+    float alpha;
+    float beta;
     miopenTensorDescriptor_t input_desc;
     cl_mem input_mem;
     miopenTensorDescriptor_t output_desc;

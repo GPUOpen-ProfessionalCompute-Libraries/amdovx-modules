@@ -117,11 +117,9 @@ std::string get_warp_valid_info_4pixels();
 std::string get_warp_valid_info_2pixels();
 // Do reading and wraping bilinear ------------------------------------------------------------------------------------------------------------
 std::string warp_rgb2_bilinear_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image);
-std::string warp_rgbx_bilinear_rgbx(bool bWriteU8Image);
 std::string warp_rgb4_bilinear_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image);
 // Do reading and wraping bicubic ------------------------------------------------------------------------------------------------------------
 std::string warp_rgb2_bicubic_rgbx(vx_scalar s_alpha_value, bool bWriteU8Image);
-std::string warp_rgbx_bicubic_rgbx(bool bWriteU8Image);
 std::string warp_rgb4_bicubic_rgb4(vx_scalar s_alpha_value, bool bWriteU8Image);
 // Write output -------------------------------------------------------------------------------------------------------------------------------
 std::string write_4pixels_to_RGBX();
@@ -135,7 +133,6 @@ std::string write_luma_S16_16bit_input(bool write4pixels);
 std::string Create_compute_bicubic_coeffs();
 std::string Create_amd_unpack();
 std::string Create_interpolate_cubic_rgb();
-std::string Create_interpolate_cubic_rgbx();
 std::string Create_amd_unpack15();
 std::string Create_interpolate_cubic_rgb4();
 #endif //__WARP_H__

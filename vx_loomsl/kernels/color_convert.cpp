@@ -3153,8 +3153,8 @@ std::string ConvertRGB4toRGB2()
 		"    uint4 pRGB0;\n"
 		"    float mulfactor = 255.0f/32767.0f;\n"
 		"    float4 f; f.s0 = 0;\n"
-		"    f.s012 = amd_unpackA(L0.s0,L0.s1)*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = amd_unpackB(L0.s1,L0.s2); pRGB0.s1 = amd_pack(f);\n"
-		"    f.s012 = amd_unpackA(L0.s3,L1.s0)*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = amd_unpackB(L1.s0,L1.s1); pRGB0.s3 = amd_pack(f);\n";
+		"    f.s012 = amd_unpackA(L0.s0,L0.s1)*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = amd_unpackB(L0.s1,L0.s2)*(float3)mulfactor; pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = amd_unpackA(L0.s3,L1.s0)*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = amd_unpackB(L1.s0,L1.s1)*(float3)mulfactor; pRGB0.s3 = amd_pack(f);\n";
 	return output;
 }
 std::string GammaAndConvertRGB4toRGB2()
@@ -3163,8 +3163,8 @@ std::string GammaAndConvertRGB4toRGB2()
 		"    uint4 pRGB0;\n"
 		"    float mulfactor = 255.0f/32767.0f;\n"
 		"    float4 f; f.s0 = 0;\n"
-		"    f.s012 = gamma3(amd_unpackA(L0.s0,L0.s1))*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L0.s1,L0.s2)); pRGB0.s1 = amd_pack(f);\n"
-		"    f.s012 = gamma3(amd_unpackA(L0.s3,L1.s0))*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L1.s0,L1.s1)); pRGB0.s3 = amd_pack(f);\n";
+		"    f.s012 = gamma3(amd_unpackA(L0.s0,L0.s1))*(float3)mulfactor; pRGB0.s0 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L0.s1,L0.s2))*(float3)mulfactor; pRGB0.s1 = amd_pack(f);\n"
+		"    f.s012 = gamma3(amd_unpackA(L0.s3,L1.s0))*(float3)mulfactor; pRGB0.s2 = amd_pack(f); f.s012 = gamma3(amd_unpackB(L1.s0,L1.s1))*(float3)mulfactor; pRGB0.s3 = amd_pack(f);\n";
 	return output;
 }
 
@@ -3397,7 +3397,7 @@ std::string Degamma()
 	std::string output =
 		"float degamma(float input)\n"
 		"{\n"
-		"  return (input>1325.42515)? powr(mad(input,0.0034437731651f,6.20631634155943312f)*0.9478672985782f,2.2f) : input*0.07739938080495356f;\n"//( ( Csrgb * (32767^(1/2.2)/32767) + 0.055*32767^(1/2.2) ) * (1/1.055) ) ^ 2.2, Csrgb*(1/12.92)
+		"  return (input>1325.42515)? powr(mad(input,0.002201622270595392f,3.967730631733f),2.4f) : input*0.07739938080495356f;\n"//( Csrgb * (32767^(1/2.4)/32767)* (1/1.055) + 0.055*32767^(1/2.4)* (1/1.055) ) ^ 2.4, Csrgb*(1/12.92)
 		"}\n"
 		"\n";
 	return output;
@@ -3407,7 +3407,7 @@ std::string Gamma()
 	std::string output =
 		"float gamma(float input)\n"
 		"{\n"
-		"  return (input>102.5869236)? mad(powr(input,0.4545454545454545f),274.4083174742070237489f,-1802.185f) : input*12.92f;\n"//( ( Clinear^(1/2.2) * (1-0.055)*(32767/32767^(1/2.2)) - 0.055 * 32767 , Csrgb*12.92
+		"  return (input>102.5869236)? mad(powr(input,0.41666667f),454.21052164846f,-1802.185f) : input*12.92f;\n"//( ( Clinear^(1/2.4) * (1.055)*(32767/32767^(1/2.4)) - 0.055 * 32767 , Csrgb*12.92
 		"}\n"
 		"\n";
 	return output;

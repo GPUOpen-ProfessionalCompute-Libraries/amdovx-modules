@@ -213,7 +213,7 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 		"  int gy = get_global_id(1);\n"
 		"  if ((gx < %d) && (gy < %d)) {\n" // work_items[0], work_items[1]
 		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, work_items[0], work_items[1]);
-	opencl_kernel_code = item;
+	opencl_kernel_code += item;
 	if (format == VX_DF_IMAGE_RGB){
 		opencl_kernel_code +=
 			"    uint3 pix0 = *(__global uint3 *) (ip0_buf + ip0_offset + (gy * ip0_stride) + (gx * 12));\n"
