@@ -1489,22 +1489,6 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 			_mm_store_si128(dst++, r0);
 		}
 		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->warp_output_image, map_id));
-		if (stitch->exp_comp_output_image) {
-			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->exp_comp_output_image, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
-			__m128i *dst = (__m128i*) ptr;
-			vx_size size_in_bytes = (addr.stride_y * addr.dim_y)&~127;
-			for (vx_uint32 i = 0; i < size_in_bytes; i += 128){
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-				_mm_store_si128(dst++, r0);
-			}
-			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->exp_comp_output_image, map_id));
-		}
 		if (stitch->expcomp_luma16) {
 			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->expcomp_luma16, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
 			__m128i *dst = (__m128i*) ptr;
