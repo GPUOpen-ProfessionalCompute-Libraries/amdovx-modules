@@ -621,9 +621,10 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->group2_image,              "merge_group2",        true,  false, false, false, "merge-group2.raw" },
 		{ (vx_reference)stitch->overlay_remap,             "overlay_remap",       true,  false, false, false, "overlay-remap.raw" },
 		{ (vx_reference)stitch->camera_remap,              "camera_remap",        true,  false, false, false, "camera-remap.raw" },	
+		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         true,  false, false, false, "overlay-rgb.raw" },
+		{ (vx_reference)stitch->Img_output_rgb,            "stitch_rgb",          true,  false, false, false, "stitch-rgb.raw" },
 		// IntermediateTmpData
 		{ (vx_reference)stitch->Img_input_rgb,             "camera_input_rgb",    false, true,  true,  false, "camera-input-rgb.raw" },
-		{ (vx_reference)stitch->Img_output_rgb,            "stitch_rgb",          false, true,  true,  false, "stitch-rgb.raw" },
 		{ (vx_reference)stitch->warp_luma_image,           "warp_luma_image",     false, true,  true,  false, "warp-luma-image.raw" },
 		{ (vx_reference)stitch->gain_array,                "exp_gain_array",      false, false, true,  false, "exp-gain-array.bin" },
 		{ (vx_reference)stitch->exp_comp_output_image,     "exp_rgby",            false, false, true,  false, "exp-rgby.raw" },
@@ -637,7 +638,6 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->sobel_magnitude_image,     "sobel_mag_image",     false, true,  true,  false, "sobel-mag-image.raw" },
 		{ (vx_reference)stitch->sobel_phase_image,         "sobel_phase_image",   false, true,  true,  false, "sobel-phase-image.raw" },
 		{ (vx_reference)stitch->Img_overlay_rgba,          "overlay_rgba",        false, true,  true,  false, "overlay-rgba.raw" },
-		{ (vx_reference)stitch->Img_overlay_rgb,           "overlay_rgb",         false, true,  true,  false, "overlay-rgb.raw" },
 		{ (vx_reference)stitch->Img_output,                "stitch_output",       false, false, true,  false, "stitch-output.raw" },
 		// input data
 		{ (vx_reference)stitch->Img_input,                 "camera_input",        false, true,  false, false, "camera-input.raw" },
