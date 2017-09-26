@@ -552,6 +552,76 @@ static void ResetLiveStitchGlobalAttributes()
 		g_live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION] = 0;
 	}
 }
+//! \brief Function to set get number from attribute enum
+vx_status offsetFromEnum(const char* enum_string, vx_uint32 * offset){
+	struct {
+		const char* name;
+		vx_uint32 offset;
+	} list[] = {
+		{ "LIVE_STITCH_ATTR_PROFILER",                  0 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP",                   1 },
+		{ "LIVE_STITCH_ATTR_SEAMFIND",                  2 },
+		{ "LIVE_STITCH_ATTR_SEAM_REFRESH",              3 },
+		{ "LIVE_STITCH_ATTR_SEAM_COST_SELECT",          4 },
+		{ "LIVE_STITCH_ATTR_MULTIBAND",                 5 },
+		{ "LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS",        6 },
+		{ "LIVE_STITCH_ATTR_STITCH_MODE",               7 },
+		{ "LIVE_STITCH_ATTR_ENABLE_REINITIALIZE",      10 },
+		{ "LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION",    11 },
+		{ "LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY",       12 },
+		{ "LIVE_STITCH_ATTR_SEAM_HORT_PRIORITY",       13 },
+		{ "LIVE_STITCH_ATTR_SEAM_FREQUENCY",           14 },
+		{ "LIVE_STITCH_ATTR_SEAM_QUALITY",             15 },
+		{ "LIVE_STITCH_ATTR_SEAM_STAGGER",             16 },
+		{ "LIVE_STITCH_ATTR_SEAM_LOCK",                17 },
+		{ "LIVE_STITCH_ATTR_SEAM_FLAGS",               18 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_ENABLE",      20 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_HFOV_MIN",    21 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_PITCH_TOL",   22 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_YAW_TOL",     23 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_HR",  24 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD",  25 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL",  26 },
+		{ "LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD",  27 },
+		{ "LIVE_STITCH_ATTR_MULTIBAND_PAD_PIXELS",     29 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_W",       30 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_H",       31 },
+		{ "LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION",  32 },
+		{ "LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE",  33 },
+		{ "LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE", 34 },
+		{ "LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE",  35 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP_GAIN_IMG_C",       36 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP_ALPHA_VALUE",      37 },
+		{ "LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE",       38 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X",        40 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y",        41 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap",  42 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE", 43 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH",     44 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT",    45 },
+		{ "LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y",  46 },
+		{ "LIVE_STITCH_ATTR_CHROMA_KEY",               50 },
+		{ "LIVE_STITCH_ATTR_CHROMA_KEY_VALUE",         51 },
+		{ "LIVE_STITCH_ATTR_CHROMA_KEY_TOL",           52 },
+		{ "LIVE_STITCH_ATTR_CHROMA_KEY_EED",           53 },
+		{ "LIVE_STITCH_ATTR_NOISE_FILTER",             55 },
+		{ "LIVE_STITCH_ATTR_USE_CPU_FOR_INIT",         56 },
+		{ "LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT",       57 },
+		{ "LIVE_STITCH_ATTR_PRECISION",                58 },
+		{ "LIVE_STITCH_ATTR_WARP_INTERPOLATION",       59 },
+		{ "LIVE_STITCH_ATTR_LINEAR_COLORSPACE",        60 },
+		{ "LIVE_STITCH_ATTR_SEAM_THRESHOLD",           64 },
+		{ "LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA",      65 },
+	};
+	for (vx_size i = 0; i < dimof(list); i++) {
+		if (!_stricmp(list[i].name,enum_string)) {
+			*offset = list[i].offset;
+			return VX_SUCCESS;
+		}
+	}
+	return VX_ERROR_INVALID_VALUE;
+}
+
 static std::vector<std::string> split(std::string str, char delimiter) {
 	std::stringstream ss(str);
 	std::string tok;
@@ -1968,6 +2038,16 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributes(vx_uint32 attr
 	return VX_SUCCESS;
 }
 
+//! \brief Set global attributes. Note that current global attributes will become default attributes for when a stitch context is created.
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr)
+{
+	// get offset value
+	vx_uint32 attr_offset;
+	ERROR_CHECK_STATUS(offsetFromEnum(attr_enum_name, &attr_offset));
+	ERROR_CHECK_STATUS(lsGlobalSetAttributes(attr_offset, attr_count, attr_ptr));
+	return VX_SUCCESS;
+}
+
 //! \brief Get global attributes. Note that current global attributes will become default attributes for when a stitch context is created.
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributes(vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr)
 {
@@ -1980,6 +2060,16 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributes(vx_uint32 attr
 
 	// get global live_stitch_attr[]
 	memcpy(attr_ptr, &g_live_stitch_attr[attr_offset], attr_count * sizeof(vx_float32));
+	return VX_SUCCESS;
+}
+
+//! \brief Get global attributes. Note that current global attributes will become default attributes for when a stitch context is created.
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr)
+{
+	// get offset value
+	vx_uint32 attr_offset;
+	ERROR_CHECK_STATUS(offsetFromEnum(attr_enum_name, &attr_offset));
+	ERROR_CHECK_STATUS(lsGlobalGetAttributes(attr_offset, attr_count, attr_ptr));
 	return VX_SUCCESS;
 }
 
@@ -2040,6 +2130,16 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributes(ls_context stitch, v
 	return VX_SUCCESS;
 }
 
+//! \brief Set context specific attributes.
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr)
+{
+	// get offset value
+	vx_uint32 attr_offset;
+	ERROR_CHECK_STATUS(offsetFromEnum(attr_enum_name, &attr_offset));
+	ERROR_CHECK_STATUS(lsSetAttributes(stitch, attr_offset, attr_count, attr_ptr));
+	return VX_SUCCESS;
+}
+
 //! \brief Get context specific attributes.
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributes(ls_context stitch, vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr)
 {
@@ -2051,6 +2151,16 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributes(ls_context stitch, v
 
 	// get live_stitch_attr
 	memcpy(attr_ptr, &stitch->live_stitch_attr[attr_offset], attr_count * sizeof(vx_float32));
+	return VX_SUCCESS;
+}
+
+//! \brief Get context specific attributes.
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr)
+{
+	// get offset value
+	vx_uint32 attr_offset;
+	ERROR_CHECK_STATUS(offsetFromEnum(attr_enum_name, &attr_offset));
+	ERROR_CHECK_STATUS(lsGetAttributes(stitch, attr_offset, attr_count, attr_ptr));
 	return VX_SUCCESS;
 }
 
