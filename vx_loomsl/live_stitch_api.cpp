@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include <stdarg.h>
 #include <map>
 #include <string>
+#include <climits>
 
 // Version
 #define LS_VERSION             "0.9.6"
@@ -453,7 +454,14 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 			ls_printf("vxQueryContext of failed(%d)\n", status);
 			return nullptr;
 		}
-		vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
+		unsigned long long int size_long = (unsigned long long int)(addr_in.dim_y + 1) * (unsigned long long int)addr_in.stride_y;
+		if (size_long >= (UINT_MAX))
+		{
+			ls_printf("ERROR: Configuration results in an intermediate image size (%lu bytes) bigger than the supported size (4.2 GB).\n", size_long);
+			return nullptr;
+		}
+		vx_size size = size_long;
+
 		cl_int err = CL_SUCCESS;
 		cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
 		if (!clImg || err){
@@ -2809,6 +2817,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	************************************************************************************************************************************/
 	else if (stitch->stitching_mode == stitching_mode_normal)
 	{
+		// Check output definition:
+		unsigned long long int size_long = (unsigned long long int)stitch->output_buffer_height * (unsigned long long int)stitch->output_buffer_height * stitch->num_cameras;
+		if (size_long >= (UINT_MAX))
+		{
+			ls_printf("ERROR: Configuration results in an intermediate image size (%lu bytes) bigger than the supported size (4.2 GB).\n", size_long);
+			return VX_ERROR_INVALID_DIMENSION;
+		}
+
 		////////////////////////////////////////////////////////////////////////
 		// get configuration from environment variables
 		////////////////////////////////////////////////////////////////////////
