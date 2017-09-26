@@ -250,11 +250,11 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 		"	int ly = get_local_id(1);\n"
 		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
 		"   sumI[lid] = 0; sumJ[lid] = 0;\n"
-		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
+		"	bool isValid = ((lx<<3) < (int)((offs.s1>>16)&0xff)) && (ly*2 < (int)((offs.s1>>24)&0xff));\n"
 		"	if (isValid) {\n"
-		"		int   gx = (lx<<3) + ((offs.s0 >> 5) & 0x3FFF);\n"
-		"		int   gy = (ly<<1) + (offs.s0 >> 19);\n"
-		"		uint2 cam_id = (uint2)((offs.s0 & 0x1f), ((offs.s1>>12) & 0x1f));\n";
+		"		int   gx = (lx<<3) + ((offs.s0) & 0xffff);\n"
+		"		int   gy = (ly<<1) + ((offs.s0 >> 16) & 0xffff);\n"
+		"		uint2 cam_id = (uint2)((offs.s1 & 0xff), ((offs.s1>>8) & 0xff));\n";
 	if (mask_image){
 		opencl_kernel_code +=
 			"		uint4 maskSrc; \n"
@@ -1713,13 +1713,13 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	opencl_kernel_code +=
 		"	barrier(CLK_LOCAL_MEM_FENCE);\n"
 		"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n"
-		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
+		"	bool isValid = ((lx<<3) < (int)((offs.s1 >> 16)&0xff)) && (ly*2 < (int)((offs.s1>>24)&0xff));\n"
 		"	if (isValid) {\n"
 		"		global uint *pI, *pJ;\n"
 		"		uint4 Isum4, Jsum4;\n"
-		"		int   gx = (lx<<3) + ((offs.s0 >> 5) & 0x3FFF);\n"
-		"		int   gy = (ly<<1) + (offs.s0 >> 19);\n"
-		"		uint2 cam_id = (uint2)((offs.s0 & 0x1f), ((offs.s1>>12) & 0x1f));\n";
+		"		int   gx = (lx<<3) + ((offs.s0) & 0xffff);\n"
+		"		int   gy = (ly<<1) + ((offs.s0 >> 16) & 0xffff);\n"
+		"		uint2 cam_id = (uint2)((offs.s1 & 0xff), ((offs.s1>>8) & 0xff));\n";
 	if (mask_image){
 		opencl_kernel_code +=
 			"		pWt_buf += pWt_offs + mad24(gy, (int)pWt_stride, gx);\n"
@@ -2394,9 +2394,6 @@ vx_status GenerateExpCompBuffers(
 									overlapEntry.end_x = xe - xs - 1;
 									overlapEntry.end_y = ye - ys - 1;
 									overlapEntry.camId1 = j;
-									overlapEntry.camId2 = 0x1F;
-									overlapEntry.camId3 = 0x1F;
-									overlapEntry.camId4 = 0x1F;
 									overlapTable[overlapEntryCount] = overlapEntry;
 								}
 								overlapEntryCount++;
