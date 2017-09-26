@@ -1523,6 +1523,7 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 		}	
 		// initialize overlay_rgb or output_rgb to 0:
 		r0 = _mm_set1_epi32(0x00000000);
+		rect = { 0, 0, eqrWidth, eqrHeight };
 		if (stitch->Img_overlay_rgb){
 			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->Img_overlay_rgb, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
 			__m128i *dst = (__m128i*) ptr;
