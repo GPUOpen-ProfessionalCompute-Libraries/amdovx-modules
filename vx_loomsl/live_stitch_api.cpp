@@ -1519,10 +1519,42 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 				_mm_store_si128(dst++, r0);
 				_mm_store_si128(dst++, r0);
 			}
-			//			for (vx_uint32 i = 0; i < (addr.stride_y * addr.dim_y) / 4; i++)
-			//				ptr[i] = 0x80000000;
 			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->expcomp_luma16, map_id));
-		}		
+		}	
+		// initialize overlay_rgb or output_rgb to 0:
+		r0 = _mm_set1_epi32(0x00000000);
+		if (stitch->Img_overlay_rgb){
+			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->Img_overlay_rgb, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+			__m128i *dst = (__m128i*) ptr;
+			vx_size size_in_bytes = (addr.stride_y * addr.dim_y)&~127;
+			for (vx_uint32 i = 0; i < size_in_bytes; i += 128){
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+			}
+			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->Img_overlay_rgb, map_id));
+		}
+		else if (stitch->Img_output_rgb){
+			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->Img_output_rgb, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+			__m128i *dst = (__m128i*) ptr;
+			vx_size size_in_bytes = (addr.stride_y * addr.dim_y)&~127;
+			for (vx_uint32 i = 0; i < size_in_bytes; i += 128){
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+				_mm_store_si128(dst++, r0);
+			}
+			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->Img_output_rgb, map_id));
+		}
 	}
 	return VX_SUCCESS;
 }
