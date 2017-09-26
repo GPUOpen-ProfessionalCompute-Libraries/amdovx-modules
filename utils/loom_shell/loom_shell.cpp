@@ -908,75 +908,110 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "setGlobalAttribute")) {
 		// parse the command
-		vx_uint32 attr_offset = 0; float value = 0;
+		vx_uint32 attr_offset = 257; float value = 0; char attr_name[64];
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: setGlobalAttribute(offset,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseFloat(s, value));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (setGlobalAttribute(attr_offset, value) != VX_SUCCESS)
-			return -1;
+		if (attr_offset != 257){
+			if (setGlobalAttribute(attr_offset, value) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (setGlobalAttributeByName(attr_name, value) != VX_SUCCESS)
+				return -1;
+		}
+
 	}
 	else if (!_stricmp(command, "setAttribute")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 0; float value = 0;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: setAttribute(context,offset,value);";
+		vx_uint32 contextIndex = 0, attr_offset = 257; float value = 0; char attr_name[64];
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: setAttribute(context,offset/name,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseFloat(s, value));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (setAttribute(context_[contextIndex], attr_offset, value) != VX_SUCCESS)
-			return -1;
+		if (attr_offset != 257){
+			if (setAttribute(context_[contextIndex], attr_offset, value) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (setAttributeByName(context_[contextIndex], attr_name, value) != VX_SUCCESS)
+				return -1;
+		}
 	}
 	else if (!_stricmp(command, "showGlobalAttributes")) {
 		// parse the command
-		vx_uint32 attr_offset = 0, attr_count = 0;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: showGlobalAttributes(offset,count);";
+		vx_uint32 attr_offset = 257, attr_count = 0; char attr_name[64];
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: showGlobalAttributes(offset/name,count);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (showGlobalAttributes(attr_offset, attr_count) != VX_SUCCESS)
-			return -1;
+		if (attr_offset != 257){
+			if (showGlobalAttributes(attr_offset, attr_count) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (showGlobalAttributesByName(attr_name, attr_count) != VX_SUCCESS)
+				return -1;
+		}
 	}
 	else if (!_stricmp(command, "showAttributes")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0;
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: showAttributes(context,offset,count);";
+		vx_uint32 contextIndex = 0, attr_offset = 257, attr_count = 0; char attr_name[64];
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: showAttributes(context,offset/name,count);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (showAttributes(context_[contextIndex], attr_offset, attr_count) != VX_SUCCESS)
-			return -1;
+		if (attr_offset != 257){
+			if (showAttributes(context_[contextIndex], attr_offset, attr_count) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (showAttributesByName(context_[contextIndex], attr_name, attr_count) != VX_SUCCESS)
+				return -1;
+		}
 	}
 	else if (!_stricmp(command, "loadAttributes") || !_stricmp(command, "saveAttributes")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0;
+		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0; char attr_name[64];
 		char fileName[256] = { 0 };
 		const char * invalidSyntax = !_stricmp(command, "loadAttributes") ?
-			"ERROR: invalid syntax: expects: loadAttributes(context,offset,count,\"attr.txt\");" :
-			"ERROR: invalid syntax: expects: saveAttributes(context,offset,count,\"attr.txt\");";
+			"ERROR: invalid syntax: expects: loadAttributes(context,offset/name,count,\"attr.txt\");" :
+			"ERROR: invalid syntax: expects: saveAttributes(context,offset/name,count,\"attr.txt\");";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -984,18 +1019,26 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (!_stricmp(command, "loadAttributes")) {
+		if (!_stricmp(command, "loadAttributes") && attr_offset != 257) {
 			if (loadAttributes(context_[contextIndex], attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else {
+		else if (!_stricmp(command, "loadAttributes") && attr_offset == 257) {
+			if (loadAttributesByName(context_[contextIndex], attr_name, attr_count, fileName) != VX_SUCCESS)
+				return -1;
+		}
+		else if (attr_offset != 257){
 			if (saveAttributes(context_[contextIndex], attr_offset, attr_count, fileName) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (saveAttributesByName(context_[contextIndex], attr_name, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
 	}
 	else if (!_stricmp(command, "loadGlobalAttributes") || !_stricmp(command, "saveGlobalAttributes")) {
 		// parse the command
-		vx_uint32 attr_offset = 0, attr_count = 0;
+		vx_uint32 attr_offset = 257, attr_count = 0; char attr_name[64];
 		char fileName[256] = { 0 };
 		const char * invalidSyntax = !_stricmp(command, "loadGlobalAttributes") ?
 			"ERROR: invalid syntax: expects: loadGlobalAttributes(offset,count,\"attr.txt\");" :
@@ -1003,18 +1046,28 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseUInt(s, attr_offset));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		SYNTAX_CHECK(ParseUInt(s, attr_count));
+		if (!ParseUInt(s, attr_offset)){
+			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (!_stricmp(command, "loadGlobalAttributes")) {
+		if (!_stricmp(command, "loadGlobalAttributes") && attr_offset != 257) {
 			if (loadGlobalAttributes(attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else {
+		else if (!_stricmp(command, "loadGlobalAttributes") && attr_offset == 257){
+			if (loadGlobalAttributesByName(attr_name, attr_count, fileName) != VX_SUCCESS)
+				return -1;
+		}
+		else if (attr_offset != 257){
 			if (saveGlobalAttributes(attr_offset, attr_count, fileName) != VX_SUCCESS)
+				return -1;
+		}
+		else{
+			if (saveGlobalAttributesByName(attr_name, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
 	}
