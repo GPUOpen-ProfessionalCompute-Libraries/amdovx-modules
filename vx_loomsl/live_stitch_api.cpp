@@ -124,6 +124,10 @@ struct ls_context_t {
 	bool        context_is_external;            // To avoid releaseing external OpenVX context
 	vx_context  context;                        // OpenVX context
 	vx_graph    graphStitch;                    // OpenVX graph for stitching
+	// OpenCL buffer
+	vx_size     opencl_mem_alloc_count;         // count number of opencl buffers allocated by LOOM
+	vx_size     opencl_mem_alloc_size;          // count memory of opencl buffers allocated by LOOM
+	vx_size     opencl_mem_release_count;       // count number of opencl buffer released by LOOM
 	// internal buffer sizes
 	ls_internal_table_size_info table_sizes;	// internal table sizes
 	vx_image	rgb_input, rgb_output;			// internal images
@@ -406,6 +410,7 @@ static vx_status DumpReference(vx_reference ref, const char * fileName)
 	else return VX_ERROR_NOT_SUPPORTED;
 }
 
+//! \Creates an aligned image with a size depending on the input format
 static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32 height, vx_uint32 alignpixels, vx_df_image format, vx_enum mem_type)
 {
 	if (mem_type == VX_MEMORY_TYPE_OPENCL){
@@ -445,6 +450,8 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 		vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
 		cl_int err = CL_SUCCESS;
 		cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
+		stitch->opencl_mem_alloc_count++;
+		stitch->opencl_mem_alloc_size += size;
 		if (!clImg || err){
 			ls_printf("clCreateBuffer of size %d failed(%d)\n", (int)size, err);
 			return nullptr;
@@ -455,6 +462,28 @@ static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32
 	else
 	{
 		return vxCreateImage(stitch->context, width, height, format);
+	}
+}
+
+//! \Release an OpenVX image, if necessary it will free the used OpenCL memory
+static vx_status releaseImage(ls_context stitch, vx_image *input){
+	vx_enum mem_type;
+	ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_MEMORY_TYPE, &mem_type, sizeof(mem_type)));
+	if (mem_type == VX_MEMORY_TYPE_OPENCL){
+		cl_mem clImg;
+		ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_ATTRIBUTE_AMD_OPENCL_BUFFER, &clImg, sizeof(cl_mem)));
+		clReleaseMemObject(clImg);
+		stitch->opencl_mem_release_count++;
+		vxReleaseImage(input);
+		return VX_SUCCESS;
+	}
+	else if (mem_type == VX_MEMORY_TYPE_NONE){
+		vxReleaseImage(input);
+		return VX_SUCCESS;
+	}
+	else{
+		printf("ERROR: releaseImage: Type not supported\n");
+		return VX_FAILURE;
 	}
 }
 
@@ -1137,6 +1166,26 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 	}
 	return VX_SUCCESS;
 }
+
+static vx_status ReleaseStitchInitData(ls_context stitch)
+{
+	if (stitch->stitchInitData){
+		if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
+		if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
+		if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->DefaultCamMap));
+		if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->ValidPixelMap));
+		if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->PaddedPixMap));
+		if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->stitchInitData->SrcCoordMap));
+		if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
+		if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
+		if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
+		if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
+		delete[] stitch->stitchInitData;
+		stitch->stitchInitData = nullptr;
+	}
+	return VX_SUCCESS;
+}
+
 static vx_status AllocateLensModelBuffersForOverlay(ls_context stitch)
 {
 	stitch->overlaySrcMap = new StitchCoord2dFloat[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_overlays];
@@ -1604,6 +1653,9 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				return status;
 			}
 		}
+
+		// Release used buffers
+		ERROR_CHECK_STATUS(ReleaseStitchInitData(stitch));		
 	}
 	else
 	{
@@ -1981,6 +2033,13 @@ LIVE_STITCH_API_ENTRY ls_context VX_API_CALL lsCreateContext()
 		memcpy(stitch->live_stitch_attr, g_live_stitch_attr, sizeof(stitch->live_stitch_attr));
 		stitch->magic = LIVE_STITCH_MAGIC;
 	}
+
+	/////////////////////////////////////////////////////////
+	// Reset OpenCL counter:
+	stitch->opencl_mem_alloc_count = 0;
+	stitch->opencl_mem_alloc_size = 0;
+	stitch->opencl_mem_release_count = 0;
+
 	return stitch;
 }
 
@@ -3071,31 +3130,31 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->Img_input_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_input_rgb));
 		if (stitch->Img_output_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_output_rgb));
 		if (stitch->Img_overlay) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay));
-		if (stitch->Img_overlay_rgb) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay_rgb));
-		if (stitch->Img_overlay_rgba) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->Img_overlay_rgba));
-		if (stitch->warp_output_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->warp_output_image));
-		if (stitch->exp_comp_output_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->exp_comp_output_image));
-		if (stitch->weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->weight_image));
-		if (stitch->cam_id_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->cam_id_image));
-		if (stitch->group1_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->group1_image));
-		if (stitch->group2_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->group2_image));
-		if (stitch->expcomp_luma16) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->expcomp_luma16));
-		if (stitch->valid_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->valid_mask_image));
-		if (stitch->warp_luma_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->warp_luma_image));
-		if (stitch->sobel_magnitude_s16_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_s16_image));
-		if (stitch->sobelx_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobelx_image));
-		if (stitch->sobely_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobely_image));
-		if (stitch->sobel_magnitude_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_magnitude_image));
-		if (stitch->sobel_phase_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->sobel_phase_image));
-		if (stitch->seamfind_weight_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->seamfind_weight_image));
-		if (stitch->blend_mask_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->blend_mask_image));
+		if (stitch->Img_overlay_rgb) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->Img_overlay_rgb));
+		if (stitch->Img_overlay_rgba) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->Img_overlay_rgba));
+		if (stitch->warp_output_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->warp_output_image));
+		if (stitch->exp_comp_output_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->exp_comp_output_image));
+		if (stitch->weight_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->weight_image));
+		if (stitch->cam_id_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->cam_id_image));
+		if (stitch->group1_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->group1_image));
+		if (stitch->group2_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->group2_image));
+		if (stitch->expcomp_luma16) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->expcomp_luma16));
+		if (stitch->valid_mask_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->valid_mask_image));
+		if (stitch->warp_luma_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->warp_luma_image));
+		if (stitch->sobel_magnitude_s16_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->sobel_magnitude_s16_image));
+		if (stitch->sobelx_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->sobelx_image));
+		if (stitch->sobely_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->sobely_image));
+		if (stitch->sobel_magnitude_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->sobel_magnitude_image));
+		if (stitch->sobel_phase_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->sobel_phase_image));
+		if (stitch->seamfind_weight_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->seamfind_weight_image));
+		if (stitch->blend_mask_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->blend_mask_image));
 		if (stitch->blend_offsets) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->blend_offsets));
 		if (stitch->chroma_key_input_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_img));
 		if (stitch->chroma_key_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_mask_img));
-		if (stitch->chroma_key_dilate_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_dilate_mask_img));
-		if (stitch->chroma_key_erode_mask_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_erode_mask_img));
-		if (stitch->chroma_key_input_RGB_img) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->chroma_key_input_RGB_img));
-		if (stitch->noiseFilterInput_image) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->noiseFilterInput_image));
+		if (stitch->chroma_key_dilate_mask_img) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->chroma_key_dilate_mask_img));
+		if (stitch->chroma_key_erode_mask_img) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->chroma_key_erode_mask_img));
+		if (stitch->chroma_key_input_RGB_img) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->chroma_key_input_RGB_img));
+		if (stitch->noiseFilterInput_image) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->noiseFilterInput_image));
 
 		// release scalar objects
 		if (stitch->current_frame) ERROR_CHECK_STATUS_(vxReleaseScalar(&stitch->current_frame));
@@ -3163,10 +3222,10 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->pStitchMultiband[i].UpscaleSubtractNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleSubtractNode));
 				if (stitch->pStitchMultiband[i].UpscaleAddNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleAddNode));
 				if (stitch->pStitchMultiband[i].LaplacianReconNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].LaplacianReconNode));
-				if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgGaussian));
-				if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].WeightPyrImgGaussian));
-				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacian));
-				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
+				if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgGaussian));
+				if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->pStitchMultiband[i].WeightPyrImgGaussian));
+				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacian));
+				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
 			}
 			delete[] stitch->pStitchMultiband;
 			delete[] stitch->multibandBlendOffsetIntoBuffer;
@@ -3189,29 +3248,16 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		// release tiled image elements
 		if (stitch->num_encode_sections > 1){
 			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
-				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
-				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
+				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->encode_src_rgb_imgs[i]));
+				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->encode_dst_imgs[i]));
 				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
-				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
+				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(releaseImage(stitch, &stitch->encodetileOutput[i]));
 			}
 		}
 
 		// release fast GPU initialize elements
 		if (!stitch->USE_CPU_INIT){
-			if (stitch->stitchInitData){
-				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
-				if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
-				if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->DefaultCamMap));
-				if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->ValidPixelMap));
-				if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->PaddedPixMap));
-				if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->SrcCoordMap));
-				if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
-				if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
-				if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
-				if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
-				delete[] stitch->stitchInitData;
-				stitch->stitchInitData = nullptr;
-			}
+			ReleaseStitchInitData(stitch);
 		}
 
 		// release internal buffers
@@ -3238,6 +3284,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		//Graph & Context
 		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
 		if (stitch->context && !stitch->context_is_external) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
+
+
+		if (stitch->opencl_mem_alloc_count > 0) {
+			ls_printf("OK: OpenCL buffer usage within LOOM: " VX_FMT_SIZE ", " VX_FMT_SIZE "/" VX_FMT_SIZE "\n",
+				stitch->opencl_mem_alloc_size, stitch->opencl_mem_release_count, stitch->opencl_mem_alloc_count);
+		}
 
 		delete stitch;
 		*pStitch = nullptr;
