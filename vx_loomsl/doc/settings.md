@@ -5,7 +5,7 @@
 
  Within the API, one example would be: ```lsSetGlobalAttribute(offset,count,value);```
 
- Where offset is a number for a certain parameter.
+ Where offset is a number for a certain parameter. Most of the attributes are global, which means there can only set before initializing. Some can only changed after initalizing, there are called dynamic.
 
  ## General Settings:
  | Name  | Offset | Description                                 | Value           |
@@ -27,7 +27,7 @@
  | Name  | Offset | Description                                 | Value           |
  |-------|------------------|---------------------------------------------|-------------------|
  |LIVE_STITCH_ATTR_NOISE_FILTER | 55 | Option to enable/disable the module | **0: Off**, 1: On |
- |LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA | 65 | Dynamic Lambda to control denoising | **1**; Range: 0 - 1 |
+ |LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA | 65 | **Dynamic** Lambda to control denoising | **1**; Range: 0 - 1 |
 
  ## Exposure Compensation
  | Name  | Offset | Description                                 | Value           |
@@ -61,7 +61,7 @@
  |LIVE_STITCH_ATTR_SEAM_COEQUSH_OVERLAP_VD | 25 | Max vertical overlap in degrees |  **20** |
  |LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_TOL | 26 | Top and bottom camera pitch tolerance | **5** |
  |LIVE_STITCH_ATTR_SEAM_COEQUSH_TOPBOT_VGD | 27 | Top and bottom camera vertical overlap clamp in degrees for equaor cameras | **0** |
- |LIVE_STITCH_ATTR_SEAM_THRESHOLD  | 64 | Seamfind refresh Threshold: 0 - 100 percentage change | **25** |
+ |LIVE_STITCH_ATTR_SEAM_THRESHOLD  | 64 | **Dynamic** Seamfind refresh Threshold: 0 - 100 percentage change | **25** |
 
 
  ## Multiband
