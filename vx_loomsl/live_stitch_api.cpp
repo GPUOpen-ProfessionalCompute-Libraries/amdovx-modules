@@ -2468,10 +2468,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		// create remap table object and image for overlay warp
 		ERROR_CHECK_OBJECT_(stitch->overlay_remap = vxCreateRemap(stitch->context, stitch->overlay_buffer_width, stitch->overlay_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-			ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGB4_AMD));
+			ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgb = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGB4_AMD));
 		}
 		else{ //8bit mode
-			ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgb = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGB));
+			ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgb = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGB));
 		}
 		ERROR_CHECK_OBJECT_(stitch->Img_overlay_rgba = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, VX_DF_IMAGE_RGBX));
 		// initialize remap using lens model
