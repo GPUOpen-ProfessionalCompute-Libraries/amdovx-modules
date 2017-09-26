@@ -590,7 +590,7 @@ vx_status setGlobalAttribute(vx_uint32 offset, float value)
 vx_status setGlobalAttributeByName(const char* name, float value)
 {
 	vx_status status = lsGlobalSetAttributesByName(name, 1, &value);
-	if (status) return Error("ERROR: setGlobalAttributeByName(%s%.3f) failed (%d)", name, value, status);
+	if (status) return Error("ERROR: setGlobalAttributeByName(%s,%.3f) failed (%d)", name, value, status);
 	return VX_SUCCESS;
 }
 
@@ -612,7 +612,7 @@ vx_status showGlobalAttributesByName(const char* name, vx_uint32 count)
 	vx_status status = lsGlobalGetAttributesByName(name, count, attr);
 	if (status) { delete[] attr; return Error("ERROR: showGlobalAttributesByName(%s,%d,*) failed (%d)", name, count, status); }
 	for (vx_uint32 i = 0; i < count; i++) {
-		Message("attr[%4d] = %13.6f (global)\n", i, attr[i]);
+		Message("attr[%40s,%4d] = %13.6f (global)\n", name, i, attr[i]);
 	}
 	delete[] attr;
 	return VX_SUCCESS;
@@ -710,7 +710,7 @@ vx_status showAttributesByName(ls_context context, const char* name, vx_uint32 c
 	vx_status status = lsGetAttributesByName(context, name, count, attr);
 	if (status) { delete[] attr; return Error("ERROR: lsGetAttributesByName(*,%s,%d,*) failed (%d)", name, count, status); }
 	for (vx_uint32 i = 0; i < count; i++) {
-		Message("attr[%4d] = %13.6f\n", i, attr[i]);
+		Message("attr[%40s,%4d] = %13.6f\n", name, i, attr[i]);
 	}
 	delete[] attr;
 	return VX_SUCCESS;

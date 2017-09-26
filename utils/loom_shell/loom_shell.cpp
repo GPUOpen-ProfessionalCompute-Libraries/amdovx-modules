@@ -909,7 +909,7 @@ int CLoomShellParser::OnCommand()
 	else if (!_stricmp(command, "setGlobalAttribute")) {
 		// parse the command
 		vx_uint32 attr_offset = 257; float value = 0; char attr_name[64];
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: setGlobalAttribute(offset,value);";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: setGlobalAttribute(offset/name,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
@@ -1041,14 +1041,14 @@ int CLoomShellParser::OnCommand()
 		vx_uint32 attr_offset = 257, attr_count = 0; char attr_name[64];
 		char fileName[256] = { 0 };
 		const char * invalidSyntax = !_stricmp(command, "loadGlobalAttributes") ?
-			"ERROR: invalid syntax: expects: loadGlobalAttributes(offset,count,\"attr.txt\");" :
-			"ERROR: invalid syntax: expects: saveGlobalAttributes(offset,count,\"attr.txt\");";
+			"ERROR: invalid syntax: expects: loadGlobalAttributes(offset/name,count,\"attr.txt\");" :
+			"ERROR: invalid syntax: expects: saveGlobalAttributes(offset/name,count,\"attr.txt\");";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		SYNTAX_CHECK(ParseUInt(s, attr_offset));
-		SYNTAX_CHECK(ParseSkip(s, ","));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
 		}
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
