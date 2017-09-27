@@ -93,7 +93,6 @@ struct NeuralNetworkCommonHandle {
 //////////////////////////////////////////////////////////////////////
 //! \brief The utility functions
 vx_node createNode(vx_graph graph, vx_enum kernelEnum, vx_reference params[], vx_uint32 num);
-vx_reference getNodeParameterByIndex(vx_node node, vx_uint32 index);
 vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle);
 vx_status releaseGraphHandle(vx_node node, NeuralNetworkCommonHandle * handle);
 
