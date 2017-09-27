@@ -2319,7 +2319,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
-			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
+			ls_printf("WARNING: Simple stitching is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
@@ -2950,7 +2950,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	Other Modes
 	************************************************************************************************************************************/
 	else {
-		vxAddLogEntry((vx_reference)stitch->context, VX_ERROR_NO_RESOURCES, "Other Stitching Modes are under development\nMode-1 = Quick Stitch Mode Available\nMode-2 = Normal Stitch Mode Available\n");
+		vxAddLogEntry((vx_reference)stitch->context, VX_ERROR_NO_RESOURCES, "Other Stitching Modes are under development\nMode-1 = Simple stitch Mode Available\nMode-2 = Normal Stitch Mode Available\n");
 		return VX_ERROR_NO_RESOURCES;
 	}
 
