@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include <string>
 
 // Version
-#define LS_VERSION             "0.9.6"
+#define LS_VERSION             "0.9.7"
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The magic number for validation
