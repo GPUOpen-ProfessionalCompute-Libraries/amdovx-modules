@@ -109,11 +109,8 @@ void getLayerParams(
         const caffe::BatchNormParameter& norm = layer.batch_norm_param();
         int use_global_stats = norm.use_global_stats();
         float eps = norm.eps();
-	int bias_term = 0, scale_term = 0;
         params =       std::to_string(eps)
-                + " " + std::to_string(use_global_stats)
-                + " " + std::to_string(bias_term)
-                + " " + std::to_string(scale_term);
+                + " " + std::to_string(use_global_stats);
     }
     else if(layer.type() == "Scale") {
         const caffe::ScaleParameter& scale = layer.scale_param();
@@ -333,16 +330,23 @@ int calculateTensorDim(
         else if(type == "SoftmaxWithLoss") {
             output = node[5];
         }
-	else if (type == "BatchNorm") {
+		else if (type == "BatchNorm") {
+		    std::stringstream ss(params);
+		    int use_global_stats;
+		    float eps;
+		    ss >> eps >> use_global_stats;
+		    tensorMap[output + "_W"] = std::vector<int>{k};
+		    tensorMap[output + "_B"] = std::vector<int>{k};
+		}
+        else if(type == "Scale") {
 	    std::stringstream ss(params);
-	    int use_global_stats;
-	    float eps;
-	    ss >> eps >> use_global_stats;
+	    int bias_term;
+            ss >> bias_term;
 	    tensorMap[output + "_W"] = std::vector<int>{k};
-	    tensorMap[output + "_B"] = std::vector<int>{k};
-	    tensorMap[output + "_M"] = std::vector<int>{k};
-	    tensorMap[output + "_V"] = std::vector<int>{k};
-	}
+            if(bias_term) {
+                tensorMap[output + "_B"] = std::vector<int>{k};
+            }
+        }
 	
         tensorMap[output] = std::vector<int>{n, k, h, w};
         if(n < 1 || k < 1 || h < 1 || w < 1)
@@ -591,20 +595,76 @@ void writeGDF(
 #endif
         }
         else if(type == "BatchNorm") {
-            int use_global_stats;
-            float eps, beta = 0, gamma = 1;
-            std::stringstream ss(params);
-            ss >> eps >> use_global_stats;
-            ofsGDF << "data " << node[3] <<"_eps =" << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
-            ofsGDF << "data " << node[3] <<"_beta =" << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
-            ofsGDF << "data " << node[3] <<"_gamma ="<< " scalar:VX_TYPE_FLOAT32," << gamma << std::endl;
-            ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " "
-                   << node[3] << "_gamma "
-                   << node[3] << "_beta "
-                   << " " << node[3]
-                   << std::endl;
+		// check next node. If scale extract weight and bias paramters for scale layer.
+        auto& next_node = *std::next(&node);
+        auto&& next_output = next_node[3];
+        auto&& next_type = next_node[0];
+        auto&& nn_params = next_node[1];
+        std::string nn_layer_name = next_node[3];
+        formatFileName(nn_layer_name,"/","_");
+        bool bscale_layer = (next_type == "Scale");
+
+    	int use_global_stats, bias_term;
+        float eps;
+        std::stringstream ss(params);
+        ss >> eps >> use_global_stats;
+	    std::string weights = output + "_W";
+	    auto&& dim = tensorMap[weights];
+	    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+	    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+	    ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+	    tensorCheck[weights] = true;
+	    std::string bias = output + "_B";
+	    dim = tensorMap[bias];
+	    ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+	    ofsGDF << "init " << bias << " bias/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+	    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+	    tensorCheck[bias] = true;
+	    bias = "NULL";
+	    if (bscale_layer){
+		    weights = next_output + "_W";
+		    std::stringstream ss(nn_params); 
+		    ss >> bias_term;
+		    dim = tensorMap[weights];
+		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		    ofsGDF << "init " << weights << " weights/" << nn_layer_name << ".f32" << std::endl;
+	        tensorCheck[weights] = true;
+	        if(bias_term) {
+	            bias = next_output + "_B";
+	            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+	            ofsGDF << "init " << bias << " bias/"<< nn_layer_name << ".f32" << std::endl;
+	#if ENABLE_DIRECTIVE
+	            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+	#endif
+	            tensorCheck[bias] = true;
+	        }
+    	}else
+    	{
+		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+    		// put default scale and bias term
+		    std::vector<float> scale_arr(dim[0]);
+		    std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
+		    FILE *fp = fopen("scale_init.f32", "wb");
+		    if (fp) {
+		    	fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
+		    	fclose(fp);
+		    }
+		    ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
+    	}
+
+        ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
+               << node[3] << "_B "
+               << next_node[3] << "_W "
+               << bias << " "
+               << node[3] << "_eps "
+               << node[3]
+               << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
-            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+        ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
         }
         else if(type == "Eltwise") {
@@ -641,13 +701,42 @@ void writeGDF(
             }
         }
         else if(type == "Scale") {
-            float alpha = 1, beta = 0;
-            ofsGDF << "data " << node[3] <<"_alpha = " << " scalar:VX_TYPE_FLOAT32," << alpha << std::endl;
-            ofsGDF << "data " << node[3] <<"_beta = " << " scalar:VX_TYPE_FLOAT32," << beta << std::endl;
+        	// if prev_layer is batch_norm, go to next layer
+	        auto& prev_node = *std::prev(&node);
+	        std::string node_type_prev = prev_node[0]; 
+	        if (node_type_prev == "BatchNorm"){
+        		ofsGDF << std::endl;
+        		continue;
+	        }
+	        int bias_term;
+		    auto&& type = node[0];
+	        auto&& params = node[1];
+	        std::string layer_name = node[3];
+	        formatFileName(layer_name,"/","_");
+	    	std::string weights = output + "_W";
+		    std::stringstream ss(params); ss >> bias_term;
+		    auto&& dim = tensorMap[weights];
+		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+	        tensorCheck[weights] = true;
+#if ENABLE_DIRECTIVE
+	        ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+	        std::string bias = "NULL";
+	        if(bias_term) {
+	            bias = output + "_B";
+	            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+	            ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+	            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+	            tensorCheck[bias] = true;
+	        }
+
             ofsGDF << "node org.khronos.nn_extension.scale_layer " << node[4]
-                   << node[3] << "_alpha "
-                   << node[3] << "_beta"
-                   << " " << node[3]
+                   << node[3] << "_W "
+                   << node[3] << "_B "
+                   << node[3]
                    << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
