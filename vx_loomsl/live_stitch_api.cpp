@@ -44,7 +44,7 @@ THE SOFTWARE.
 //! \brief The stitching modes
 enum {
 	stitching_mode_normal          = 0, // normal mode
-	stitching_mode_quick_and_dirty = 1, // quick and dirty mode
+	stitching_mode_simple          = 1, // simple mode
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -1118,7 +1118,7 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 		// Quick Initailize enabled
 		if (stitch->stitchInitData && stitch->stitchInitData->graphInitialize && !stitch->SETUP_LOAD_FILES_FOUND)
 		{
-			if (stitch->stitching_mode == stitching_mode_quick_and_dirty) stitch->stitchInitData->paddingPixelCount = 0;
+			if (stitch->stitching_mode == stitching_mode_simple) stitch->stitchInitData->paddingPixelCount = 0;
 			else stitch->stitchInitData->paddingPixelCount = stitch->paddingPixelCount;
 			ERROR_CHECK_STATUS_(setupQuickInitializeParams(stitch));
 			ERROR_CHECK_STATUS_(setupQuickInitializeGraph(stitch));
@@ -2340,8 +2340,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	/////////////////////////////////////////////////////////
 	// pick default stitch mode and aux data length
 	stitch->stitching_mode = stitching_mode_normal;
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == (float)stitching_mode_quick_and_dirty)
-		stitch->stitching_mode = stitching_mode_quick_and_dirty;
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == (float)stitching_mode_simple)
+		stitch->stitching_mode = stitching_mode_simple;
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 1.0f)
 		stitch->feature_enable_reinitialize = true;
 	stitch->loomioOutputAuxSelection = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION];
@@ -2728,9 +2728,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 
 	/***********************************************************************************************************************************
-	Quick Stitch Mode -> Simple stitch
+	Simple stitch mode
 	************************************************************************************************************************************/
-	if (stitch->stitching_mode == stitching_mode_quick_and_dirty)
+	if (stitch->stitching_mode == stitching_mode_simple)
 	{
 		// create remap table object
 		ERROR_CHECK_OBJECT_(stitch->camera_remap = vxCreateRemap(stitch->context, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
