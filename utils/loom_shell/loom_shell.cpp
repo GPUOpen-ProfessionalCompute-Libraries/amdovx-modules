@@ -908,18 +908,19 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "setGlobalAttribute")) {
 		// parse the command
-		vx_uint32 attr_offset = 257; float value = 0; char attr_name[64];
+		vx_uint32 attr_offset = 0; float value = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: setGlobalAttribute(offset/name,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseFloat(s, value));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (attr_offset != 257){
+		if (offset_mode){
 			if (setGlobalAttribute(attr_offset, value) != VX_SUCCESS)
 				return -1;
 		}
@@ -931,20 +932,21 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "setAttribute")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 257; float value = 0; char attr_name[64];
+		vx_uint32 contextIndex = 0, attr_offset = 0; float value = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: setAttribute(context,offset/name,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseFloat(s, value));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (attr_offset != 257){
+		if (offset_mode){
 			if (setAttribute(context_[contextIndex], attr_offset, value) != VX_SUCCESS)
 				return -1;
 		}
@@ -955,18 +957,19 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "showGlobalAttributes")) {
 		// parse the command
-		vx_uint32 attr_offset = 257, attr_count = 0; char attr_name[64];
+		vx_uint32 attr_offset = 0, attr_count = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: showGlobalAttributes(offset/name,count);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (attr_offset != 257){
+		if (offset_mode){
 			if (showGlobalAttributes(attr_offset, attr_count) != VX_SUCCESS)
 				return -1;
 		}
@@ -977,20 +980,21 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "showAttributes")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 257, attr_count = 0; char attr_name[64];
+		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: showAttributes(context,offset/name,count);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (attr_offset != 257){
+		if (offset_mode){
 			if (showAttributes(context_[contextIndex], attr_offset, attr_count) != VX_SUCCESS)
 				return -1;
 		}
@@ -1001,7 +1005,7 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "loadAttributes") || !_stricmp(command, "saveAttributes")) {
 		// parse the command
-		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0; char attr_name[64];
+		vx_uint32 contextIndex = 0, attr_offset = 0, attr_count = 0; char attr_name[64]; bool offset_mode = true;
 		char fileName[256] = { 0 };
 		const char * invalidSyntax = !_stricmp(command, "loadAttributes") ?
 			"ERROR: invalid syntax: expects: loadAttributes(context,offset/name,count,\"attr.txt\");" :
@@ -1011,6 +1015,7 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
@@ -1019,15 +1024,15 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (!_stricmp(command, "loadAttributes") && attr_offset != 257) {
+		if (!_stricmp(command, "loadAttributes") && offset_mode) {
 			if (loadAttributes(context_[contextIndex], attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else if (!_stricmp(command, "loadAttributes") && attr_offset == 257) {
+		else if (!_stricmp(command, "loadAttributes") && !offset_mode) {
 			if (loadAttributesByName(context_[contextIndex], attr_name, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else if (attr_offset != 257){
+		else if (offset_mode){
 			if (saveAttributes(context_[contextIndex], attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
@@ -1038,7 +1043,7 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "loadGlobalAttributes") || !_stricmp(command, "saveGlobalAttributes")) {
 		// parse the command
-		vx_uint32 attr_offset = 257, attr_count = 0; char attr_name[64];
+		vx_uint32 attr_offset = 0, attr_count = 0; char attr_name[64]; bool offset_mode = true;
 		char fileName[256] = { 0 };
 		const char * invalidSyntax = !_stricmp(command, "loadGlobalAttributes") ?
 			"ERROR: invalid syntax: expects: loadGlobalAttributes(offset/name,count,\"attr.txt\");" :
@@ -1046,6 +1051,7 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		if (!ParseUInt(s, attr_offset)){
 			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
 		SYNTAX_CHECK(ParseUInt(s, attr_count));
@@ -1054,15 +1060,15 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		if (!_stricmp(command, "loadGlobalAttributes") && attr_offset != 257) {
+		if (!_stricmp(command, "loadGlobalAttributes") && offset_mode) {
 			if (loadGlobalAttributes(attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else if (!_stricmp(command, "loadGlobalAttributes") && attr_offset == 257){
+		else if (!_stricmp(command, "loadGlobalAttributes") && !offset_mode){
 			if (loadGlobalAttributesByName(attr_name, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
-		else if (attr_offset != 257){
+		else if (offset_mode){
 			if (saveGlobalAttributes(attr_offset, attr_count, fileName) != VX_SUCCESS)
 				return -1;
 		}
