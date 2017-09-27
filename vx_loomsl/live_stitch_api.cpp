@@ -527,29 +527,18 @@ static void ResetLiveStitchGlobalAttributes()
 		// frame encoding default attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap] = 0;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] = 3840;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] = 2160;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y] = 3840;
 		// chroma key default
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_EED] = 0;
 		// LoomIO specific attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		// Temporal Filter
-		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT] = 0;
-		// 16 bit flow
-		g_live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
-		// warp
-		g_live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION] = 0;
 	}
 }
 static std::vector<std::string> split(std::string str, char delimiter) {
