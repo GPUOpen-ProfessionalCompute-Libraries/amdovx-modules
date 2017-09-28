@@ -28,7 +28,6 @@ THE SOFTWARE.
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The Chroma Key kernel registration functions.
-vx_status chroma_key_merge_publish(vx_context context);
 vx_status chroma_key_mask_generation_publish(vx_context context);
 
 #endif //__CHROMA_KEY_H__
