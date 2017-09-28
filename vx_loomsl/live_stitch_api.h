@@ -98,6 +98,7 @@ enum {
 	LIVE_STITCH_ATTR_PRECISION	              =	  58,	// enables a 16bit flow from input to output color convert: 0:Auto-Detect 1:8-bit 2: 16-bit (default:0)
 	LIVE_STITCH_ATTR_WARP_INTERPOLATION       =   59,   // warp interpolation mode: 0: bilinear, 1: bicubic (default:0)
 	LIVE_STITCH_ATTR_LINEAR_COLORSPACE        =   60,   // the whole flow will use a linear colorspace: 0: Non linear, 1: linear (default:0)
+	LIVE_STITCH_ATTR_COLOR_CORRECTION         =   61,   // use an external color correction matrix to color correct: 0: Off, 1: On
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)
 	LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA	  =   65,   // temporal filter variable: 0 - 1 (default:1)
@@ -366,5 +367,10 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetExpCompGains(ls_context stitch,
 //  - valid when seam find is not active
 //  - weights: array of weights in output_width * output_height * num_camera
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetBlendWeights(ls_context stitch, vx_uint8 * weights, size_t size);
+
+//! \brief color correction module.
+//  - valid when color correction is active
+//  - needs 12 values per camera
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetColorCorrectGains(ls_context stitch, size_t num_entries, vx_float32 * gains);
 
 #endif //__LIVE_STITCH_API_H__

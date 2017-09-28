@@ -64,6 +64,8 @@ vx_status setAttribute(ls_context context, vx_uint32 offset, float value);
 vx_status saveAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, const char * fileName);
 vx_status loadAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, const char * fileName);
 
+vx_status loadColorCorrectGains(ls_context stitch, size_t num_entries, const char * fileName);
+
 vx_status showExpCompGains(ls_context stitch, size_t num_entries);
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 vx_status saveExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);

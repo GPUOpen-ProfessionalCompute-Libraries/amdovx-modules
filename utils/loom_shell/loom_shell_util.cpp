@@ -971,6 +971,36 @@ vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags)
 	return VX_SUCCESS;
 }
 
+vx_status loadColorCorrectGains(ls_context stitch, size_t num_entries, const char * fileName)
+{
+	bool textFileFormat = (strlen(fileName) > 4 && !_stricmp(&fileName[strlen(fileName) - 4], ".txt")) ? true : false;
+	FILE * fp = fopen(fileName, textFileFormat ? "r" : "rb");
+	if (!fp) return Error("ERROR: unable to open: %s", fileName);
+	std::vector<vx_float32> gains(num_entries);
+	if (!textFileFormat) {
+		size_t count = fread(gains.data(), sizeof(vx_float32), gains.size(), fp);
+		if (count != gains.size()) {
+			fclose(fp);
+			return Error("ERROR: loadColorCorrectGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)count);
+		}
+	}
+	else {
+		for (vx_size i = 0; i < gains.size(); i++) {
+			vx_float32 f;
+			if (fscanf(fp, "%g", &f) != 1) {
+				fclose(fp);
+				return Error("ERROR: loadColorCorrectGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)i);
+			}
+			gains[i] = f;
+		}
+	}
+	fclose(fp);
+	vx_status status = lsSetColorCorrectGains(stitch, num_entries, gains.data());
+	if (status) return Error("ERROR: lsSetColorCorrectGains: failed (%d)\n", status);
+	Message("OK: loadColorCorrectGains: loaded %d values from %s\n", (vx_uint32)gains.size(), fileName);
+	return VX_SUCCESS;
+}
+
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName)
 {
 	bool textFileFormat = (strlen(fileName) > 4 && !_stricmp(&fileName[strlen(fileName) - 4], ".txt")) ? true : false;

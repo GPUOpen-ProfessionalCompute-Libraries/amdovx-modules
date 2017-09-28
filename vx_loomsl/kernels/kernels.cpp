@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "noise_filter.h"
 #include "warp_eqr_to_aze.h"
 #include "lens_distortion_remap.h"
+#include "color_correct.h"
 
 #if _WIN32
 #include <Windows.h>
@@ -55,6 +56,7 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(color_convert_from_IYUV_publish(context));
 	ERROR_CHECK_STATUS(color_convert_to_NV12_publish(context));
 	ERROR_CHECK_STATUS(color_convert_to_IYUV_publish(context));
+	ERROR_CHECK_STATUS(color_correct_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_solvegains_publish(context));
@@ -291,7 +293,27 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx
 		dimof(params));
 	return node;
 }
-
+/**
+* \brief Function to create Stitch Color Correct node
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorCorrectNode(vx_graph graph, vx_uint32 num_cam, vx_array in_gains, vx_image input, vx_image output, vx_uint32 num_camera_columns)
+{
+	vx_node node;
+	vx_scalar s_num_cam = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_cam);
+	vx_scalar s_num_camera_columns = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT32, &num_camera_columns);
+	vx_reference params[] = {
+		(vx_reference)s_num_cam,
+		(vx_reference)in_gains,
+		(vx_reference)input,
+		(vx_reference)output,
+		(vx_reference)s_num_camera_columns
+	};
+	node = stitchCreateNode(graph,
+		AMDOVX_KERNEL_STITCHING_COLOR_CORRECT,
+		params,
+		dimof(params));
+	return node;
+}
 /**
 * \brief Function to create Stitch Warp node
 */
