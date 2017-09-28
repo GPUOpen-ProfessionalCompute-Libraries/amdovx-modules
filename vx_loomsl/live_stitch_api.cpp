@@ -621,7 +621,7 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->seamfind_info_array,       "seam_info",           true,  false, false, false, "seam-info.bin" },
 		{ (vx_reference)stitch->seamfind_weight_image,     "seam_mask",           true,  false, false, false, "seam-mask.raw" },
 		{ (vx_reference)stitch->valid_mask_image,          "multi_valid_mask",    true,  false, false, false, "multi-valid-mask.raw" },
-		{ (vx_reference)stitch->blend_mask_image,          "multi_blend-mask",    true,  false, false, false, "multi-blend-mask.raw" },
+		{ (vx_reference)stitch->blend_mask_image,          "multi_blend_mask",    true,  false, false, false, "multi-blend-mask.raw" },
 		{ (vx_reference)stitch->blend_offsets,             "multi_blend_offsets", true,  false, false, false, "multi-blend-offsets.bin" },
 		{ (vx_reference)stitch->weight_image,              "merge_weight",        true,  false, false, false, "merge-weight.raw" },
 		{ (vx_reference)stitch->cam_id_image,              "merge_camid",         true,  false, false, false, "merge-camid.raw" },
