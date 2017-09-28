@@ -597,7 +597,6 @@ static const char * GetFileNameSuffix(ls_context stitch, vx_reference ref, bool&
 		{ (vx_reference)stitch->valid_array,           false, false, "exp-valid.bin" },
 		{ (vx_reference)stitch->OverlapPixelEntry,     false, false, "exp-overlap.bin" },
 		{ (vx_reference)stitch->overlap_matrix,        false, true,  "exp-count.bin" },
-		{ (vx_reference)stitch->exp_comp_output_image, false, false, "exp-rgby.raw" },
 		{ (vx_reference)stitch->valid_mask_image,      false, false, "valid-mask.raw" },
 		{ (vx_reference)stitch->seamfind_valid_array,  false, false, "seam-valid.bin" },
 		{ (vx_reference)stitch->seamfind_weight_array, false, false, "seam-weight.bin" },
@@ -1668,10 +1667,10 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 		}
 		ERROR_CHECK_OBJECT_(stitch->overlap_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-			ERROR_CHECK_OBJECT_(stitch->exp_comp_output_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGB4_AMD));
+			ERROR_CHECK_OBJECT_(stitch->exp_comp_output_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGB4_AMD));
 		}
 		else{
-			ERROR_CHECK_OBJECT_(stitch->exp_comp_output_image = vxCreateImage(stitch->context, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGBX));
+			ERROR_CHECK_OBJECT_(stitch->exp_comp_output_image = vxCreateVirtualImage(stitch->graphStitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height * stitch->num_cameras, VX_DF_IMAGE_RGBX));
 		}
 		if (stitch->EXPO_COMP == 1) {
 			ERROR_CHECK_OBJECT_(stitch->A_matrix = vxCreateMatrix(stitch->context, VX_TYPE_INT32, stitch->num_cameras, stitch->num_cameras));
