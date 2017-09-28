@@ -249,7 +249,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 		"	int lx = get_local_id(0);\n"
 		"	int ly = get_local_id(1);\n"
 		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
-		"   sumI[lid] = 0; sumJ[lid] = 0;\n"
+		"	sumI[lid] = 0; sumJ[lid] = 0;\n"
 		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
 		"	if (isValid) {\n"
 		"		int   gx = (lx<<3) + ((offs.s0 >> 5) & 0x3FFF);\n"
@@ -381,7 +381,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 				"		I = vload4(0, pI);\n"
 				"		J = vload4(0, pJ);\n"
 				"		mask = ( ( (I|J) & 0x80008000 ) >> 15) + 0x7fff7fff; //Check if I or J have 0x8000, 0x8000 > 0x8000 and 0x0000 > 0x7fff \n"
-				"		Isum4  +=  (I.s0 & (mask.s0 & 0x7f80     & convert_int(maskIJ.s0)) ) >>7;\n"
+				"		Isum4  += (I.s0 & (mask.s0 & 0x7f80     & convert_int(maskIJ.s0)) ) >>7;\n"
 				"		Isum4  += (I.s1 & (mask.s1 & 0x7f80     & convert_int(maskIJ.s2)) ) >>7;\n"
 				"		Isum4  += (I.s2 & (mask.s2 & 0x7f80     & convert_int(maskIJ.s4)) ) >>7;\n"
 				"		Isum4  += (I.s3 & (mask.s3 & 0x7f80     & convert_int(maskIJ.s6)) ) >>7;\n"
@@ -389,7 +389,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 				"		Isum4  += (I.s1 & (mask.s1 & 0x7f800000 & convert_int(maskIJ.s3)) ) >>23;\n"
 				"		Isum4  += (I.s2 & (mask.s2 & 0x7f800000 & convert_int(maskIJ.s5)) ) >>23;\n"
 				"		Isum4  += (I.s3 & (mask.s3 & 0x7f800000 & convert_int(maskIJ.s7)) ) >>23;\n"
-				"		Jsum4  +=  (J.s0 & (mask.s0 & 0x7f80     & convert_int(maskIJ.s0)) ) >>7;\n"
+				"		Jsum4  += (J.s0 & (mask.s0 & 0x7f80     & convert_int(maskIJ.s0)) ) >>7;\n"
 				"		Jsum4  += (J.s1 & (mask.s1 & 0x7f80     & convert_int(maskIJ.s2)) ) >>7;\n"
 				"		Jsum4  += (J.s2 & (mask.s2 & 0x7f80     & convert_int(maskIJ.s4)) ) >>7;\n"
 				"		Jsum4  += (J.s3 & (mask.s3 & 0x7f80     & convert_int(maskIJ.s6)) ) >>7;\n"
@@ -791,10 +791,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"{\n"
 			"  return ( ( ( (uint) clamp(src1,0.0f,32767.0f))<<16) + (uint) clamp(src0,0.0f,32767.0f) );\n"
 			"}\n"
-			"\n";
-	}
-	if (output_format == VX_DF_IMAGE_RGB4_AMD){
-		opencl_kernel_code +=
+			"\n"
 			"float3 amd_unpackA(uint src0, uint src1)\n"
 			"{\n"
 			"  return (float3)((float)(src0 & 0x7fff),(float)((src0 >> 16) & 0x7fff), (float)(src1 & 0x7fff));\n"
