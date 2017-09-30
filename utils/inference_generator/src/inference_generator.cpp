@@ -373,10 +373,13 @@ void writeGDF(
     int fixedPointPosition,
     std::string convertPolicy,
     std::string roundPolicy,
-    bool isVirtualEnabled)
+    bool isVirtualEnabled,
+    bool bFuseScaleLayer)
 {
     std::map<std::string,bool> tensorCheck;
     ofsGDF << "import vx_nn" << std::endl;
+    bool bfuse_scale_layer = bFuseScaleLayer;
+
     for(auto& node : net) {
         // create input/output tensor objects
         bool isFirstLayer = (&node == &net.front());
@@ -403,8 +406,42 @@ void writeGDF(
             }
         }
         auto&& output = node[3];
+   	  	if (node[0] == "BatchNorm" && !isLastLayer && bfuse_scale_layer){
+   	  		auto& next_node = *std::next(&node);
+   	  		if (next_node[0] == "Scale"){
+	   	  		auto&& next_output = next_node[3];
+		        auto&& odim = tensorMap[next_output];
+			    tensorCheck[output] = true;		// make sure next node doesn't create input tensor
+		        if(!tensorCheck[next_output]) {
+				//	std::cout << "Output:" << " name:" << output << std::endl;
+		            if(!isVirtualEnabled) {
+		                ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		            } else {
+		                if(!isLastLayer) {
+		                    ofsGDF << "data " << next_output << " = virtual-tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		                }
+		                else {
+		                    ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		                }
+		            }
+		#if ENABLE_DIRECTIVE
+		            ofsGDF << "directive " << next_output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+		#endif
+		        }
+		        tensorCheck[next_output] = true;
+		        bfuse_scale_layer = true;
+		    }
+   	 	}
+
+   	 	if (node[0] == "Scale" && !isFirstLayer && bfuse_scale_layer){
+	 	 	auto& prev_node = *std::prev(&node);
+   	 		if (prev_node[0]=="BatchNorm")
+	        	continue;
+	    }
+
         auto&& odim = tensorMap[output];
         if(!tensorCheck[output]) {
+		//	std::cout << "Output:" << " name:" << output << std::endl;
             if(!isVirtualEnabled) {
                 ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             } else {
@@ -595,77 +632,76 @@ void writeGDF(
 #endif
         }
         else if(type == "BatchNorm") {
-		// check next node. If scale extract weight and bias paramters for scale layer.
-        auto& next_node = *std::next(&node);
-        auto&& next_output = next_node[3];
-        auto&& next_type = next_node[0];
-        auto&& nn_params = next_node[1];
-        std::string nn_layer_name = next_node[3];
-        formatFileName(nn_layer_name,"/","_");
-        bool bscale_layer = (next_type == "Scale");
-
-    	int use_global_stats, bias_term;
-        float eps;
-        std::stringstream ss(params);
-        ss >> eps >> use_global_stats;
-	    std::string weights = output + "_W";
-	    auto&& dim = tensorMap[weights];
-	    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-	    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
-#if ENABLE_DIRECTIVE
-	    ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-#endif
-	    tensorCheck[weights] = true;
-	    std::string bias = output + "_B";
-	    dim = tensorMap[bias];
-	    ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-	    ofsGDF << "init " << bias << " bias/" << layer_name << ".f32" << std::endl;
-#if ENABLE_DIRECTIVE
-	    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-#endif
-	    tensorCheck[bias] = true;
-	    bias = "NULL";
-	    if (bscale_layer){
-		    weights = next_output + "_W";
-		    std::stringstream ss(nn_params); 
-		    ss >> bias_term;
-		    dim = tensorMap[weights];
+	    	int use_global_stats, bias_term;
+	        float eps;
+	        std::stringstream ss(params);
+	        ss >> eps >> use_global_stats;
+		    std::string weights = output + "_W";
+		    auto&& dim = tensorMap[weights];
 		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		    ofsGDF << "init " << weights << " weights/" << nn_layer_name << ".f32" << std::endl;
-	        tensorCheck[weights] = true;
-	        if(bias_term) {
-	            bias = next_output + "_B";
-	            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-	            ofsGDF << "init " << bias << " bias/"<< nn_layer_name << ".f32" << std::endl;
+		    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
 	#if ENABLE_DIRECTIVE
-	            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+		    ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 	#endif
-	            tensorCheck[bias] = true;
-	        }
-    	}else
-    	{
-		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-    		// put default scale and bias term
-		    std::vector<float> scale_arr(dim[0]);
-		    std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
-		    FILE *fp = fopen("scale_init.f32", "wb");
-		    if (fp) {
-		    	fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
-		    	fclose(fp);
-		    }
-		    ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
-    	}
-
-        ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
-               << node[3] << "_B "
-               << next_node[3] << "_W "
-               << bias << " "
-               << node[3] << "_eps "
-               << node[3]
-               << std::endl;
-#if ENABLE_DUMP_LAYER_DATA
-        ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
-#endif
+		    tensorCheck[weights] = true;
+		    std::string bias = output + "_B";
+		    dim = tensorMap[bias];
+		    ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		    ofsGDF << "init " << bias << " bias/" << layer_name << ".f32" << std::endl;
+	#if ENABLE_DIRECTIVE
+		    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+	#endif
+		    tensorCheck[bias] = true;
+		    bias = "NULL";
+		    if (bfuse_scale_layer){
+				// check next node. If scale extract weight and bias paramters for scale layer.
+		        auto& next_node = *std::next(&node);
+		        auto&& next_output = next_node[3];
+		        auto&& nn_params = next_node[1];
+		        std::string nn_layer_name = next_node[3];
+		        formatFileName(nn_layer_name,"/","_");
+			    weights = next_output + "_W";
+			    std::stringstream ss(nn_params); 
+			    ss >> bias_term;
+			    dim = tensorMap[weights];
+			    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+			    ofsGDF << "init " << weights << " weights/" << nn_layer_name << ".f32" << std::endl;
+		        tensorCheck[weights] = true;
+		        if(bias_term) {
+		            bias = next_output + "_B";
+		            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+		            ofsGDF << "init " << bias << " bias/"<< nn_layer_name << ".f32" << std::endl;
+	#if ENABLE_DIRECTIVE
+		            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+	#endif
+		            tensorCheck[bias] = true;
+		    	}
+		    	output = next_node[3];
+	    	}else
+	    	{
+	    		weights = output +"_W1";
+			    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+	    		// put default scale and bias term
+			    std::vector<float> scale_arr(dim[0]);
+			    std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
+			    FILE *fp = fopen("scale_init.f32", "wb");
+			    if (fp) {
+			    	fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
+			    	fclose(fp);
+			    }
+			    ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
+	    	}
+	        ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
+	        ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
+	               << node[3] << "_B "
+	               << weights << " "
+	               << bias << " "
+	               << node[3] << "_eps "
+	               << output
+	               << std::endl;
+	#if ENABLE_DUMP_LAYER_DATA
+	        ofsGDF << "write "<< output << " out/"<< layer_name << ".f32" << std::endl;
+	#endif
         }
         else if(type == "Eltwise") {
             int op;
@@ -701,13 +737,6 @@ void writeGDF(
             }
         }
         else if(type == "Scale") {
-        	// if prev_layer is batch_norm, go to next layer
-	        auto& prev_node = *std::prev(&node);
-	        std::string node_type_prev = prev_node[0]; 
-	        if (node_type_prev == "BatchNorm"){
-        		ofsGDF << std::endl;
-        		continue;
-	        }
 	        int bias_term;
 		    auto&& type = node[0];
 	        auto&& params = node[1];
@@ -724,7 +753,7 @@ void writeGDF(
 #endif
 	        std::string bias = "NULL";
 	        if(bias_term) {
-	            bias = output + "_B";
+	            bias = output + "_B ";
 	            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
 	            ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
@@ -733,7 +762,7 @@ void writeGDF(
 	            tensorCheck[bias] = true;
 	        }
 
-            ofsGDF << "node org.khronos.nn_extension.scale_layer " << node[4]
+            ofsGDF << "node org.khronos.nn_extension.scale_layer " << node[4] << " "
                    << node[3] << "_W "
                    << node[3] << "_B "
                    << node[3]
@@ -1613,7 +1642,7 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         dumpLayerData(layer_parameter, outputFolder);
 
         // enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
-        bool isSplitEnabled = (flags == 1) ? true : false;
+        bool isSplitEnabled = (flags & 1);
         if(!isSplitEnabled) {
             if(layer_parameter.type()=="Split"){
                 for(int j=0; j< layer_parameter.top_size() ; j++ ){
@@ -1720,6 +1749,7 @@ int main(int argc, char* argv[])
     bool isVirtualEnabled = true;
     bool generateGDF = true;
     bool generateVXC = false;
+    bool bFuseScaleWithBatchNorm = false;
     std::string outputFolder = ".";
     int flags = 0;
     for(; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
@@ -1780,10 +1810,11 @@ int main(int argc, char* argv[])
     if(argc > 9) roundPolicy = argv[9];
     std::vector<std::vector<std::string>> net;
 
-    if(flags != 1 && flags != 0 ) {
-        printf("ERROR: flags can only take 0 or 1\n");
+    if(flags > 2 ) {
+        printf("ERROR: flags>2 not supported\n");
         return -1;
     }
+    bFuseScaleWithBatchNorm = (flags & 2) >> 1;
 
     // load caffe model (or just .prototxt)
     if(strstr(fileName,".caffemodel")) {
@@ -1815,7 +1846,7 @@ int main(int argc, char* argv[])
 
     if(generateGDF) {
         std::ofstream ofsGDF(outputFolder + "/net.gdf", std::ios::binary);
-        writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled);
+        writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, bFuseScaleWithBatchNorm);
     }
 
     if(generateVXC) {
