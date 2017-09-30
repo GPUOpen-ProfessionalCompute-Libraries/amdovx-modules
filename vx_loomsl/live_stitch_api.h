@@ -54,8 +54,6 @@ enum {
 	LIVE_STITCH_ATTR_MULTIBAND                =    5,   // multiband attribute: 0:OFF 1:ON
 	LIVE_STITCH_ATTR_MULTIBAND_NUMBANDS       =    6,   // multiband attribute: numbands 2-6
 	LIVE_STITCH_ATTR_STITCH_MODE              =    7,   // stitch mode: 0:normal 1:quick (default: normal)
-	LIVE_STITCH_ATTR_INPUT_SCALE_FACTOR       =    8,   // input scale factor: use 0.5 or 1.0 (default 1.0)
-	LIVE_STITCH_ATTR_OUTPUT_SCALE_FACTOR      =    9,   // output scale factor: use 0.5 or 1.0 (default 1.0)
 	LIVE_STITCH_ATTR_ENABLE_REINITIALIZE      =   10,   // enable lsReinitialize (default disabled)
 	LIVE_STITCH_ATTR_REDUCE_OVERLAP_REGION    =   11,   // Reduces the overlap region by n*n pixels (default: 0)
 	LIVE_STITCH_ATTR_SEAM_VERT_PRIORITY       =   12,   // Vertical seam priority: -1 to N Flag. -1:Disable 1:highest N:Lowest. (default 1)
@@ -95,7 +93,7 @@ enum {
 	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
 	LIVE_STITCH_ATTR_CHROMA_KEY_EED			  =	  53,   // chroma key enable erode and dilate mask: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_NOISE_FILTER			  =   55,   // temporal filter to account for the camera noise: 0:OFF 1:ON (default:0)
-	LIVE_STITCH_ATTR_FAST_INIT				  =   56,   // use gpu kernels for initialize stitch: 0:OFF 1:ON (default:1)
+	LIVE_STITCH_ATTR_USE_CPU_FOR_INIT         =   56,   // use CPU kernels for initialize stitch: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT		  =	  57,   // save initialized stitch tables for quick load&run: 0:OFF 1:ON (default:0)
 	// Dynamic LoomSL attributes
 	LIVE_STITCH_ATTR_SEAM_THRESHOLD           =   64,   // seamfind seam refresh Threshold: 0 - 100 percentage change (default:25)

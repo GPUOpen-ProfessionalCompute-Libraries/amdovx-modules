@@ -606,10 +606,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_global_work_update(
 	vx_size arr_numitems = 0;
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
 	opencl_global_work[0] = arr_numitems*opencl_local_work[0];
-	if (sc_width)
-		opencl_global_work[1] = opencl_local_work[1]<<1;
-	else
-		opencl_global_work[1] = opencl_local_work[1];
+	opencl_global_work[1] = 2*opencl_local_work[1];
 	return VX_SUCCESS;
 }
 
@@ -676,10 +673,10 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 	opencl_local_work[0] = 16;
 	opencl_local_work[1] = 16;
 	opencl_global_work[0] = wg_num*opencl_local_work[0];
+	opencl_global_work[1] = 2*opencl_local_work[1];
 	// opencl kernel header and reading
 	char item[8192];
 	if (sc_width && sc_height){
-		opencl_global_work[1] = opencl_local_work[1] << 1;
 		vx_float32 xscale = 1.0f, yscale = 1.0f, xoffset = 0.0f, yoffset = 0.0f;
 		// calculate xscale and yscale for block_gain computation
 		if (bg_width >= 1){
@@ -844,9 +841,67 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_width));
 		ERROR_CHECK_STATUS(vxReleaseScalar(&sc_height));
 	}
+	else if (num_gains == num_cam * 12) // if gain array gives color transform for R, G and B with bias offset
+	{
+		sprintf(item,
+			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
+			"\n"
+			"float4 amd_unpack(uint src)\n"
+			"{\n"
+			"	return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
+			"}\n"
+			"\n"
+			"uint RGBTran(uint rgbx, float4 r4, float4 g4, float4 b4) {\n"
+			"  float4 fin, fout;\n"
+			"  fin = amd_unpack(rgbx);\n"
+			"  fout.s0 = mad(fin.s0, r4.s0, mad(fin.s1, r4.s1, mad(fin.s2, r4.s2, r4.s3)));\n"
+			"  fout.s1 = mad(fin.s0, g4.s0, mad(fin.s1, g4.s1, mad(fin.s2, g4.s2, g4.s3)));\n"
+			"  fout.s2 = mad(fin.s0, b4.s0, mad(fin.s1, b4.s1, mad(fin.s2, b4.s2, b4.s3)));\n"
+			"  fout.s3 = fin.s3;\n"
+			"  return amd_pack(fout);\n"
+			"}\n"
+			"\n"
+			"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n"
+			"void %s(uint pIn_width, uint pIn_height, __global uchar * pIn_buf, uint pIn_stride, uint pIn_offset,\n"
+			"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
+			"        __global uchar * pExpData_buf, uint pExpData_offset, uint pExpData_num, uint numcam, \n"
+			"        uint pOut_width, uint pOut_height, __global uchar * pOut_buf, uint pOut_stride, uint pOut_offset)\n"
+			"{\n"
+			"  int grp_id = get_global_id(0)>>4;\n"
+			"  if (grp_id < pExpData_num) {\n"
+			"    uint2 size = (uint2)((pIn_stride*%d), (pOut_stride*%d));\n"
+			"    uint2 offs = ((__global uint2 *)(pExpData_buf+pExpData_offset))[grp_id];\n"
+			"    pG_buf += pG_offs; int cam_id = offs.s0&0x3f;\n"
+			"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
+			"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n"
+			"    int  lx = get_local_id(0);\n"
+			"    int  ly = get_global_id(1);\n"
+			"    int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
+			"    int   gy = ly + ((offs.s0 >> 18) << 1);\n"
+			"    pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+			"    pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
+			"    uchar4 offs4 = as_uchar4(offs.s1); \n"
+			"    if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+			"      uint8 r0, r1;\n"
+			"      r0 =  *(__global uint8 *)pIn_buf;\n"
+			"      r0.s0 = RGBTran(r0.s0, r4, g4 , b4);\n"
+			"      r0.s1 = RGBTran(r0.s1, r4, g4 , b4);\n"
+			"      r0.s2 = RGBTran(r0.s2, r4, g4 , b4);\n"
+			"      r0.s3 = RGBTran(r0.s3, r4, g4 , b4);\n"
+			"      r0.s4 = RGBTran(r0.s4, r4, g4 , b4);\n"
+			"      r0.s5 = RGBTran(r0.s5, r4, g4 , b4);\n"
+			"      r0.s6 = RGBTran(r0.s6, r4, g4 , b4);\n"
+			"      r0.s7 = RGBTran(r0.s7, r4, g4 , b4);\n"
+			"      *(__global uint8 *)(pOut_buf) = r0;\n"
+			"    }\n"
+			"  }\n"
+			"}\n"
+			, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, height_one_in, height_one_out);
+		opencl_kernel_code = item;
+	}
 	else
 	{
-		opencl_global_work[1] = opencl_local_work[1];
 		sprintf(item,
 			"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
 			"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
@@ -882,16 +937,15 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 		}
 		opencl_kernel_code +=
 			"	int  lx = get_local_id(0);\n"
-			"	int  ly = get_local_id(1);\n"
+			"	int  ly = get_global_id(1);\n"
 			"   int   gx = lx + ((offs.s0 >> 6) & 0xFFF);\n"
-			"   int   gy = ly + (offs.s0 >> 18) ;\n"
-			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24((gy<<1), (int)pIn_stride, (gx<<5));\n"
-			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24((gy<<1), (int)pOut_stride, (gx<<5));\n"
+			"   int   gy = ly + ((offs.s0 >> 18) << 1);\n"
+			"   pIn_buf += pIn_offset + (size.x*cam_id) + mad24(gy, (int)pIn_stride, (gx<<5));\n"
+			"   pOut_buf += pOut_offset + (size.y*cam_id) + mad24(gy, (int)pOut_stride, (gx<<5));\n"
 			"   uchar4 offs4 = as_uchar4(offs.s1); \n"
-			"   if (((lx<<3) < (int)offs4.s2) && (ly*2 < (int)offs4.s3)) {\n"
-			"	uint8 r0, r1; float4 f4;\n"
+			"   if (((lx<<3) < (int)offs4.s2) && (ly <= (int)offs4.s3)) {\n"
+			"	uint8 r0; float4 f4;\n"
 			"	r0 =  *(__global uint8 *)pIn_buf;\n"
-			"	r1 =  *(__global uint8 *)(pIn_buf+pIn_stride);\n"
 			"	f4 = amd_unpack(r0.s0)*g4; r0.s0 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s1)*g4; r0.s1 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s2)*g4; r0.s2 = amd_pack(f4); \n"
@@ -900,16 +954,7 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_codegen(
 			"	f4 = amd_unpack(r0.s5)*g4; r0.s5 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s6)*g4; r0.s6 = amd_pack(f4); \n"
 			"	f4 = amd_unpack(r0.s7)*g4; r0.s7 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s0)*g4; r1.s0 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s1)*g4; r1.s1 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s2)*g4; r1.s2 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s3)*g4; r1.s3 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s4)*g4; r1.s4 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s5)*g4; r1.s5 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s6)*g4; r1.s6 = amd_pack(f4); \n"
-			"	f4 = amd_unpack(r1.s7)*g4; r1.s7 = amd_pack(f4); \n"
 			"	*(__global uint8 *)(pOut_buf) = r0;\n"
-			"	*(__global uint8 *)(pOut_buf+pOut_stride) = r1;\n"
 			"}\n"
 		"}\n"
 	"}\n";
@@ -1057,7 +1102,9 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_float32 alpha = 0, beta = 0;
 	vx_uint32 *pIMat, *pNMat;
 	vx_uint32 numCameras;
-	CExpCompensator* exp_comp = new CExpCompensator();
+	CExpCompensator* exp_comp = nullptr;
+	status = vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)); if (status != VX_SUCCESS) return VX_FAILURE;
+
 	vx_scalar scalar = (vx_scalar)parameters[0];
 	ERROR_CHECK_STATUS(vxReadScalarValue(scalar, &alpha));
 	scalar = (vx_scalar)parameters[1];
@@ -1066,13 +1113,13 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_matrix mat = (vx_matrix)parameters[2];
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
-	pIMat = new vx_uint32[rows*columns];
+	pIMat = exp_comp->m_pIMat;
 	ERROR_CHECK_STATUS(vxReadMatrix(mat, (void *)pIMat));
 	mat = (vx_matrix)parameters[3];
 	vx_size rows1 = 0;
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
 	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows1, sizeof(rows1)));
-	pNMat = new vx_uint32[rows1*columns];
+	pNMat = exp_comp->m_pNMat;
 	ERROR_CHECK_STATUS(vxReadMatrix(mat, (void *)pNMat));
 	// get output array pointer
 	vx_array arr = (vx_array)parameters[4];
@@ -1093,11 +1140,33 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 	vx_size stride = 0;
 	void *base = NULL;
 	status = exp_comp->SolveForGains(alpha, beta, pIMat, pNMat, numCameras, arr, (vx_uint32)rows, (vx_uint32)columns);
-	delete pIMat;
-	delete pNMat;
+	return status;
+}
+
+static vx_status VX_CALLBACK exposure_comp_solvegains_initialize(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	vx_size columns = 0, rows = 0;
+	vx_matrix mat = (vx_matrix)parameters[2];
+	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_COLUMNS, &columns, sizeof(columns)));
+	ERROR_CHECK_STATUS(vxQueryMatrix(mat, VX_MATRIX_ATTRIBUTE_ROWS, &rows, sizeof(rows)));
+
+	CExpCompensator *pExpComp = new CExpCompensator((int)rows, (int)columns);
+	vx_size size = sizeof(CExpCompensator);
+	status = vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_SIZE, &size, sizeof(size)); if (status != VX_SUCCESS) return VX_FAILURE;
+	status = vxSetNodeAttribute(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &pExpComp, sizeof(pExpComp)); if (status != VX_SUCCESS) return VX_FAILURE;
+	return status;
+}
+
+static vx_status VX_CALLBACK exposure_comp_solvegains_uninitialize(vx_node node, const vx_reference *parameters, vx_uint32 num)
+{
+	vx_status status = VX_FAILURE;
+	CExpCompensator* exp_comp = nullptr;
+	status = vxQueryNode(node, VX_NODE_ATTRIBUTE_LOCAL_DATA_PTR, &exp_comp, sizeof(exp_comp)); if (status != VX_SUCCESS) return VX_FAILURE;
 	delete exp_comp;
 	return status;
 }
+
 
 //! \brief The exposure_comp_applygains kernel publisher.
 vx_status exposure_comp_solvegains_publish(vx_context context)
@@ -1109,8 +1178,8 @@ vx_status exposure_comp_solvegains_publish(vx_context context)
 		5,
 		exposure_comp_solvegains_input_validator,
 		exposure_comp_solvegains_output_validator,
-		nullptr,
-		nullptr);
+		exposure_comp_solvegains_initialize,
+		exposure_comp_solvegains_uninitialize);
 	ERROR_CHECK_OBJECT(kernel);
 	// set kernel parameters
 	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));

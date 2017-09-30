@@ -21,6 +21,34 @@
 cmake_minimum_required (VERSION 2.8)
 project (amdovx-modules)
 
-#add_subdirectory (vx_ext_cv)
-add_subdirectory (vx_loomsl)
-add_subdirectory (utils)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+find_package(OpenCV QUIET)
+find_package(OpenCL QUIET)
+find_package(FFmpeg QUIET)
+find_package(miopengemm PATHS /opt/rocm)
+find_package(miopen     PATHS /opt/rocm)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+add_subdirectory(deps/amdovx-core)
+
+if(OpenCL_FOUND)
+    add_subdirectory (vx_loomsl)
+    add_subdirectory (utils)
+    if(FFMPEG_FOUND)
+        add_subdirectory (vx_loomio_media)
+    endif(FFMPEG_FOUND)
+endif(OpenCL_FOUND)
+
+if(OpenCL_FOUND AND miopengemm_FOUND AND miopen_FOUND)
+    add_subdirectory (vx_nn)
+endif()
+
+if(OpenCV_FOUND)
+    if(${OpenCV_VERSION_MAJOR} EQUAL 3)
+        add_subdirectory (vx_opencv)
+    endif()
+endif(OpenCV_FOUND)
