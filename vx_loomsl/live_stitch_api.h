@@ -351,8 +351,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsImportConfiguration(ls_context sti
 
 //! \brief export configuration.
 //  - exportType: "pts" - PtGui project (.pts text file)
-//  - exportType: "loom_shell" - loom_shell script (.lss text file)
+//  - exportType: "loom_shell" - Camera and output configuration into a loom_shell script (.lss text file)
 //  - exportType: "gdf" - gdf script (.gdf text file) and other data files with same fileName prefix
+//  - exportType: "data" - all intermediate and initialization data with same fileName prefix
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context stitch, const char * exportType, const char * fileName);
 
