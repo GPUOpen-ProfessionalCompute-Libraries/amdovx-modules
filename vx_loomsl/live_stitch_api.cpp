@@ -720,7 +720,7 @@ static vx_status SyncInternalTables(ls_context stitch)
 		(vx_reference)stitch->seamfind_scene_array,
 		(vx_reference)stitch->blend_mask_image,
 		(vx_reference)stitch->warp_output_image,
-		(vx_reference)stitch->exp_comp_output_image,
+		(vx_reference)stitch->rgb_output,
 		(vx_reference)stitch->overlay_remap,
 		(vx_reference)stitch->camera_remap,
 	};
@@ -1181,10 +1181,26 @@ static vx_status InitializeInternalTablesForRemap(ls_context stitch, vx_remap re
 
 	return VX_SUCCESS;
 }
-static vx_status memset128(void * ptr, __m128i value, size_t size_in_bytes){ // size_in_bytes % 16 = 0 !
-	__m128i *dst = (__m128i*) ptr;
-	for (vx_uint32 i = 0; i < size_in_bytes; i += 16){
-		_mm_store_si128(dst++, value);
+static vx_status memset32(void * ptr, vx_uint32 value, size_t num_dword){
+	__m128i r0 = _mm_set1_epi32(value);
+	__m128i *dst_128 = (__m128i*) ptr;
+	size_t num_bytes = num_dword * 4;
+	size_t num_128bytes = num_bytes&~127;
+	vx_uint32 i;
+	for (i = 0; i < num_128bytes; i += 128){
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+		_mm_store_si128(dst_128++, r0);
+	}
+	vx_uint32* dst_32 = ((vx_uint32*)ptr + (num_128bytes / 4));
+	for (; i < num_bytes; i += 4){
+		*dst_32 = value;
+		dst_32++;
 	}
 	return VX_SUCCESS;
 }
@@ -1474,24 +1490,22 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 		vx_imagepatch_addressing_t addr;
 		vx_map_id map_id;
 		vx_uint32 * ptr;
-		__m128i r0;
+		vx_uint32 init_value;
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-			r0 = _mm_set1_epi32(0x80008000);
+			init_value = 0x80008000;
 		}
 		else{ // 8bit flow
-			r0 = _mm_set1_epi32(0x80000000);
+			init_value = 0x80000000;
 		}
 		ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->warp_output_image, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
-		// Since stride_y will be a multiple of output width, which itself needs to be a multiple of 16, size in bytes will always be multiple of 16!
-		vx_size size_in_bytes = (addr.stride_y * addr.dim_y)&~15;
-		ERROR_CHECK_STATUS_(memset128(ptr, r0, size_in_bytes));
+		vx_size size_in_dwords = (addr.stride_y * addr.dim_y) / 4;
+		ERROR_CHECK_STATUS_(memset32(ptr, init_value, size_in_dwords));
 		ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->warp_output_image, map_id));
 		
 		if (stitch->expcomp_luma16) {
 			ERROR_CHECK_STATUS_(vxMapImagePatch(stitch->expcomp_luma16, &rect, 0, &map_id, &addr, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
-			// Since stride_y will be a multiple of output width, which itself needs to be a multiple of 16, size in bytes will always be multiple of 16!
-			vx_size size_in_bytes = (addr.stride_y * addr.dim_y)&~15;
-			ERROR_CHECK_STATUS_(memset128(ptr, r0, size_in_bytes));
+			vx_size size_in_dwords = (addr.stride_y * addr.dim_y) / 4;
+			ERROR_CHECK_STATUS_(memset32(ptr, init_value, size_in_dwords));
 			ERROR_CHECK_STATUS_(vxUnmapImagePatch(stitch->expcomp_luma16, map_id));
 		}
 
