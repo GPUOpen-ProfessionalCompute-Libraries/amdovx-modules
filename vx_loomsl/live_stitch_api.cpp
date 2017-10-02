@@ -2882,7 +2882,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			// quick setup files load
 			stitch->SETUP_LOAD = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT];
 			stitch->SETUP_LOAD_FILES_FOUND = vx_false_e;
-			//if (stitch->MULTIBAND_BLEND || stitch->EXPO_COMP){ stitch->SETUP_LOAD = 0; }
 			if (stitch->SETUP_LOAD){ 	
 				vx_status status = quickSetupFilesLookup(stitch);
 				if (status != VX_SUCCESS) {
