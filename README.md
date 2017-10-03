@@ -17,6 +17,8 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
   * [protobuf](https://github.com/google/protobuf): install `libprotobuf-dev` and `protobuf-compiler`
 * git clone this project using `--recursive` option so that correct branch of the [amdovx-core](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core) project is cloned automatically in the deps folder.
 
+Refer to [Wiki](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/wiki) page for developer instructions.
+
 ## Build using Visual Studio Professional 2013 on 64-bit Windows 10/8.1/7
 * Use amdovx-modules/loom.sln to build for x64 platform
 
