@@ -46,7 +46,7 @@ typedef struct {
 	vx_uint32 camId1  :  8; // values [0..30] overlapping cameraId; 31 indicates invalid cameraId
 	vx_uint32 end_x   :  8; // ending pixel x-coordinate within the 128x32 block
 	vx_uint32 end_y   :  8; // ending pixel y-coordinate within the 128x32 block
-} StitchOverlapPixelEntry;
+} StitchExpCompOverlapPixelEntry;
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The kernel registration functions.
@@ -96,7 +96,7 @@ vx_status GenerateExpCompBuffers(
 	vx_size validTableSize,                        // [in] size of valid table, in terms of number of entries
 	vx_size overlapTableSize,                      // [in] size of overlap table, in terms of number of entries
 	StitchExpCompCalcEntry * validTable,           // [out] expComp valid table
-	StitchOverlapPixelEntry * overlapTable,        // [out] expComp overlap table
+	StitchExpCompOverlapPixelEntry * overlapTable, // [out] expComp overlap table
 	vx_size * validTableEntryCount,                // [out] number of entries needed by expComp valid table
 	vx_size * overlapTableEntryCount,              // [out] number of entries needed by expComp overlap table
 	vx_int32 * overlapPixelCountMatrix             // [out] expComp overlap pixel count matrix: size: [numCamera * numCamera]

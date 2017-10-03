@@ -279,7 +279,7 @@ vx_status Compute_StitchExpCompCalcEntry(vx_rectangle_t *pOverlap_roi, vx_array 
 	if (!numCameras)return VX_FAILURE;
 	vx_rectangle_t *rect_I;
 	vx_int32 x1, y1, x2, y2;
-	StitchOverlapPixelEntry ExpOut;
+	StitchExpCompOverlapPixelEntry ExpOut;
 	ERROR_CHECK_STATUS(vxTruncateArray(ExpCompOut, 0));
 	for (i = 0; i < numCameras; i++){
 		for (int j = i + 1; j < numCameras; j++){

@@ -65,7 +65,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_input_validator(vx_node n
 		vx_size capacity = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		if (itemsize != sizeof(StitchOverlapPixelEntry)) {
+		if (itemsize != sizeof(StitchExpCompOverlapPixelEntry)) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation gains array type should be float32\n");
 		}
@@ -1516,7 +1516,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_input_validator(vx_nod
 		vx_size capacity = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		if (itemsize != sizeof(StitchOverlapPixelEntry)) {
+		if (itemsize != sizeof(StitchExpCompOverlapPixelEntry)) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation gains array type should be float32\n");
 		}
@@ -2308,7 +2308,7 @@ vx_status GenerateExpCompBuffers(
 	vx_size validTableSize,                        // [in] size of valid table, in terms of number of entries
 	vx_size overlapTableSize,                      // [in] size of overlap table, in terms of number of entries
 	StitchExpCompCalcEntry * validTable,           // [out] expComp valid table
-	StitchOverlapPixelEntry * overlapTable,        // [out] expComp overlap table
+	StitchExpCompOverlapPixelEntry * overlapTable, // [out] expComp overlap table
 	vx_size * validTableEntryCount,                // [out] number of entries needed by expComp valid table
 	vx_size * overlapTableEntryCount,              // [out] number of entries needed by expComp overlap table
 	vx_int32 * overlapPixelCountMatrix             // [out] expComp overlap pixel count matrix: size: [numCamera * numCamera]
@@ -2387,7 +2387,7 @@ vx_status GenerateExpCompBuffers(
 							// add overlapTable entry
 							if (overlapTable){
 								if (overlapEntryCount < overlapTableSize) {
-									StitchOverlapPixelEntry overlapEntry;
+									StitchExpCompOverlapPixelEntry overlapEntry;
 									overlapEntry.camId0 = i;
 									overlapEntry.start_x = xs;
 									overlapEntry.start_y = ys;
