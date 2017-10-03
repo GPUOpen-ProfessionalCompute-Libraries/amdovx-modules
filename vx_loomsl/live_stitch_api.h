@@ -180,10 +180,12 @@ LIVE_STITCH_API_ENTRY void VX_API_CALL lsGlobalSetLogCallback(stitch_log_callbac
 //  - Note that updating global attributes will not change the features and/or parameters of stitch contexts that have already been created
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributes(vx_uint32 attr_offset, vx_uint32 attr_count, const vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr);
 
 //! \brief Query current values of global attributes.
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributes(vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr);
 
 //! \brief Create stitch context.
 //  - create a stitch context using the feature dictated by global attributes prior to this call
@@ -322,7 +324,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsWaitForCompletion(ls_context stitc
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributes(ls_context stitch, vx_uint32 attr_offset, vx_uint32 attr_count, const vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributes(ls_context stitch, vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr);
 
 //! \brief Query configuration.
 //  - return VX_SUCCESS or error code (see log messages for further details)
