@@ -3245,7 +3245,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		}
 
 		// release fast GPU initialize elements
-		if (!stitch->USE_CPU_INIT){
+		if (!stitch->USE_CPU_INIT || stitch->reinitialize_required){
 			ReleaseStitchInitData(stitch);
 		}
 
