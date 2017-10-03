@@ -464,7 +464,7 @@ static vx_status ReleaseAlignedOpenCLImage(ls_context stitch, vx_image *input){
 	vx_enum mem_type;
 	ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_MEMORY_TYPE, &mem_type, sizeof(mem_type)));
 	if (mem_type != VX_MEMORY_TYPE_OPENCL){
-		ls_printf("Can not release aligned OpenCL Image, if it is not created by Loom/n");
+		ls_printf("Can not release aligned OpenCL Image, if it is not created by Loom\n");
 		return VX_ERROR_INVALID_REFERENCE;
 	}
 
@@ -3211,8 +3211,10 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->pStitchMultiband[i].UpscaleSubtractNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleSubtractNode));
 				if (stitch->pStitchMultiband[i].UpscaleAddNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleAddNode));
 				if (stitch->pStitchMultiband[i].LaplacianReconNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].LaplacianReconNode));
-				if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgGaussian));
-				if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].WeightPyrImgGaussian));
+				if (i != 0){
+					if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgGaussian));
+					if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].WeightPyrImgGaussian));
+				}
 				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacian));
 				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
 			}
@@ -3237,7 +3239,7 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		// release tiled image elements
 		if (stitch->num_encode_sections > 1){
 			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
-				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage( &stitch->encode_src_rgb_imgs[i]));
+				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
 				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
 				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
 				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
