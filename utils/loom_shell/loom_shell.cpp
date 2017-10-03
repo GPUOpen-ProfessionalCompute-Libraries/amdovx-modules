@@ -911,8 +911,8 @@ int CLoomShellParser::OnCommand()
 		vx_uint32 attr_offset = 0; float value = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: setGlobalAttribute(offset/name,value);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -937,8 +937,8 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -960,8 +960,8 @@ int CLoomShellParser::OnCommand()
 		vx_uint32 attr_offset = 0, attr_count = 0; char attr_name[64]; bool offset_mode = true;
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: showGlobalAttributes(offset/name,count);";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -985,8 +985,8 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -1013,8 +1013,8 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+        SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){			
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
@@ -1049,8 +1049,8 @@ int CLoomShellParser::OnCommand()
 			"ERROR: invalid syntax: expects: loadGlobalAttributes(offset/name,count,\"attr.txt\");" :
 			"ERROR: invalid syntax: expects: saveGlobalAttributes(offset/name,count,\"attr.txt\");";
 		SYNTAX_CHECK(ParseSkip(s, "("));
-		if (!ParseUInt(s, attr_offset)){
-			SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		SYNTAX_CHECK(ParseWord(s, attr_name, sizeof(attr_name)));
+		if (!ParseUInt(attr_name, attr_offset)){
 			offset_mode = false;
 		}
 		SYNTAX_CHECK(ParseSkip(s, ","));
