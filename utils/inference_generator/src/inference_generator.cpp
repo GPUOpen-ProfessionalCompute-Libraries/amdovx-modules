@@ -519,14 +519,6 @@ void writeGDF(
 #endif
                 tensorCheck[bias] = true;
             }
-            else {
-                bias = output + "_B";
-                ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-#if ENABLE_DIRECTIVE
-                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-#endif
-                tensorCheck[bias] = true;
-            }
 
             ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_DECONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << "," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
             ofsGDF << "node org.khronos.nn_extension.deconvolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
