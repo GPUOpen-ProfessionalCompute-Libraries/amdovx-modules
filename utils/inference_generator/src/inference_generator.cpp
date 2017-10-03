@@ -210,7 +210,7 @@ int loadCaffeProtoTxt(
         }
 
         //Split type.
-        if(layer.type()=="Split"){
+        if(layer.type()=="Split") {
             for(int j=0; j< layer.top_size() ; j++ )
             {
                 // get layer information and add to net
@@ -330,24 +330,24 @@ int calculateTensorDim(
         else if(type == "SoftmaxWithLoss") {
             output = node[5];
         }
-		else if (type == "BatchNorm") {
-		    std::stringstream ss(params);
-		    int use_global_stats;
-		    float eps;
-		    ss >> eps >> use_global_stats;
-		    tensorMap[output + "_W"] = std::vector<int>{k};
-		    tensorMap[output + "_B"] = std::vector<int>{k};
-		}
+        else if (type == "BatchNorm") {
+            std::stringstream ss(params);
+            int use_global_stats;
+            float eps;
+            ss >> eps >> use_global_stats;
+            tensorMap[output + "_W"] = std::vector<int>{k};
+            tensorMap[output + "_B"] = std::vector<int>{k};
+        }
         else if(type == "Scale") {
-	    std::stringstream ss(params);
-	    int bias_term;
+            std::stringstream ss(params);
+            int bias_term;
             ss >> bias_term;
-	    tensorMap[output + "_W"] = std::vector<int>{k};
+            tensorMap[output + "_W"] = std::vector<int>{k};
             if(bias_term) {
                 tensorMap[output + "_B"] = std::vector<int>{k};
             }
         }
-	
+
         tensorMap[output] = std::vector<int>{n, k, h, w};
         if(n < 1 || k < 1 || h < 1 || w < 1)
             error("calculateTensorDim: got invalid dim %dx%dx%dx%d for %s\n", n, k, h, w, output.c_str());
@@ -374,7 +374,7 @@ void writeGDF(
     std::string convertPolicy,
     std::string roundPolicy,
     bool isVirtualEnabled,
-    std::string outputFolder,    
+    std::string outputFolder,
     bool bFuseScaleLayer)
 {
     std::map<std::string,bool> tensorCheck;
@@ -391,14 +391,16 @@ void writeGDF(
                 if((isVirtualEnabled && isFirstLayer) || (isVirtualEnabled && isLastLayer)) {
                     ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     tensorCheck[node[i]] = true;
-                    if(!isLastLayer){
+                    if(!isLastLayer) {
                         ofsGDF << "read data input.f32" << std::endl;
                     }
-                }else {
+                }
+                else {
                     if(isVirtualEnabled) {
                         ofsGDF << "data " << node[i] << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                         tensorCheck[node[i]] = true;
-                    }else{
+                    }
+                    else {
                         ofsGDF << "data " << node[i] << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                         tensorCheck[node[i]]= true;
                         if(isFirstLayer) ofsGDF << "read data input.f32" << std::endl;
@@ -407,42 +409,41 @@ void writeGDF(
             }
         }
         auto&& output = node[3];
-   	  	if (node[0] == "BatchNorm" && !isLastLayer && bfuse_scale_layer){
-   	  		auto& next_node = *std::next(&node);
-   	  		if (next_node[0] == "Scale"){
-	   	  		auto&& next_output = next_node[3];
-		        auto&& odim = tensorMap[next_output];
-			    tensorCheck[output] = true;		// make sure next node doesn't create input tensor
-		        if(!tensorCheck[next_output]) {
-				//	std::cout << "Output:" << " name:" << output << std::endl;
-		            if(!isVirtualEnabled) {
-		                ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		            } else {
-		                if(!isLastLayer) {
-		                    ofsGDF << "data " << next_output << " = virtual-tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		                }
-		                else {
-		                    ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		                }
-		            }
-		#if ENABLE_DIRECTIVE
-		            ofsGDF << "directive " << next_output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-		#endif
-		        }
-		        tensorCheck[next_output] = true;
-		        bfuse_scale_layer = true;
-		    }
-   	 	}
+        if (node[0] == "BatchNorm" && !isLastLayer && bfuse_scale_layer) {
+            auto& next_node = *std::next(&node);
+            if (next_node[0] == "Scale") {
+                auto&& next_output = next_node[3];
+                auto&& odim = tensorMap[next_output];
+                tensorCheck[output] = true; // make sure next node doesn't create input tensor
+                if(!tensorCheck[next_output]) {
+                    if(!isVirtualEnabled) {
+                        ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    }
+                    else {
+                        if(!isLastLayer) {
+                            ofsGDF << "data " << next_output << " = virtual-tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        }
+                        else {
+                            ofsGDF << "data " << next_output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        }
+                    }
+#if ENABLE_DIRECTIVE
+                    ofsGDF << "directive " << next_output << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+                }
+                tensorCheck[next_output] = true;
+                bfuse_scale_layer = true;
+            }
+        }
 
-   	 	if (node[0] == "Scale" && !isFirstLayer && bfuse_scale_layer){
-	 	 	auto& prev_node = *std::prev(&node);
-   	 		if (prev_node[0]=="BatchNorm")
-	        	continue;
-	    }
+        if (node[0] == "Scale" && !isFirstLayer && bfuse_scale_layer) {
+            auto& prev_node = *std::prev(&node);
+            if (prev_node[0]=="BatchNorm")
+            continue;
+        }
 
         auto&& odim = tensorMap[output];
         if(!tensorCheck[output]) {
-		//	std::cout << "Output:" << " name:" << output << std::endl;
             if(!isVirtualEnabled) {
                 ofsGDF << "data " << output << " = tensor:4,{" << odim[3] << "," << odim[2] << "," << odim[1] << "," << odim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
             } else {
@@ -496,7 +497,7 @@ void writeGDF(
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
         }
-        else if (type == "Deconvolution"){
+        else if (type == "Deconvolution") {
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
             ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
@@ -517,7 +518,8 @@ void writeGDF(
                 ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
                 tensorCheck[bias] = true;
-            }else{
+            }
+            else {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
 #if ENABLE_DIRECTIVE
@@ -633,50 +635,50 @@ void writeGDF(
 #endif
         }
         else if(type == "BatchNorm") {
-	    	int use_global_stats, bias_term;
-	        float eps;
-	        std::stringstream ss(params);
-	        ss >> eps >> use_global_stats;
-		    std::string weights = output + "_W";
-		    auto&& dim = tensorMap[weights];
-		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
-	#if ENABLE_DIRECTIVE
-		    ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-	#endif
-		    tensorCheck[weights] = true;
-		    std::string bias = output + "_B";
-		    dim = tensorMap[bias];
-		    ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		    ofsGDF << "init " << bias << " bias/" << layer_name << ".f32" << std::endl;
-	#if ENABLE_DIRECTIVE
-		    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-	#endif
-		    tensorCheck[bias] = true;
-		    bias = "NULL";
-		    if (bfuse_scale_layer){
-				// check next node. If scale extract weight and bias paramters for scale layer.
-		        auto& next_node = *std::next(&node);
-		        auto&& next_output = next_node[3];
-		        auto&& nn_params = next_node[1];
-		        std::string nn_layer_name = next_node[3];
-		        formatFileName(nn_layer_name,"/","_");
-			    weights = next_output + "_W";
-			    std::stringstream ss(nn_params); 
-			    ss >> bias_term;
-			    dim = tensorMap[weights];
-			    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-			    ofsGDF << "init " << weights << " weights/" << nn_layer_name << ".f32" << std::endl;
-		        tensorCheck[weights] = true;
-		        if(bias_term) {
-		            bias = next_output + "_B";
-		            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		            ofsGDF << "init " << bias << " bias/"<< nn_layer_name << ".f32" << std::endl;
-	#if ENABLE_DIRECTIVE
-		            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-	#endif
-		            tensorCheck[bias] = true;
-		    	}
+            int use_global_stats, bias_term;
+            float eps;
+            std::stringstream ss(params);
+            ss >> eps >> use_global_stats;
+            std::string weights = output + "_W";
+            auto&& dim = tensorMap[weights];
+            ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+            tensorCheck[weights] = true;
+            std::string bias = output + "_B";
+            dim = tensorMap[bias];
+            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "init " << bias << " bias/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+            tensorCheck[bias] = true;
+            bias = "NULL";
+            if (bfuse_scale_layer) {
+                // check next node. If scale extract weight and bias paramters for scale layer.
+                auto& next_node = *std::next(&node);
+                auto&& next_output = next_node[3];
+                auto&& nn_params = next_node[1];
+                std::string nn_layer_name = next_node[3];
+                formatFileName(nn_layer_name,"/","_");
+                weights = next_output + "_W";
+                std::stringstream ss(nn_params);
+                ss >> bias_term;
+                dim = tensorMap[weights];
+                ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                ofsGDF << "init " << weights << " weights/" << nn_layer_name << ".f32" << std::endl;
+                tensorCheck[weights] = true;
+                if(bias_term) {
+                    bias = next_output + "_B";
+                    ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    ofsGDF << "init " << bias << " bias/"<< nn_layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+                    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+                    tensorCheck[bias] = true;
+                }
                 ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
                 ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
                        << node[3] << "_B "
@@ -685,23 +687,23 @@ void writeGDF(
                        << node[3] << "_eps "
                        << next_node[3]
                        << std::endl;
-    #if ENABLE_DUMP_LAYER_DATA
+#if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< next_node[3] << " out/"<< layer_name << ".f32" << std::endl;
-    #endif
-	    	}else
-	    	{
-	    		weights = output +"_W1";
-			    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-	    		// put default scale and bias term
-			    std::vector<float> scale_arr(dim[0]);
-			    std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
-				std::string fileName_weights = outputFolder + "scale_init.f32";
-				FILE *fp = fopen(fileName_weights.c_str(), "wb");
-			    if (fp) {
-			    	fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
-			    	fclose(fp);
-			    }
-			    ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
+#endif
+            }
+            else {
+                weights = output +"_W1";
+                ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                // put default scale and bias term
+                std::vector<float> scale_arr(dim[0]);
+                std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
+                std::string fileName_weights = outputFolder + "scale_init.f32";
+                FILE *fp = fopen(fileName_weights.c_str(), "wb");
+                if (fp) {
+                    fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
+                    fclose(fp);
+                }
+                ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
                 ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
                 ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
                        << node[3] << "_B "
@@ -710,10 +712,10 @@ void writeGDF(
                        << node[3] << "_eps "
                        << output
                        << std::endl;
-    #if ENABLE_DUMP_LAYER_DATA
+#if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< output << " out/"<< layer_name << ".f32" << std::endl;
-    #endif
-	    	}
+#endif
+            }
         }
         else if(type == "Eltwise") {
             int op;
@@ -749,30 +751,30 @@ void writeGDF(
             }
         }
         else if(type == "Scale") {
-	        int bias_term;
-		    auto&& type = node[0];
-	        auto&& params = node[1];
-	        std::string layer_name = node[3];
-	        formatFileName(layer_name,"/","_");
-	    	std::string weights = output + "_W";
-		    std::stringstream ss(params); ss >> bias_term;
-		    auto&& dim = tensorMap[weights];
-		    ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-		    ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
-	        tensorCheck[weights] = true;
+            int bias_term;
+            auto&& type = node[0];
+            auto&& params = node[1];
+            std::string layer_name = node[3];
+            formatFileName(layer_name,"/","_");
+            std::string weights = output + "_W";
+            std::stringstream ss(params); ss >> bias_term;
+            auto&& dim = tensorMap[weights];
+            ofsGDF << "data " << weights << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+            ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+            tensorCheck[weights] = true;
 #if ENABLE_DIRECTIVE
-	        ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+            ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
-	        std::string bias = "NULL";
-	        if(bias_term) {
-	            bias = output + "_B ";
-	            ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-	            ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+            std::string bias = "NULL";
+            if(bias_term) {
+                bias = output + "_B ";
+                ofsGDF << "data " << bias << " = tensor:1,{" << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
-	            ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
-	            tensorCheck[bias] = true;
-	        }
+                tensorCheck[bias] = true;
+            }
 
             ofsGDF << "node com.amd.nn_extension.scale_layer " << node[4] << " "
                    << node[3] << "_W "
@@ -842,7 +844,7 @@ void writeGDF(
 void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string outputFolder)
 {
     std:: string layer_name;
-    if(layer_parameter.has_name()){
+    if(layer_parameter.has_name()) {
         layer_name = layer_parameter.name();
         formatFileName(layer_name,"/","_");
     }
@@ -863,12 +865,12 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
         const caffe::BlobProto& weights_blob = layer_parameter.blobs(0);
         int weightsize = weights_blob.data_size();
 
-        for(int i=0;i<weightsize;i++){
+        for(int i=0;i<weightsize;i++) {
             float weight = weights_blob.data(i);
             fwrite(&weight,sizeof(float),1,fs_weights);
         }
         //Extraction of bias if exists.
-        if(blob_size >= 2){
+        if(blob_size >= 2) {
             //Extraction of Bias.
             const caffe::BlobProto bias_blob = layer_parameter.blobs(1);
             int biassize = bias_blob.data_size();
@@ -897,13 +899,13 @@ void writeVXCode(
     std::string codeType)
 {
     if(codeType == "declaration") {
-        ofsCodeH << "	vx_context context; " << std::endl;
-        ofsCodeH << "	vx_graph graph; " << std::endl;
+        ofsCodeH << "    vx_context context; " << std::endl;
+        ofsCodeH << "    vx_graph graph; " << std::endl;
     }
     else if(codeType == "initialize") {
-        ofsCodeC << "	context = vxCreateContext(); " << std::endl;
+        ofsCodeC << "    context = vxCreateContext(); " << std::endl;
         ofsCodeC << "   ERROR_CHECK_OBJECT(context);" << std::endl;
-        ofsCodeC << "	graph = vxCreateGraph(context); " << std::endl;
+        ofsCodeC << "    graph = vxCreateGraph(context); " << std::endl;
         ofsCodeC << "   ERROR_CHECK_OBJECT(graph);" << std::endl;
     }
     else if(codeType == "release_graph") {
@@ -921,14 +923,14 @@ void writeVXCode(
             if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
                 auto&& dim = tensorMap[node[i]];
                 if(codeType == "declaration") {
-                    ofsCodeH << "	vx_size " << node[i] << "_dims[4];" << std::endl;
-                    ofsCodeH << "	vx_tensor " << node[i] << " ;" << std::endl;
+                    ofsCodeH << "    vx_size " << node[i] << "_dims[4];" << std::endl;
+                    ofsCodeH << "    vx_tensor " << node[i] << " ;" << std::endl;
                 }
                 else if(codeType == "constructor") {
-                    ofsCodeC << "	" << node[i] + "_dims  {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
+                    ofsCodeC << "    " << node[i] + "_dims  {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
                 }
                 else if(codeType == "initialize") {
-                    ofsCodeC << "	" << node[i] << " = vxCreateTensor(context, 4, " << node[i] + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                    ofsCodeC << "    " << node[i] << " = vxCreateTensor(context, 4, " << node[i] + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
                     ofsCodeC << "   " << "ERROR_CHECK_OBJECT("  << node[i] << ");" << std::endl;
                 }
                 else if(codeType == "run") {
@@ -954,14 +956,14 @@ void writeVXCode(
         auto&& odim = tensorMap[output];
         if(!declare_tensor_check[output]) {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_size " << output << "_dims[4];" << std::endl;
-                ofsCodeH << "	vx_tensor " << output << " ;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_dims[4];" << std::endl;
+                ofsCodeH << "    vx_tensor " << output << " ;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_dims  {" << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << "}," << std::endl;
+                ofsCodeC << "    " << output + "_dims  {" << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << "}," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output << " = vxCreateTensor(context,4, " << output + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                ofsCodeC << "    " << output << " = vxCreateTensor(context,4, " << output + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT("  << output << ");" << std::endl;
             }
             else if(codeType == "release_tensors") {
@@ -981,31 +983,31 @@ void writeVXCode(
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_size " << weights << "_dims[4];" << std::endl;
-                ofsCodeH << "	vx_tensor " << weights << " ;" << std::endl;
+                ofsCodeH << "    vx_size " << weights << "_dims[4];" << std::endl;
+                ofsCodeH << "    vx_tensor " << weights << " ;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << weights + "_dims {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
+                ofsCodeC << "    " << weights + "_dims {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << weights << " = vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                ofsCodeC << "    " << weights << " = vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << weights << "); " << std::endl;
                 ofsCodeC << "   " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
-                ofsCodeC << "	" << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                ofsCodeC << "	" << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
-                ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
-                ofsCodeC << "	" << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "	" << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
-                ofsCodeC << "	" << "vx_size " << weights  + "_m_size = 4;" << std::endl;
-                ofsCodeC << "	" << "vx_size " << weights + "_m_stride[4];" << std::endl;
-                ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
+                ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
+                ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
+                ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
+                ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
+                ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
+                ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
                          << weights + "_m_size *= " << weights+ "_dims[i]; } " << std::endl;
-                ofsCodeC << "	" << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
+                ofsCodeC << "    " << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
                          << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
+                ofsCodeC << "    " << "fclose(" << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "delete " << weights + "_buf;" << std::endl;
             }
             else if(codeType == "release_tensors") {
                 ofsCodeC << "   " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << weights << " ));" << std::endl;
@@ -1015,27 +1017,27 @@ void writeVXCode(
             if(bias_term) {
                 bias = output + "_B";
                 if(codeType == "declaration") {
-                    ofsCodeH << "	vx_size " << bias << "_dims[1];" << std::endl;
-                    ofsCodeH << "	vx_tensor " << bias << ";" << std::endl;
+                    ofsCodeH << "    vx_size " << bias << "_dims[1];" << std::endl;
+                    ofsCodeH << "    vx_tensor " << bias << ";" << std::endl;
                 }
                 else if(codeType == "constructor") {
-                    ofsCodeC << "	" << bias + "_dims  { " << k << " }, " << std::endl;
+                    ofsCodeC << "    " << bias + "_dims  { " << k << " }, " << std::endl;
                 }
                 else if(codeType == "initialize") {
-                    ofsCodeC << "	" << bias << " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                    ofsCodeC << "    " << bias << " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
                     ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
                     ofsCodeC << "   " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;                    ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
-                    ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
-                    ofsCodeC << "	" << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias  + "_m_size = 4;" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias + "_m_stride[1];" << std::endl;
-                    ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
+                    ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
+                    ofsCodeC << "    " << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias  + "_m_size = 4;" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias + "_m_stride[1];" << std::endl;
+                    ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
                              << bias + "_m_size *= " << bias + "_dims[i]; } " << std::endl;
-                    ofsCodeC << "	" << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
+                    ofsCodeC << "    " << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
                              << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                    ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
+                    ofsCodeC << "    " << "fclose(" << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "delete " << bias + "_buf;" << std::endl;
                 }
                 else if(codeType == "release_tensors") {
                     ofsCodeC << "   " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << bias << " ));" << std::endl;
@@ -1043,18 +1045,18 @@ void writeVXCode(
                 declare_tensor_check[bias] = true;
             }
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_nn_convolution_params_t " << output << "_params;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_nn_convolution_params_t " << output << "_params;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_params.padding_x = " << pad_w << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.padding_y = " << pad_h << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
-                ofsCodeC << "	" << output + "_params.dilation_x = " << dilation_w - 1 << " ;" << std::endl;
-                ofsCodeC << "	" << output + "_params.dilation_y = " << dilation_h - 1 << " ;" << std::endl;
-                ofsCodeC << "	" << output + "_node = " << "vxConvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << "sizeof(" << output + "_params ), " << output << ");" << std::endl;
+                ofsCodeC << "    " << output + "_params.padding_x = " << pad_w << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.padding_y = " << pad_h << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
+                ofsCodeC << "    " << output + "_params.dilation_x = " << dilation_w - 1 << " ;" << std::endl;
+                ofsCodeC << "    " << output + "_params.dilation_y = " << dilation_h - 1 << " ;" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxConvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << "sizeof(" << output + "_params ), " << output << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
 
             }
@@ -1069,31 +1071,31 @@ void writeVXCode(
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_size " << weights << "_dims[4];" << std::endl;
-                ofsCodeH << "	vx_tensor " << weights << " ;" << std::endl;
+                ofsCodeH << "    vx_size " << weights << "_dims[4];" << std::endl;
+                ofsCodeH << "    vx_tensor " << weights << " ;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << weights + "_dims{ " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
+                ofsCodeC << "    " << weights + "_dims{ " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << "}," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << weights + "= vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                ofsCodeC << "    " << weights + "= vxCreateTensor(context,4, " << weights + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << weights << "); " << std::endl;
                 ofsCodeC << "   " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
-                ofsCodeC << "	" << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                ofsCodeC << "	" << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
-                ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
-                ofsCodeC << "	" << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "	" << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
-                ofsCodeC << "	" << "vx_size " << weights  + "_m_size = 4;" << std::endl;
-                ofsCodeC << "	" << "vx_size " << weights + "_m_stride[4];" << std::endl;
-                ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
+                ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
+                ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
+                ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
+                ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
+                ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
+                ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
                          << weights + "_m_size *= " << weights+ "_dims[i]; } " << std::endl;
-                ofsCodeC << "	" << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
+                ofsCodeC << "    " << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
                          << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
+                ofsCodeC << "    " << "fclose(" << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "delete " << weights + "_buf;" << std::endl;
             }
             else if(codeType == "release_tensors") {
                 ofsCodeC << "   " << "vxReleaseTensor(&" << weights << " );" << std::endl;
@@ -1103,29 +1105,29 @@ void writeVXCode(
             if(bias_term) {
                 bias = output + "_B";
                 if(codeType == "declaration") {
-                    ofsCodeH << "	vx_size " << bias << "_dims[1];" << std::endl;
-                    ofsCodeH << "	vx_tensor " << bias << ";" << std::endl;
+                    ofsCodeH << "    vx_size " << bias << "_dims[1];" << std::endl;
+                    ofsCodeH << "    vx_tensor " << bias << ";" << std::endl;
                 }
                 else if(codeType == "constructor") {
-                    ofsCodeC << "	" << bias + "_dims{" << k << "}," << std::endl;
+                    ofsCodeC << "    " << bias + "_dims{" << k << "}," << std::endl;
                 }
                 else if(codeType == "initialize") {
-                    ofsCodeC << "	" << bias + " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
+                    ofsCodeC << "    " << bias + " = vxCreateTensor(context,1, " << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
                     ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
                     ofsCodeC << "   " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                    ofsCodeC << "	" << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                    ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
-                    ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
-                    ofsCodeC << "	" << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias  + "_m_size = 4;" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias + "_m_stride[1];" << std::endl;
-                    ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
+                    ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
+                    ofsCodeC << "    " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
+                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
+                    ofsCodeC << "    " << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias  + "_m_size = 4;" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias + "_m_stride[1];" << std::endl;
+                    ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
                              << bias + "_m_size *= " << bias + "_dims[i]; } " << std::endl;
-                    ofsCodeC << "	" << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
+                    ofsCodeC << "    " << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
                              << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                    ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
+                    ofsCodeC << "    " << "fclose(" << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "delete " << bias + "_buf;" << std::endl;
                 }
                 else if(codeType == "release_tensors") {
                     ofsCodeC << "   " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << bias << " ));" << std::endl;
@@ -1133,17 +1135,17 @@ void writeVXCode(
                 declare_tensor_check[bias] = true;
             }
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_nn_deconvolution_params_t " << output << "_params;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_nn_deconvolution_params_t " << output << "_params;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_params.padding_x = " << pad_w << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.padding_y = " << pad_h << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
-                ofsCodeC << "	" << output + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
-                ofsCodeC << "	" << output + "_node = " << " vxDeconvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << output << ");" << std::endl;
+                ofsCodeC << "    " << output + "_params.padding_x = " << pad_w << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.padding_y = " << pad_h << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
+                ofsCodeC << "    " << output + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << " vxDeconvolutionLayer(graph, " << node[4] << ", " << weights << ", " << bias << ", &" << output + "_params, " << output << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1156,24 +1158,24 @@ void writeVXCode(
             ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
             if((pool != 0 && pool != 1)) error("writeGDF: pooling_layer supports only MAX and AVG\n");
             if(codeType == "declaration" ) {
-                ofsCodeH << "	vx_enum " << output << "_type;" << std::endl;
-                ofsCodeH << "	vx_size " << output << "_kernel_w;" << std::endl;
-                ofsCodeH << "	vx_size " << output << "_kernel_h;" << std::endl;
-                ofsCodeH << "	vx_size " << output << "_pad_w;" << std::endl;
-                ofsCodeH << "	vx_size " << output << "_pad_h;" << std::endl;
-                ofsCodeH << "	vx_enum " << output << "_roundPolicy;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_type;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_kernel_w;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_kernel_h;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_pad_w;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_pad_h;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_roundPolicy;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_kernel_w(" << kernel_w << ")," << std::endl;
-                ofsCodeC << "	" << output + "_kernel_h(" << kernel_h << ")," << std::endl;
-                ofsCodeC << "	" << output + "_pad_w(" << pad_w << ")," << std::endl;
-                ofsCodeC << "	" << output + "_pad_h(" << pad_h << ")," << std::endl;
+                ofsCodeC << "    " << output + "_kernel_w(" << kernel_w << ")," << std::endl;
+                ofsCodeC << "    " << output + "_kernel_h(" << kernel_h << ")," << std::endl;
+                ofsCodeC << "    " << output + "_pad_w(" << pad_w << ")," << std::endl;
+                ofsCodeC << "    " << output + "_pad_h(" << pad_h << ")," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_type = " << (pool == 0 ? "VX_NN_POOLING_MAX" : "VX_NN_POOLING_AVG") << " ;" << std::endl;
-                ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_node = " << "vxPoolingLayer(graph, " << node[4] << ", " << output + "_type" << ", " << output + "_kernel_w, " << output + "_kernel_h, "
+                ofsCodeC << "    " << output + "_type = " << (pool == 0 ? "VX_NN_POOLING_MAX" : "VX_NN_POOLING_AVG") << " ;" << std::endl;
+                ofsCodeC << "    " << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxPoolingLayer(graph, " << node[4] << ", " << output + "_type" << ", " << output + "_kernel_w, " << output + "_kernel_h, "
                          << output + "_pad_w, " << output + "_pad_h, " << output + "_roundPolicy, " << output << " );" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
@@ -1188,31 +1190,31 @@ void writeVXCode(
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_size " << weights << "_dims[4];" << std::endl;
-                ofsCodeH << "	vx_tensor " << weights << ";" << std::endl;
+                ofsCodeH << "    vx_size " << weights << "_dims[4];" << std::endl;
+                ofsCodeH << "    vx_tensor " << weights << ";" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << weights + "_dims{" << dim[3] << ", " << dim[2] << "," << dim[1] << "," << dim[0] << "}," << std::endl;
+                ofsCodeC << "    " << weights + "_dims{" << dim[3] << ", " << dim[2] << "," << dim[1] << "," << dim[0] << "}," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << weights << "= vxCreateTensor(context,4," << weights + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
+                ofsCodeC << "    " << weights << "= vxCreateTensor(context,4," << weights + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << weights << "); " << std::endl;
                 ofsCodeC << "   " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
-                ofsCodeC << "	" << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                ofsCodeC << "	" << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                ofsCodeC << "	" << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
-                ofsCodeC << "	" << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
-                ofsCodeC << "	" << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "	" << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
-                ofsCodeC << "	" << "vx_size " << weights  + "_m_size = 4;" << std::endl;
-                ofsCodeC << "	" << "vx_size " << weights + "_m_stride[4];" << std::endl;
-                ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
+                ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
+                ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
+                ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
+                ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
+                ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
+                ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 4; i++) { " << weights+"_m_stride[i] = " << weights + "_m_size; "
                          << weights + "_m_size *= " << weights+ "_dims[i]; } " << std::endl;
-                ofsCodeC << "	" << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
+                ofsCodeC << "    " << "vxCopyTensorPatch( " << weights << ", 4, nullptr, nullptr," << weights+"_m_stride, " << weights +"_buf, "
                          << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                ofsCodeC << "	" << "fclose(" << weights + "_file);" << std::endl;
-                ofsCodeC << "	" << "delete " << weights + "_buf;" << std::endl;
+                ofsCodeC << "    " << "fclose(" << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << "delete " << weights + "_buf;" << std::endl;
             }
             else if(codeType == "release_tensors") {
                 ofsCodeC << "   " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << weights << " ));" << std::endl;
@@ -1222,29 +1224,29 @@ void writeVXCode(
             if(bias_term) {
                 bias = output + "_B" ;
                 if(codeType == "declaration") {
-                    ofsCodeH << "	vx_size " << bias << "_dims[1];" << std::endl;
-                    ofsCodeH << "	vx_tensor " << bias << ";" << std::endl;
+                    ofsCodeH << "    vx_size " << bias << "_dims[1];" << std::endl;
+                    ofsCodeH << "    vx_tensor " << bias << ";" << std::endl;
                 }
                 else if(codeType == "constructor") {
-                    ofsCodeC << "	" << bias + "_dims{" << k << "}," << std::endl;
+                    ofsCodeC << "    " << bias + "_dims{" << k << "}," << std::endl;
                 }
                 else if(codeType == "initialize") {
-                    ofsCodeC << "	" << bias << "= vxCreateTensor(context,1," << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
+                    ofsCodeC << "    " << bias << "= vxCreateTensor(context,1," << bias + "_dims, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
                     ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
                     ofsCodeC << "   " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
-                    ofsCodeC << "	" << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                    ofsCodeC << "	" << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                    ofsCodeC << "	" << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
-                    ofsCodeC << "	" << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
-                    ofsCodeC << "	" << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias  + "_m_size = 4;" << std::endl;
-                    ofsCodeC << "	" << "vx_size " << bias + "_m_stride[1];" << std::endl;
-                    ofsCodeC << "	" << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
+                    ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
+                    ofsCodeC << "    " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
+                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
+                    ofsCodeC << "    " << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias  + "_m_size = 4;" << std::endl;
+                    ofsCodeC << "    " << "vx_size " << bias + "_m_stride[1];" << std::endl;
+                    ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
                              << bias + "_m_size *= " << bias + "_dims[i]; } " << std::endl;
-                    ofsCodeC << "	" << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
+                    ofsCodeC << "    " << "vxCopyTensorPatch( " << bias << ", 1, nullptr, nullptr," << bias + "_m_stride, " << bias +"_buf, "
                              << "VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST); " << std::endl;
-                    ofsCodeC << "	" << "fclose(" << bias + "_file);" << std::endl;
-                    ofsCodeC << "	" << "delete " << bias + "_buf;" << std::endl;
+                    ofsCodeC << "    " << "fclose(" << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "delete " << bias + "_buf;" << std::endl;
                 }
                 else if(codeType == "release_tensors") {
                     ofsCodeC << "   " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << bias << " ));" << std::endl;
@@ -1252,14 +1254,14 @@ void writeVXCode(
                 declare_tensor_check[bias]= true;
             }
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_enum " << output << "_convertPolicy;" << std::endl;
-                ofsCodeH << "	vx_enum " << output << "_roundPolicy;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_convertPolicy;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_roundPolicy;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_convertPolicy = " << convertPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
-                ofsCodeC << "	" << output + "_node = " << "vxFullyConnectedLayer( graph, " << node[4] << ", " << weights << ", " << bias << ", " << output + "_convertPolicy, " << output + "_roundPolicy, " << output + ");" << std::endl;
+                ofsCodeC << "    " << output + "_convertPolicy = " << convertPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_roundPolicy = " << roundPolicy << ";" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxFullyConnectedLayer( graph, " << node[4] << ", " << weights << ", " << bias << ", " << output + "_convertPolicy, " << output + "_roundPolicy, " << output + ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1268,18 +1270,18 @@ void writeVXCode(
         }
         else if(type == "ReLU") {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_enum " << output << "_mode;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_param_a;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_param_b;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_mode;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_param_a;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_param_b;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_param_a(" << 0 << ")," << std::endl;
-                ofsCodeC << "	" << output + "_param_b(" << 0 << ")," << std::endl;
+                ofsCodeC << "    " << output + "_param_a(" << 0 << ")," << std::endl;
+                ofsCodeC << "    " << output + "_param_b(" << 0 << ")," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
-                ofsCodeC << "	" << output + "_node = " << "vxActivationLayer(graph, " << node[4] << ", " << output + "_mode, " << output + "_param_a, " << output + "_param_b, " << output << ");" << std::endl;
+                ofsCodeC << "    " << output + "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxActivationLayer(graph, " << node[4] << ", " << output + "_mode, " << output + "_param_a, " << output + "_param_b, " << output << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1294,22 +1296,22 @@ void writeVXCode(
             std::string lrnType;
             lrnType =  (norm_region == "1") ? "VX_NORMALIZATION_SAME_MAP" : "VX_NORMALIZATION_ACROSS_MAPS";
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_enum " << output << "_mode;" << std::endl;
-                ofsCodeH << "	vx_size " << output << "_size;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_alpha;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_beta;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_bias;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_enum " << output << "_mode;" << std::endl;
+                ofsCodeH << "    vx_size " << output << "_size;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_alpha;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_beta;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_bias;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_size("  << normalization_size << ")," << std::endl;
-                ofsCodeC << " 	" << output + "_alpha(" << alpha << ")," << std::endl;
-                ofsCodeC << "	" << output + "_beta(" << beta << ")," << std::endl;
-                ofsCodeC << "	" << output + "_bias(" << k << ")," << std::endl;
+                ofsCodeC << "    " << output + "_size("  << normalization_size << ")," << std::endl;
+                ofsCodeC << "     " << output + "_alpha(" << alpha << ")," << std::endl;
+                ofsCodeC << "    " << output + "_beta(" << beta << ")," << std::endl;
+                ofsCodeC << "    " << output + "_bias(" << k << ")," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_mode = " << lrnType << ";" << std::endl;
-                ofsCodeC << "	" << output + "_node = " << "vxNormalizationLayer( graph, " << node[4] << ", " << output + "_mode, " << output + "_size, " << output + "_alpha, " << output + "_beta, "
+                ofsCodeC << "    " << output + "_mode = " << lrnType << ";" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxNormalizationLayer( graph, " << node[4] << ", " << output + "_mode, " << output + "_size, " << output + "_alpha, " << output + "_beta, "
                          << output << ", " << output + "_bias );" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
@@ -1323,18 +1325,18 @@ void writeVXCode(
             std::stringstream ss(params);
             ss >> eps >> use_global_stats;
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_float32 " << output << "_eps; " << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_beta; " << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_gamma;" << std::endl;
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_eps; " << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_beta; " << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_gamma;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_eps(" << eps << ")," << std::endl;
-                ofsCodeC << "	" << output + "_beta(" << beta << ")," << std::endl;
-                ofsCodeC << "	" << output + "_gamma(" << gamma << ")," << std::endl;
+                ofsCodeC << "    " << output + "_eps(" << eps << ")," << std::endl;
+                ofsCodeC << "    " << output + "_beta(" << beta << ")," << std::endl;
+                ofsCodeC << "    " << output + "_gamma(" << gamma << ")," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_node = " << "vxBatchNormalizationLayer(graph, " << node[4] << output + "_gamma, " << output + "_beta, " << output << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxBatchNormalizationLayer(graph, " << node[4] << output + "_gamma, " << output + "_beta, " << output << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1358,25 +1360,25 @@ void writeVXCode(
                 if(i < node.size()- 1) {
                     out += "tmp_"+ std::to_string(i-4);
                     if(codeType == "declaration") {
-                        ofsCodeH << "	vx_size " << out << "_dim[4];" << std::endl;
-                        ofsCodeH << "	vx_tensor " << out << "; " << std::endl;
+                        ofsCodeH << "    vx_size " << out << "_dim[4];" << std::endl;
+                        ofsCodeH << "    vx_tensor " << out << "; " << std::endl;
                     }
                     else if(codeType == "constructor") {
-                        ofsCodeC << "	" << out + "_dim {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " }," << std::endl;
+                        ofsCodeC << "    " << out + "_dim {" << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " }," << std::endl;
                     }
                     else if(codeType == "initialize") {
-                        ofsCodeC << "	" << out << "= vxCreateTensor(context,4, " << out + "_dim, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
+                        ofsCodeC << "    " << out << "= vxCreateTensor(context,4, " << out + "_dim, VX_TYPE_FLOAT32, " << fixedPosition << ");" << std::endl;
                     }
                     declare_tensor_check[out]= true;
                 }
                 if(op == 1) {
                     if(codeType == "declaration") {
-                        ofsCodeH << "	vx_enum " << node[3] << "_convertPolicy;" << std::endl;
-                        ofsCodeH << "	vx_node	" << node[3] <<"_node;" << std::endl;
+                        ofsCodeH << "    vx_enum " << node[3] << "_convertPolicy;" << std::endl;
+                        ofsCodeH << "    vx_node    " << node[3] <<"_node;" << std::endl;
                     }
                     else if(codeType == "initialize") {
-                        ofsCodeC << "	" << node[3] + "_convertPolicy = " << convertPolicy << ";" << std::endl;
-                        ofsCodeC << "	" << node[3] + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << node[3] + "_convertPolicy, " << out << ");" << std::endl;
+                        ofsCodeC << "    " << node[3] + "_convertPolicy = " << convertPolicy << ";" << std::endl;
+                        ofsCodeC << "    " << node[3] + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << node[3] + "_convertPolicy, " << out << ");" << std::endl;
                         ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
                     }
                     else if(codeType == "release_nodes") {
@@ -1390,21 +1392,21 @@ void writeVXCode(
         else if(type == "Scale") {
             float alpha =1,beta=0;
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_float32 " << output << "_alpha;" << std::endl;
-                ofsCodeH << "	vx_float32 " << output << "_beta;" << std::endl;
-                ofsCodeH << "	vx_node	" << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_alpha;" << std::endl;
+                ofsCodeH << "    vx_float32 " << output << "_beta;" << std::endl;
+                ofsCodeH << "    vx_node    " << output << "_node;" << std::endl;
             }
             else if(codeType == "constructor") {
-                ofsCodeC << "	" << output + "_alpha(" << alpha << ")," << std::endl;
-                ofsCodeC << "	" << output + "_beta(" << beta << ")," << std::endl;
+                ofsCodeC << "    " << output + "_alpha(" << alpha << ")," << std::endl;
+                ofsCodeC << "    " << output + "_beta(" << beta << ")," << std::endl;
             }
         }
         else if(type == "Concat") {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" <<  output + "_node = " << "vxConcatLayer(graph, " ;
+                ofsCodeC << "    " <<  output + "_node = " << "vxConcatLayer(graph, " ;
                 for(int i=4;i < node.size(); i++) {
                     ofsCodeC << node[i] << ", " ;
                 }
@@ -1418,10 +1420,10 @@ void writeVXCode(
         else if(type == "Dropout") {
             //during inference dropout layer propogates input to output .
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType ==  "initialize") {
-                ofsCodeC << "	" << output + "_node = " << "vxCopyLayer( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxCopyLayer( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1429,10 +1431,10 @@ void writeVXCode(
             }        }
         else if(type == "Softmax") {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1441,10 +1443,10 @@ void writeVXCode(
         }
         else if(type == "Split") {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_node = " << "vxCopyLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxCopyLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1453,10 +1455,10 @@ void writeVXCode(
         }
         else if(type == "SoftmaxWithLoss") {
             if(codeType == "declaration") {
-                ofsCodeH << "	vx_node " << output << "_node;" << std::endl;
+                ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "	" << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxSoftmaxLayer(graph, " << node[4] << ", " << node[3] << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
@@ -1507,23 +1509,8 @@ void generateCode(
     ofsCodeH << "#include <stdio.h>" << std::endl;
     ofsCodeH << "#include <stdlib.h>" << std::endl << std::endl;
 
-  /*  ofsCodeH << "#define ERROR_CHECK_STATUS(call) { \n vx_status status = (call); \n "
-             << "if(status != VX_SUCCESS ) \n { \n "
-             << "   vxAddLogEntry((vx_reference)(obj), status,\"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); \n  } " << std::endl
-             << "   return status;\n }"
-             << std::endl << std::endl; */
-
-    ofsCodeH << "#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS){ vxAddLogEntry(NULL, status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return status; }}" << std::endl;
-/*
-    ofsCodeH << "#define ERROR_CHECK_OBJECT(obj) { \n vx_status status = vxGetStatus((vx_reference) (obj)); \n "
-             << "if(status != VX_SUCCESS ) \n { \n"
-             <<  "  vxAddLogEntry((vx_reference)(obj), status,\"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); \n  }  " << std::endl
-             << "   return status;\n }"
-             << std::endl << std::endl;
-*/
-
-    ofsCodeH << "#define ERROR_CHECK_OBJECT(obj) { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS){ vxAddLogEntry((vx_reference)(obj), status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return status; }}"
-             << std::endl;
+    ofsCodeH << "#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS) { vxAddLogEntry(NULL, status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return status; }}" << std::endl;
+    ofsCodeH << "#define ERROR_CHECK_OBJECT(obj) { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS) { vxAddLogEntry((vx_reference)(obj), status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return status; }}" << std::endl;
     ofsCodeH
             << "class NetVX {" << std::endl
             << "public:" << std::endl
@@ -1551,7 +1538,7 @@ void generateCode(
     ofsCodeC << "{" << std::endl;
     ofsCodeC << "   std::string str = dataFolder, fileName;" << std::endl;
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "initialize");
-    ofsCodeC << "	return 0;" << std::endl;
+    ofsCodeC << "    return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
     ofsCodeC << "int NetVX::Shutdown()" << std::endl;
@@ -1560,13 +1547,13 @@ void generateCode(
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_graph");
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_tensors");
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "release_context");
-    ofsCodeC << "	return 0;" << std::endl;
+    ofsCodeC << "    return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
     ofsCodeC << "int NetVX::Run(float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes)" << std::endl;
     ofsCodeC << "{" << std::endl;
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "run");
-    ofsCodeC << "	return 0;" << std::endl;
+    ofsCodeC << "    return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
     ofsCodeM << "#include \"net.h\"" << std::endl ;
@@ -1628,20 +1615,20 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         const caffe::LayerParameter& layer_parameter = net_parameter.layer(i);
 
         caffe::Phase phase = layer_parameter.phase();
-        for(int j=0;j<layer_parameter.include_size();j++){
-            if(layer_parameter.include(j).phase()){
+        for(int j=0;j<layer_parameter.include_size();j++) {
+            if(layer_parameter.include(j).phase()) {
                 phase = layer_parameter.include(j).phase();
             }
         }
 
-        if(phase== caffe::TEST){
+        if(phase== caffe::TEST) {
             continue;
         }
 
         //Check layer name.
         else if(layer_parameter.type() == "Input" || layer_parameter.type() == "Data" || layer_parameter.type() == "ImageData" ) {
             outputNameMap[layer_parameter.top(0)]= layer_parameter.top(0);
-            if(layer_parameter.type() == "Input"  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0))){
+            if(layer_parameter.type() == "Input"  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0))) {
                 inputDim[0] = layer_parameter.input_param().shape(0).dim(0);
                 inputDim[1] = layer_parameter.input_param().shape(0).dim(1);
                 inputDim[2] = layer_parameter.input_param().shape(0).dim(2);
@@ -1656,8 +1643,8 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         // enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
         bool isSplitEnabled = (flags & 1);
         if(!isSplitEnabled) {
-            if(layer_parameter.type()=="Split"){
-                for(int j=0; j< layer_parameter.top_size() ; j++ ){
+            if(layer_parameter.type()=="Split") {
+                for(int j=0; j< layer_parameter.top_size() ; j++ ) {
                     // get layer information and add to net
                     std::vector<std::string> node;
                     node.push_back(layer_parameter.type());
@@ -1680,9 +1667,9 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         else
         {
             //Split type.
-            if(layer_parameter.type()=="Split"){
+            if(layer_parameter.type()=="Split") {
                 splitNameMap[layer_parameter.name()]= layer_parameter.bottom(0);
-                for(int j=0; j< layer_parameter.top_size() ; j++ ){
+                for(int j=0; j< layer_parameter.top_size() ; j++ ) {
                     splitNameMap[layer_parameter.top(j)] = layer_parameter.bottom(0);
                 }
                 continue;
@@ -1698,7 +1685,7 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         node.push_back(layer_parameter.top(0));
         node.push_back(layer_parameter.name());
         for(int j = 0; j < layer_parameter.bottom_size()  ; j++) {
-            if(isSplitEnabled && (strstr(layer_parameter.bottom(j).c_str(),"split"))){
+            if(isSplitEnabled && (strstr(layer_parameter.bottom(j).c_str(),"split"))) {
                 outputNameMap[layer_parameter.bottom(j)]= splitNameMap[layer_parameter.bottom(j)];
             }
             if(outputNameMap.find(layer_parameter.bottom(j)) == outputNameMap.end()) {
@@ -1731,11 +1718,11 @@ int loadCaffeModelFile(
         std::cout << "CaffeModel Read Successful" << std::endl;
         int layer_param_size = net_parameter.layer_size();
         if(layer_param_size > 0) {
-		parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
+            parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
         }
         else {
-		std::cerr << "ERROR: [Unsupported caffemodel] please upgrade this caffemodel, currently uses deprecated V1LayerParameters." << std::endl;
-		return -1;
+            std::cerr << "ERROR: [Unsupported caffemodel] please upgrade this caffemodel, currently uses deprecated V1LayerParameters." << std::endl;
+            return -1;
         }
     }
     else {
@@ -1842,7 +1829,7 @@ int main(int argc, char* argv[])
             return -1;
         }
     }
-    else{
+    else {
         printf("%s", usage);
         return -1;
     }
