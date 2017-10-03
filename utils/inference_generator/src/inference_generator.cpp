@@ -1822,10 +1822,7 @@ int main(int argc, char* argv[])
     if(argc > 9) roundPolicy = argv[9];
     std::vector<std::vector<std::string>> net;
 
-    if(flags > 2 ) {
-        printf("ERROR: flags>2 not supported\n");
-        return -1;
-    }
+    flags &= 3;     // we are only interersted in LSBs 0 & 1
     bFuseScaleWithBatchNorm = (flags & 2) >> 1;
 
     // load caffe model (or just .prototxt)
