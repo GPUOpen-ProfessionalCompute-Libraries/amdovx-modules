@@ -470,9 +470,13 @@ static vx_status ReleaseAlignedOpenCLImage(ls_context stitch, vx_image *input){
 
 	cl_mem clImg;
 	ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_ATTRIBUTE_AMD_OPENCL_BUFFER, &clImg, sizeof(cl_mem)));
-	clReleaseMemObject(clImg);
+	cl_int err = clReleaseMemObject(clImg);
+	if (err){
+		ls_printf("clReleaseMemObject failed(%d)\n", err);
+		return VX_FAILURE;
+	}
 	stitch->opencl_mem_release_count++;
-	vxReleaseImage(input);
+	ERROR_CHECK_STATUS(vxReleaseImage(input));
 	return VX_SUCCESS;
 }
 
