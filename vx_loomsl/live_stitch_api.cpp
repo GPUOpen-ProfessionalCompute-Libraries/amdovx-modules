@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include <string>
 
 // Version
-#define LS_VERSION             "0.9.6"
+#define LS_VERSION             "0.9.7"
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The magic number for validation
@@ -44,7 +44,7 @@ THE SOFTWARE.
 //! \brief The stitching modes
 enum {
 	stitching_mode_normal          = 0, // normal mode
-	stitching_mode_quick_and_dirty = 1, // quick and dirty mode
+	stitching_mode_simple          = 1, // simple mode
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -181,16 +181,16 @@ struct ls_context_t {
 	vx_uint8    * overlayIndexBuf;
 	// internal buffers for frame encode
     #define MAX_TILE_IMG 16
-	vx_uint32   output_encode_buffer_width;             // buffer width after encode conversion
-	vx_uint32   output_encode_buffer_height;            // buffer height after encode conversion
-	vx_uint32   output_tiles;                    // total number of encode tiles
-	vx_uint32   num_encode_sections;                    // total number of encode sectional images
-	vx_image    encode_src_rgb_imgs[MAX_TILE_IMG];      // encode intermediate images
-	vx_image    encode_dst_imgs[MAX_TILE_IMG];          // encode intermediate images
-	vx_image    encodetileOutput[MAX_TILE_IMG];         // encode tile output NV12 images
-	vx_rectangle_t src_encode_tile_rect[MAX_TILE_IMG];  // src encode rectangles 
-	vx_rectangle_t dst_encode_tile_rect[MAX_TILE_IMG];  // dst encode rectangles 
-	vx_node     encode_color_convert_nodes[MAX_TILE_IMG];// nodes to color convert each of the sectional ROI images
+	vx_uint32   output_tile_buffer_width;               // buffer width after tile conversion
+	vx_uint32   output_tile_buffer_height;              // buffer height after tile conversion
+	vx_uint32   output_tiles;                           // total number of tiles
+	vx_uint32   num_tile_sections;                      // total number of sectional images
+	vx_image    tile_src_rgb_imgs[MAX_TILE_IMG];        // tiled intermediate images
+	vx_image    tile_dst_imgs[MAX_TILE_IMG];            // tiled intermediate images
+	vx_image    tileOutput[MAX_TILE_IMG];               // tiled output NV12 images
+	vx_rectangle_t src_tile_rect[MAX_TILE_IMG];         // src tile rectangles 
+	vx_rectangle_t dst_tile_rect[MAX_TILE_IMG];         // dst tile rectangles 
+	vx_node     tile_color_convert_nodes[MAX_TILE_IMG];// nodes to color convert each of the sectional ROI images
 	// chroma key
 	vx_uint32   CHROMA_KEY;                             // chroma key flag variable
 	vx_uint32   CHROMA_KEY_EED;                         // chroma key flag variable
@@ -527,29 +527,18 @@ static void ResetLiveStitchGlobalAttributes()
 		// frame encoding default attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] = 1;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap] = 0;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE] = 0;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] = 3840;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] = 2160;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y] = 3840;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH] = 3840;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT] = 2160;
+		g_live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_STRIDE_Y] = 3840;
 		// chroma key default
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_VALUE] = 8454016;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_TOL] = 25;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_CHROMA_KEY_EED] = 0;
 		// LoomIO specific attributes
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_CAMERA_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OVERLAY_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_DATA_SIZE] = (float)LOOMIO_DEFAULT_AUX_DATA_CAPACITY;
 		// Temporal Filter
-		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER] = 0;
 		g_live_stitch_attr[LIVE_STITCH_ATTR_NOISE_FILTER_LAMBDA] = 1;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT] = 0;
-		// 16 bit flow
-		g_live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 0;
-		g_live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
-		// warp
-		g_live_stitch_attr[LIVE_STITCH_ATTR_WARP_INTERPOLATION] = 0;
 	}
 }
 static std::vector<std::string> split(std::string str, char delimiter) {
@@ -988,7 +977,7 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 {
 	vx_uint32 camWidth = stitch->camera_rgb_buffer_width / stitch->num_camera_columns;
 	vx_uint32 camHeight = stitch->camera_rgb_buffer_height / stitch->num_camera_rows;
-	vx_uint32 numCamera = stitch->num_camera_rows;
+	vx_uint32 numCamera = stitch->num_camera_rows * stitch->num_camera_columns;
 	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
 	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	// compute camera warp parameters and check for supported lens types
@@ -1053,7 +1042,7 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 }
 static vx_status setupQuickInitializeGraph(ls_context stitch)
 {
-	vx_uint32 numCamera = stitch->num_camera_rows;
+	vx_uint32 numCamera = stitch->num_camera_rows * stitch->num_camera_columns;
 	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
 	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	vx_uint32 paddingPixelCount = stitch->stitchInitData->paddingPixelCount;
@@ -1127,7 +1116,7 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 		// Quick Initailize enabled
 		if (stitch->stitchInitData && stitch->stitchInitData->graphInitialize && !stitch->SETUP_LOAD_FILES_FOUND)
 		{
-			if (stitch->stitching_mode == stitching_mode_quick_and_dirty) stitch->stitchInitData->paddingPixelCount = 0;
+			if (stitch->stitching_mode == stitching_mode_simple) stitch->stitchInitData->paddingPixelCount = 0;
 			else stitch->stitchInitData->paddingPixelCount = stitch->paddingPixelCount;
 			ERROR_CHECK_STATUS_(setupQuickInitializeParams(stitch));
 			ERROR_CHECK_STATUS_(setupQuickInitializeGraph(stitch));
@@ -1819,21 +1808,21 @@ functions to tile stitched output
 *****************************************************************************************************************************************/
 static vx_status CreateImageFromROI(ls_context stitch)
 {
-	vx_uint32 dst_tile_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
+	vx_uint32 dst_tile_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 
-	for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++)
+	for (vx_uint32 i = 0; i < stitch->num_tile_sections; i++)
 	{
 		// create src & dst images from ROI's
-		ERROR_CHECK_OBJECT_(stitch->encode_src_rgb_imgs[i] = vxCreateImageFromROI(stitch->Img_output_rgb, &stitch->src_encode_tile_rect[i]));
+		ERROR_CHECK_OBJECT_(stitch->tile_src_rgb_imgs[i] = vxCreateImageFromROI(stitch->Img_output_rgb, &stitch->src_tile_rect[i]));
 
 		// get the destination Image ID and create Img from ROI
-		vx_uint32 outputTileID = stitch->dst_encode_tile_rect[i].start_y / dst_tile_height;
-		stitch->dst_encode_tile_rect[i].start_y = stitch->dst_encode_tile_rect[i].start_y % dst_tile_height;
-		stitch->dst_encode_tile_rect[i].end_y = stitch->dst_encode_tile_rect[i].end_y % dst_tile_height;
-		ERROR_CHECK_OBJECT_(stitch->encode_dst_imgs[i] = vxCreateImageFromROI(stitch->encodetileOutput[outputTileID], &stitch->dst_encode_tile_rect[i]));
+		vx_uint32 outputTileID = stitch->dst_tile_rect[i].start_y / dst_tile_height;
+		stitch->dst_tile_rect[i].start_y = stitch->dst_tile_rect[i].start_y % dst_tile_height;
+		stitch->dst_tile_rect[i].end_y = stitch->dst_tile_rect[i].end_y % dst_tile_height;
+		ERROR_CHECK_OBJECT_(stitch->tile_dst_imgs[i] = vxCreateImageFromROI(stitch->tileOutput[outputTileID], &stitch->dst_tile_rect[i]));
 
 		// color covert the image ROI's
-		ERROR_CHECK_OBJECT(stitch->encode_color_convert_nodes[i] = CreateColorConvertNode(stitch->graphStitch, stitch->encode_src_rgb_imgs[i], stitch->encode_dst_imgs[i],stitch->color_convert_flags));
+		ERROR_CHECK_OBJECT(stitch->tile_color_convert_nodes[i] = CreateColorConvertNode(stitch->graphStitch, stitch->tile_src_rgb_imgs[i], stitch->tile_dst_imgs[i],stitch->color_convert_flags));
 	}
 	return VX_SUCCESS;
 }
@@ -1842,10 +1831,10 @@ static vx_status ROIProcessImage(ls_context stitch)
 	// src tile dimesions
 	vx_uint32 src_tile_width = (vx_uint32)(stitch->output_rgb_buffer_width / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
 	vx_uint32 src_tile_height = (vx_uint32)(stitch->output_rgb_buffer_height / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
-	vx_uint32 src_tile_overlap = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap];
+	vx_uint32 src_tile_overlap = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_OVERLAP];
 	// dst tile dimesions
-	vx_uint32 dst_tile_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
-	vx_uint32 dst_tile_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
+	vx_uint32 dst_tile_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
+	vx_uint32 dst_tile_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT] / stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
 
 	// calculate encode regions
 	vx_uint32 roi_img = 0;
@@ -1863,45 +1852,45 @@ static vx_status ROIProcessImage(ls_context stitch)
 			// tile region warp around
 			if (tstart_x < 0){
 				// overlap rectangle
-				stitch->src_encode_tile_rect[roi_img].start_x = stitch->output_rgb_buffer_width - src_tile_overlap;	stitch->src_encode_tile_rect[roi_img].end_x = stitch->output_rgb_buffer_width;
-				stitch->src_encode_tile_rect[roi_img].start_y = tstart_y; stitch->src_encode_tile_rect[roi_img].end_y = tend_y;
+				stitch->src_tile_rect[roi_img].start_x = stitch->output_rgb_buffer_width - src_tile_overlap;	stitch->src_tile_rect[roi_img].end_x = stitch->output_rgb_buffer_width;
+				stitch->src_tile_rect[roi_img].start_y = tstart_y; stitch->src_tile_rect[roi_img].end_y = tend_y;
 				// output overlap rectangle
-				stitch->dst_encode_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_encode_tile_rect[roi_img].end_x = output_tstart_x + src_tile_overlap;
-				stitch->dst_encode_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_encode_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
+				stitch->dst_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_tile_rect[roi_img].end_x = output_tstart_x + src_tile_overlap;
+				stitch->dst_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
 				roi_img++;
 				// image rectangle
-				stitch->src_encode_tile_rect[roi_img].start_x = 0; stitch->src_encode_tile_rect[roi_img].end_x = tend_x;
-				stitch->src_encode_tile_rect[roi_img].start_y = tstart_y; stitch->src_encode_tile_rect[roi_img].end_y = tend_y;
+				stitch->src_tile_rect[roi_img].start_x = 0; stitch->src_tile_rect[roi_img].end_x = tend_x;
+				stitch->src_tile_rect[roi_img].start_y = tstart_y; stitch->src_tile_rect[roi_img].end_y = tend_y;
 				// output image rectangle
-				stitch->dst_encode_tile_rect[roi_img].start_x = output_tstart_x + src_tile_overlap;	stitch->dst_encode_tile_rect[roi_img].end_x = stitch->dst_encode_tile_rect[roi_img].start_x + tend_x;
-				stitch->dst_encode_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_encode_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
+				stitch->dst_tile_rect[roi_img].start_x = output_tstart_x + src_tile_overlap;	stitch->dst_tile_rect[roi_img].end_x = stitch->dst_tile_rect[roi_img].start_x + tend_x;
+				stitch->dst_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
 				roi_img++;
 			}
 			// tile region
 			if (tstart_x >= 0 && tend_x <= (vx_int32)stitch->output_rgb_buffer_width){
 				// image rectangle
-				stitch->src_encode_tile_rect[roi_img].start_x = tstart_x; stitch->src_encode_tile_rect[roi_img].end_x = tend_x;
-				stitch->src_encode_tile_rect[roi_img].start_y = tstart_y; stitch->src_encode_tile_rect[roi_img].end_y = tend_y;
+				stitch->src_tile_rect[roi_img].start_x = tstart_x; stitch->src_tile_rect[roi_img].end_x = tend_x;
+				stitch->src_tile_rect[roi_img].start_y = tstart_y; stitch->src_tile_rect[roi_img].end_y = tend_y;
 				// output image rectangle
-				stitch->dst_encode_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_encode_tile_rect[roi_img].end_x = output_tend_x;
-				stitch->dst_encode_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_encode_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
+				stitch->dst_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_tile_rect[roi_img].end_x = output_tend_x;
+				stitch->dst_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
 				roi_img++;
 			}
 			// tile region warp around
 			if (tstart_x >= 0 && tend_x > (vx_int32)stitch->output_rgb_buffer_width){
 				// image rectangle
-				stitch->src_encode_tile_rect[roi_img].start_x = tstart_x; stitch->src_encode_tile_rect[roi_img].end_x = stitch->output_rgb_buffer_width;
-				stitch->src_encode_tile_rect[roi_img].start_y = tstart_y; stitch->src_encode_tile_rect[roi_img].end_y = tend_y;
+				stitch->src_tile_rect[roi_img].start_x = tstart_x; stitch->src_tile_rect[roi_img].end_x = stitch->output_rgb_buffer_width;
+				stitch->src_tile_rect[roi_img].start_y = tstart_y; stitch->src_tile_rect[roi_img].end_y = tend_y;
 				// output image rectangle
-				stitch->dst_encode_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_encode_tile_rect[roi_img].end_x = output_tstart_x + (stitch->output_rgb_buffer_width - tstart_x);
-				stitch->dst_encode_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_encode_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
+				stitch->dst_tile_rect[roi_img].start_x = output_tstart_x;	stitch->dst_tile_rect[roi_img].end_x = output_tstart_x + (stitch->output_rgb_buffer_width - tstart_x);
+				stitch->dst_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
 				roi_img++;
 				// overlap rectangle
-				stitch->src_encode_tile_rect[roi_img].start_x = 0; stitch->src_encode_tile_rect[roi_img].end_x = src_tile_overlap;
-				stitch->src_encode_tile_rect[roi_img].start_y = tstart_y; stitch->src_encode_tile_rect[roi_img].end_y = tend_y;
+				stitch->src_tile_rect[roi_img].start_x = 0; stitch->src_tile_rect[roi_img].end_x = src_tile_overlap;
+				stitch->src_tile_rect[roi_img].start_y = tstart_y; stitch->src_tile_rect[roi_img].end_y = tend_y;
 				// output image rectangle
-				stitch->dst_encode_tile_rect[roi_img].start_x = output_tstart_x + (stitch->output_rgb_buffer_width - tstart_x); stitch->dst_encode_tile_rect[roi_img].end_x = stitch->dst_encode_tile_rect[roi_img].start_x + src_tile_overlap;
-				stitch->dst_encode_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_encode_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
+				stitch->dst_tile_rect[roi_img].start_x = output_tstart_x + (stitch->output_rgb_buffer_width - tstart_x); stitch->dst_tile_rect[roi_img].end_x = stitch->dst_tile_rect[roi_img].start_x + src_tile_overlap;
+				stitch->dst_tile_rect[roi_img].start_y = output_tstart_y; stitch->dst_tile_rect[roi_img].end_y = output_tstart_y + (tend_y - tstart_y);
 				roi_img++;
 			}
 			src_tile_start_x += src_tile_width;
@@ -1909,7 +1898,7 @@ static vx_status ROIProcessImage(ls_context stitch)
 		} 
 		src_tile_start_y += src_tile_height;
 	}
-	stitch->num_encode_sections = roi_img;
+	stitch->num_tile_sections = roi_img;
 	
 	return VX_SUCCESS;
 }
@@ -2322,7 +2311,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == 1){
 			stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] = 1;
-			ls_printf("WARNING: Quick Stitch is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
+			ls_printf("WARNING: Simple stitching is not supported by the 16bit mode, a 8 bit flow will be used instead.\n");
 		}
 	}
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] == 1){
@@ -2343,8 +2332,8 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	/////////////////////////////////////////////////////////
 	// pick default stitch mode and aux data length
 	stitch->stitching_mode = stitching_mode_normal;
-	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == (float)stitching_mode_quick_and_dirty)
-		stitch->stitching_mode = stitching_mode_quick_and_dirty;
+	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_STITCH_MODE] == (float)stitching_mode_simple)
+		stitch->stitching_mode = stitching_mode_simple;
 	if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_ENABLE_REINITIALIZE] == 1.0f)
 		stitch->feature_enable_reinitialize = true;
 	stitch->loomioOutputAuxSelection = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_IO_OUTPUT_AUX_SELECTION];
@@ -2500,14 +2489,14 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f)){
 				// set buffer to encode tile width and height
 				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
-				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
+				stitch->output_tile_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
-				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
+				stitch->output_tile_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] * stitch->output_tiles);
 				// create virtual image
 				stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch,
-					stitch->output_encode_buffer_width,
-					stitch->output_encode_buffer_height,
+					stitch->output_tile_buffer_width,
+					stitch->output_tile_buffer_height,
 					stitch->output_buffer_format);
 		}
 		else{
@@ -2543,27 +2532,27 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 				stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y] != 1.0f){		
 				// create the encoded tiled output
 				stitch->output_tiles = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X] * stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]);
-				stitch->output_encode_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH]
+				stitch->output_tile_buffer_width = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X]);
-				stitch->output_encode_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT]
+				stitch->output_tile_buffer_height = (vx_uint32)(stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT]
 					/ stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y]) ;
 
 				// create output buffer
-				addr_out[0].dim_x = stitch->output_encode_buffer_width;	addr_out[0].dim_y = stitch->output_encode_buffer_height;
-				addr_out[0].stride_x = 1; addr_out[0].stride_y = (vx_int32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y];	// assuing every tile has the same stride
+				addr_out[0].dim_x = stitch->output_tile_buffer_width;	addr_out[0].dim_y = stitch->output_tile_buffer_height;
+				addr_out[0].stride_x = 1; addr_out[0].stride_y = (vx_int32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_OUTPUT_TILE_STRIDE_Y];	// assuing every tile has the same stride
 				if (stitch->output_buffer_format == VX_DF_IMAGE_NV12){
-					addr_out[1].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_encode_buffer_height >> 1;
+					addr_out[1].dim_x = stitch->output_tile_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_tile_buffer_height >> 1;
 					addr_out[1].stride_x = 1; addr_out[1].stride_y = addr_out[0].stride_y;
 				}
 				else{
-					addr_out[1].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_encode_buffer_height >> 1;
+					addr_out[1].dim_x = stitch->output_tile_buffer_width >> 1;	addr_out[1].dim_y = stitch->output_tile_buffer_height >> 1;
 					addr_out[1].stride_x = 1; addr_out[1].stride_y = addr_out[0].stride_y >> 1;
-					addr_out[2].dim_x = stitch->output_encode_buffer_width >> 1;	addr_out[2].dim_y = stitch->output_encode_buffer_height >> 1;
+					addr_out[2].dim_x = stitch->output_tile_buffer_width >> 1;	addr_out[2].dim_y = stitch->output_tile_buffer_height >> 1;
 					addr_out[2].stride_x = 1; addr_out[2].stride_y = addr_out[0].stride_y >> 1;
 				}
 
 				for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
-					ERROR_CHECK_OBJECT_(stitch->encodetileOutput[i] = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
+					ERROR_CHECK_OBJECT_(stitch->tileOutput[i] = vxCreateImageFromHandle(stitch->context, stitch->output_buffer_format, &addr_out[0], ptr, VX_MEMORY_TYPE_OPENCL));
 				}
 			}
 			else{
@@ -2731,9 +2720,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	}
 
 	/***********************************************************************************************************************************
-	Quick Stitch Mode -> Simple stitch
+	Simple stitch mode
 	************************************************************************************************************************************/
-	if (stitch->stitching_mode == stitching_mode_quick_and_dirty)
+	if (stitch->stitching_mode == stitching_mode_simple)
 	{
 		// create remap table object
 		ERROR_CHECK_OBJECT_(stitch->camera_remap = vxCreateRemap(stitch->context, stitch->camera_rgb_buffer_width, stitch->camera_rgb_buffer_height, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height));
@@ -2953,7 +2942,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	Other Modes
 	************************************************************************************************************************************/
 	else {
-		vxAddLogEntry((vx_reference)stitch->context, VX_ERROR_NO_RESOURCES, "Other Stitching Modes are under development\nMode-1 = Quick Stitch Mode Available\nMode-2 = Normal Stitch Mode Available\n");
+		vxAddLogEntry((vx_reference)stitch->context, VX_ERROR_NO_RESOURCES, "Other Stitching Modes are under development\nMode-1 = Simple stitch Mode Available\nMode-2 = Normal Stitch Mode Available\n");
 		return VX_ERROR_NO_RESOURCES;
 	}
 
@@ -3180,12 +3169,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->nodeLoomIoViewing) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeLoomIoViewing));
 
 		// release tiled image elements
-		if (stitch->num_encode_sections > 1){
-			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
-				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
-				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
-				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
-				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
+		if (stitch->num_tile_sections > 1){
+			for (vx_uint32 i = 0; i < stitch->num_tile_sections; i++){
+				if (stitch->tile_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tile_src_rgb_imgs[i]));
+				if (stitch->tile_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tile_dst_imgs[i]));
+				if (stitch->tile_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->tile_color_convert_nodes[i]));
+				if (stitch->tileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tileOutput[i]));
 			}
 		}
 
@@ -3296,7 +3285,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 		if (stitch->output_tiles > 1) {
 			for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 2) + 1] : nullptr };
-				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->encodetileOutput[i], ptr_out, nullptr, 2));
+				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->tileOutput[i], ptr_out, nullptr, 2));
 			}
 		}
 		else {
@@ -3312,7 +3301,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetOutputBuffer(ls_context stitch,
 		if (stitch->output_tiles > 1) {
 			for (vx_uint32 i = 0; i < stitch->output_tiles; i++){
 				void * ptr_out[] = { output_buffer ? output_buffer[(i * 2)] : nullptr, output_buffer ? output_buffer[(i * 3) + 1] : nullptr, output_buffer ? output_buffer[(i * 3) + 2] : nullptr };
-				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->encodetileOutput[i], ptr_out, nullptr, 3));
+				ERROR_CHECK_STATUS_(vxSwapImageHandle(stitch->tileOutput[i], ptr_out, nullptr, 3));
 			}
 		}
 		else {
