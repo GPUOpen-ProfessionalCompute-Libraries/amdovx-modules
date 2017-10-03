@@ -374,6 +374,7 @@ void writeGDF(
     std::string convertPolicy,
     std::string roundPolicy,
     bool isVirtualEnabled,
+    std::string outputFolder,    
     bool bFuseScaleLayer)
 {
     std::map<std::string,bool> tensorCheck;
@@ -676,7 +677,17 @@ void writeGDF(
 	#endif
 		            tensorCheck[bias] = true;
 		    	}
-		    	output = next_node[3];
+                ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
+                ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
+                       << node[3] << "_B "
+                       << weights << " "
+                       << bias << " "
+                       << node[3] << "_eps "
+                       << next_node[3]
+                       << std::endl;
+    #if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< next_node[3] << " out/"<< layer_name << ".f32" << std::endl;
+    #endif
 	    	}else
 	    	{
 	    		weights = output +"_W1";
@@ -684,24 +695,25 @@ void writeGDF(
 	    		// put default scale and bias term
 			    std::vector<float> scale_arr(dim[0]);
 			    std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
-			    FILE *fp = fopen("scale_init.f32", "wb");
+				std::string fileName_weights = outputFolder + "scale_init.f32";
+				FILE *fp = fopen(fileName_weights.c_str(), "wb");
 			    if (fp) {
 			    	fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
 			    	fclose(fp);
 			    }
 			    ofsGDF << "init " << weights << " scale_init.f32" << std::endl;
+                ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
+                ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
+                       << node[3] << "_B "
+                       << weights << " "
+                       << bias << " "
+                       << node[3] << "_eps "
+                       << output
+                       << std::endl;
+    #if ENABLE_DUMP_LAYER_DATA
+            ofsGDF << "write "<< output << " out/"<< layer_name << ".f32" << std::endl;
+    #endif
 	    	}
-	        ofsGDF << "data " << node[3] << "_eps ="  << " scalar:VX_TYPE_FLOAT32," << eps << std::endl;
-	        ofsGDF << "node com.amd.nn_extension.batch_normalization_layer " << node[4] << " " << node[3] << "_W "
-	               << node[3] << "_B "
-	               << weights << " "
-	               << bias << " "
-	               << node[3] << "_eps "
-	               << output
-	               << std::endl;
-	#if ENABLE_DUMP_LAYER_DATA
-	        ofsGDF << "write "<< output << " out/"<< layer_name << ".f32" << std::endl;
-	#endif
         }
         else if(type == "Eltwise") {
             int op;
@@ -762,7 +774,7 @@ void writeGDF(
 	            tensorCheck[bias] = true;
 	        }
 
-            ofsGDF << "node org.khronos.nn_extension.scale_layer " << node[4] << " "
+            ofsGDF << "node com.amd.nn_extension.scale_layer " << node[4] << " "
                    << node[3] << "_W "
                    << node[3] << "_B "
                    << node[3]
@@ -1846,7 +1858,7 @@ int main(int argc, char* argv[])
 
     if(generateGDF) {
         std::ofstream ofsGDF(outputFolder + "/net.gdf", std::ios::binary);
-        writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, bFuseScaleWithBatchNorm);
+        writeGDF(ofsGDF, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, outputFolder, bFuseScaleWithBatchNorm);
     }
 
     if(generateVXC) {

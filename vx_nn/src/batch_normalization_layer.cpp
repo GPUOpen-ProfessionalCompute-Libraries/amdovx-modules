@@ -86,7 +86,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
 		if (num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
 		if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
 		vx_size bias_dims[1];
-		ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, bias_dims, sizeof(scale_dims)));
+		ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
 		if (bias_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
 	}
 

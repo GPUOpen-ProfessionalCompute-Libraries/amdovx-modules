@@ -85,12 +85,12 @@ static vx_status VX_CALLBACK validateScaleLayer(vx_node node, const vx_reference
 
 static vx_status VX_CALLBACK processScaleLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
 {
-    BatchNormLayerLocalData * data = NULL;
+    ScaleLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
     //miopen batch norm inference.
-    ERROR_CHECK_MIOPEN_STATUS(miopenScaleForwardInference(miopenHandle, miopenBNSpatial, &data->alpha, &data->beta, data->input_desc, data->input_mem,
+    ERROR_CHECK_MIOPEN_STATUS(miopenBatchNormalizationForwardInference(miopenHandle, miopenBNSpatial, &data->alpha, &data->beta, data->input_desc, data->input_mem,
                                                                        data->output_desc, data->output_mem, data->bnScaleBiasMeanVarDesc, data->bnScale, data->bnBias, nullptr, nullptr, 0));
 
     return VX_SUCCESS;
@@ -98,7 +98,7 @@ static vx_status VX_CALLBACK processScaleLayer(vx_node node, const vx_reference 
 
 static vx_status VX_CALLBACK initializeScaleLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-    BatchNormLayerLocalData * data = new BatchNormLayerLocalData;
+    ScaleLayerLocalData * data = new ScaleLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
@@ -134,7 +134,7 @@ static vx_status VX_CALLBACK initializeScaleLayer(vx_node node, const vx_referen
 
 static vx_status VX_CALLBACK uninitializeScaleLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-    BatchNormLayerLocalData * data = NULL;
+    ScaleLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
