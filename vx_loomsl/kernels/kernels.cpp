@@ -56,6 +56,7 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
 	ERROR_CHECK_STATUS(color_convert_to_NV12_publish(context));
 	ERROR_CHECK_STATUS(color_convert_to_IYUV_publish(context));
 	ERROR_CHECK_STATUS(warp_publish(context));
+	ERROR_CHECK_STATUS(exposure_compensation_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_calcErrorFn_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_solvegains_publish(context));
 	ERROR_CHECK_STATUS(exposure_comp_applygains_publish(context));
@@ -220,8 +221,6 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertNode(vx_graph graph, vx_image
 }
 VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromNV12Node(vx_graph graph, vx_image inputY, vx_image inputUV, vx_image output, vx_uint8 flags)
 {
-	vx_node node;
-
 	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 	vx_reference params[] = {
 		(vx_reference)inputY,
@@ -229,7 +228,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertFromNV12Node(vx_graph graph, 
 		(vx_reference)output,
 		(vx_reference)s_flags
 	};
-	node = stitchCreateNode(graph,
+	vx_node node = stitchCreateNode(graph,
 		AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_FROM_NV12,
 		params,
 		dimof(params));

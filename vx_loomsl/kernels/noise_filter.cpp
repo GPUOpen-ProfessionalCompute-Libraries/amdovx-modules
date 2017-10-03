@@ -196,13 +196,6 @@ static vx_status VX_CALLBACK noise_filter_opencl_codegen(
 	}
 
 	sprintf(item,
-		"#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-		"#pragma OPENCL EXTENSION cl_amd_media_ops2 : enable\n"
-		"float4 amd_unpack(uint src)\n"
-		"{\n"
-		"  return (float4)(amd_unpack0(src), amd_unpack1(src), amd_unpack2(src), amd_unpack3(src));\n"
-		"}\n"
-		"\n"
 		"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n" // opencl_local_work[0], opencl_local_work[1]
 		"void %s(float lambda,\n" // opencl_kernel_function_name
 		"        uint ip0_width, uint ip0_height, __global uchar * ip0_buf, uint ip0_stride, uint ip0_offset,\n"
