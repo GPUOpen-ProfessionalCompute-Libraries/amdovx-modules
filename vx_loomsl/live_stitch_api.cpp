@@ -720,7 +720,6 @@ static vx_status SyncInternalTables(ls_context stitch)
 		(vx_reference)stitch->seamfind_scene_array,
 		(vx_reference)stitch->blend_mask_image,
 		(vx_reference)stitch->warp_output_image,
-		(vx_reference)stitch->rgb_output,
 		(vx_reference)stitch->overlay_remap,
 		(vx_reference)stitch->camera_remap,
 	};
