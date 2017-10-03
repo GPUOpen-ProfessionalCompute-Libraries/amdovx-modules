@@ -124,6 +124,10 @@ struct ls_context_t {
 	bool        context_is_external;            // To avoid releaseing external OpenVX context
 	vx_context  context;                        // OpenVX context
 	vx_graph    graphStitch;                    // OpenVX graph for stitching
+	// OpenCL buffer
+	vx_size     opencl_mem_alloc_count;         // count number of opencl buffers allocated by LOOM
+	vx_size     opencl_mem_alloc_size;          // count memory of opencl buffers allocated by LOOM
+	vx_size     opencl_mem_release_count;       // count number of opencl buffer released by LOOM
 	// internal buffer sizes
 	ls_internal_table_size_info table_sizes;	// internal table sizes
 	vx_image	rgb_input, rgb_output;			// internal images
@@ -406,56 +410,74 @@ static vx_status DumpReference(vx_reference ref, const char * fileName)
 	else return VX_ERROR_NOT_SUPPORTED;
 }
 
-static vx_image CreateAlignedImage(ls_context stitch, vx_uint32 width, vx_uint32 height, vx_uint32 alignpixels, vx_df_image format, vx_enum mem_type)
+//! \Creates an aligned image with a size depending on the input format
+static vx_image CreateAlignedOpenCLImage(ls_context stitch, vx_uint32 width, vx_uint32 height, vx_uint32 alignpixels, vx_df_image format)
 {
-	if (mem_type == VX_MEMORY_TYPE_OPENCL){
-		cl_context opencl_context = nullptr;
-		vx_imagepatch_addressing_t addr_in = { 0 };
-		void *ptr[1] = { nullptr };
-		addr_in.dim_x = width;
-		addr_in.dim_y = height;
-		switch (format)
-		{
-			case VX_DF_IMAGE_RGBX:
-			case VX_DF_IMAGE_U32:
-			case VX_DF_IMAGE_S32:
-				addr_in.stride_x = 4;
-				break;
-			case VX_DF_IMAGE_U16:
-			case VX_DF_IMAGE_S16:
-				addr_in.stride_x = 2;
-				break;
-			case VX_DF_IMAGE_RGB4_AMD:
-				addr_in.stride_x = 6;
-				break;
-			default:
-				addr_in.stride_x = 1;
-		}
-		if (alignpixels == 0)
-			addr_in.stride_y = addr_in.dim_x *addr_in.stride_x;
-		else
-			addr_in.stride_y = ((addr_in.dim_x + alignpixels - 1) & ~(alignpixels - 1))*addr_in.stride_x;
-
-		// allocate opencl buffer with required dim
-		vx_status status = vxQueryContext(stitch->context, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &opencl_context, sizeof(opencl_context));
-		if (status != VX_SUCCESS){
-			ls_printf("vxQueryContext of failed(%d)\n", status);
-			return nullptr;
-		}
-		vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
-		cl_int err = CL_SUCCESS;
-		cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
-		if (!clImg || err){
-			ls_printf("clCreateBuffer of size %d failed(%d)\n", (int)size, err);
-			return nullptr;
-		}
-		ptr[0] = clImg;
-		return vxCreateImageFromHandle(stitch->context, format, &addr_in, ptr, mem_type);
-	}
-	else
+	cl_context opencl_context = nullptr;
+	vx_imagepatch_addressing_t addr_in = { 0 };
+	void *ptr[1] = { nullptr };
+	addr_in.dim_x = width;
+	addr_in.dim_y = height;
+	switch (format)
 	{
-		return vxCreateImage(stitch->context, width, height, format);
+	case VX_DF_IMAGE_RGBX:
+	case VX_DF_IMAGE_U32:
+	case VX_DF_IMAGE_S32:
+		addr_in.stride_x = 4;
+		break;
+	case VX_DF_IMAGE_U16:
+	case VX_DF_IMAGE_S16:
+		addr_in.stride_x = 2;
+		break;
+	case VX_DF_IMAGE_RGB4_AMD:
+		addr_in.stride_x = 6;
+		break;
+	default:
+		addr_in.stride_x = 1;
 	}
+	if (alignpixels == 0)
+		addr_in.stride_y = addr_in.dim_x *addr_in.stride_x;
+	else
+		addr_in.stride_y = ((addr_in.dim_x + alignpixels - 1) & ~(alignpixels - 1))*addr_in.stride_x;
+
+	// allocate opencl buffer with required dim
+	vx_status status = vxQueryContext(stitch->context, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &opencl_context, sizeof(opencl_context));
+	if (status != VX_SUCCESS){
+		ls_printf("vxQueryContext of failed(%d)\n", status);
+		return nullptr;
+	}
+	vx_size size = (addr_in.dim_y + 1) * addr_in.stride_y;
+	cl_int err = CL_SUCCESS;
+	cl_mem clImg = clCreateBuffer(opencl_context, CL_MEM_READ_WRITE, size, NULL, &err);
+	stitch->opencl_mem_alloc_count++;
+	stitch->opencl_mem_alloc_size += size;
+	if (!clImg || err){
+		ls_printf("clCreateBuffer of size %d failed(%d)\n", (int)size, err);
+		return nullptr;
+	}
+	ptr[0] = clImg;
+	return vxCreateImageFromHandle(stitch->context, format, &addr_in, ptr, VX_MEMORY_TYPE_OPENCL);
+}
+
+//! \Release an OpenVX image, if necessary it will free the used OpenCL memory
+static vx_status ReleaseAlignedOpenCLImage(ls_context stitch, vx_image *input){
+	vx_enum mem_type;
+	ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_MEMORY_TYPE, &mem_type, sizeof(mem_type)));
+	if (mem_type != VX_MEMORY_TYPE_OPENCL){
+		ls_printf("Can not release aligned OpenCL Image, if it is not created by Loom\n");
+		return VX_ERROR_INVALID_REFERENCE;
+	}
+
+	cl_mem clImg;
+	ERROR_CHECK_STATUS(vxQueryImage(*input, VX_IMAGE_ATTRIBUTE_AMD_OPENCL_BUFFER, &clImg, sizeof(cl_mem)));
+	cl_int err = clReleaseMemObject(clImg);
+	if (err){
+		ls_printf("clReleaseMemObject failed(%d)\n", err);
+		return VX_FAILURE;
+	}
+	stitch->opencl_mem_release_count++;
+	ERROR_CHECK_STATUS(vxReleaseImage(input));
+	return VX_SUCCESS;
 }
 
 vx_node VX_API_CALL CreateColorConvertNode(vx_graph graph, vx_image input, vx_image output, vx_uint8 flags)
@@ -1103,14 +1125,14 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 		vx_size arr_size = (stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height);
 		ERROR_CHECK_TYPE_(StitchCoord2dFloatType = vxRegisterUserStruct(stitch->context, sizeof(StitchCoord2dFloat)));
 		ERROR_CHECK_OBJECT_(stitch->stitchInitData->graphInitialize = vxCreateGraph(stitch->context));
-		ERROR_CHECK_OBJECT_(stitch->stitchInitData->ValidPixelMap = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U32, VX_MEMORY_TYPE_OPENCL));
+		ERROR_CHECK_OBJECT_(stitch->stitchInitData->ValidPixelMap = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U32));
 		if (stitch->MULTIBAND_BLEND)
 		{
-			ERROR_CHECK_OBJECT_(stitch->stitchInitData->PaddedPixMap = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U32, VX_MEMORY_TYPE_OPENCL));
+			ERROR_CHECK_OBJECT_(stitch->stitchInitData->PaddedPixMap = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U32));
 		}
-		ERROR_CHECK_OBJECT_(stitch->stitchInitData->DefaultCamMap = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U8, VX_MEMORY_TYPE_OPENCL));
+		ERROR_CHECK_OBJECT_(stitch->stitchInitData->DefaultCamMap = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, stitch->output_rgb_buffer_height, 16, VX_DF_IMAGE_U8));
 		ERROR_CHECK_OBJECT_(stitch->stitchInitData->CameraParamsArr = vxCreateArray(stitch->context, VX_TYPE_FLOAT32, 32 * stitch->num_cameras));
-		ERROR_CHECK_OBJECT_(stitch->stitchInitData->SrcCoordMap = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width * 2, stitch->output_rgb_buffer_height*stitch->num_cameras, 16, VX_DF_IMAGE_U32, VX_MEMORY_TYPE_OPENCL));
+		ERROR_CHECK_OBJECT_(stitch->stitchInitData->SrcCoordMap = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width * 2, stitch->output_rgb_buffer_height*stitch->num_cameras, 16, VX_DF_IMAGE_U32));
 		ERROR_CHECK_OBJECT_(stitch->stitchInitData->CameraZBuffArr = vxCreateVirtualArray(stitch->stitchInitData->graphInitialize, VX_TYPE_FLOAT32, arr_size*stitch->num_cameras));
 
 		// Quick Initailize enabled
@@ -1124,6 +1146,26 @@ static vx_status AllocateLensModelBuffersForCamera(ls_context stitch)
 	}
 	return VX_SUCCESS;
 }
+
+static vx_status ReleaseStitchInitData(ls_context stitch)
+{
+	if (stitch->stitchInitData){
+		if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
+		if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
+		if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->stitchInitData->DefaultCamMap));
+		if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->stitchInitData->ValidPixelMap));
+		if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->stitchInitData->PaddedPixMap));
+		if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->stitchInitData->SrcCoordMap));
+		if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
+		if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
+		if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
+		if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
+		delete[] stitch->stitchInitData;
+		stitch->stitchInitData = nullptr;
+	}
+	return VX_SUCCESS;
+}
+
 static vx_status AllocateLensModelBuffersForOverlay(ls_context stitch)
 {
 	stitch->overlaySrcMap = new StitchCoord2dFloat[stitch->output_rgb_buffer_width * stitch->output_rgb_buffer_height * stitch->num_overlays];
@@ -1586,6 +1628,9 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 				return status;
 			}
 		}
+
+		// Release used buffers
+		ERROR_CHECK_STATUS(ReleaseStitchInitData(stitch));		
 	}
 	else
 	{
@@ -1734,28 +1779,28 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 		memset(stitch->pStitchMultiband, 0, sizeof(StitchMultibandData)*stitch->num_bands);
 		stitch->pStitchMultiband[0].WeightPyrImgGaussian = stitch->SEAM_FIND ? stitch->seamfind_weight_image : stitch->weight_image;	// for level#0: weight image is mask image after seem find
 		stitch->pStitchMultiband[0].DstPyrImgGaussian = stitch->EXPO_COMP ? stitch->exp_comp_output_image : stitch->warp_output_image;			// for level#0: dst image is image after exposure_comp
-		ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacian = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+		ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacian = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGB4_AMD));
 		if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGB4_AMD));
 		}
 		else{ // 8bit flow
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGBX, VX_MEMORY_TYPE_OPENCL));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[0].DstPyrImgLaplacianRec = CreateAlignedOpenCLImage(stitch, stitch->output_rgb_buffer_width, (stitch->output_rgb_buffer_height * stitch->num_cameras), 8, VX_DF_IMAGE_RGBX));
 		}
 		for (vx_int32 level = 1, levelAlign = 1; level < stitch->num_bands; level++, levelAlign = ((levelAlign << 1) | 1)) {
 			vx_uint32 width_l = (stitch->output_rgb_buffer_width + levelAlign) >> level;
 			vx_uint32 height_l = ((stitch->output_rgb_buffer_height + levelAlign) >> level) * stitch->num_cameras;
 
 			if (stitch->live_stitch_attr[LIVE_STITCH_ATTR_PRECISION] == 2){
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 32, VX_DF_IMAGE_S16, VX_MEMORY_TYPE_OPENCL));
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedOpenCLImage(stitch, width_l, height_l, 32, VX_DF_IMAGE_S16));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedOpenCLImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD));
 			}
 			else{ // 8bit flow
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_U8, VX_MEMORY_TYPE_OPENCL));
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGBX, VX_MEMORY_TYPE_OPENCL));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].WeightPyrImgGaussian = CreateAlignedOpenCLImage(stitch, width_l, height_l, 16, VX_DF_IMAGE_U8));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgGaussian = CreateAlignedOpenCLImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGBX));
 			}
 			if (level != (stitch->num_bands-1))
-				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
-			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = CreateAlignedImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD, VX_MEMORY_TYPE_OPENCL));
+				ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacian = CreateAlignedOpenCLImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD));
+			ERROR_CHECK_OBJECT_(stitch->pStitchMultiband[level].DstPyrImgLaplacianRec = CreateAlignedOpenCLImage(stitch, width_l, height_l, 8, VX_DF_IMAGE_RGB4_AMD));
 		}
 		for (int level = 0; level < stitch->num_bands; level++) {
 			stitch->pStitchMultiband[level].valid_array_offset = (vx_uint32)stitch->multibandBlendOffsetIntoBuffer[level];
@@ -1963,6 +2008,13 @@ LIVE_STITCH_API_ENTRY ls_context VX_API_CALL lsCreateContext()
 		memcpy(stitch->live_stitch_attr, g_live_stitch_attr, sizeof(stitch->live_stitch_attr));
 		stitch->magic = LIVE_STITCH_MAGIC;
 	}
+
+	/////////////////////////////////////////////////////////
+	// Reset OpenCL counter:
+	stitch->opencl_mem_alloc_count = 0;
+	stitch->opencl_mem_alloc_size = 0;
+	stitch->opencl_mem_release_count = 0;
+
 	return stitch;
 }
 
@@ -3145,10 +3197,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 				if (stitch->pStitchMultiband[i].UpscaleSubtractNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleSubtractNode));
 				if (stitch->pStitchMultiband[i].UpscaleAddNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].UpscaleAddNode));
 				if (stitch->pStitchMultiband[i].LaplacianReconNode)ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->pStitchMultiband[i].LaplacianReconNode));
-				if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgGaussian));
-				if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].WeightPyrImgGaussian));
-				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacian));
-				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
+				if (i != 0){
+					if (stitch->pStitchMultiband[i].DstPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgGaussian));
+					if (stitch->pStitchMultiband[i].WeightPyrImgGaussian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].WeightPyrImgGaussian));
+				}
+				if (stitch->pStitchMultiband[i].DstPyrImgLaplacian) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacian));
+				if (stitch->pStitchMultiband[i].DstPyrImgLaplacianRec) ERROR_CHECK_STATUS_(ReleaseAlignedOpenCLImage(stitch, &stitch->pStitchMultiband[i].DstPyrImgLaplacianRec));
 			}
 			delete[] stitch->pStitchMultiband;
 			delete[] stitch->multibandBlendOffsetIntoBuffer;
@@ -3179,21 +3233,8 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		}
 
 		// release fast GPU initialize elements
-		if (!stitch->USE_CPU_INIT){
-			if (stitch->stitchInitData){
-				if (stitch->stitchInitData->CameraParamsArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraParamsArr));
-				if (stitch->stitchInitData->CameraZBuffArr) ERROR_CHECK_STATUS_(vxReleaseArray(&stitch->stitchInitData->CameraZBuffArr));
-				if (stitch->stitchInitData->DefaultCamMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->DefaultCamMap));
-				if (stitch->stitchInitData->ValidPixelMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->ValidPixelMap));
-				if (stitch->stitchInitData->PaddedPixMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->PaddedPixMap));
-				if (stitch->stitchInitData->SrcCoordMap) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->stitchInitData->SrcCoordMap));
-				if (stitch->stitchInitData->calc_warp_maps_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_warp_maps_node));
-				if (stitch->stitchInitData->calc_default_idx_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->calc_default_idx_node));
-				if (stitch->stitchInitData->pad_dilate_node) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->stitchInitData->pad_dilate_node));
-				if (stitch->stitchInitData->graphInitialize) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->stitchInitData->graphInitialize));
-				delete[] stitch->stitchInitData;
-				stitch->stitchInitData = nullptr;
-			}
+		if (!stitch->USE_CPU_INIT || stitch->reinitialize_required){
+			ReleaseStitchInitData(stitch);
 		}
 
 		// release internal buffers
@@ -3220,6 +3261,12 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		//Graph & Context
 		if (stitch->graphStitch) ERROR_CHECK_STATUS_(vxReleaseGraph(&stitch->graphStitch));
 		if (stitch->context && !stitch->context_is_external) ERROR_CHECK_STATUS_(vxReleaseContext(&stitch->context));
+
+
+		if (stitch->opencl_mem_alloc_count > 0) {
+			ls_printf("OK: OpenCL buffer usage within LOOM: " VX_FMT_SIZE ", " VX_FMT_SIZE "/" VX_FMT_SIZE "\n",
+				stitch->opencl_mem_alloc_size, stitch->opencl_mem_release_count, stitch->opencl_mem_alloc_count);
+		}
 
 		delete stitch;
 		*pStitch = nullptr;
