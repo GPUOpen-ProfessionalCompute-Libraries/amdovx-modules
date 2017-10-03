@@ -203,7 +203,7 @@ struct ls_context_t {
 	vx_image    tile_src_rgb_imgs[MAX_TILE_IMG];        // tiled intermediate images
 	vx_image    tile_dst_imgs[MAX_TILE_IMG];            // tiled intermediate images
 	vx_image    tileOutput[MAX_TILE_IMG];               // tiled output NV12 images
-    vx_image    tiled_dst_imgs_planes[MAX_TILE_IMG][3]; // tiled intermediate images planes
+    vx_image    tile_dst_imgs_planes[MAX_TILE_IMG][3]; // tiled intermediate images planes
 	vx_rectangle_t src_tile_rect[MAX_TILE_IMG];         // src tile rectangles 
 	vx_rectangle_t dst_tile_rect[MAX_TILE_IMG];         // dst tile rectangles 
 	vx_node     tile_color_convert_nodes[MAX_TILE_IMG]; // nodes to color convert each of the sectional ROI images
@@ -328,11 +328,11 @@ static NameOffsetPair nameOffsetList[] = {
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y),
-	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap),
+	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_OVERLAP),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE),
-	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH),
-	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT),
-	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y),
+	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH),
+	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT),
+	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_OUTPUT_TILE_STRIDE_Y),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_CHROMA_KEY),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_CHROMA_KEY_VALUE),
 	ENUM_NAME_OFFSET(LIVE_STITCH_ATTR_CHROMA_KEY_TOL),
@@ -3370,15 +3370,15 @@ SHARED_PUBLIC vx_status VX_API_CALL lsReleaseContext(ls_context * pStitch)
 		if (stitch->nodeLoomIoViewing) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->nodeLoomIoViewing));
 
 		// release tiled image elements
-		if (stitch->num_encode_sections > 1){
-			for (vx_uint32 i = 0; i < stitch->num_encode_sections; i++){
-				if (stitch->encode_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_src_rgb_imgs[i]));
-				if (stitch->encode_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encode_dst_imgs[i]));
+		if (stitch->num_tile_sections > 1){
+			for (vx_uint32 i = 0; i < stitch->num_tile_sections; i++){
+				if (stitch->tile_src_rgb_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tile_src_rgb_imgs[i]));
+				if (stitch->tile_dst_imgs[i]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tile_dst_imgs[i]));
 				for (vx_uint32 j = 0; j < 3; j++){
 					if (stitch->tile_dst_imgs_planes[i][j]) ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tile_dst_imgs_planes[i][j]));
 				}
-				if (stitch->encode_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->encode_color_convert_nodes[i]));
-				if (stitch->encodetileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->encodetileOutput[i]));
+				if (stitch->tile_color_convert_nodes[i]) ERROR_CHECK_STATUS_(vxReleaseNode(&stitch->tile_color_convert_nodes[i]));
+				if (stitch->tileOutput[i])ERROR_CHECK_STATUS_(vxReleaseImage(&stitch->tileOutput[i]));
 			}
 		}
 
