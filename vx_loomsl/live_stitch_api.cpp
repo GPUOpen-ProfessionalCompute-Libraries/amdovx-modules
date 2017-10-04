@@ -1416,7 +1416,7 @@ static vx_status InitializeInternalTablesForCamera(ls_context stitch)
 	if (stitch->EXPO_COMP)
 	{ // exposure comp tables
 		StitchExpCompCalcEntry validEntry = { 0 }, *validBuf = nullptr;
-		StitchOverlapPixelEntry overlapEntry = { 0 }, *overlapBuf = nullptr;
+		StitchExpCompOverlapPixelEntry overlapEntry = { 0 }, *overlapBuf = nullptr;
 		vx_size stride = 0, validEntryCount = 0, overlapEntryCount = 0; vx_map_id map_id_valid = 0, map_id_overlap = 0;
 		ERROR_CHECK_STATUS_(vxTruncateArray(stitch->valid_array, 0));
 		ERROR_CHECK_STATUS_(vxAddArrayItems(stitch->valid_array, stitch->table_sizes.expCompValidTableSize, &validEntry, 0));
@@ -1786,7 +1786,7 @@ static vx_status AllocateInternalTablesForCamera(ls_context stitch)
 	if (stitch->EXPO_COMP) {
 		vx_enum StitchOverlapPixelEntryType, StitchExpCompCalcEntryType;
 		vx_float32 one = 1.0f; // initialize gain_array with default gains as one
-		ERROR_CHECK_TYPE_(StitchOverlapPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchOverlapPixelEntry)));
+		ERROR_CHECK_TYPE_(StitchOverlapPixelEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchExpCompOverlapPixelEntry)));
 		ERROR_CHECK_TYPE_(StitchExpCompCalcEntryType = vxRegisterUserStruct(stitch->context, sizeof(StitchExpCompCalcEntry)));
 		ERROR_CHECK_OBJECT_(stitch->valid_array = vxCreateArray(stitch->context, StitchExpCompCalcEntryType, stitch->table_sizes.expCompValidTableSize));
 		if (stitch->EXPO_COMP < 3) {

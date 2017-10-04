@@ -65,7 +65,7 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_input_validator(vx_node n
 		vx_size capacity = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		if (itemsize != sizeof(StitchOverlapPixelEntry)) {
+		if (itemsize != sizeof(StitchExpCompOverlapPixelEntry)) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation gains array type should be float32\n");
 		}
@@ -250,11 +250,11 @@ static vx_status VX_CALLBACK exposure_comp_calcErrorFn_opencl_codegen(
 		"	int ly = get_local_id(1);\n"
 		"	int lid = mad24(ly, (int)get_local_size(0), lx);\n"
 		"	sumI[lid] = 0; sumJ[lid] = 0;\n"
-		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
+		"	bool isValid = ((lx<<3) < (int)((offs.s1>>16)&0xff)) && (ly*2 < (int)((offs.s1>>24)&0xff));\n"
 		"	if (isValid) {\n"
-		"		int   gx = (lx<<3) + ((offs.s0 >> 5) & 0x3FFF);\n"
-		"		int   gy = (ly<<1) + (offs.s0 >> 19);\n"
-		"		uint2 cam_id = (uint2)((offs.s0 & 0x1f), ((offs.s1>>12) & 0x1f));\n";
+		"		int   gx = (lx<<3) + ((offs.s0) & 0xffff);\n"
+		"		int   gy = (ly<<1) + ((offs.s0 >> 16) & 0xffff);\n"
+		"		uint2 cam_id = (uint2)((offs.s1 & 0xff), ((offs.s1>>8) & 0xff));\n";
 	if (mask_image){
 		opencl_kernel_code +=
 			"		uint4 maskSrc; \n"
@@ -1509,7 +1509,7 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_input_validator(vx_nod
 		vx_size capacity = 0;
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMSIZE, &itemsize, sizeof(itemsize)));
 		ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_CAPACITY, &capacity, sizeof(capacity)));
-		if (itemsize != sizeof(StitchOverlapPixelEntry)) {
+		if (itemsize != sizeof(StitchExpCompOverlapPixelEntry)) {
 			status = VX_ERROR_INVALID_TYPE;
 			vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation gains array type should be float32\n");
 		}
@@ -1706,13 +1706,13 @@ static vx_status VX_CALLBACK exposure_comp_calcRGBErrorFn_opencl_codegen(
 	opencl_kernel_code +=
 		"	barrier(CLK_LOCAL_MEM_FENCE);\n"
 		"   sumI[lid] = (uint4)0; sumJ[lid] = (uint4)0;\n"
-		"	bool isValid = ((lx<<3) < (int)(offs.s1&0x7f)) && (ly*2 < (int)((offs.s1>>7)&0x1f));\n"
+		"	bool isValid = ((lx<<3) < (int)((offs.s1 >> 16)&0xff)) && (ly*2 < (int)((offs.s1>>24)&0xff));\n"
 		"	if (isValid) {\n"
 		"		global uint *pI, *pJ;\n"
 		"		uint4 Isum4, Jsum4;\n"
-		"		int   gx = (lx<<3) + ((offs.s0 >> 5) & 0x3FFF);\n"
-		"		int   gy = (ly<<1) + (offs.s0 >> 19);\n"
-		"		uint2 cam_id = (uint2)((offs.s0 & 0x1f), ((offs.s1>>12) & 0x1f));\n";
+		"		int   gx = (lx<<3) + ((offs.s0) & 0xffff);\n"
+		"		int   gy = (ly<<1) + ((offs.s0 >> 16) & 0xffff);\n"
+		"		uint2 cam_id = (uint2)((offs.s1 & 0xff), ((offs.s1>>8) & 0xff));\n";
 	if (mask_image){
 		opencl_kernel_code +=
 			"		pWt_buf += pWt_offs + mad24(gy, (int)pWt_stride, gx);\n"
@@ -2278,7 +2278,7 @@ vx_status GenerateExpCompBuffers(
 	vx_size validTableSize,                        // [in] size of valid table, in terms of number of entries
 	vx_size overlapTableSize,                      // [in] size of overlap table, in terms of number of entries
 	StitchExpCompCalcEntry * validTable,           // [out] expComp valid table
-	StitchOverlapPixelEntry * overlapTable,        // [out] expComp overlap table
+	StitchExpCompOverlapPixelEntry * overlapTable, // [out] expComp overlap table
 	vx_size * validTableEntryCount,                // [out] number of entries needed by expComp valid table
 	vx_size * overlapTableEntryCount,              // [out] number of entries needed by expComp overlap table
 	vx_int32 * overlapPixelCountMatrix             // [out] expComp overlap pixel count matrix: size: [numCamera * numCamera]
@@ -2357,16 +2357,13 @@ vx_status GenerateExpCompBuffers(
 							// add overlapTable entry
 							if (overlapTable){
 								if (overlapEntryCount < overlapTableSize) {
-									StitchOverlapPixelEntry overlapEntry;
+									StitchExpCompOverlapPixelEntry overlapEntry;
 									overlapEntry.camId0 = i;
 									overlapEntry.start_x = xs;
 									overlapEntry.start_y = ys;
 									overlapEntry.end_x = xe - xs - 1;
 									overlapEntry.end_y = ye - ys - 1;
 									overlapEntry.camId1 = j;
-									overlapEntry.camId2 = 0x1F;
-									overlapEntry.camId3 = 0x1F;
-									overlapEntry.camId4 = 0x1F;
 									overlapTable[overlapEntryCount] = overlapEntry;
 								}
 								overlapEntryCount++;
