@@ -2999,18 +2999,18 @@ std::string ConvertRGB4toNV12()
 		"    uint2 pY0, pY1, pUV;\n"
 		"    float4 y0, y1, uv; float3 rgb;\n"
 		"    //pixel[0]\n"
-		"    rgb = amd_unpackA(L0.s0,L0.s1); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
-		"    rgb = amd_unpackA(L2.s0,L2.s1); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, amd_unpackB(L2.s1,L2.s2)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L0.s0,L0.s1); uv.s0 =  dot(cU, rgb);                     y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 =  dot(cV, rgb);                     y0.s1 = dot(cY.s012, amd_unpackB(L0.s1,L0.s2)) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = amd_unpackA(L2.s0,L2.s1); uv.s0 = (dot(cU, rgb)+uv.s0)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1)*0.5 + 128.0f; y1.s1 = dot(cY.s012, amd_unpackB(L2.s1,L2.s2)) + cY.s3;\n"
 		"    //pixel[2]\n"
-		"    rgb = amd_unpackA(L0.s3,L0.s4); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, amd_unpackB(L0.s4,L0.s5)) + cY.s3;\n"
-		"    rgb = amd_unpackA(L2.s3,L2.s4); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, amd_unpackB(L2.s4,L2.s5)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L0.s3,L0.s4); uv.s2 =  dot(cU, rgb);                     y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 =  dot(cV, rgb);                     y0.s3 = dot(cY.s012, amd_unpackB(L0.s4,L0.s5)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L2.s3,L2.s4); uv.s2 = (dot(cU, rgb)+uv.s2)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3)*0.5 + 128.0f; y1.s3 = dot(cY.s012, amd_unpackB(L2.s4,L2.s5)) + cY.s3;\n"
 		"    pY0.s0 = amd_pack(y0); pY1.s0 = amd_pack(y1); pUV.s0 = amd_pack(uv);\n"
 		"    //pixel[4]\n"
-		"    rgb = amd_unpackA(L0.s6,L0.s7); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, amd_unpackB(L0.s7,L1.s0)) + cY.s3;\n"
-		"    rgb = amd_unpackA(L2.s6,L2.s7); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, amd_unpackB(L2.s7,L3.s0)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L0.s6,L0.s7); uv.s0 =  dot(cU, rgb);                     y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 =  dot(cV, rgb);                     y0.s1 = dot(cY.s012, amd_unpackB(L0.s7,L1.s0)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L2.s6,L2.s7); uv.s0 = (dot(cU, rgb)+uv.s0)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1)*0.5 + 128.0f; y1.s1 = dot(cY.s012, amd_unpackB(L2.s7,L3.s0)) + cY.s3;\n"
 		"    //pixel[6]\n"
-		"    rgb = amd_unpackA(L1.s1,L1.s2); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, amd_unpackB(L1.s2,L1.s3)) + cY.s3;\n"
-		"    rgb = amd_unpackA(L3.s1,L3.s2); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, amd_unpackB(L3.s2,L3.s3)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L1.s1,L1.s2); uv.s2 =  dot(cU, rgb);                     y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 =  dot(cV, rgb);                     y0.s3 = dot(cY.s012, amd_unpackB(L1.s2,L1.s3)) + cY.s3;\n"
+		"    rgb = amd_unpackA(L3.s1,L3.s2); uv.s2 = (dot(cU, rgb)+uv.s2)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3)*0.5 + 128.0f; y1.s3 = dot(cY.s012, amd_unpackB(L3.s2,L3.s3)) + cY.s3;\n"
 		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pUV.s1 = amd_pack(uv);\n";
 	return output;
 }
@@ -3020,18 +3020,18 @@ std::string GammaAndConvertRGB4toNV12()
 		"    uint2 pY0, pY1, pUV;\n"
 		"    float4 y0, y1, uv; float3 rgb;\n"
 		"    //pixel[0]\n"
-		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
-		"    rgb = gamma3(amd_unpackA(L2.s0,L2.s1)); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s1,L2.s2))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s0,L0.s1)); uv.s0 =  dot(cU, rgb);                     y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 =  dot(cV, rgb);                     y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s1,L0.s2))) + cY.s3;\n" // As in MPEG2: U and V are at even pixel location(0,2,..), so ignoring odd pixels for chroma conversion, but take the mean of two lines: see https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx as reference
+		"    rgb = gamma3(amd_unpackA(L2.s0,L2.s1)); uv.s0 = (dot(cU, rgb)+uv.s0)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1)*0.5 + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s1,L2.s2))) + cY.s3;\n"
 		"    //pixel[2]\n"
-		"    rgb = gamma3(amd_unpackA(L0.s3,L0.s4)); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s4,L0.s5))) + cY.s3;\n"
-		"    rgb = gamma3(amd_unpackA(L2.s3,L2.s4)); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L2.s4,L2.s5))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s3,L0.s4)); uv.s2 =  dot(cU, rgb);                     y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 =  dot(cV, rgb);                     y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L0.s4,L0.s5))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s3,L2.s4)); uv.s2 = (dot(cU, rgb)+uv.s2)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3)*0.5 + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L2.s4,L2.s5))) + cY.s3;\n"
 		"    pY0.s0 = amd_pack(y0); pY1.s0 = amd_pack(y1); pUV.s0 = amd_pack(uv);\n"
 		"    //pixel[4]\n"
-		"    rgb = gamma3(amd_unpackA(L0.s6,L0.s7)); uv.s0 = dot(cU, rgb);                  y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = dot(cV, rgb);                  y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s7,L1.s0))) + cY.s3;\n"
-		"    rgb = gamma3(amd_unpackA(L2.s6,L2.s7)); uv.s0 = (dot(cU, rgb)+uv.s0) + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1) + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s7,L3.s0))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L0.s6,L0.s7)); uv.s0 =  dot(cU, rgb);                     y0.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 =  dot(cV, rgb);                     y0.s1 = dot(cY.s012, gamma3(amd_unpackB(L0.s7,L1.s0))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L2.s6,L2.s7)); uv.s0 = (dot(cU, rgb)+uv.s0)*0.5 + 128.0f; y1.s0 = dot(cY.s012, rgb) + cY.s3; uv.s1 = (dot(cV, rgb)+uv.s1)*0.5 + 128.0f; y1.s1 = dot(cY.s012, gamma3(amd_unpackB(L2.s7,L3.s0))) + cY.s3;\n"
 		"    //pixel[6]\n"
-		"    rgb = gamma3(amd_unpackA(L1.s1,L1.s2)); uv.s2 = dot(cU, rgb);                  y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = dot(cV, rgb);                  y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s2,L1.s3))) + cY.s3;\n"
-		"    rgb = gamma3(amd_unpackA(L3.s1,L3.s2)); uv.s2 = (dot(cU, rgb)+uv.s2) + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3) + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L3.s2,L3.s3))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L1.s1,L1.s2)); uv.s2 =  dot(cU, rgb);                     y0.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 =  dot(cV, rgb);                     y0.s3 = dot(cY.s012, gamma3(amd_unpackB(L1.s2,L1.s3))) + cY.s3;\n"
+		"    rgb = gamma3(amd_unpackA(L3.s1,L3.s2)); uv.s2 = (dot(cU, rgb)+uv.s2)*0.5 + 128.0f; y1.s2 = dot(cY.s012, rgb) + cY.s3; uv.s3 = (dot(cV, rgb)+uv.s3)*0.5 + 128.0f; y1.s3 = dot(cY.s012, gamma3(amd_unpackB(L3.s2,L3.s3))) + cY.s3;\n"
 		"    pY0.s1 = amd_pack(y0); pY1.s1 = amd_pack(y1); pUV.s1 = amd_pack(uv);\n";
 	return output;
 }
