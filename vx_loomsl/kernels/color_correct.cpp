@@ -238,12 +238,15 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 		// read num_camera_columns
 		ERROR_CHECK_STATUS(vxReadScalarValue(s_num_camera_columns, &num_camera_columns));
 	}
+	vx_uint32 num_camera_rows = num_cameras / num_camera_columns;
 
 	// set kernel configuration
-	vx_uint32 work_items[3];
-	work_items[0] = (input_width + (3*num_camera_columns -1)) / (4*num_camera_columns);
-	work_items[1] = (input_height + (num_cameras / num_camera_columns) - 1) / (num_cameras / num_camera_columns);
-	work_items[2] = num_cameras;
+	vx_uint32 work_items[2];
+	//work_items[0] = (input_width + (3*num_camera_columns -1)) / (4*num_camera_columns);
+	//work_items[1] = (input_height + (num_cameras / num_camera_columns) - 1) / (num_cameras / num_camera_columns);
+	//work_items[2] = num_cameras;
+	work_items[0] = input_width / 4;
+	work_items[1] = input_height / 4;
 	strcpy(opencl_kernel_function_name, "color_correct");
 	opencl_work_dim = 3;
 	opencl_local_work[0] = 16;
@@ -251,7 +254,6 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 	opencl_local_work[2] = 1;
 	opencl_global_work[0] = (work_items[0] + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
 	opencl_global_work[1] = (work_items[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
-	opencl_global_work[2] = (work_items[2] + opencl_local_work[2] - 1) & ~(opencl_local_work[2] - 1);
 
 	// kernel header and reading
 	opencl_kernel_code =
@@ -293,25 +295,16 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 		"{\n"
 		"  int gx = get_global_id(0)<<2;\n"
 		"  int gy = get_global_id(1);\n"
-		"  int cam_id = get_global_id(2);\n"
-		"  if ((gx < (%d<<2)) && (gy < %d) && (cam_id < %d)) {\n" // work_items[0], work_items[1], work_items[2]
-		, work_items[0], work_items[1], work_items[2]);
+		"  if ((gx < (%d<<2)) && (gy < %d)) {\n" // work_items[0], work_items[1]
+		"  int cam_rows = gx / %d;\n" // input_height / num_camera_rows
+		"  int cam_id = gy / %d + cam_rows * %d;\n"// input_width / num_camera_columns, num_camera_columns
+		, work_items[0], work_items[1], work_items[2], input_height / num_camera_rows, input_width / num_camera_columns, num_camera_columns);
 	opencl_kernel_code += item;
 
 	opencl_kernel_code +=
 		"    pG_buf += pG_offs;\n"
 		"    __global float4 * pg = (__global float4 *)pG_buf; pg += cam_id*3;\n"
 		"    float4 r4 = pg[0], g4 = pg[1], b4 = pg[2];\n";
-	if ((num_cameras / num_camera_columns) != 1){
-		sprintf(item,
-			"    gy = cam_id * %d + gy;\n", input_height / (num_cameras / num_camera_columns));
-		opencl_kernel_code += item;
-	}
-	if (num_camera_columns != 1){
-		sprintf(item,
-			"    gx = cam_id * %d + gx;\n", input_width / num_camera_columns);
-		opencl_kernel_code += item;
-	}
 
 	if (input_format == VX_DF_IMAGE_RGB){
 		opencl_kernel_code +=
