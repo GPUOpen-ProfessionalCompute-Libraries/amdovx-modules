@@ -340,20 +340,20 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 	}
 	opencl_kernel_code +=
 		"    uint2 wgInfo = *(__global uint2 * ) valid_pix_buf;\n"
-		"    int camId = wgInfo.s0 & 0x1F;\n"
-		"    int gx = (wgInfo.s0 >> 5) & 0x3FFF;\n"
-		"    int gy = (wgInfo.s0 >> 19) & 0x1FFF;\n"
-		"    int border = (wgInfo.s1 >> 30)&0x3;\n";
+		"    int camId = wgInfo.s1 & 0x3F;\n"
+		"    int gx = (wgInfo.s0) & 0xffff;\n"
+		"    int gy = (wgInfo.s0 >> 16) & 0xffff;\n"
+		"    int border = (wgInfo.s1 >> 30) & 0x3;\n";
 	if (input_format == VX_DF_IMAGE_RGB4_AMD) {
 		opencl_kernel_code +=
 			"    gy += ((grp_id & 0x1) << 3); //+8\n"
 			"    gx += ((grp_id & 0x2) << 4); //+32\n"
-			"    bool outputValid = select((ly <= ((wgInfo.s1 >> 8) & 0xFF)), ((ly+8) <= ((wgInfo.s1 >> 8) & 0xFF)), (grp_id & 0x1));\n"
-			"    outputValid &= select(((lx>>1) <= ((wgInfo.s1 & 0xFF) >> 2)), (((lx>>1)+8) <= ((wgInfo.s1 & 0xFF) >> 2)), (grp_id & 0x2));\n";
+			"    bool outputValid = select((ly <= ((wgInfo.s1 >> 12) & 0xF)), ((ly+8) <= ((wgInfo.s1 >> 12) & 0xF)), (grp_id & 0x1));\n"
+			"    outputValid &= select(((lx>>1) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)), (((lx>>1)+8) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)), (grp_id & 0x2));\n";
 	}
 	else{
 		opencl_kernel_code +=
-			"    bool outputValid = (lx <= ((wgInfo.s1 & 0xFF) >> 2)) && (ly <= ((wgInfo.s1 >> 8) & 0xFF)) ? true : false;\n";
+			"    bool outputValid = (lx <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)) && (ly <= ((wgInfo.s1 >> 12) & 0xF)) ? true : false;\n";
 	}
 	if (input_format == VX_DF_IMAGE_U8) {
 		if (output_format == VX_DF_IMAGE_U8){
@@ -1262,11 +1262,11 @@ static vx_status VX_CALLBACK upscale_gaussian_subtract_opencl_codegen(
 		"	if (grp_id < pG_num) {\n"
 		"	int size_x = get_local_size(0) - 1; \n"
 		"	uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
-		"	uint camera_id = offs.x & 0x1f; int gx = (lx<<2) + ((offs.x >> 5) & 0x3FFF); int gy = (offs.x >> 19);\n"
+		"	uint camera_id = offs.s1 & 0x3f; int gx = (lx<<2) + ((offs.s0) & 0xffff); int gy = (offs.x >> 16);\n"
 		"	if (!get_group_id(1) | (get_group_id(1) && (gy+8 < %d))) {\n"
 		"	gy += (ly<<1);\n"
-		"	bool outputValid = (lx*4 <= (offs.y & 0xFF)) && (ly*2 <= ((offs.y >> 8)&0xFF));\n"
-		"	int border = (offs.y >> 30) & 0x3;\n"
+		"	bool outputValid = (lx*4 <= ((offs.s1>>6) & 0x3f)) && (ly*2 <= ((offs.s1 >> 12)&0xf));\n"
+		"	int border = (offs.s1 >> 30) & 0x3;\n"
 		"	int ybound = %d;\n"
 		"	op_buf  += op_offset + mad24(gy, (int)op_stride, gx*6);\n"
 		"	ip1_buf += ip1_offset + (camera_id * ip1_stride*%d);\n"
@@ -1919,9 +1919,9 @@ static vx_status VX_CALLBACK upscale_gaussian_add_opencl_codegen(
 		"	if (grp_id < pG_num) {\n"
 		"		int size_x = get_local_size(0) - 1; \n"
 		"		uint2 offs = ((__global uint2 *)pG_buf)[grp_id];\n"
-		"		uint camera_id = offs.x & 0x1f; uint gx = (lx<<3) + ((offs.x >> 5) & 0x3FFF); uint gy = ly*2 + (offs.x >> 19);\n"
-		"	    bool outputValid = (lx*8 <= (offs.y & 0xFF)) && (ly*2 <= ((offs.y >> 8) & 0xFF));\n"
-		"		int border = (offs.y >> 30) & 0x3;\n"
+		"		uint camera_id = offs.s1 & 0x3f; uint gx = (lx<<3) + ((offs.s0) & 0xffff); uint gy = ly*2 + (offs.s0 >> 16);\n"
+		"	    bool outputValid = (lx*8 <= ((offs.s1 >> 6) & 0x3f)) && (ly*2 <= ((offs.s1 >> 12) & 0xf));\n"
+		"		int border = (offs.s1 >> 30) & 0x3;\n"
 		"		int height1 = %d;\n"
 		"		ip_buf += ip_offset + mad24(gy, ip_stride, gx*6);\n"
 		"		ip_buf += (camera_id * ip_stride*%d);\n"
