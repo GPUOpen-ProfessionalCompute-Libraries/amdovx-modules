@@ -9,16 +9,16 @@ This software is provided under a MIT-style license,  see the file COPYRIGHT.txt
 
 ## Features
 * Real-time live 360 degree video stitching optimized for Radeon Pro Graphics
-* Upto 31 cameras
-* Upto 7680x3840 output resolution
+* Up to 31 cameras
+* Up to 7680x3840 output resolution
 * RGB and YUV 4:2:2 image formats
 * Overlay other videos on top of stitched video
 * Support for 3rd party *LoomIO* plug-ins for camera capture and stitched output
-* Support PtGui project export/import for camera calibration
-* Supports different [settings](doc/settings.md) to change quality and performance
+* Support of PtGui project export/import for camera calibration
+* Support for different [settings](doc/settings.md) to change quality and performance
 
 ## Live Stitch API: Simple Example
-Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses. 
+Let's consider a 360 rig that has 3 1080p cameras with Circular FishEye lenses.
 The below example demonstrates how to stitch images from these cameras into a 4K Equirectangular buffer.
 
     #include "vx_loomsl/live_stitch_api.h"
@@ -64,7 +64,7 @@ The below example demonstrates how to stitch images from these cameras into a 4K
       releaseBuffer(&buf[0]);
       releaseBuffer(&buf[1]);
       lsReleaseContext(&context);
-      
+
       return 0;
     }
 

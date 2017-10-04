@@ -83,11 +83,11 @@ enum {
 	LIVE_STITCH_ATTR_EXPCOMP_BETA_VALUE		  =   38,   // exp-comp attribute: beta value (variance of mean intensity)
 	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X		  =	  40,   // number of horizontal tiles in the output (default: 1)
 	LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y		  =   41,   // number of veritical tiles in the output (default: 1)
-	LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap  =   42,   // overlap pixel count (default: 0)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_OVERLAP      =   42,   // overlap pixel count (default: 0)
 	LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE =   43,   // tiled buffer default value (default: 0)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH     =   44,   // encoder buffer width (default: 3840)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT    =   45,   // encoder buffer height (default: 2160)
-	LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y  =   46,   // encoder buffer stride_y (default: 2160)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH        =   44,   // tiled output buffer width (default: 3840)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT       =   45,   // tiled output buffer height (default: 2160)
+	LIVE_STITCH_ATTR_OUTPUT_TILE_STRIDE_Y     =   46,   // tiled output buffer stride_y (default: 2160)
 	LIVE_STITCH_ATTR_CHROMA_KEY				  =   50,   // chroma key enable: 0:OFF 1:ON (default:0)
 	LIVE_STITCH_ATTR_CHROMA_KEY_VALUE		  =   51,   // chroma key value: 0 - N (default: 8454016 - Green 0x80FF80)
 	LIVE_STITCH_ATTR_CHROMA_KEY_TOL			  =	  52,   // chroma key tol: 0 - N (default: 25)
@@ -180,10 +180,12 @@ LIVE_STITCH_API_ENTRY void VX_API_CALL lsGlobalSetLogCallback(stitch_log_callbac
 //  - Note that updating global attributes will not change the features and/or parameters of stitch contexts that have already been created
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributes(vx_uint32 attr_offset, vx_uint32 attr_count, const vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalSetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr);
 
 //! \brief Query current values of global attributes.
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributes(vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGlobalGetAttributesByName(const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr);
 
 //! \brief Create stitch context.
 //  - create a stitch context using the feature dictated by global attributes prior to this call
@@ -322,7 +324,9 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsWaitForCompletion(ls_context stitc
 //  - only dynamic LoomSL attributes can be modified using lsSetAttributes API
 //  - return VX_SUCCESS or error code (see log messages for further details)
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributes(ls_context stitch, vx_uint32 attr_offset, vx_uint32 attr_count, const vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, const vx_float32 * attr_ptr);
 LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributes(ls_context stitch, vx_uint32 attr_offset, vx_uint32 attr_count, vx_float32 * attr_ptr);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetAttributesByName(ls_context stitch, const char * attr_enum_name, vx_uint32 attr_count, vx_float32 * attr_ptr);
 
 //! \brief Query configuration.
 //  - return VX_SUCCESS or error code (see log messages for further details)

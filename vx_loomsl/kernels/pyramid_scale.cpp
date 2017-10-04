@@ -346,21 +346,10 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 		"    int border = (wgInfo.s1 >> 30) & 0x3;\n";
 	if (input_format == VX_DF_IMAGE_RGB4_AMD) {
 		opencl_kernel_code +=
-			"    bool outputValid = true;\n"
-			"    if(grp_id & 0x1){\n"
-			"      gy+=8;\n"
-			"      outputValid = (outputValid) && ((ly+8) <= ((wgInfo.s1 >> 12) & 0xF)) ? true : false; \n"
-			"    }\n"
-			"    else{\n"
-			"      outputValid = (outputValid) && ((ly) <= ((wgInfo.s1 >> 12) & 0xF)) ? true : false; \n"
-			"    }\n"
-			"    if(grp_id & 0x2){\n"
-			"      gx+=32;\n"
-			"      outputValid = (((lx>>1)+8) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)) && (outputValid) ? true : false; \n"
-			"    }\n"
-			"    else{\n"
-			"      outputValid = ((lx>>1) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)) && (outputValid) ? true : false; \n"
-			"    }\n";
+			"    gy += ((grp_id & 0x1) << 3); //+8\n"
+			"    gx += ((grp_id & 0x2) << 4); //+32\n"
+			"    bool outputValid = select((ly <= ((wgInfo.s1 >> 12) & 0xF)), ((ly+8) <= ((wgInfo.s1 >> 12) & 0xF)), (grp_id & 0x1));\n"
+			"    outputValid &= select(((lx>>1) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)), (((lx>>1)+8) <= (((wgInfo.s1 >> 6) & 0x3F) >> 2)), (grp_id & 0x2));\n";
 	}
 	else{
 		opencl_kernel_code +=
@@ -405,10 +394,10 @@ static vx_status VX_CALLBACK half_scale_gaussian_opencl_codegen(
 			"      *(__local uint2 *)(lbuf + loffset) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * max(0, gybase)));\n"
 			"      *(__local uint2 *)(lbuf + loffset + 16*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * (gybase+16)));\n"
 			"      if (ly < 3) {\n"
-			"        *(__local uint2 *)(lbuf + loffset + 32*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * min(height1-2, gybase+32)));\n"
+			"        *(__local uint2 *)(lbuf + loffset + 32*144) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * min(height1-1, gybase+32)));\n"
 			"      }\n"
 			"      if (lid < 35) {\n"
-			"		 gybase = max(0, min(height1-2, ((gy<<1) + lid - 1)));\n"
+			"		 gybase = max(0, min(height1-1, ((gy<<1) + lid - 1)));\n"
 			"		 goffset = (gx<<1) + 120; goffset = select(goffset, 0, goffset>(ip_width-8));\n"
 			"        *(__local uint2 *)(lbuf + (lid * 144) + 128) = vload2(0, (__global uint *)(gbuf + goffset + ip_stride * gybase));\n"
 			"		 goffset += 8; goffset = select(goffset, 0, goffset>(ip_width-8));\n"
