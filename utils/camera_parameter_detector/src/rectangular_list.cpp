@@ -323,7 +323,7 @@ int rectangular_list::check_resulting_list(string text){
 		printf("Error: \t %s - Not enough rects here (%d)!\n", text.c_str(), (int)rect_list.size());
 		return -1;
 	}
-	printf("OK: \t %s: %d found\n", text, (int)rect_list.size());
+	printf("OK: \t %s: %d found\n", text.c_str(), (int)rect_list.size());
 	return 0;
 }
 
