@@ -1606,6 +1606,9 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
     {
         const caffe::LayerParameter& layer_parameter = net_parameter.layer(i);
 
+        if(layer_parameter.top_size() == 0)
+            continue;
+
         caffe::Phase phase = layer_parameter.phase();
         for(int j=0;j<layer_parameter.include_size();j++) {
             if(layer_parameter.include(j).phase()) {
