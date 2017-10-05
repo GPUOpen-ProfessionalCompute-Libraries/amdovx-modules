@@ -18,8 +18,37 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required (VERSION 2.8)
-project (utils)
 
-add_subdirectory (loom_shell)
-add_subdirectory (camera_parameter_detector)
+cmake_minimum_required (VERSION 2.8)
+project (camera_parameter_detector)
+
+set (CMAKE_CXX_STANDARD 11)
+
+find_package(OpenCV REQUIRED)
+
+list(APPEND SOURCES
+	src/apply_color_correction.cpp
+	src/calculate_color_correction.cpp
+	src/color_correction_matrix.cpp
+	src/inputparameters.cpp
+	src/rect.cpp
+	src/rectangular_list.cpp
+	src/Source.cpp
+	src/utils.cpp
+)
+
+add_executable(camera_parameter_detector ${SOURCES})
+
+include_directories(${OpenCV_INCLUDE_DIRS})
+target_link_libraries(camera_parameter_detector ${OpenCV_LIBRARIES})
+target_compile_definitions(camera_parameter_detector PUBLIC USE_OPENCV_CONTRIB=0)
+
+if( POLICY CMP0054 )
+  cmake_policy( SET CMP0054 OLD )
+endif()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif()

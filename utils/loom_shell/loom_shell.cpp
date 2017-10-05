@@ -1705,6 +1705,23 @@ int CLoomShellParser::OnCommand()
 			if (status) return status;
 		}
 	}
+	else if (!_stricmp(command, "loadColorCorrectGains")) {
+		// parse the command
+		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: loadColorCorrectGains(context,num_entries,\"gains.txt\");";
+		vx_uint32 num_entries;
+		SYNTAX_CHECK(ParseSkip(s, "("));
+		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseUInt(s, num_entries));
+		SYNTAX_CHECK(ParseSkip(s, ","));
+		SYNTAX_CHECK(ParseString(s, fileName, sizeof(fileName)));
+		SYNTAX_CHECK(ParseSkip(s, ")"));
+		SYNTAX_CHECK(ParseEndOfLine(s));
+		// process the command
+		vx_status status = loadColorCorrectGains(context_[contextIndex], num_entries, fileName);
+		if (status) return status;
+	}
 	else if (!_stricmp(command, "loadBlendWeights")) {
 		// parse the command
 		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };

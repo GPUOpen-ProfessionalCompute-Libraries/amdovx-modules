@@ -91,6 +91,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         showExpCompGains(context,num_entries);
         loadExpCompGains(context,num_entries,\"gains.txt\");
         saveExpCompGains(context,num_entries,\"gains.txt\");
+        loadColorCorrectGains(context,num_entries,\"gains.txt\");
     ~ miscellaneous
         help
         include "script.lss"

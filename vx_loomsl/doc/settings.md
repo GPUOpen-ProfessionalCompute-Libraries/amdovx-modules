@@ -1,9 +1,10 @@
 ﻿# Radeon Loom Stitching Library Settings (vx_loomsl)
  There are different ways to improve the output or the performance of the stitch process by optimizing or changing certain parameters and settings.
  The settings can be set using [loom_shell](../../utils/loom_shell/README.md) or by using the [API](../README.md).
- There are different ways to set or to get/show attributes within the API and loom shell. One example for Loom shell would be to pass the attribute by offset or name: ```setGlobalAttribute(offset/name,value); ```
-
- Within the API, one example would be: ```lsSetGlobalAttribute(offset,count,value);```
+ There are different ways to set or to get/show attributes within the API and loom shell. 
+ In Loom shell the attribute can be set by name or offset: ```setGlobalAttribute(offset/name,value); ```
+ 
+ Within the API, the offset or enum can be used: ```lsSetGlobalAttribute(offset,count,value);```
 
  Where offset is a number for a certain parameter. Most of the attributes are global, which means there can only set before initializing. Some can only changed after initalizing, there are called dynamic.
 
@@ -13,8 +14,9 @@
  |LIVE_STITCH_ATTR_PROFILER | 0      | A profiler, which shows performance numbers | **0: Off**, 1: On |
  |LIVE_STITCH_ATTR_STITCH_MODE | 7 | Stitch mode | **0: Normal Stitch**, 1: Quick Stitch |
  |LIVE_STITCH_ATTR_ENABLE_REINITIALIZE | 10 | Reinitialization | **0: Disable**, 1: Enable |
- |LIVE_STITCH_ATTR_FAST_INIT | 56 | Quick reinitialization on GPU | 0: Off, **1: On** |
+ |LIVE_STITCH_ATTR_USE_CPU_INIT | 56 | Quick reinitialization on GPU | **0: Off**, 1: On |
  |LIVE_STITCH_ATTR_SAVE_AND_LOAD_INIT | 57 | Save initialized stitch tables for quick run&load | **0: Off**, 1: On |
+ |LIVE_STITCH_ATTR_COLOR_CORRECTION | 61 | Use an external color correction matrix to correct colors | **0: Off**, 1: On |
 
  ## High precision
  | Name  | Offset | Description                                 | Value           |
@@ -84,11 +86,11 @@
  |-------|------------------|---------------------------------------------|-------------------|
  |LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_X | 40 | Number of horizontal tiles in the output | **1** |
  |LIVE_STITCH_ATTR_OUTPUT_TILE_NUM_Y | 41 | Number of vertical tiles in the output | **1** |
- |LIVE_STITCH_ATTR_OUTPUT_src_tile_overlap | 42 | Overlap pixel count | **0** |
+ |LIVE_STITCH_ATTR_OUTPUT_TILE_OVERLAP | 42 | Overlap pixel count | **0** |
  |LIVE_STITCH_ATTR_OUTPUT_TILE_BUFFER_VALUE | 43 | Tiled buffer default value | **0** |
- |LIVE_STITCH_ATTR_OUTPUT_ENCODER_WIDTH | 44 | Encoder buffer width | **3840** |
- |LIVE_STITCH_ATTR_OUTPUT_ENCODER_HEIGHT | 45 | Encoder buffer height | **2160** |
- |LIVE_STITCH_ATTR_OUTPUT_ENCODER_STRIDE_Y | 46 | Encoder buffer stride_y | **2160** |
+ |LIVE_STITCH_ATTR_OUTPUT_TILE_WIDTH | 44 | Encoder buffer width | **3840** |
+ |LIVE_STITCH_ATTR_OUTPUT_TILE_HEIGHT | 45 | Encoder buffer height | **2160** |
+ |LIVE_STITCH_ATTR_OUTPUT_TILE_STRIDE_Y | 46 | Encoder buffer stride_y | **2160** |
 
  ## LoomIO
 | Name  | Offset | Description                                 | Value           |
