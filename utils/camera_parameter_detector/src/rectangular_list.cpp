@@ -64,7 +64,7 @@ int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only
 /*	Mat pyr, timg, gray0(image.size(), CV_8U), gray;
 
 	// down-scale and upscale the image to filter out the noise
-/*	pyrDown(image, pyr, Size(image.cols / 2, image.rows / 2));
+	pyrDown(image, pyr, Size(image.cols / 2, image.rows / 2));
 	pyrUp(pyr, timg, image.size());*/
 /*	timg = image;
 	
@@ -317,7 +317,7 @@ int rectangular_list::calc_maxNearObjects(){
 	return 0;
 }
 
-int rectangular_list::check_resulting_list(char* text){
+int rectangular_list::check_resulting_list(string text){
 	if (rect_list.size() < 4){
 		valid = false;
 		printf("Error: \t %s - Not enough rects here (%d)!\n", text, (int)rect_list.size());

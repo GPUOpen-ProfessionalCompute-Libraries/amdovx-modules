@@ -47,6 +47,8 @@ private:
 
 	// functions
 	int calc_maxNearObjects();
-	int check_resulting_list(char *text);
+	int check_resulting_list(string text);
 	Vec3f calculate_color(Point center, Mat Transformation, Mat image, int predicted_size);
 };
+
+static double angle(Point pt1, Point pt2, Point pt0);
