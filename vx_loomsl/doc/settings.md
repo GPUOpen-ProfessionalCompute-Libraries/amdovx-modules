@@ -1,8 +1,10 @@
 ﻿# Radeon Loom Stitching Library Settings (vx_loomsl)
  There are different ways to improve the output or the performance of the stitch process by optimizing or changing certain parameters and settings.
  The settings can be set using [loom_shell](../../utils/loom_shell/README.md) or by using the [API](../README.md).
- There are different ways to set or to get/show attributes within the API and loom shell. One example for Loom shell would be to pass the attribute by offset or name: ```setGlobalAttribute(offset/name,value); ```
- Within the API, one example would be: ```lsSetGlobalAttribute(offset,count,value);```
+ There are different ways to set or to get/show attributes within the API and loom shell. 
+ In Loom shell the attribute can be set by name or offset: ```setGlobalAttribute(offset/name,value); ```
+ 
+ Within the API, the offset or enum can be used: ```lsSetGlobalAttribute(offset,count,value);```
 
  Where offset is a number for a certain parameter. Most of the attributes are global, which means there can only set before initializing. Some can only changed after initalizing, there are called dynamic.
 
