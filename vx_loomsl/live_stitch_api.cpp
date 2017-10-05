@@ -34,7 +34,7 @@ THE SOFTWARE.
 #include <string>
 
 // Version
-#define LS_VERSION             "0.9.6"
+#define LS_VERSION             "0.9.7"
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The magic number for validation
@@ -990,7 +990,7 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 {
 	vx_uint32 camWidth = stitch->camera_rgb_buffer_width / stitch->num_camera_columns;
 	vx_uint32 camHeight = stitch->camera_rgb_buffer_height / stitch->num_camera_rows;
-	vx_uint32 numCamera = stitch->num_camera_rows;
+	vx_uint32 numCamera = stitch->num_camera_rows * stitch->num_camera_columns;
 	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
 	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	// compute camera warp parameters and check for supported lens types
@@ -1055,7 +1055,7 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 }
 static vx_status setupQuickInitializeGraph(ls_context stitch)
 {
-	vx_uint32 numCamera = stitch->num_camera_rows;
+	vx_uint32 numCamera = stitch->num_camera_rows * stitch->num_camera_columns;
 	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
 	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	vx_uint32 paddingPixelCount = stitch->stitchInitData->paddingPixelCount;
