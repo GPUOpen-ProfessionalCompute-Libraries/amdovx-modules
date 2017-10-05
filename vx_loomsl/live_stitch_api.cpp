@@ -2503,7 +2503,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 		stitch->live_stitch_attr[LIVE_STITCH_ATTR_LINEAR_COLORSPACE] = 0;
 		ls_printf("WARNING: Linear colorspace was set to invalid value. (Only 0: Nonlinear and 1: Linear)\n");
 	}
-	// check attribute for fast init code
+	// check attribute for CPU init code (slower)
 	stitch->USE_CPU_INIT = (vx_uint32)stitch->live_stitch_attr[LIVE_STITCH_ATTR_USE_CPU_FOR_INIT];
 	if (stitch->USE_CPU_INIT)
 		ls_printf("OK: Use CPU Init, will be slow\n");
@@ -2935,7 +2935,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 	else if (stitch->stitching_mode == stitching_mode_normal)
 	{
 		// Check output definition:
-		unsigned long long int size_long = (unsigned long long int)stitch->output_buffer_height * (unsigned long long int)stitch->output_buffer_height * stitch->num_cameras;
+		unsigned long long int size_long = (unsigned long long int)stitch->output_buffer_height * (unsigned long long int)stitch->output_buffer_height * stitch->num_cameras * 4; // Assume RGBX with 4 bpp
 		if (size_long >= (UINT_MAX))
 		{
 			ls_printf("ERROR: Configuration results in an intermediate image size (%lu bytes) bigger than the supported size (4.2 GB).\n", size_long);
