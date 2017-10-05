@@ -136,6 +136,15 @@ struct ls_context_t {
 	vx_array    color_correct_gain_array;
 	// warp data & node elements
 	vx_remap    camera_remap;                   // remap table for camera (in simple stitch mode)
+	vx_array    ValidPixelEntry, WarpRemapEntry;
+	vx_image    warp_output_image;
+	vx_node     SimpleStitchRemapNode, WarpNode;
+	vx_uint8    alpha_value, warp_flags;
+	// exp comp data & node elements		
+	vx_uint32   EXPO_COMP;                      // exposure comp flags from environment variable		
+	vx_uint32   EXPO_COMP_GAINW, EXPO_COMP_GAINH;// exposure comp module gain image width and height		
+	vx_uint32   EXPO_COMP_GAINC;                // exposure comp gain array number of gain values per camera. For mode 4, this should be 12 which is default if not specified.		
+	vx_array    OverlapPixelEntry, valid_array, gain_array;
 	vx_matrix   overlap_matrix, A_matrix;
 	vx_image    exp_comp_output_image, expcomp_luma16;
 	vx_node     ExpcompComputeGainNode, ExpcompSolveGainNode, ExpcompApplyGainNode;
