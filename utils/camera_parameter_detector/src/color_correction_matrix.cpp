@@ -208,7 +208,7 @@ Vec3f color_correction_matrix::colorspace_conversion(Vec3f input){
 }
 
 int color_correction_matrix::colorspace_conversion(vector<Vec3f> *input){
-	for (int i = 0; i < input->size(); i++){
+	for (size_t i = 0; i < input->size(); i++){
 		input->at(i) = (colorspace_conversion(input->at(i)));
 	}
 	return 1;

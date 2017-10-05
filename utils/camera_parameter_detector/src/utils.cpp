@@ -24,7 +24,7 @@ Mat degamma(Mat image){
 
 vector<Vec3f> degamma(vector<Vec3f> input){
 	vector<Vec3f> output;
-	for (int i = 0; i < input.size(); i++){
+	for (size_t i = 0; i < input.size(); i++){
 		Vec3b intensity_in = input.at(i);
 		output.push_back(degamma(intensity_in));
 	}
