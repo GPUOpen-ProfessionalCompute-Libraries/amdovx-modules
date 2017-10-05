@@ -51,4 +51,4 @@ private:
 	Vec3f calculate_color(Point center, Mat Transformation, Mat image, int predicted_size);
 };
 
-static double angle(Point pt1, Point pt2, Point pt0);
+double angle(Point pt1, Point pt2, Point pt0);

@@ -320,7 +320,7 @@ int rectangular_list::calc_maxNearObjects(){
 int rectangular_list::check_resulting_list(string text){
 	if (rect_list.size() < 4){
 		valid = false;
-		printf("Error: \t %s - Not enough rects here (%d)!\n", text, (int)rect_list.size());
+		printf("Error: \t %s - Not enough rects here (%d)!\n", text.c_str(), (int)rect_list.size());
 		return -1;
 	}
 	printf("OK: \t %s: %d found\n", text, (int)rect_list.size());
@@ -426,7 +426,7 @@ Vec3f rectangular_list::calculate_color(Point center, Mat Transformation, Mat im
 	return mean;
 }
 
-static double angle(Point pt1, Point pt2, Point pt0)
+double angle(Point pt1, Point pt2, Point pt0)
 {
 	double dx1 = pt1.x - pt0.x;
 	double dy1 = pt1.y - pt0.y;
