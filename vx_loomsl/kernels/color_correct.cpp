@@ -246,12 +246,11 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 	//work_items[1] = (input_height + (num_cameras / num_camera_columns) - 1) / (num_cameras / num_camera_columns);
 	//work_items[2] = num_cameras;
 	work_items[0] = input_width / 4;
-	work_items[1] = input_height / 4;
+	work_items[1] = input_height;
 	strcpy(opencl_kernel_function_name, "color_correct");
-	opencl_work_dim = 3;
+	opencl_work_dim = 2;
 	opencl_local_work[0] = 16;
 	opencl_local_work[1] = 4;
-	opencl_local_work[2] = 1;
 	opencl_global_work[0] = (work_items[0] + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
 	opencl_global_work[1] = (work_items[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
 
@@ -276,13 +275,13 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 
 	char item[8192];
 	sprintf(item,
-		"__kernel __attribute__((reqd_work_group_size(%d, %d, %d)))\n" // opencl_local_work[0], opencl_local_work[1]
+		"__kernel __attribute__((reqd_work_group_size(%d, %d, 1)))\n" // opencl_local_work[0], opencl_local_work[1]
 		"void %s(\n" // opencl_kernel_function_name
 		"        uint num_cameras,\n"
 		"        __global uchar * pG_buf, uint pG_offs, uint pG_num,\n"
 		"	     uint pRGB_in_width, uint pRGB_in_height, __global uchar * pRGB_in_buf, uint pRGB_in_stride, uint pRGB_in_offset,\n"
 		"	     uint pRGB_out_width, uint pRGB_out_height, __global uchar * pRGB_out_buf, uint pRGB_out_stride, uint pRGB_out_offset"
-		, (int)opencl_local_work[0], (int)opencl_local_work[1], (int)opencl_local_work[2], opencl_kernel_function_name);
+		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name);
 	opencl_kernel_code += item;
 	if (s_num_camera_columns) {
 		opencl_kernel_code +=
