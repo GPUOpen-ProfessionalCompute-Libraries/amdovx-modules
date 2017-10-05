@@ -295,9 +295,9 @@ static vx_status VX_CALLBACK color_correct_opencl_codegen(
 		"  int gx = get_global_id(0)<<2;\n"
 		"  int gy = get_global_id(1);\n"
 		"  if ((gx < (%d<<2)) && (gy < %d)) {\n" // work_items[0], work_items[1]
-		"  int cam_rows = gx / %d;\n" // input_height / num_camera_rows
-		"  int cam_id = gy / %d + cam_rows * %d;\n"// input_width / num_camera_columns, num_camera_columns
-		, work_items[0], work_items[1], work_items[2], input_height / num_camera_rows, input_width / num_camera_columns, num_camera_columns);
+		"  int cam_rows = gy / %d;\n" // input_height / num_camera_rows
+		"  int cam_id = gx / %d + cam_rows * %d;\n"// input_width / num_camera_columns, num_camera_columns
+		, work_items[0], work_items[1], input_height / num_camera_rows, input_width / num_camera_columns, num_camera_columns);
 	opencl_kernel_code += item;
 
 	opencl_kernel_code +=
