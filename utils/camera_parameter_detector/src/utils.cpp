@@ -1,3 +1,7 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "utils.h"
 
 Vec3f convert2float(Vec3b input){
@@ -127,7 +131,7 @@ Mat read_input(params parameter){
 		FILE *fp = NULL;
 		char *imagedata = NULL;
 		int framesize = parameter.width*parameter.height * 3;
-		fopen_s(&fp, parameter.input_image_filename, "rb");
+		fp = fopen(parameter.input_image_filename, "rb");
 		if (fp == NULL)
 		{
 			image.data = NULL;

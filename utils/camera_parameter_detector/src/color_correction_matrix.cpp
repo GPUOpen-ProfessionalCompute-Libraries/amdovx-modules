@@ -1,6 +1,8 @@
-#include "color_correction_matrix.hpp"
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 
-//#include <iostream>
+#include "color_correction_matrix.hpp"
 
 color_correction_matrix::color_correction_matrix(){
 	values.create(3, 4, CV_32FC1);
@@ -171,7 +173,7 @@ int color_correction_matrix::save_to_CV_file(char* filename){
 
 int color_correction_matrix::save_to_LOOM_file(char* filename){
 	FILE *filepointer;
-	fopen_s(&filepointer, filename, "w");
+	filepointer = fopen(filename, "w");
 	fprintf(filepointer, "%f %f %f %f ", values.at<float>(2, 2), values.at<float>(2, 1), values.at<float>(2, 0), values.at<float>(2, 3));
 	fprintf(filepointer, "%f %f %f %f ", values.at<float>(1, 2), values.at<float>(1, 1), values.at<float>(1, 0), values.at<float>(1, 3));
 	fprintf(filepointer, "%f %f %f %f ", values.at<float>(0, 2), values.at<float>(0, 1), values.at<float>(0, 0), values.at<float>(0, 3));
@@ -208,7 +210,7 @@ Vec3f color_correction_matrix::colorspace_conversion(Vec3f input){
 }
 
 int color_correction_matrix::colorspace_conversion(vector<Vec3f> *input){
-	for (size_t i = 0; i < input->size(); i++){
+	for (int i = 0; i < (int)input->size(); i++){
 		input->at(i) = (colorspace_conversion(input->at(i)));
 	}
 	return 1;
@@ -217,7 +219,7 @@ int color_correction_matrix::colorspace_conversion(vector<Vec3f> *input){
 Mat construct4xk_from_vectorlist(vector<Vec3f> input){
 	Mat output;
 	output.create(4, (int)input.size(), CV_32FC1);
-	for (int i = 0; i < input.size(); i++){
+	for (int i = 0; i < (int)input.size(); i++){
 		output.at<float>(0, i) = input.at(i)[0];
 		output.at<float>(1, i) = input.at(i)[1];
 		output.at<float>(2, i) = input.at(i)[2];
@@ -229,7 +231,7 @@ Mat construct4xk_from_vectorlist(vector<Vec3f> input){
 Mat construct3xk_from_vectorlist(vector<Vec3f> input){
 	Mat output;
 	output.create(3, (int)input.size(), CV_32FC1);
-	for (int i = 0; i < input.size(); i++){
+	for (int i = 0; i < (int)input.size(); i++){
 		output.at<float>(0, i) = input.at(i)[0];
 		output.at<float>(1, i) = input.at(i)[1];
 		output.at<float>(2, i) = input.at(i)[2];
@@ -240,7 +242,7 @@ Mat construct3xk_from_vectorlist(vector<Vec3f> input){
 Mat construct3xk_from_vectorlist(vector<Vec3f> input, int col1, int col2){
 	Mat output;
 	output.create(3, (int)input.size(), CV_32FC1);
-	for (int i = 0; i < input.size(); i++){
+	for (int i = 0; i < (int)input.size(); i++){
 		output.at<float>(0, i) = input.at(i)[col1];
 		output.at<float>(1, i) = input.at(i)[col2];
 		output.at<float>(2, i) = 255;
@@ -251,7 +253,7 @@ Mat construct3xk_from_vectorlist(vector<Vec3f> input, int col1, int col2){
 Mat construct2xk_from_vectorlist(vector<Vec3f> input, int col1, int col2){
 	Mat output;
 	output.create(2, (int)input.size(), CV_32FC1);
-	for (int i = 0; i < input.size(); i++){
+	for (int i = 0; i < (int)input.size(); i++){
 		output.at<float>(0, i) = input.at(i)[col1];
 		output.at<float>(1, i) = input.at(i)[col2];
 	}
