@@ -498,7 +498,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 * \param [in] seam_path     The input array of seam path .
 * \param [in] seam_pref     The input array of seam preference.
 * \param [out] output       The weight image.
-* \param [in] flags			Debug flags.
+* \param [in] flags	        Debug flags.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */

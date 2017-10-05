@@ -79,14 +79,14 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         releaseOpenCLContext(&opencl_context);
         releaseOpenVXContext(&openvx_context);
     ~ attributes (advanced)
-        setGlobalAttribute(offset,value);
-        showGlobalAttributes(offset,count);
-        saveGlobalAttributes(offset,count,"attr.txt");
-        loadGlobalAttributes(offset,count,"attr.txt");
-        setAttribute(context,offset,value);
-        showAttributes(context,offset,count);
-        saveAttributes(context,offset,count,"attr.txt");
-        loadAttributes(context,offset,count,"attr.txt");
+        setGlobalAttribute(offset/name,value);
+        showGlobalAttributes(offset/name,count);
+        saveGlobalAttributes(offset/name,count,"attr.txt");
+        loadGlobalAttributes(offset/name,count,"attr.txt");
+        setAttribute(context,offset/name,value);
+        showAttributes(context,offset/name,count);
+        saveAttributes(context,offset/name,count,"attr.txt");
+        loadAttributes(context,offset/name,count,"attr.txt");
     ~ components (advanced)
         showExpCompGains(context,num_entries);
         loadExpCompGains(context,num_entries,\"gains.txt\");
@@ -130,6 +130,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
 | kernelName      | LoomIO plug-in: OpenVX kernel name
 | kernelArguments | LoomIO plug-in: custom kernel arguments
 | offset          | start index of an attribute, see [settings](../../vx_loomsl/doc/settings.md)
+| name            | start name of an attribute, see [settings](../../vx_loomsl/doc/settings.md)
 | count           | number of attributes
 | value           | value of attribute
 | contextCount    | number of stitch instances in context[] allocated using "ls_context context[N];"
