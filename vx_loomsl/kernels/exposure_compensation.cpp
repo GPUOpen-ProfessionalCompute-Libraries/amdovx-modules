@@ -694,7 +694,6 @@ static vx_status VX_CALLBACK exposure_comp_applygains_opencl_global_work_update(
 	)
 {
 	vx_array arr = (vx_array)parameters[2];				// input array
-	vx_scalar sc_width = (vx_scalar)parameters[4];		// input scalar - bg width
 	// Get the number of elements in the stitchWarpRemapEntry array
 	vx_size arr_numitems = 0;
 	ERROR_CHECK_STATUS(vxQueryArray(arr, VX_ARRAY_ATTRIBUTE_NUMITEMS, &arr_numitems, sizeof(arr_numitems)));
@@ -1411,8 +1410,6 @@ static vx_status VX_CALLBACK exposure_comp_solvegains_kernel(vx_node node, const
 		vxAddLogEntry((vx_reference)node, status, "ERROR: exposure_compensation_gain array capacity not enough\n");
 	}
 	numCameras = (vx_uint32)columns;
-	vx_size stride = 0;
-	void *base = NULL;
 	status = exp_comp->SolveForGains(alpha, beta, pIMat, pNMat, numCameras, arr, (vx_uint32)rows, (vx_uint32)columns);
 	return status;
 }

@@ -19,4 +19,4 @@ Vec3f degamma(Vec3b intensity_in);
 Mat gamma(Mat image);
 Vec3b gamma(Vec3f intensity_in);
 
-int show_image(char* name, Mat *image);
+int show_image(string name, Mat *image);

@@ -1245,7 +1245,7 @@ int CLoomShellParser::OnCommand()
 	}
 	else if (!_stricmp(command, "showConfiguration")) {
 		// parse the command
-		vx_uint32 contextIndex = 0; char exportType[128], fileName[256] = { 0 };
+		vx_uint32 contextIndex = 0; char exportType[128];
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: showConfiguration(context,\"<exportType>\");";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));

@@ -343,7 +343,7 @@ int rectangular::SetCorner(cv::Mat *input, int value){
 		printf("Value for set corner is wrong(%d)\n", value);
 		return -1;
 	}
-	for (int i = 0; i < cornerPoints.size(); i++)
+	for (int i = 0; i < (int)cornerPoints.size(); i++)
 	{
 		input->at<uchar>(Point(cornerPoints.at(i).x, cornerPoints.at(i).y)) = value;
 	}
@@ -371,7 +371,7 @@ float rectangular::RelationSquare(){
 int rectangular::CalcNumberOfNearObjects(std::vector<rectangular> inputList){
 	int counter = 0;
 	float sizeRelation;
-	for (int i = 0; i < inputList.size(); i++){
+	for (int i = 0; i < (int)inputList.size(); i++){
 		sizeRelation = abs(this->size / inputList.at(i).size - 1);
 		if (distance_between_points(inputList.at(i).center, this->center) < 8 * this->meanVertex && sizeRelation < 0.5){
 			counter++;
@@ -382,7 +382,7 @@ int rectangular::CalcNumberOfNearObjects(std::vector<rectangular> inputList){
 }
 
 int rectangular::countRectsAround(std::vector<rectangular> inputList){
-	for (int i=0; i < inputList.size(); i++){
+	for (int i=0; i < (int)inputList.size(); i++){
 		Point otherCenter = inputList.at(i).center;
 		// Calculate how many rects could between this and the other one, in x and in y direction
 		int counterLeftRight = (int)round((this->center.x - otherCenter.x) / (this->meanVertex*1.2)); 

@@ -77,7 +77,7 @@ Vec3b gamma(Vec3f intensity_in){
 	return intensity_out;
 }
 
-int show_image(char* name, Mat *image){
+int show_image(string name, Mat *image){
 	namedWindow(name, WINDOW_AUTOSIZE);		// Create a window for display.
 	imshow(name, *image);					// Show our image inside it.
 	waitKey(0);

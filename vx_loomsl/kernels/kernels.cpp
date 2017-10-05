@@ -323,7 +323,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchWarpNode(vx_graph graph, vx_uint32 num_ca
 	vx_scalar s_alpha_value = NULL;
 	if (alpha_value != 0)
 	{
-		vx_scalar s_alpha_value = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &alpha_value);
+		s_alpha_value = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &alpha_value);
 	}
 	vx_scalar s_flags = vxCreateScalar(vxGetContext((vx_reference)graph), VX_TYPE_UINT8, &flags);
 

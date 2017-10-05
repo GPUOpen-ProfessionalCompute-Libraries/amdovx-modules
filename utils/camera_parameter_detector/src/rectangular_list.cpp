@@ -143,7 +143,7 @@ int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only
 	}*/
 
 
-	for (int i = 0; i < square_list.size(); i++){
+	for (int i = 0; i < (int)square_list.size(); i++){
 		rectangular rect(square_list.at(i));
 		rect_list.push_back(rect);
 	}
@@ -154,7 +154,7 @@ int rectangular_list::create_from_image_with_OpenCV(Mat image){ // Testcode only
 int rectangular_list::drawSquares(Mat& image, char *wndname)
 {
 	if (square_list.size() != rect_list.size()){ // If rects are not in square list, add them
-		for (int i = 0; i < rect_list.size(); i++)
+		for (int i = 0; i < (int)rect_list.size(); i++)
 		{
 			square_list.push_back(rect_list.at(i).output_pointlist());
 		}
@@ -175,7 +175,7 @@ int rectangular_list::drawSquares(Mat& image, char *wndname)
 
 int rectangular_list::check_vertex(Mat *image){
 	int i = 0;
-	while (i<rect_list.size()){
+	while (i<(int)rect_list.size()){
 		if (rect_list.at(i).RelationLeftRightVertex() > 0.25 || rect_list.at(i).RelationTopBottomVertex() > 0.25 || rect_list.at(i).RelationSquare() > 0.25 || rect_list.at(i).size < 25)
 		{
 			if (image != NULL)
@@ -194,7 +194,7 @@ int rectangular_list::check_vertex(Mat *image){
 int rectangular_list::check_near_objects(Mat *image){
 	calc_maxNearObjects();
 	int i = 0;
-	while (i<rect_list.size()){
+	while (i<(int)rect_list.size()){
 		if (rect_list.at(i).numberOfNearObjects > maxNearObjects*0.8)
 		{
 			if (image != NULL)
@@ -212,7 +212,7 @@ int rectangular_list::check_near_objects(Mat *image){
 }
 
 int rectangular_list::find_orientation(){
-	for (int i = 0; i < rect_list.size(); i++)
+	for (int i = 0; i < (int)rect_list.size(); i++)
 	{
 		orientation += rect_list.at(i).countRectsAround(rect_list);
 		mean_size += rect_list.at(i).size;
@@ -308,7 +308,7 @@ int rectangular_list::size(){
 
 
 int rectangular_list::calc_maxNearObjects(){
-	for (int i = 0; i < rect_list.size(); i++){
+	for (int i = 0; i < (int)rect_list.size(); i++){
 		rect_list.at(i).CalcNumberOfNearObjects(rect_list);
 		if (rect_list.at(i).numberOfNearObjects > maxNearObjects){
 			maxNearObjects = rect_list.at(i).numberOfNearObjects;
@@ -320,10 +320,10 @@ int rectangular_list::calc_maxNearObjects(){
 int rectangular_list::check_resulting_list(char* text){
 	if (rect_list.size() < 4){
 		valid = false;
-		printf("Error: \t %s - Not enough rects here (%d)!\n", text, rect_list.size());
+		printf("Error: \t %s - Not enough rects here (%d)!\n", text, (int)rect_list.size());
 		return -1;
 	}
-	printf("OK: \t %s: %d found\n", text, rect_list.size());
+	printf("OK: \t %s: %d found\n", text, (int)rect_list.size());
 	return 0;
 }
 

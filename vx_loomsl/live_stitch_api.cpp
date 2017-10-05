@@ -662,15 +662,6 @@ vx_status offsetFromEnum(const char* enum_string, vx_uint32 * offset){
 	return VX_ERROR_INVALID_VALUE;
 }
 
-static std::vector<std::string> split(std::string str, char delimiter) {
-	std::stringstream ss(str);
-	std::string tok;
-	std::vector<std::string> internal;
-	while (std::getline(ss, tok, delimiter)) {
-		internal.push_back(tok);
-	}
-	return internal;
-}
 static vx_status IsValidContext(ls_context stitch)
 {
 	if (!stitch || stitch->magic != LIVE_STITCH_MAGIC) return VX_ERROR_INVALID_REFERENCE;
@@ -1086,15 +1077,12 @@ static vx_status setupQuickInitializeParams(ls_context stitch)
 	vx_uint32 camWidth = stitch->camera_rgb_buffer_width / stitch->num_camera_columns;
 	vx_uint32 camHeight = stitch->camera_rgb_buffer_height / stitch->num_camera_rows;
 	vx_uint32 numCamera = stitch->num_camera_rows * stitch->num_camera_columns;
-	vx_uint32 eqrWidth = stitch->output_rgb_buffer_width;
-	vx_uint32 eqrHeight = stitch->output_rgb_buffer_height;
 	// compute camera warp parameters and check for supported lens types
 	float Mcam[32 * 9], Tcam[32 * 3], fcam[32 * 2], Mr[3 * 3];
 	vx_status status = CalculateCameraWarpParameters(numCamera, camWidth, camHeight, &stitch->rig_par, stitch->camera_par, Mcam, Tcam, fcam, Mr);
 	if (status != VX_SUCCESS) return status;
 
 	vx_uint32 paddingPixelCount = stitch->stitchInitData->paddingPixelCount;
-	const camera_lens_params * lens = &stitch->camera_par[0].lens;
 
 	// add nodes to the graph and verify.
 	stitch->stitchInitData->params = { 0 };
@@ -2687,7 +2675,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			stitch->Img_output = vxCreateVirtualImage(stitch->graphStitch, stitch->output_buffer_width, stitch->output_buffer_height, stitch->output_buffer_format);
 		}
 		ERROR_CHECK_OBJECT_(stitch->Img_output);
-		vx_uint32 zero = 0;
 		ERROR_CHECK_OBJECT_(stitch->loomioOutputAuxData = vxCreateArray(stitch->context, VX_TYPE_UINT8, stitch->loomioOutputAuxDataLength));
 		vx_array loomioOutputAuxDataSource = nullptr;
 		if (stitch->loomioCameraAuxData && stitch->loomioOutputAuxSelection != 1) {
@@ -2911,7 +2898,6 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsInitialize(ls_context stitch)
 			}
 		}
 		// instantiate specified node into the graph
-		vx_uint32 zero = 0;
 		ERROR_CHECK_OBJECT_(stitch->viewingMediaConfig = vxCreateScalar(stitch->context, VX_TYPE_STRING_AMD, stitch->loomio_viewing.kernelArguments));
 		ERROR_CHECK_OBJECT_(stitch->loomioViewingAuxData = vxCreateArray(stitch->context, VX_TYPE_UINT8, stitch->loomioOutputAuxDataLength));
 		vx_reference params[] = {
@@ -4188,11 +4174,11 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsExportConfiguration(ls_context sti
 									ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_NUMITEMS, &numitems, sizeof(numitems)));
 									ERROR_CHECK_STATUS(vxQueryArray((vx_array)ref, VX_ARRAY_ATTRIBUTE_ITEMTYPE, &itemtype, sizeof(itemtype)));
 									if (itemtype == VX_TYPE_FLOAT32){
-										fprintf(fp, "data %s = array:VX_TYPE_FLOAT32,%d\n", name, numitems);
+										fprintf(fp, "data %s = array:VX_TYPE_FLOAT32,%d\n", name, (int)numitems);
 									}
 									else{
-										fprintf(fp, "type %sEntryType userstruct:%d\n", name, itemsize);
-										fprintf(fp, "data %s = array:%sEntryType,%d\n", name, name, numitems);
+										fprintf(fp, "type %sEntryType userstruct:%d\n", name, (int)itemsize);
+										fprintf(fp, "data %s = array:%sEntryType,%d\n", name, name, (int)numitems);
 									}
 								}
 								else if (type == VX_TYPE_MATRIX){
