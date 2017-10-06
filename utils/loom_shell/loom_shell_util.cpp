@@ -1165,8 +1165,8 @@ vx_status loadSeamMask(ls_context stitch, const char * fileName)
 	ERROR_CHECK_FREAD_(fread(buf, 1, size, fp),size);
 	fclose(fp);
 	vx_status status = lsSetSeamMask(stitch, buf, size);
-	if (status) return Error("ERROR: lsSetBlendWeights(*,*,%d): failed (%d)\n", size, status);
-	Message("OK: loaded %d bytes from %s as blend weights\n", size, fileName);
+	if (status) return Error("ERROR: lsSetSeamMask(*,*,%d): failed (%d)\n", size, status);
+	Message("OK: loaded %d bytes from %s as seam mask\n", size, fileName);
 	delete[] buf;
 	return VX_SUCCESS;
 }

@@ -1725,7 +1725,7 @@ int CLoomShellParser::OnCommand()
 	else if (!_stricmp(command, "loadSeamMask")) {
 		// parse the command
 		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };
-		const char * invalidSyntax = "ERROR: invalid syntax: expects: loadBlendWeights(context,\"blend-weights.raw\");";
+		const char * invalidSyntax = "ERROR: invalid syntax: expects: loadSeamMask(context,\"blend-weights.raw\");";
 		SYNTAX_CHECK(ParseSkip(s, "("));
 		SYNTAX_CHECK(ParseContextWithErrorCheck(s, contextIndex, invalidSyntax));
 		SYNTAX_CHECK(ParseSkip(s, ","));
