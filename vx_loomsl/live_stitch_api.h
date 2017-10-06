@@ -371,7 +371,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetExpCompGains(ls_context stitch,
 //! \brief set custom blend weights.
 //  - valid when seam find is not active
 //  - weights: array of weights in output_width * output_height * num_camera
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetBlendWeights(ls_context stitch, vx_uint8 * weights, size_t size);
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetSeamMask(ls_context stitch, vx_uint8 * weights, size_t size);
 
 //! \brief color correction module.
 //  - valid when color correction is active

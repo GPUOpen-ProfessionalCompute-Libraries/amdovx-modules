@@ -88,6 +88,7 @@ Live Stitch API by encapsulating the calls to enable rapid prototyping.
         saveAttributes(context,offset/name,count,"attr.txt");
         loadAttributes(context,offset/name,count,"attr.txt");
     ~ components (advanced)
+        loadSeamMask(context,\"maskimage.raw\");
         showExpCompGains(context,num_entries);
         loadExpCompGains(context,num_entries,\"gains.txt\");
         saveExpCompGains(context,num_entries,\"gains.txt\");

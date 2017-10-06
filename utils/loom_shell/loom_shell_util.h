@@ -78,7 +78,7 @@ vx_status showExpCompGains(ls_context stitch, size_t num_entries);
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 vx_status saveExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 
-vx_status loadBlendWeights(ls_context stitch, const char * fileName);
+vx_status loadSeamMask(ls_context stitch, const char * fileName);
 vx_status initializeBuffer(cl_mem mem, vx_uint32 size, cl_int pattern);
 
 vx_status ClearCmdqCache();

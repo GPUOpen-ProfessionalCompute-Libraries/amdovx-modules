@@ -1722,7 +1722,7 @@ int CLoomShellParser::OnCommand()
 		vx_status status = loadColorCorrectGains(context_[contextIndex], num_entries, fileName);
 		if (status) return status;
 	}
-	else if (!_stricmp(command, "loadBlendWeights")) {
+	else if (!_stricmp(command, "loadSeamMask")) {
 		// parse the command
 		vx_uint32 contextIndex = 0; char fileName[256] = { 0 };
 		const char * invalidSyntax = "ERROR: invalid syntax: expects: loadBlendWeights(context,\"blend-weights.raw\");";
@@ -1733,7 +1733,7 @@ int CLoomShellParser::OnCommand()
 		SYNTAX_CHECK(ParseSkip(s, ")"));
 		SYNTAX_CHECK(ParseEndOfLine(s));
 		// process the command
-		vx_status status = loadBlendWeights(context_[contextIndex], fileName);
+		vx_status status = loadSeamMask(context_[contextIndex], fileName);
 		if (status) return status;
 	}
 	else if (!_stricmp(command, "help")) {

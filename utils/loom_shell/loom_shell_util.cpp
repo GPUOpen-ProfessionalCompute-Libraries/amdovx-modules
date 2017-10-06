@@ -1155,7 +1155,7 @@ vx_status showExpCompGains(ls_context stitch, size_t num_entries)
 	return VX_SUCCESS;
 }
 
-vx_status loadBlendWeights(ls_context stitch, const char * fileName)
+vx_status loadSeamMask(ls_context stitch, const char * fileName)
 {
 	FILE * fp = fopen(fileName, "rb");
 	if (!fp) return Error("ERROR: unable to open: %s", fileName);
@@ -1164,7 +1164,7 @@ vx_status loadBlendWeights(ls_context stitch, const char * fileName)
 	if (!buf) return Error("ERROR: alloc(%d) failed", size);
 	ERROR_CHECK_FREAD_(fread(buf, 1, size, fp),size);
 	fclose(fp);
-	vx_status status = lsSetBlendWeights(stitch, buf, size);
+	vx_status status = lsSetSeamMask(stitch, buf, size);
 	if (status) return Error("ERROR: lsSetBlendWeights(*,*,%d): failed (%d)\n", size, status);
 	Message("OK: loaded %d bytes from %s as blend weights\n", size, fileName);
 	delete[] buf;

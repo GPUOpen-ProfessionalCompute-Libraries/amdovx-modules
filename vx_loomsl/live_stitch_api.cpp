@@ -4504,7 +4504,7 @@ LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsGetExpCompGains(ls_context stitch,
 	return VX_SUCCESS;
 }
 
-LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetBlendWeights(ls_context stitch, vx_uint8 * weights, size_t size)
+LIVE_STITCH_API_ENTRY vx_status VX_API_CALL lsSetSeamMask(ls_context stitch, vx_uint8 * weights, size_t size)
 {
 	ERROR_CHECK_STATUS_(IsValidContextAndInitialized(stitch));
 	if (stitch->SEAM_FIND || !stitch->weight_image)
