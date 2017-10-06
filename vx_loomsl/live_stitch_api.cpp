@@ -717,7 +717,7 @@ static vx_status GetReferenceInformation(ls_context stitch, vx_int32 number, vx_
 		{ (vx_reference)stitch->Img_input_rgb,             "camera_input_rgb",    false, true,  true,  false, "camera-input-rgb.raw" },
 		{ (vx_reference)stitch->warp_luma_image,           "warp_luma_image",     false, true,  true,  false, "warp-luma-image.raw" },
 		{ (vx_reference)stitch->gain_array,                "exp_gain_array",      false, false, true,  false, "exp-gain-array.bin" },
-		{ (vx_reference)stitch->exp_comp_output_image,     "exp_rgby",            false, false, true,  false, "exp-rgby.raw" },
+		{ (vx_reference)stitch->exp_comp_output_image,     "exp_rgby",            false, true,  true,  false, "exp-rgby.raw" },
 		{ (vx_reference)stitch->A_matrix,                  "exp_compAMatrix",     false, false, true,  false, "exp-compAMatrix.bin" },
 		{ (vx_reference)stitch->seamfind_accum_array,      "seam_accum",          false, false, true,  false, "seam-accum.bin" },
 		{ (vx_reference)stitch->seamfind_path_array,       "seam_path",           false, false, true,  false, "seam-path.bin" },
@@ -801,10 +801,13 @@ static vx_status DumpInternalTables(ls_context stitch, const char * fileNamePref
 			status = DumpImage(stitch->pStitchMultiband[level].WeightPyrImgGaussian, fileName);
 			if (status != VX_SUCCESS)
 				return status;
-			sprintf(fileName, "%s-blend-pyr-gauss-%d.raw", fileNamePrefix, level);
-			status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
-			if (status != VX_SUCCESS)
-				return status;
+			if (level != 0)
+			{
+				sprintf(fileName, "%s-blend-pyr-gauss-%d.raw", fileNamePrefix, level);
+				status = DumpImage(stitch->pStitchMultiband[level].DstPyrImgGaussian, fileName);
+				if (status != VX_SUCCESS)
+					return status;
+			}
 			if (level != (stitch->num_bands - 1))
 			{			
 				sprintf(fileName, "%s-blend-pyr-lap-%d.raw", fileNamePrefix, level);
