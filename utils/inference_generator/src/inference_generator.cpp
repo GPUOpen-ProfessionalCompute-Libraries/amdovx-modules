@@ -62,6 +62,7 @@ void getLayerParams(
         int dilation_h = conv.dilation_size() > 0 ? conv.dilation(0) : 1;
         int dilation_w = conv.dilation_size() > 1 ? conv.dilation(1) : dilation_h;
         int bias_term = conv.bias_term();
+        int group = conv.has_group() ? conv.group() : 0;
         params =       std::to_string(k)
                 + " " + std::to_string(kernel_w)
                 + " " + std::to_string(kernel_h)
@@ -71,7 +72,8 @@ void getLayerParams(
                 + " " + std::to_string(pad_h)
                 + " " + std::to_string(dilation_w)
                 + " " + std::to_string(dilation_h)
-                + " " + std::to_string(bias_term);
+                + " " + std::to_string(bias_term)
+                + " " + std::to_string(group);
     }
     else if(layer.type() == "Pooling") {
         const caffe::PoolingParameter& pooling = layer.pooling_param();
@@ -467,12 +469,14 @@ void writeGDF(
         formatFileName(layer_name,"/","_");
         if(type == "Convolution") {
             std::stringstream ss(params);
-            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
+            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term, group;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term >> group;
             std::string weights = output + "_W";
             auto&& dim = tensorMap[weights];
             ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-            ofsGDF << "init " << weights << " weights/" << layer_name << ".f32" << std::endl;
+            ofsGDF << "init " << weights << " ";
+            if(group > 1) ofsGDF << "@repeat~" << group << "~";
+            ofsGDF << "weights/" << layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
             ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
@@ -481,7 +485,9 @@ void writeGDF(
             if(bias_term) {
                 bias = output + "_B";
                 ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                ofsGDF << "init " << bias << " bias/"<< layer_name << ".f32" << std::endl;
+                ofsGDF << "init " << bias << " ";
+                if(group > 1) ofsGDF << "@repeat~" << group << "~";
+                ofsGDF << "bias/"<< layer_name << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
                 ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
