@@ -41,7 +41,9 @@ vx_status showOutputBufferStride(ls_context context);
 vx_status showOverlayBufferStride(ls_context context);
 vx_status showConfiguration(ls_context context, const char * exportType);
 vx_status showAttributes(ls_context context, vx_uint32 offset, vx_uint32 count);
+vx_status showAttributesByName(ls_context context, const char * name, vx_uint32 count);
 vx_status showGlobalAttributes(vx_uint32 offset, vx_uint32 count);
+vx_status showGlobalAttributesByName(const char * name, vx_uint32 count);
 
 vx_status createBuffer(cl_context opencl_context, vx_uint32 size, cl_mem * mem);
 vx_status releaseBuffer(cl_mem * mem);
@@ -58,17 +60,25 @@ vx_status loadBuffer(cl_mem mem, const char * fileName, vx_uint32 offset = 0);
 vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags = 0);
 
 vx_status setGlobalAttribute(vx_uint32 offset, float value);
+vx_status setGlobalAttributeByName(const char * name, float value);
 vx_status saveGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * fileName);
+vx_status saveGlobalAttributesByName(const char * name, vx_uint32 count, const char * fileName);
 vx_status loadGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * fileName);
+vx_status loadGlobalAttributesByName(const char * name, vx_uint32 count, const char * fileName);
 vx_status setAttribute(ls_context context, vx_uint32 offset, float value);
+vx_status setAttributeByName(ls_context context, const char * name, float value);
 vx_status saveAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, const char * fileName);
+vx_status saveAttributesByName(ls_context context, const char * name, vx_uint32 count, const char * fileName);
 vx_status loadAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, const char * fileName);
+vx_status loadAttributesByName(ls_context context, const char * name, vx_uint32 count, const char * fileName);
+
+vx_status loadColorCorrectGains(ls_context stitch, size_t num_entries, const char * fileName);
 
 vx_status showExpCompGains(ls_context stitch, size_t num_entries);
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 vx_status saveExpCompGains(ls_context stitch, size_t num_entries, const char * fileName);
 
-vx_status loadBlendWeights(ls_context stitch, const char * fileName);
+vx_status loadSeamMask(ls_context stitch, const char * fileName);
 vx_status initializeBuffer(cl_mem mem, vx_uint32 size, cl_int pattern);
 
 vx_status ClearCmdqCache();

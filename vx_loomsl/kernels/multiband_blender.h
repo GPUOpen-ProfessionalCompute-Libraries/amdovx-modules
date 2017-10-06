@@ -44,13 +44,14 @@ typedef struct{
 }StitchMultibandData;
 
 typedef struct {
-	vx_uint32 camId   :  5; // destination buffer/camera ID
-	vx_uint32 dstX    : 14; // destination pixel x-coordinate (integer)
-	vx_uint32 dstY    : 13; // destination pixel y-coordinate (integer)
-	vx_uint32 last_x  :  8; // ending pixel x-coordinate within the 64x16 block
-	vx_uint32 last_y  :  8; // ending pixel y-coordinate within the 64x16 block
+	vx_uint32 dstX    : 16; // destination pixel x-coordinate (integer)
+	vx_uint32 dstY    : 16; // destination pixel y-coordinate (integer)
+	vx_uint32 camId   :  6; // destination buffer/camera ID
+	vx_uint32 last_x  :  6; // ending pixel x-coordinate within the 64x16 block
+	vx_uint32 last_y  :  4; // ending pixel y-coordinate within the 64x16 block
 	vx_uint32 skip_x  :  8; // starting pixel x-coordinate within the 64x16 block
-	vx_uint32 skip_y  :  8; // starting pixel y-coordinate within the 64x16 block
+	vx_uint32 skip_y  :  6; // starting pixel y-coordinate within the 64x16 block
+	vx_uint32 boarder :  2; // defines if block is at image boarder
 } StitchBlendValidEntry;
 
 //////////////////////////////////////////////////////////////////////

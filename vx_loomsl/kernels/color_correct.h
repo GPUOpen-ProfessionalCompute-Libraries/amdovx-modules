@@ -21,13 +21,16 @@ THE SOFTWARE.
 */
 
 
-#ifndef __CHROMA_KEY_H__
-#define __CHROMA_KEY_H__
+#ifndef __COLOR_CORRECT_H__
+#define __COLOR_CORRECT_H__
 
 #include "kernels.h"
 
 //////////////////////////////////////////////////////////////////////
-//! \brief The Chroma Key kernel registration functions.
-vx_status chroma_key_mask_generation_publish(vx_context context);
+//! \brief The kernel registration functions.
+vx_status color_correct_publish(vx_context context);
 
-#endif //__CHROMA_KEY_H__
+
+
+
+#endif //__COLOR_CORRECT_H__

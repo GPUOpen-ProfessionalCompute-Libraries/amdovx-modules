@@ -185,6 +185,9 @@ enum vx_kernel_stitching_amd_e {
 	//! \brief The Color Convert function kernel for IYUV output. Kernel name is "com.amd.loomsl.color_convert_to_IYUV".
 	AMDOVX_KERNEL_STITCHING_COLOR_CONVERT_TO_IYUV = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x020,
 
+	//! \brief The Color Correct function kernel. Kernel name is "com.amd.loomsl.color_correct".
+	AMDOVX_KERNEL_STITCHING_COLOR_CORRECT = VX_KERNEL_BASE(VX_ID_AMD, AMDOVX_LIBRARY_STITCHING) + 0x021,
+
 	// TBD: remove
 
 	//! \brief The Exposure Compensation kernel. Kernel name is "com.amd.loomsl.exposure_compensation_model".
@@ -256,6 +259,19 @@ VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToNV12Node(vx_graph graph, vx
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */
 VX_API_ENTRY vx_node VX_API_CALL stitchColorConvertToIYUVNode(vx_graph graph, vx_image input, vx_image outputY, vx_image outputU, vx_image outputV, vx_uint8 flags);
+
+/*!\brief[Graph] Creates a Color Correct node.
+* \param [in] graph The reference to the graph.
+* \param [in] input The input scalar number of cameras.
+* \param [in] in_gains   Array of gains
+* \param [in] input The input image.
+* \param [out] output The output image.
+* \param [in] num_camera_columns The number of camera columns (optional).
+* \return <tt>\ref vx_node< / tt>.
+* \retval vx_node A node reference.Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus< / tt>
+*/
+VX_API_ENTRY vx_node VX_API_CALL stitchColorCorrectNode(vx_graph graph, vx_uint32 num_cam, vx_array in_gains, vx_image input, vx_image output, vx_uint32 num_camera_columns);
+
 
 /*! \brief [Graph] Creates a Warp node.
 * \param [in] graph The reference to the graph.
@@ -330,7 +346,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchExposureCompSolveForGainNode(vx_graph gra
 /*! \brief [Graph] Creates a ExposureCompApplyGain node.
 * \param [in] graph      The reference to the graph.
 * \param [in] input      Input image
-* \param [in] in_gains   Array of valid regions of rectangles
+* \param [in] in_gains   Array of gains
 * \param [in] in_offsets Array of StitchExpCompCalcEntry
 * \param [in] num_cam      scalar 
 * \param [in] gain_width scalar for gain_array width
@@ -482,7 +498,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchSeamFindPathTraceNode(vx_graph graph, vx_
 * \param [in] seam_path     The input array of seam path .
 * \param [in] seam_pref     The input array of seam preference.
 * \param [out] output       The weight image.
-* \param [in] flags			Debug flags.
+* \param [in] flags	        Debug flags.
 * \return <tt>\ref vx_node</tt>.
 * \retval vx_node A node reference. Any possible errors preventing a successful creation should be checked using <tt>\ref vxGetStatus</tt>
 */

@@ -587,6 +587,13 @@ vx_status setGlobalAttribute(vx_uint32 offset, float value)
 	return VX_SUCCESS;
 }
 
+vx_status setGlobalAttributeByName(const char* name, float value)
+{
+	vx_status status = lsGlobalSetAttributesByName(name, 1, &value);
+	if (status) return Error("ERROR: setGlobalAttributeByName(%s,%.3f) failed (%d)", name, value, status);
+	return VX_SUCCESS;
+}
+
 vx_status showGlobalAttributes(vx_uint32 offset, vx_uint32 count)
 {
 	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
@@ -594,6 +601,18 @@ vx_status showGlobalAttributes(vx_uint32 offset, vx_uint32 count)
 	if (status) { delete[] attr; return Error("ERROR: showGlobalAttributes(%d,%d,*) failed (%d)", offset, count, status); }
 	for (vx_uint32 i = 0; i < count; i++) {
 		Message("attr[%4d] = %13.6f (global)\n", i, attr[i]);
+	}
+	delete[] attr;
+	return VX_SUCCESS;
+}
+
+vx_status showGlobalAttributesByName(const char* name, vx_uint32 count)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	vx_status status = lsGlobalGetAttributesByName(name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: showGlobalAttributesByName(%s,%d,*) failed (%d)", name, count, status); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		Message("attr[%40s,%4d] = %13.6f (global)\n", name, i, attr[i]);
 	}
 	delete[] attr;
 	return VX_SUCCESS;
@@ -614,6 +633,21 @@ vx_status loadGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * f
 	return VX_SUCCESS;
 }
 
+vx_status loadGlobalAttributesByName(const char* name, vx_uint32 count, const char * fileName)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	FILE * fp = fopen(fileName, "r"); if (!fp) { delete[] attr; return Error("ERROR: unable to open: %s", fileName); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		if (fscanf(fp, "%f", &attr[i]) != 1) { delete[] attr; fclose(fp); return Error("ERROR: loadAttributes: too few values in %s", fileName); }
+	}
+	fclose(fp);
+	vx_status status = lsGlobalSetAttributesByName(name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: loadGlobalAttributesByName(%s,%d,*) failed (%d)", name, count, status); }
+	delete[] attr;
+	Message("OK: global attributes %s (count %d) loaded from \"%s\"\n", name, count, fileName);
+	return VX_SUCCESS;
+}
+
 vx_status saveGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * fileName)
 {
 	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
@@ -629,10 +663,32 @@ vx_status saveGlobalAttributes(vx_uint32 offset, vx_uint32 count, const char * f
 	return VX_SUCCESS;
 }
 
+vx_status saveGlobalAttributesByName(const char* name, vx_uint32 count, const char * fileName)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	vx_status status = lsGlobalGetAttributesByName(name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: saveGlobalAttributesByName(%s,%d,*) failed (%d)", name, count, status); }
+	FILE * fp = fopen(fileName, "w"); if (!fp) { delete[] attr; return Error("ERROR: unable to create: %s", fileName); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		fprintf(fp, "%13.6f\n", attr[i]);
+	}
+	fclose(fp);
+	delete[] attr;
+	Message("OK: global attributes %s (count %d) saved into \"%s\"\n", name, count, fileName);
+	return VX_SUCCESS;
+}
+
 vx_status setAttribute(ls_context context, vx_uint32 offset, float value)
 {
 	vx_status status = lsSetAttributes(context, offset, 1, &value);
 	if (status) return Error("ERROR: setAttribute(*,%d,%.3f) failed (%d)", offset, value, status);
+	return VX_SUCCESS;
+}
+
+vx_status setAttributeByName(ls_context context, const char* name, float value)
+{
+	vx_status status = lsSetAttributesByName(context, name, 1, &value);
+	if (status) return Error("ERROR: setAttributeByName(*,%s,%.3f) failed (%d)", name, value, status);
 	return VX_SUCCESS;
 }
 
@@ -643,6 +699,18 @@ vx_status showAttributes(ls_context context, vx_uint32 offset, vx_uint32 count)
 	if (status) { delete[] attr; return Error("ERROR: lsGetAttributes(*,%d,%d,*) failed (%d)", offset, count, status); }
 	for (vx_uint32 i = 0; i < count; i++) {
 		Message("attr[%4d] = %13.6f\n", i, attr[i]);
+	}
+	delete[] attr;
+	return VX_SUCCESS;
+}
+
+vx_status showAttributesByName(ls_context context, const char* name, vx_uint32 count)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	vx_status status = lsGetAttributesByName(context, name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: lsGetAttributesByName(*,%s,%d,*) failed (%d)", name, count, status); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		Message("attr[%40s,%4d] = %13.6f\n", name, i, attr[i]);
 	}
 	delete[] attr;
 	return VX_SUCCESS;
@@ -663,6 +731,21 @@ vx_status loadAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, 
 	Message("OK: attributes %d..%d (count %d) loaded from \"%s\"\n", offset, offset + count - 1, count, fileName);
 }
 
+vx_status loadAttributesByName(ls_context context, const char* name, vx_uint32 count, const char * fileName)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	FILE * fp = fopen(fileName, "r"); if (!fp) { delete[] attr; return Error("ERROR: unable to open: %s", fileName); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		if (fscanf(fp, "%f", &attr[i]) != 1) { delete[] attr; fclose(fp); return Error("ERROR: loadAttributes: too few values in %s", fileName); }
+	}
+	fclose(fp);
+	vx_status status = lsSetAttributesByName(context, name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: lsSetAttributesByName(*,%s,%d,*) failed (%d)", name, count, status); }
+	delete[] attr;
+	return VX_SUCCESS;
+	Message("OK: attributes %s (count %d) loaded from \"%s\"\n", name, count, fileName);
+}
+
 vx_status saveAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, const char * fileName)
 {
 	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
@@ -675,6 +758,21 @@ vx_status saveAttributes(ls_context context, vx_uint32 offset, vx_uint32 count, 
 	fclose(fp);
 	delete[] attr;
 	Message("OK: attributes %d..%d (count %d) saved into \"%s\"\n", offset, offset + count - 1, count, fileName);
+	return VX_SUCCESS;
+}
+
+vx_status saveAttributesByName(ls_context context, const char* name, vx_uint32 count, const char * fileName)
+{
+	float * attr = new float[count]; if (!attr) return Error("ERROR: new[] failed");
+	vx_status status = lsGetAttributesByName(context, name, count, attr);
+	if (status) { delete[] attr; return Error("ERROR: lsGetAttributesByName(*,%s,%d,*) failed (%d)", name, count, status); }
+	FILE * fp = fopen(fileName, "w"); if (!fp) { delete[] attr; return Error("ERROR: unable to create: %s", fileName); }
+	for (vx_uint32 i = 0; i < count; i++) {
+		fprintf(fp, "%13.6f\n", attr[i]);
+	}
+	fclose(fp);
+	delete[] attr;
+	Message("OK: attributes %s (count %d) saved into \"%s\"\n", name, count, fileName);
 	return VX_SUCCESS;
 }
 
@@ -971,6 +1069,36 @@ vx_status saveBuffer(cl_mem mem, const char * fileName, vx_uint32 flags)
 	return VX_SUCCESS;
 }
 
+vx_status loadColorCorrectGains(ls_context stitch, size_t num_entries, const char * fileName)
+{
+	bool textFileFormat = (strlen(fileName) > 4 && !_stricmp(&fileName[strlen(fileName) - 4], ".txt")) ? true : false;
+	FILE * fp = fopen(fileName, textFileFormat ? "r" : "rb");
+	if (!fp) return Error("ERROR: unable to open: %s", fileName);
+	std::vector<vx_float32> gains(num_entries);
+	if (!textFileFormat) {
+		size_t count = fread(gains.data(), sizeof(vx_float32), gains.size(), fp);
+		if (count != gains.size()) {
+			fclose(fp);
+			return Error("ERROR: loadColorCorrectGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)count);
+		}
+	}
+	else {
+		for (vx_size i = 0; i < gains.size(); i++) {
+			vx_float32 f;
+			if (fscanf(fp, "%g", &f) != 1) {
+				fclose(fp);
+				return Error("ERROR: loadColorCorrectGains: missing entries in %s: got only %d\n", fileName, (vx_uint32)i);
+			}
+			gains[i] = f;
+		}
+	}
+	fclose(fp);
+	vx_status status = lsSetColorCorrectGains(stitch, num_entries, gains.data());
+	if (status) return Error("ERROR: lsSetColorCorrectGains: failed (%d)\n", status);
+	Message("OK: loadColorCorrectGains: loaded %d values from %s\n", (vx_uint32)gains.size(), fileName);
+	return VX_SUCCESS;
+}
+
 vx_status loadExpCompGains(ls_context stitch, size_t num_entries, const char * fileName)
 {
 	bool textFileFormat = (strlen(fileName) > 4 && !_stricmp(&fileName[strlen(fileName) - 4], ".txt")) ? true : false;
@@ -1027,7 +1155,7 @@ vx_status showExpCompGains(ls_context stitch, size_t num_entries)
 	return VX_SUCCESS;
 }
 
-vx_status loadBlendWeights(ls_context stitch, const char * fileName)
+vx_status loadSeamMask(ls_context stitch, const char * fileName)
 {
 	FILE * fp = fopen(fileName, "rb");
 	if (!fp) return Error("ERROR: unable to open: %s", fileName);
@@ -1036,9 +1164,9 @@ vx_status loadBlendWeights(ls_context stitch, const char * fileName)
 	if (!buf) return Error("ERROR: alloc(%d) failed", size);
 	ERROR_CHECK_FREAD_(fread(buf, 1, size, fp),size);
 	fclose(fp);
-	vx_status status = lsSetBlendWeights(stitch, buf, size);
-	if (status) return Error("ERROR: lsSetBlendWeights(*,*,%d): failed (%d)\n", size, status);
-	Message("OK: loaded %d bytes from %s as blend weights\n", size, fileName);
+	vx_status status = lsSetSeamMask(stitch, buf, size);
+	if (status) return Error("ERROR: lsSetSeamMask(*,*,%d): failed (%d)\n", size, status);
+	Message("OK: loaded %d bytes from %s as seam mask\n", size, fileName);
 	delete[] buf;
 	return VX_SUCCESS;
 }
