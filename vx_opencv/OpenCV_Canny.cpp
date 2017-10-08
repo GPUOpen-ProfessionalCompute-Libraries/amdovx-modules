@@ -137,42 +137,63 @@ Execution Kernel
 *************************************************************************************************************/
 static vx_status VX_CALLBACK CV_Canny_Kernel(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-	vx_status status = VX_SUCCESS;
+    vx_status status = VX_SUCCESS;
+    
+    vx_image image_in = (vx_image) parameters[0];
+    vx_image image_out = (vx_image) parameters[1];
+    vx_scalar THRESHOLD1 = (vx_scalar) parameters[2];
+    vx_scalar THRESHOLD2 = (vx_scalar) parameters[3];
+    vx_scalar APERSIZE = (vx_scalar) parameters[4];
+    vx_scalar L2GRAD = (vx_scalar) parameters[5];
+    
 
-	vx_image image_in = (vx_image) parameters[0];
-	vx_image image_out = (vx_image) parameters[1];
-	vx_scalar THRESHOLD1 = (vx_scalar) parameters[2];
-	vx_scalar THRESHOLD2 = (vx_scalar) parameters[3];
-	vx_scalar APERSIZE = (vx_scalar) parameters[4];
-	vx_scalar L2GRAD = (vx_scalar) parameters[5];
-
-	Mat *mat, bl;
-
-	float threshold1, threshold2;
-	int aperture_size;
-	vx_int32 value = 0;
-	vx_float32 value_f = 0;
-	vx_bool value_b, l2grad;
-
-	//Extracting Values from the Scalar into Ksize and Ddepth
-	STATUS_ERROR_CHECK(vxReadScalarValue(THRESHOLD1, &value_f)); threshold1 = value_f;
-	STATUS_ERROR_CHECK(vxReadScalarValue(THRESHOLD2, &value_f)); threshold2 = value_f;
-	STATUS_ERROR_CHECK(vxReadScalarValue(APERSIZE, &value)); aperture_size = value;
-	STATUS_ERROR_CHECK(vxReadScalarValue(L2GRAD, &value_b)); l2grad = value_b;
-
-	//Converting VX Image to OpenCV Mat
-	STATUS_ERROR_CHECK(match_vx_image_parameters(image_in, image_out));
-	STATUS_ERROR_CHECK(VX_to_CV_Image(&mat, image_in));
-
-	//Compute using OpenCV
-	bool L2_Gradient;
-	if (l2grad == vx_true_e) L2_Gradient = true; else L2_Gradient = false;
-	cv::Canny(*mat, bl, threshold1, threshold2, aperture_size, L2_Gradient);
-
-	//Converting OpenCV Mat into VX Image
-	STATUS_ERROR_CHECK(CV_to_VX_Image(image_out, &bl));
-
-	return status;
+    
+    float threshold1, threshold2;
+    int aperture_size;
+    vx_int32 value = 0;
+    vx_float32 value_f = 0;
+    vx_bool value_b, l2grad;
+    
+    //Extracting Values from the Scalar into Ksize and Ddepth
+    STATUS_ERROR_CHECK(vxReadScalarValue(THRESHOLD1, &value_f)); threshold1 = value_f;
+    STATUS_ERROR_CHECK(vxReadScalarValue(THRESHOLD2, &value_f)); threshold2 = value_f;
+    STATUS_ERROR_CHECK(vxReadScalarValue(APERSIZE, &value)); aperture_size = value;
+    STATUS_ERROR_CHECK(vxReadScalarValue(L2GRAD, &value_b)); l2grad = value_b;
+    
+    // get image dimensions
+    vx_uint32 width, height;
+    STATUS_ERROR_CHECK(vxQueryImage(image_in, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
+    STATUS_ERROR_CHECK(vxQueryImage(image_in, VX_IMAGE_ATTRIBUTE_HEIGHT,&height,sizeof(height)));
+    
+    //get buffer pointers and stride values from OpenVX input/output image objects
+    void * ptr_in, * ptr_out;
+    vx_rectangle_t rect = { 0, 0, width, height };
+    vx_map_id map_id_in, map_id_out;
+    vx_imagepatch_addressing_t addr_in, addr_out;
+    
+    STATUS_ERROR_CHECK(vxMapImagePatch(image_in, &rect, 0, &map_id_in, &addr_in, &ptr_in,
+                                       VX_READ_ONLY,VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+    STATUS_ERROR_CHECK(vxMapImagePatch(image_out, &rect, 0, &map_id_out, &addr_out, &ptr_out,
+                                       VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, VX_NOGAP_X));
+    
+    // create OpenCV Mat objects that use OpenVX internal buffers instead of separate allocation
+    // and make sure that scope of OpenCV Mat objects end before vxUnmapImagePatch calls so that
+    // the buffer pointers of OpenVX is not visible to OpenCV after the vxUnmapImagePatch calls.
+    {
+        Mat input_mat(width, height, CV_8UC1, ptr_in, addr_in.stride_y);
+        Mat output_bl(width, height, CV_8UC1, ptr_out, addr_out.stride_y);
+    
+        //Compute using OpenCV
+        bool L2_Gradient;
+        if (l2grad == vx_true_e) L2_Gradient = true; else L2_Gradient = false;
+        cv::Canny(input_mat, output_bl, threshold1, threshold2, aperture_size, L2_Gradient);
+    }
+    
+    // unmap the image objects to return the buffer pointers
+    STATUS_ERROR_CHECK(vxUnmapImagePatch(image_in, map_id_in));
+    STATUS_ERROR_CHECK(vxUnmapImagePatch(image_out, map_id_out));
+    
+    return status;
 }
 
 /************************************************************************************************************
