@@ -1421,7 +1421,7 @@ void writeVXCode(
                 ofsCodeH << "    vx_node " << output << "_node;" << std::endl;
             }
             else if(codeType ==  "initialize") {
-                ofsCodeC << "    " << output + "_node = " << "vxCopyLayer( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
+                ofsCodeC << "    " << output + "_node = " << "vxCopyNode( graph, " << node[4] << ", " << node[3] << ");" << std::endl;
                 ofsCodeC << "   " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
             else if(codeType == "release_nodes") {
