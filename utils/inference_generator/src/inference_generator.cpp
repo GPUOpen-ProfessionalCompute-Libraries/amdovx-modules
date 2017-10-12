@@ -922,6 +922,11 @@ void writeVXCode(
         //declare input tensors.
         bool isFirstLayer = (&node == &net.front());
         bool isLastLayer = (&node == &net.back());
+
+        auto&& layerName = node[3];
+        if(codeType == "initialize") {
+            ofsCodeC << "    //" << layerName <<" Layer" << std::endl;
+        }
         for(size_t i=4; i < node.size(); i++) {
             if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
                 auto&& dim = tensorMap[node[i]];
@@ -998,10 +1003,10 @@ void writeVXCode(
                 ofsCodeC << "    " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
                 ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
                 ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; }" << std::endl;
-                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
                 ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,sizeof(float)," << weights + "_size," << weights + "_file);" << std::endl;
                 ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; }"<< std::endl;
                 ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
                 ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
@@ -1031,9 +1036,9 @@ void writeVXCode(
                     ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
                     ofsCodeC << "    " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
                     ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
-                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << k << ";" << std::endl;
                     ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
-                    ofsCodeC << "    " << "fread(" << bias + "_buf,1," << bias + "_size," << bias + "_file);" << std::endl;
+                    ofsCodeC << "    " << "fread(" << bias + "_buf,sizeof(float)," << bias + "_size," << bias + "_file);" << std::endl;
                     ofsCodeC << "    " << "vx_size " << bias  + "_m_size = 4;" << std::endl;
                     ofsCodeC << "    " << "vx_size " << bias + "_m_stride[1];" << std::endl;
                     ofsCodeC << "    " << "for ( vx_uint32 i=0; i < 1; i++) { " << bias + "_m_stride[i] = " << bias + "_m_size; "
@@ -1543,7 +1548,7 @@ void generateCode(
 
     ofsCodeC << "int NetVX::Initialize(const char * dataFolder)" << std::endl;
     ofsCodeC << "{" << std::endl;
-    ofsCodeC << "   std::string str = dataFolder, fileName;" << std::endl;
+    ofsCodeC << "    std::string str = dataFolder, fileName;" << std::endl;
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "initialize");
     ofsCodeC << "    return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
