@@ -908,6 +908,9 @@ void writeVXCode(
         ofsCodeC << "    graph = vxCreateGraph(context); " << std::endl;
         ofsCodeC << "    ERROR_CHECK_OBJECT(graph);" << std::endl;
         ofsCodeC << std::endl;
+        ofsCodeC << "    // load neural network extension kernels" << std::endl;
+        ofsCodeC << "    ERROR_CHECK_STATUS(vxLoadKernels(context,\"vx_nn\"));" << std::endl;
+        ofsCodeC << std::endl;
     }
     else if(codeType == "release_graph") {
         ofsCodeC << "    // release graph" << std::endl;
@@ -1094,10 +1097,10 @@ void writeVXCode(
                 ofsCodeC << "    " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
                 ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
                 ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl;"<< "fclose(" << weights + "_file); return -1;" <<  "}" << std::endl;
-                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
                 ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,sizeof(float)," << weights + "_size," << weights + "_file);" << std::endl;
                 ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl;"<< "fclose(" << weights + "_file); return -1;" <<  "}" << std::endl;
                 ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
                 ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
@@ -1128,7 +1131,7 @@ void writeVXCode(
                     ofsCodeC << "    " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
                     ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
                     ofsCodeC << "    " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl; "<< "fclose(" << bias + "_file); return -1;" <<  "}" << std::endl;
-                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << k << ";" << std::endl;
                     ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
                     ofsCodeC << "    " << "size_t " << bias + "_b_res_size;" << std::endl;
                     ofsCodeC << "    " << bias + "_b_res_size = " <<"fread(" << bias + "_buf,sizeof(float)," << bias + "_size," << bias + "_file);" << std::endl;
@@ -1215,10 +1218,10 @@ void writeVXCode(
                 ofsCodeC << "    " << "fileName = str + " << "\"/weights/" + layer_name + ".f32\";" << std::endl;
                 ofsCodeC << "    " << "FILE * " << weights << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
                 ofsCodeC << "    " << "if(!" << weights << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl;"<< "fclose(" << weights + "_file); return -1;" << " }" << std::endl;
-                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << 4 * dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
+                ofsCodeC << "    " << "vx_size  " << weights << "_size =  " << dim[3] * dim[2] * dim[1] * dim[0] << ";" << std::endl;
                 ofsCodeC << "    " << "float * " << weights << "_buf = new float[" << weights + "_size];" << std::endl;
                 ofsCodeC << "    " << "size_t " << weights + "_res_size;" << std::endl;
-                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,1," << weights + "_size," << weights + "_file);" << std::endl;
+                ofsCodeC << "    " << weights + "_res_size = " << "fread(" << weights + "_buf,sizeof(float)," << weights + "_size," << weights + "_file);" << std::endl;
                 ofsCodeC << "    " << "if(" + weights + "_res_size != " << weights + "_size ) { std::cerr << \"ERROR: read error in : \" << fileName << std::endl; "<< "fclose(" << weights + "_file); return -1;" <<  "}" << std::endl;
                 ofsCodeC << "    " << "vx_size " << weights  + "_m_size = 4;" << std::endl;
                 ofsCodeC << "    " << "vx_size " << weights + "_m_stride[4];" << std::endl;
@@ -1249,7 +1252,7 @@ void writeVXCode(
                     ofsCodeC << "    " << "fileName = str + " << "\"/bias/" + layer_name + ".f32\";" << std::endl;
                     ofsCodeC << "    " << "FILE * " << bias << "_file = fopen(fileName.c_str(), " << "\"rb\"" << ");" << std::endl;
                     ofsCodeC << "    " << "if(!" << bias << "_file) { std::cerr << \"ERROR: unable to open the file \" << fileName << std::endl;"<< "fclose(" << bias + "_file); return -1;" << " }" << std::endl;
-                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << 4 * k << ";" << std::endl;
+                    ofsCodeC << "    " << "vx_size  " << bias << "_size =  " << k << ";" << std::endl;
                     ofsCodeC << "    " << "float * " << bias << "_buf = new float[" << bias + "_size];" << std::endl;
                     ofsCodeC << "    " << "size_t " << bias + "_b_res_size;" << std::endl;
                     ofsCodeC << "    " << bias + "_b_res_size = " <<"fread(" << bias + "_buf,sizeof(float)," << bias + "_size," << bias + "_file);" << std::endl;
