@@ -3,9 +3,6 @@
 ## DESCRIPTION
 ANNIE Client
 
-## Command-line Usage
-    % annie_client.exe [-w <client-work-folder>] [-p port] server-host
-
 ## Features
 
 ### Control Panel Window
