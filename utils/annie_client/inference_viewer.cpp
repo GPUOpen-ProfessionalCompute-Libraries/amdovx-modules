@@ -11,9 +11,10 @@
 #include <QPushButton>
 #include <QMessageBox>
 
-#define WINDOW_TITLE    "Inference Viewer"
-#define ICON_SIZE       64
-#define ICON_STRIDE     (ICON_SIZE + 8)
+#define WINDOW_TITLE             "Inference Viewer"
+#define ICON_SIZE                64
+#define ICON_STRIDE              (ICON_SIZE + 8)
+#define INFCOM_RUNTIME_OPTIONS   ""
 
 inference_state::inference_state()
 {
@@ -52,15 +53,16 @@ inference_state::inference_state()
     inputDim[1] = 224;
     inputDim[2] = 3;
     inputDim[3] = 32;
-    numGPUs = 1;
+    GPUs = 1;
     serverHost = "";
     serverPort = 0;
+    maxDatasetSize = 0;
 }
 
 inference_viewer::inference_viewer(
         QString serverHost, int serverPort,
         QString labelsFilename, QString dataFilename, QString dataFolder,
-        int dim[4], int gpuCount,
+        int dimInput[4], int GPUs, int dimOutput[4], int maxDatasetSize,
         QWidget *parent) :
     QWidget(parent),
     ui(new Ui::inference_viewer)
@@ -72,13 +74,20 @@ inference_viewer::inference_viewer(
         state->datasetFilename = dataFilename;
     if(dataFolder.size() > 0)
         state->datasetFolder = dataFolder;
-    state->inputDim[0] = dim[0];
-    state->inputDim[1] = dim[1];
-    state->inputDim[2] = dim[2];
-    state->inputDim[3] = dim[3];
-    state->numGPUs = gpuCount;
+    state->maxDatasetSize = maxDatasetSize;
+    state->inputDim[0] = dimInput[0];
+    state->inputDim[1] = dimInput[1];
+    state->inputDim[2] = dimInput[2];
+    state->inputDim[3] = dimInput[3];
+    state->GPUs = GPUs;
+    state->outputDim[0] = dimOutput[0];
+    state->outputDim[1] = dimOutput[1];
+    state->outputDim[2] = dimOutput[2];
+    state->outputDim[3] = dimOutput[3];
     state->serverHost = serverHost;
     state->serverPort = serverPort;
+    progress.completed = false;
+    progress.errorCode = 0;
     ui->setupUi(this);
     setMinimumWidth(800);
     setMinimumHeight(800);
@@ -95,7 +104,10 @@ void inference_viewer::startReceiver()
 {
     // start receiver thread
     state->receiver_thread = new QThread;
-    state->receiver_worker = new inference_receiver(state->serverHost, state->serverPort, &state->imageBuffer);
+    state->receiver_worker = new inference_receiver(
+                state->serverHost, state->serverPort,
+                state->GPUs, state->inputDim, state->outputDim, INFCOM_RUNTIME_OPTIONS,
+                &state->imageBuffer, &progress);
     state->receiver_worker->moveToThread(state->receiver_thread);
     connect(state->receiver_worker, SIGNAL (error(QString)), this, SLOT (errorString(QString)));
     connect(state->receiver_thread, SIGNAL (started()), state->receiver_worker, SLOT (run()));
@@ -178,6 +190,7 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
     if(event->key() == Qt::Key_Escape) {
         state->mouseSelectedImage = -1;
         state->viewRecentResults = false;
+        fatalError = "";
     }
     else if(event->key() == Qt::Key_Space) {
         state->viewRecentResults = !state->viewRecentResults;
@@ -225,28 +238,43 @@ void inference_viewer::paintEvent(QPaintEvent *)
             QTextStream fileInput(&fileObj);
             while (!fileInput.atEnd()) {
                 QString line = fileInput.readLine();
-                state->labelName.push_back(line);
+                if(line.size() > 0)
+                    state->labelName.push_back(line);
             }
             qDebug("OK: loaded words for %d labels from %s", state->labelName.size(), state->dataLabelsFilename.toStdString().c_str());
+            if(state->labelName.size() != state->outputDim[2]) {
+                fatalError.sprintf("ERROR: need %d labels in %s: found %d", state->outputDim[2],
+                        state->dataLabelsFilename.toStdString().c_str(), state->labelName.size());
+            }
+            state->dataLabelCount = state->labelName.size();
         }
         else {
-            qDebug("ERROR: unable to open: %s", state->dataLabelsFilename.toStdString().c_str());
+            fatalError.sprintf("ERROR: unable to open: %s", state->dataLabelsFilename.toStdString().c_str());
         }
-        state->dataLabelCount = state->labelName.size();
         state->wordsLoadDone = true;
     }
     if(!state->labelLoadDone) {
         QFile fileObj(state->datasetFilename);
         if(fileObj.open(QIODevice::ReadOnly)) {
             QTextStream fileInput(&fileObj);
+            int count = 0;
             while (!fileInput.atEnd()) {
                 QString line = fileInput.readLine();
+                if(line.size() == 0)
+                    continue;
                 QStringList words = line.split(" ");
+                if(words.size() != 2) {
+                    fatalError.sprintf("ERROR: incorrectly formatted text at %s#%d: %s", state->datasetFilename.toStdString().c_str(), state->datasetImageFilenames.size()+1, line.toStdString().c_str());
+                    break;
+                }
                 int label = words[1].toInt();
                 state->datasetImageFilenames.push_back(words[0]);
                 state->imageLabel.push_back(label);
                 state->inferenceResultTop.push_back(-1);
                 state->inferenceResultSummary.push_back("Not available");
+                count++;
+                if(state->maxDatasetSize > 0 && count == state->maxDatasetSize)
+                    break;
             }
             qDebug("OK: loaded labels for %d images from %s", state->imageLabel.size(), state->datasetFilename.toStdString().c_str());
         }
@@ -381,6 +409,10 @@ void inference_viewer::paintEvent(QPaintEvent *)
     painter.drawRoundedRect(state->exitButtonRect, 4, 4);
     painter.setPen(exitButtonTextColor);
     painter.drawText(state->exitButtonRect, Qt::AlignCenter, exitButtonText);
+
+    // in case fatal error, replace status text with the error message
+    if(fatalError.length() > 0)
+        statusText = fatalError;
 
     // render status bar text
     if (statusText.length() > 0) {

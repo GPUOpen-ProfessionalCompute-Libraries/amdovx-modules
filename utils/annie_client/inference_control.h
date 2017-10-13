@@ -15,6 +15,7 @@ public:
 signals:
 
 public slots:
+    void tick();
 
 protected:
     void CheckServer();
@@ -34,16 +35,24 @@ private:
     QLineEdit * editServerPort;
     QLineEdit * editPrototxt;
     QLineEdit * editCaffeModel;
+    QLineEdit * editGPUs;
     QLineEdit * editDimN;
     QLineEdit * editDimC;
     QLineEdit * editDimH;
     QLineEdit * editDimW;
-    QLineEdit * editGPUs;
     QLineEdit * editCompilerOptions;
+    QLineEdit * editOutDimN;
+    QLineEdit * editOutDimC;
+    QLineEdit * editOutDimH;
+    QLineEdit * editOutDimW;
     QLineEdit * editLabels;
     QLineEdit * editDataset;
     QLineEdit * editFolder;
+    QLineEdit * editMaxDatasetSize;
     QPushButton * okCompilerButton;
+    QPushButton * okRuntimeButton;
+    int dimOutput[4];
+    bool compilationCompleted;
 };
 
 #endif // INFERENCE_CONTROL_H

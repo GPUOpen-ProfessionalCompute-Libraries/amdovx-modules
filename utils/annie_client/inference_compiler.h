@@ -9,9 +9,11 @@
 
 struct model_uploader_status {
     bool completed;
-    float prototxtUploadProgress;
-    float caffeModelUploadProgress;
-    float compilationProgress;
+    int errorCode;
+    int prototxtUploadProgress;
+    int caffeModelUploadProgress;
+    int compilationProgress;
+    int * dimOutput;
     QString message;
 };
 
@@ -51,7 +53,7 @@ private:
     int dimC;
     int dimH;
     int dimW;
-    int gpuCount;
+    int GPUs;
     QString compilerOptions;
     model_uploader_status * progress;
 };
@@ -63,8 +65,10 @@ public:
     explicit inference_compiler(
             QString serverHost, int serverPort,
             QString prototxt, QString caffeModel,
-            int n, int c, int h, int w, int gpuCount,
+            int n, int c, int h, int w, int GPUs,
             QString compilerOptions,
+            int * dimOutput,
+            bool * completed,
             QWidget *parent = nullptr);
 
 protected:
@@ -88,13 +92,23 @@ private:
     int dimC;
     int dimH;
     int dimW;
-    int gpuCount;
+    int GPUs;
     QString compilerOptions;
+    int * dimOutput;
+    bool * completed;
     // status
     QLabel * labelStatus;
     QLineEdit * editPrototxtUploadProgress;
     QLineEdit * editCaffeModelUploadProgress;
     QLineEdit * editCompilerProgress;
+    QLineEdit * editDimN;
+    QLineEdit * editDimC;
+    QLineEdit * editDimH;
+    QLineEdit * editDimW;
+    QLineEdit * editOutDimN;
+    QLineEdit * editOutDimC;
+    QLineEdit * editOutDimH;
+    QLineEdit * editOutDimW;
     QLineEdit * editCompilerMessage;
     QPushButton * okCompilerButton;
     QPushButton * cancelCompilerButton;

@@ -34,7 +34,8 @@ HEADERS += \
         inference_viewer.h \
     inference_receiver.h \
     inference_control.h \
-    inference_compiler.h
+    inference_compiler.h \
+    inference_comm.h
 
 FORMS += \
         inference_viewer.ui

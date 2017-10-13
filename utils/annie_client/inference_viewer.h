@@ -56,9 +56,11 @@ public:
     int datasetStartOffset;
     QVector<QString> datasetImageFilenames;
     int inputDim[4];
-    int numGPUs;
+    int GPUs;
+    int outputDim[4];
     QString serverHost;
     int serverPort;
+    int maxDatasetSize;
 };
 
 class inference_viewer : public QWidget
@@ -69,7 +71,7 @@ public:
     explicit inference_viewer(
             QString serverHost, int serverPort,
             QString labelsFilename, QString dataFilename, QString dataFolder,
-            int dim[4], int gpuCount,
+            int dimInput[4], int GPUs, int dimOutput[4], int maxDatasetSize,
             QWidget *parent = 0);
     ~inference_viewer();
 
@@ -89,6 +91,8 @@ private:
     Ui::inference_viewer *ui;
     // state
     inference_state * state;
+    QString fatalError;
+    runtime_receiver_status progress;
 };
 
 #endif // INFERENCE_VIEWER_H

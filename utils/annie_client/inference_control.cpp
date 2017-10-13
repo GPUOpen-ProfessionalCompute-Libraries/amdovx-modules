@@ -13,6 +13,7 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QTcpSocket>
+#include <QTimer>
 
 #define CONFIGURATION_CACHE_FILENAME ".inference_control.txt"
 #define BUILD_VERSION "alpha2"
@@ -30,6 +31,7 @@ bool inference_control::isConfigValid(QString& err)
     if(!QFileInfo(editLabels->text()).isFile()) { err = "Labels: file doesn't exist."; return false; }
     if(!QFileInfo(editDataset->text()).isFile()) { err = "Dataset: file doesn't exist."; return false; }
     if(!QFileInfo(editFolder->text()).isDir()) { err = "Folder: doesn't exist."; return false; }
+    if(editMaxDatasetSize->text().toInt() < 0) { err = "Image Count: must be non-negative."; return false; }
     return true;
 }
 
@@ -48,6 +50,7 @@ void inference_control::saveConfig()
     QString labelsFilename = editLabels->text();
     QString datasetFilename = editDataset->text();
     QString datasetFolder = editFolder->text();
+    QString maxDatasetSize = editMaxDatasetSize->text();
     // save configuration
     QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
     QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
@@ -67,11 +70,13 @@ void inference_control::saveConfig()
         fileOutput << labelsFilename << endl;
         fileOutput << datasetFilename << endl;
         fileOutput << datasetFolder << endl;
+        fileOutput << maxDatasetSize << endl;
     }
     fileObj.close();
 }
 
-inference_control::inference_control(QWidget *parent) : QWidget(parent)
+inference_control::inference_control(QWidget *parent)
+    : QWidget(parent), dimOutput{ 0, 0, 0, 0 }, compilationCompleted{ false }
 {
     setWindowTitle("Inference Control");
     setMinimumWidth(800);
@@ -90,6 +95,7 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     QString lastLabelsFilename = "(pick ILSVRC2012_img_synset_words.txt)";
     QString lastDatasetFilename = "(pick ILSVRC2012_img_val.txt)";
     QString lastDatasetFolder = "(pick ILSVRC2012_img_val/)";
+    QString lastImageCount = "";
     QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
     QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
     if(fileObj.open(QIODevice::ReadOnly)) {
@@ -109,6 +115,7 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
             lastLabelsFilename = fileInput.readLine();
             lastDatasetFilename = fileInput.readLine();
             lastDatasetFolder = fileInput.readLine();
+            lastImageCount = fileInput.readLine();
         }
     }
     fileObj.close();
@@ -118,6 +125,7 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     if(lastDimC.toInt() != 3) lastDimC = "3";
     if(lastDimN.toInt() <= 0) lastDimN = "32";
     if(lastGPUs.toInt() <= 0) lastGPUs = "1";
+    if(lastImageCount.toInt() < 0) lastGPUs = "";
 
     QGridLayout * controlLayout = new QGridLayout;
     int editSpan = 5;
@@ -126,7 +134,7 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     //////////////
     /// \brief labelIntro
     ///
-    QLabel * labelIntro = new QLabel("ANNIE Inference Demo");
+    QLabel * labelIntro = new QLabel("Inference Control Panel");
     labelIntro->setStyleSheet("font-weight: bold; color: green");
     labelIntro->setAlignment(Qt::AlignCenter);
     controlLayout->addWidget(labelIntro, row, 0, 1, editSpan + 2);
@@ -200,7 +208,15 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     controlLayout->addWidget(editCaffeModel, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonCaffeModel, row, 1 + editSpan, 1, 1);
     row++;
-    QLabel * labelInputDim = new QLabel("Dimensions:");
+    QLabel * labelGPUs = new QLabel("GPUs:");
+    editGPUs = new QLineEdit(lastGPUs);
+    editGPUs->setValidator(new QIntValidator(1,8));
+    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
+    labelGPUs->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
+    controlLayout->addWidget(editGPUs, row, 1, 1, 1);
+    row++;
+    QLabel * labelInputDim = new QLabel("NCHW(inp):");
     editDimN = new QLineEdit(lastDimN);
     editDimC = new QLineEdit(lastDimC);
     editDimH = new QLineEdit(lastDimH);
@@ -218,20 +234,25 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     controlLayout->addWidget(editDimH, row, 3, 1, 1);
     controlLayout->addWidget(editDimW, row, 4, 1, 1);
     row++;
-    QLabel * labelGPUs = new QLabel("GPUs:");
-    editGPUs = new QLineEdit(lastGPUs);
-    editGPUs->setValidator(new QIntValidator(1,8));
-    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
-    labelGPUs->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
-    controlLayout->addWidget(editGPUs, row, 1, 1, 1);
-    row++;
     QLabel * labelOptions = new QLabel("Options:");
     editCompilerOptions = new QLineEdit(lastCompilerOptions);
     labelOptions->setStyleSheet("font-weight: bold; font-style: italic");
     labelOptions->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelOptions, row, 0, 1, 1);
     controlLayout->addWidget(editCompilerOptions, row, 1, 1, editSpan);
+    row++;
+    QLabel * labelOutputDim = new QLabel("NCHW(out):");
+    editOutDimN = new QLineEdit("");
+    editOutDimC = new QLineEdit("");
+    editOutDimH = new QLineEdit("");
+    editOutDimW = new QLineEdit("");
+    labelOutputDim->setStyleSheet("font-weight: bold; font-style: italic");
+    labelOutputDim->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelOutputDim, row, 0, 1, 1);
+    controlLayout->addWidget(editOutDimN, row, 1, 1, 1);
+    controlLayout->addWidget(editOutDimC, row, 2, 1, 1);
+    controlLayout->addWidget(editOutDimH, row, 3, 1, 1);
+    controlLayout->addWidget(editOutDimW, row, 4, 1, 1);
     row++;
 
     QDialogButtonBox * compilerButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -287,18 +308,43 @@ inference_control::inference_control(QWidget *parent) : QWidget(parent)
     controlLayout->addWidget(editFolder, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonDatasetFolder, row, 1 + editSpan, 1, 1);
     row++;
+    QLabel * labelMaxDatasetSize = new QLabel("Image Count:");
+    editMaxDatasetSize = new QLineEdit(lastImageCount);
+    editMaxDatasetSize->setValidator(new QIntValidator(1,1000000000));
+    labelMaxDatasetSize->setStyleSheet("font-weight: bold; font-style: italic");
+    labelMaxDatasetSize->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelMaxDatasetSize, row, 0, 1, 1);
+    controlLayout->addWidget(editMaxDatasetSize, row, 1, 1, 1);
+    row++;
 
     QDialogButtonBox * runtimeButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(runtimeButtonBox, &QDialogButtonBox::accepted, this, &inference_control::RunViewer);
     connect(runtimeButtonBox, &QDialogButtonBox::rejected, this, &inference_control::Cancel);
-    QPushButton * okRuntimeButton = runtimeButtonBox->button(QDialogButtonBox::Ok);
+    okRuntimeButton = runtimeButtonBox->button(QDialogButtonBox::Ok);
     QPushButton * cancelRuntimeButton = runtimeButtonBox->button(QDialogButtonBox::Cancel);
     okRuntimeButton->setText("Start Inference Run-time");
+    okRuntimeButton->setEnabled(false);
     cancelRuntimeButton->setText("Exit");
     controlLayout->addWidget(runtimeButtonBox, row, (1 + editSpan)/2, 1, 1);
     row++;
 
     setLayout(controlLayout);
+
+    // start timer for update
+    QTimer *timer = new QTimer();
+    connect(timer, SIGNAL(timeout()), this, SLOT(tick()));
+    timer->start(1000);
+}
+
+void inference_control::tick()
+{
+    QString text;
+    editOutDimW->setText(text.sprintf("%d", dimOutput[0]));
+    editOutDimH->setText(text.sprintf("%d", dimOutput[1]));
+    editOutDimC->setText(text.sprintf("%d", dimOutput[2]));
+    editOutDimN->setText(text.sprintf("%d", dimOutput[3]));
+    if(compilationCompleted && dimOutput[0] == 1 && dimOutput[1] == 1 && dimOutput[2] > 0 && dimOutput[3] == editDimN->text().toInt())
+        okRuntimeButton->setEnabled(true);
 }
 
 void inference_control::browsePrototxt()
@@ -390,7 +436,8 @@ void inference_control::RunCompiler()
                 editDimH->text().toInt(),
                 editDimW->text().toInt(),
                 editGPUs->text().toInt(),
-                editCompilerOptions->text());
+                editCompilerOptions->text(),
+                dimOutput, &compilationCompleted);
     compiler->show();
 }
 
@@ -406,12 +453,11 @@ void inference_control::RunViewer()
     saveConfig();
 
     // start viewer
-    int dim[4] = { editDimW->text().toInt(), editDimH->text().toInt(), editDimC->text().toInt(), editDimN->text().toInt() };
-    int gpuCount = editGPUs->text().toInt();
+    int dimInput[4] = { editDimW->text().toInt(), editDimH->text().toInt(), editDimC->text().toInt(), editDimN->text().toInt() };
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(),
                 editLabels->text(), editDataset->text(), editFolder->text(),
-                dim, gpuCount);
+                dimInput, editGPUs->text().toInt(), dimOutput, editMaxDatasetSize->text().toInt());
     viewer->show();
     close();
 }

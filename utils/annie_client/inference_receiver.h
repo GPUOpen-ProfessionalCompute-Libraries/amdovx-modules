@@ -9,11 +9,22 @@
 #include <QMouseEvent>
 #include <mutex>
 
+struct runtime_receiver_status {
+    bool completed;
+    int errorCode;
+    QString message;
+};
+
 class inference_receiver : public QObject
 {
     Q_OBJECT
 public:
-    explicit inference_receiver(QString serverHost, int serverPort, QVector<QByteArray> * imageBuffer, QObject *parent = nullptr);
+    explicit inference_receiver(
+            QString serverHost, int serverPort,
+            int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
+            QVector<QByteArray> * imageBuffer,
+            runtime_receiver_status * progress,
+            QObject *parent = nullptr);
     ~inference_receiver();
 
     static void abort();
@@ -44,6 +55,11 @@ private:
     QVector<QByteArray> * imageBuffer;
     QString serverHost;
     int serverPort;
+    int GPUs;
+    int * inputDim;
+    int * outputDim;
+    const char * runtimeOptions;
+    runtime_receiver_status * progress;
 };
 
 #endif // INFERENCE_RECEIVER_H
