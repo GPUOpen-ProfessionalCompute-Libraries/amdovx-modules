@@ -207,11 +207,13 @@ vx_status publishNormalizationLayer(vx_context context)
     return VX_SUCCESS;
 }
 
+
 VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor inputs, vx_enum type,
                                                       vx_size normalization_size,
                                                       vx_float32 alpha,
                                                       vx_float32 beta,
-                                                      vx_tensor outputs)
+                                                      vx_tensor outputs,
+                                                      vx_float32 bias)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -220,10 +222,12 @@ VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor 
         vx_scalar s_normalization_size = vxCreateScalarWithSize(context, VX_TYPE_SIZE, &normalization_size, sizeof(normalization_size));
         vx_scalar s_alpha = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha, sizeof(alpha));
         vx_scalar s_beta = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &beta, sizeof(beta));
+        vx_scalar s_bias = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &bias, sizeof(bias));
         if(vxGetStatus((vx_reference)s_type) == VX_SUCCESS &&
                 vxGetStatus((vx_reference)s_normalization_size) == VX_SUCCESS &&
                 vxGetStatus((vx_reference)s_alpha) == VX_SUCCESS &&
-                vxGetStatus((vx_reference)s_beta) == VX_SUCCESS)
+                vxGetStatus((vx_reference)s_beta) == VX_SUCCESS &&
+                vxGetStatus((vx_reference)s_bias) == VX_SUCCESS)
         {
             vx_reference params[] = {
                 (vx_reference)inputs,
@@ -231,7 +235,8 @@ VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor 
                 (vx_reference)s_normalization_size,
                 (vx_reference)s_alpha,
                 (vx_reference)s_beta,
-                (vx_reference)outputs
+                (vx_reference)outputs,
+                (vx_reference)s_bias
             };
             node = createNode(graph, VX_KERNEL_NORMALIZATION_LAYER, params, sizeof(params)/sizeof(params[0]));
         }
