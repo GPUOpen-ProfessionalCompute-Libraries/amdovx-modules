@@ -927,9 +927,8 @@ void writeVXCode(
         bool isLastLayer = (&node == &net.back());
 
         auto&& layerName = node[3];
-        if(codeType == "initialize") {
-            ofsCodeC << "    //" << layerName <<" Layer" << std::endl;
-        }
+        if(codeType == "initialize")  { ofsCodeC << "    //" << layerName <<" Layer" << std::endl; }
+        if(codeType == "declaration") { ofsCodeH << "    //" << layerName <<" Layer" << std::endl; }
         for(size_t i=4; i < node.size(); i++) {
             if(node[i] != "" && declare_tensor_check.find(node[i]) == declare_tensor_check.end()) {
                 auto&& dim = tensorMap[node[i]];
