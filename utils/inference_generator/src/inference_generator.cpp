@@ -956,6 +956,9 @@ void writeVXCode(
                     }
 
                 }
+                else if(isFirstLayer && codeType == "input_tensor") {
+                    ofsCodeC << "    " << "return (" << node[i] << "_dims[0] * "<< node[i] << "_dims[1] * " << node[i] << "_dims[2] * " << node[i] << "_dims[3]);" <<std::endl;
+                }
                 else if(codeType == "release_tensors") {
                     ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << node[i] << " ));" << std::endl;
                 }
@@ -1537,6 +1540,7 @@ void generateCode(
             << "public:" << std::endl
             << "    NetVX();" << std::endl
             << "    int Initialize(const char * dataFolder);" << std::endl
+            << "    size_t inputSize();" << std::endl
             << "    size_t outputSize();" << std::endl
             << "    int Shutdown();" << std::endl
             << "    int Run(float * inputTensor, size_t inputSizeInBytes, float * outputTensor, size_t outputSizeInBytes);" << std::endl
@@ -1578,6 +1582,11 @@ void generateCode(
     ofsCodeC << "    return 0;" << std::endl;
     ofsCodeC << "}" << std::endl << std::endl;
 
+    ofsCodeC << "size_t NetVX::inputSize()" << std::endl;
+    ofsCodeC << "{" << std::endl;
+    writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "input_tensor");
+    ofsCodeC << "}" << std::endl << std::endl;
+
     ofsCodeC << "size_t NetVX::outputSize()" << std::endl;
     ofsCodeC << "{" << std::endl;
     writeVXCode(ofsCodeH,ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, "output_tensor");
@@ -1599,6 +1608,11 @@ void generateCode(
     ofsCodeM << "    " << "size_t inputBytes = ftell(fInput);" << std::endl;
     ofsCodeM << "    " << "rewind(fInput);" << std::endl;
     ofsCodeM << "    " << "size_t inputSizeInFloat = inputBytes/sizeof(float);" << std::endl;
+    ofsCodeM << std::endl;
+    ofsCodeM << "    " << "// check for valid input" << std::endl;
+    ofsCodeM << "    " << "size_t actualInputSizeInFloat = net.inputSize();"<< std::endl;
+    ofsCodeM << "    " << "if(inputSizeInFloat != actualInputSizeInFloat) { std::cerr << \"ERROR: input.f32 is not valid, check input tensor size\" << std::endl; fclose(fInput); return -1; } " << std::endl;
+    ofsCodeM << std::endl;
     ofsCodeM << "    " << "float * inputTensor = new float[inputSizeInFloat];" << std::endl;
     ofsCodeM << "    " << "size_t result = fread(inputTensor, sizeof(float), inputSizeInFloat,fInput );" << std::endl;
     ofsCodeM << "    " << "if(result != inputSizeInFloat) { std::cerr << \" Reading error \" << std::endl; return -1; } " << std::endl;
