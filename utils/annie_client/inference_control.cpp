@@ -1,5 +1,6 @@
 #include "inference_control.h"
 #include "inference_compiler.h"
+#include "inference_comm.h"
 #include <QGridLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -14,121 +15,29 @@
 #include <QFrame>
 #include <QTcpSocket>
 #include <QTimer>
+#include <QCheckBox>
+#include <QStyle>
 
 #define CONFIGURATION_CACHE_FILENAME ".inference_control.txt"
 #define BUILD_VERSION "alpha2"
 
-bool inference_control::isConfigValid(QString& err)
-{
-    if(editServerPort->text().toInt() <= 0) { err = "Server: invalid port number."; return false; }
-    if(!QFileInfo(editPrototxt->text()).isFile()) { err = "Prototxt: file doesn't exist."; return false; }
-    if(!QFileInfo(editCaffeModel->text()).isFile()) { err = "CaffeModel: file doesn't exist."; return false; }
-    if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; return false; }
-    if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; return false; }
-    if(editDimC->text().toInt() != 3) { err = "Dimensions: Number of channels must be 3."; return false; }
-    if(editDimN->text().toInt() <= 0) { err = "Dimensions: Number of batches must be positive."; return false; }
-    if(editGPUs->text().toInt() <= 0) { err = "GPUs: must be positive."; return false; }
-    if(!QFileInfo(editLabels->text()).isFile()) { err = "Labels: file doesn't exist."; return false; }
-    if(!QFileInfo(editDataset->text()).isFile()) { err = "Dataset: file doesn't exist."; return false; }
-    if(!QFileInfo(editFolder->text()).isDir()) { err = "Folder: doesn't exist."; return false; }
-    if(editMaxDatasetSize->text().toInt() < 0) { err = "Image Count: must be non-negative."; return false; }
-    return true;
-}
-
-void inference_control::saveConfig()
-{
-    QString serverHost = editServerHost->text();
-    QString serverPort = editServerPort->text();
-    QString prototxt = editPrototxt->text();
-    QString caffeModel = editCaffeModel->text();
-    QString dimN = editDimN->text();
-    QString dimC = editDimC->text();
-    QString dimH = editDimH->text();
-    QString dimW = editDimW->text();
-    QString GPUs = editGPUs->text();
-    QString compilerOptions = editCompilerOptions->text();
-    QString labelsFilename = editLabels->text();
-    QString datasetFilename = editDataset->text();
-    QString datasetFolder = editFolder->text();
-    QString maxDatasetSize = editMaxDatasetSize->text();
-    // save configuration
-    QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
-    QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
-    if(fileObj.open(QIODevice::WriteOnly)) {
-        QTextStream fileOutput(&fileObj);
-        fileOutput << BUILD_VERSION << endl;
-        fileOutput << serverHost << endl;
-        fileOutput << serverPort << endl;
-        fileOutput << prototxt << endl;
-        fileOutput << caffeModel << endl;
-        fileOutput << dimN << endl;
-        fileOutput << dimC << endl;
-        fileOutput << dimH << endl;
-        fileOutput << dimW << endl;
-        fileOutput << GPUs << endl;
-        fileOutput << compilerOptions << endl;
-        fileOutput << labelsFilename << endl;
-        fileOutput << datasetFilename << endl;
-        fileOutput << datasetFolder << endl;
-        fileOutput << maxDatasetSize << endl;
-    }
-    fileObj.close();
-}
-
-inference_control::inference_control(QWidget *parent)
-    : QWidget(parent), dimOutput{ 0, 0, 0, 0 }, compilationCompleted{ false }
+inference_control::inference_control(int operationMode_, QWidget *parent)
+    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }
 {
     setWindowTitle("Inference Control");
     setMinimumWidth(800);
 
-    // load default configuration
-    QString lastServerHost = "(pick hostname)";
-    QString lastServerPort = "28282";
-    QString lastPrototxt = "(pick VGG_ILSVRC_16_layers.prototxt)";
-    QString lastCaffeModel = "(pick VGG_ILSVRC_16_layers.caffemodel)";
-    QString lastDimN = "32";
-    QString lastDimC = "3";
-    QString lastDimH = "224";
-    QString lastDimW = "224";
-    QString lastGPUs = "1";
-    QString lastCompilerOptions = "";
-    QString lastLabelsFilename = "(pick ILSVRC2012_img_synset_words.txt)";
-    QString lastDatasetFilename = "(pick ILSVRC2012_img_val.txt)";
-    QString lastDatasetFolder = "(pick ILSVRC2012_img_val/)";
-    QString lastImageCount = "";
-    QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
-    QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
-    if(fileObj.open(QIODevice::ReadOnly)) {
-        QTextStream fileInput(&fileObj);
-        QString version = fileInput.readLine();
-        if(version == BUILD_VERSION) {
-            lastServerHost = fileInput.readLine();
-            lastServerPort = fileInput.readLine();
-            lastPrototxt = fileInput.readLine();
-            lastCaffeModel = fileInput.readLine();
-            lastDimN = fileInput.readLine();
-            lastDimC = fileInput.readLine();
-            lastDimH = fileInput.readLine();
-            lastDimW = fileInput.readLine();
-            lastGPUs = fileInput.readLine();
-            lastCompilerOptions = fileInput.readLine();
-            lastLabelsFilename = fileInput.readLine();
-            lastDatasetFilename = fileInput.readLine();
-            lastDatasetFolder = fileInput.readLine();
-            lastImageCount = fileInput.readLine();
-        }
-    }
-    fileObj.close();
-    if(lastServerPort.toInt() <= 0) lastServerPort = "28282";
-    if(lastDimW.toInt() <= 0) lastDimW = "224";
-    if(lastDimH.toInt() <= 0) lastDimH = "224";
-    if(lastDimC.toInt() != 3) lastDimC = "3";
-    if(lastDimN.toInt() <= 0) lastDimN = "32";
-    if(lastGPUs.toInt() <= 0) lastGPUs = "1";
-    if(lastImageCount.toInt() < 0) lastGPUs = "";
+    maxGPUs = 1;
+    compiler_status.completed = false;
+    compiler_status.dimOutput[0] = 0;
+    compiler_status.dimOutput[1] = 0;
+    compiler_status.dimOutput[2] = 0;
+    compiler_status.errorCode = 0;
+    operationMode = operationMode_;
 
+    // default configuration
     QGridLayout * controlLayout = new QGridLayout;
-    int editSpan = 5;
+    int editSpan = 3;
     int row = 0;
 
     //////////////
@@ -155,24 +64,22 @@ inference_control::inference_control(QWidget *parent)
     row++;
 
     QLabel * labelServerHost = new QLabel("Server:");
-    editServerHost = new QLineEdit(lastServerHost);
-    editServerPort = new QLineEdit(lastServerPort);
+    editServerHost = new QLineEdit("localhost");
+    editServerPort = new QLineEdit("28282");
+    buttonConnect = new QPushButton("Connect");
     editServerPort->setValidator(new QIntValidator(1,65535));
     labelServerHost->setStyleSheet("font-weight: bold; font-style: italic");
     labelServerHost->setAlignment(Qt::AlignLeft);
+    connect(buttonConnect, SIGNAL(released()), this, SLOT(connectServer()));
     controlLayout->addWidget(labelServerHost, row, 0, 1, 1);
-    controlLayout->addWidget(editServerHost, row, 1, 1, 3);
-    controlLayout->addWidget(editServerPort, row, 4, 1, 1);
+    controlLayout->addWidget(editServerHost, row, 1, 1, 2);
+    controlLayout->addWidget(editServerPort, row, editSpan, 1, 1);
+    controlLayout->addWidget(buttonConnect, row, 1 + editSpan, 1, 1);
     row++;
-
-    QDialogButtonBox * serverButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(serverButtonBox, &QDialogButtonBox::accepted, this, &inference_control::CheckServer);
-    connect(serverButtonBox, &QDialogButtonBox::rejected, this, &inference_control::Cancel);
-    QPushButton * okServerButton = serverButtonBox->button(QDialogButtonBox::Ok);
-    QPushButton * cancelServerButton = serverButtonBox->button(QDialogButtonBox::Cancel);
-    okServerButton->setText("Check Server Connection");
-    cancelServerButton->setText("Exit");
-    controlLayout->addWidget(serverButtonBox, row, (1 + editSpan)/2, 1, 1);
+    labelServerStatus = new QLabel("");
+    labelServerStatus->setStyleSheet("font-style: italic");
+    labelServerStatus->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelServerStatus, row, 1, 1, editSpan + 1);
     row++;
 
     QFrame * sepHLine2 = new QFrame();
@@ -184,86 +91,86 @@ inference_control::inference_control(QWidget *parent)
     //////////////
     /// \brief labelCompiler
     ///
+    typeModelFile1Label.push_back("Prototxt:");
+    typeModelFile2Label.push_back("CaffeModel:");
+    typeModelFile1Desc.push_back("Prototxt (*.prototxt)");
+    typeModelFile2Desc.push_back("CaffeModel (*.caffemodel)");
+    numModelTypes++;
     QLabel * labelCompiler = new QLabel("Inference Compiler");
     labelCompiler->setStyleSheet("font-weight: bold; color: red");
     controlLayout->addWidget(labelCompiler, row, 0, 1, 5);
     row++;
-    QLabel * labelPrototxt = new QLabel("Prototxt:");
-    editPrototxt = new QLineEdit(lastPrototxt);
-    QPushButton * buttonPrototxt = new QPushButton(tr("Browse..."), this);
-    connect(buttonPrototxt, &QAbstractButton::clicked, this, &inference_control::browsePrototxt);
-    labelPrototxt->setStyleSheet("font-weight: bold; font-style: italic");
-    labelPrototxt->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelPrototxt, row, 0, 1, 1);
-    controlLayout->addWidget(editPrototxt, row, 1, 1, editSpan);
-    controlLayout->addWidget(buttonPrototxt, row, 1 + editSpan, 1, 1);
+    QLabel * labelModel = new QLabel("CNN Model:");
+    comboModelSelect = new QComboBox();
+    buttonModelUpload = new QPushButton(tr("Upload"), this);
+    comboModelSelect->addItem("Upload a pre-trained Caffe model (i.e., .prototxt and .caffemodel)");
+    labelModel->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModel->setAlignment(Qt::AlignLeft);
+    connect(comboModelSelect, SIGNAL(activated(int)), this, SLOT(modelSelect(int)));
+    connect(buttonModelUpload, SIGNAL(released()), this, SLOT(modelUpload()));
+    controlLayout->addWidget(labelModel, row, 0, 1, 1);
+    controlLayout->addWidget(comboModelSelect, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonModelUpload, row, 1 + editSpan, 1, 1);
     row++;
-    QLabel * labelCaffeModel = new QLabel("CaffeModel:");
-    editCaffeModel = new QLineEdit(lastCaffeModel);
-    QPushButton * buttonCaffeModel = new QPushButton(tr("Browse..."), this);
-    connect(buttonCaffeModel, &QAbstractButton::clicked, this, &inference_control::browseCaffeModel);
-    labelCaffeModel->setStyleSheet("font-weight: bold; font-style: italic");
-    labelCaffeModel->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelCaffeModel, row, 0, 1, 1);
-    controlLayout->addWidget(editCaffeModel, row, 1, 1, editSpan);
-    controlLayout->addWidget(buttonCaffeModel, row, 1 + editSpan, 1, 1);
-    row++;
-    QLabel * labelGPUs = new QLabel("GPUs:");
-    editGPUs = new QLineEdit(lastGPUs);
-    editGPUs->setValidator(new QIntValidator(1,8));
-    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
-    labelGPUs->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
-    controlLayout->addWidget(editGPUs, row, 1, 1, 1);
-    row++;
-    QLabel * labelInputDim = new QLabel("NCHW(inp):");
-    editDimN = new QLineEdit(lastDimN);
-    editDimC = new QLineEdit(lastDimC);
-    editDimH = new QLineEdit(lastDimH);
-    editDimW = new QLineEdit(lastDimW);
-    editDimN->setValidator(new QIntValidator(1,256));
+    QLabel * labelInputDim = new QLabel("CxHxW(inp):");
+    QLineEdit * editDimC = new QLineEdit("3");
+    editDimH = new QLineEdit("224");
+    editDimW = new QLineEdit("224");
     editDimC->setValidator(new QIntValidator(3,3));
     editDimH->setValidator(new QIntValidator(1,16384));
     editDimW->setValidator(new QIntValidator(1,16384));
-    editDimC->setReadOnly(true);
+    editDimC->setEnabled(false);
     labelInputDim->setStyleSheet("font-weight: bold; font-style: italic");
     labelInputDim->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelInputDim, row, 0, 1, 1);
-    controlLayout->addWidget(editDimN, row, 1, 1, 1);
-    controlLayout->addWidget(editDimC, row, 2, 1, 1);
-    controlLayout->addWidget(editDimH, row, 3, 1, 1);
-    controlLayout->addWidget(editDimW, row, 4, 1, 1);
+    controlLayout->addWidget(editDimC, row, 1, 1, 1);
+    controlLayout->addWidget(editDimH, row, 2, 1, 1);
+    controlLayout->addWidget(editDimW, row, 3, 1, 1);
     row++;
-    QLabel * labelOptions = new QLabel("Options:");
-    editCompilerOptions = new QLineEdit(lastCompilerOptions);
-    labelOptions->setStyleSheet("font-weight: bold; font-style: italic");
-    labelOptions->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelOptions, row, 0, 1, 1);
-    controlLayout->addWidget(editCompilerOptions, row, 1, 1, editSpan);
-    row++;
-    QLabel * labelOutputDim = new QLabel("NCHW(out):");
-    editOutDimN = new QLineEdit("");
+    QLabel * labelOutputDim = new QLabel("CxHxW(out):");
     editOutDimC = new QLineEdit("");
     editOutDimH = new QLineEdit("");
     editOutDimW = new QLineEdit("");
+    editOutDimC->setEnabled(false);
+    editOutDimH->setEnabled(false);
+    editOutDimW->setEnabled(false);
     labelOutputDim->setStyleSheet("font-weight: bold; font-style: italic");
     labelOutputDim->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelOutputDim, row, 0, 1, 1);
-    controlLayout->addWidget(editOutDimN, row, 1, 1, 1);
-    controlLayout->addWidget(editOutDimC, row, 2, 1, 1);
-    controlLayout->addWidget(editOutDimH, row, 3, 1, 1);
-    controlLayout->addWidget(editOutDimW, row, 4, 1, 1);
+    controlLayout->addWidget(editOutDimC, row, 1, 1, 1);
+    controlLayout->addWidget(editOutDimH, row, 2, 1, 1);
+    controlLayout->addWidget(editOutDimW, row, 3, 1, 1);
     row++;
-
-    QDialogButtonBox * compilerButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(compilerButtonBox, &QDialogButtonBox::accepted, this, &inference_control::RunCompiler);
-    connect(compilerButtonBox, &QDialogButtonBox::rejected, this, &inference_control::Cancel);
-    okCompilerButton = compilerButtonBox->button(QDialogButtonBox::Ok);
-    QPushButton * cancelCompilerButton = compilerButtonBox->button(QDialogButtonBox::Cancel);
-    okCompilerButton->setText("Start Inference Compiler");
-    cancelCompilerButton->setText("Exit");
-    controlLayout->addWidget(compilerButtonBox, row, (1 + editSpan)/2, 1, 1);
+    labelModelFile1 = new QLabel("--");
+    editModelFile1 = new QLineEdit("");
+    buttonModelFile1 = new QPushButton(tr("Browse..."), this);
+    connect(buttonModelFile1, &QAbstractButton::clicked, this, &inference_control::browseModelFile1);
+    labelModelFile1->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModelFile1->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelModelFile1, row, 0, 1, 1);
+    controlLayout->addWidget(editModelFile1, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonModelFile1, row, 1 + editSpan, 1, 1);
     row++;
+    labelModelFile2 = new QLabel("--");
+    editModelFile2 = new QLineEdit("");
+    buttonModelFile2 = new QPushButton(tr("Browse..."), this);
+    connect(buttonModelFile2, &QAbstractButton::clicked, this, &inference_control::browseModelFile2);
+    labelModelFile2->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModelFile2->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelModelFile2, row, 0, 1, 1);
+    controlLayout->addWidget(editModelFile2, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonModelFile2, row, 1 + editSpan, 1, 1);
+    row++;
+    labelCompilerOptions = new QLabel("--");
+    editCompilerOptions = new QLineEdit("");
+    labelCompilerOptions->setStyleSheet("font-weight: bold; font-style: italic");
+    labelCompilerOptions->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelCompilerOptions, row, 0, 1, 1);
+    controlLayout->addWidget(editCompilerOptions, row, 1, 1, editSpan);
+    row++;
+    connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
+    connect(editModelFile2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile2(const QString &)));
+    connect(editCompilerOptions, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeCompilerOptions(const QString &)));
 
     QFrame * sepHLine3 = new QFrame();
     sepHLine3->setFrameShape(QFrame::HLine);
@@ -278,57 +185,75 @@ inference_control::inference_control(QWidget *parent)
     labelRuntime->setStyleSheet("font-weight: bold; color: red");
     controlLayout->addWidget(labelRuntime, row, 0, 1, 5);
     row++;
-    QLabel * labelLabels = new QLabel("Labels:");
-    editLabels = new QLineEdit(lastLabelsFilename);
+    QLabel * labelGPUs = new QLabel("GPUs:");
+    editGPUs = new QLineEdit("1");
+    labelMaxGPUs = new QLabel("");
+    buttonRunInference = new QPushButton("Run");
+    editGPUs->setValidator(new QIntValidator(1,maxGPUs));
+    editGPUs->setEnabled(false);
+    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
+    labelGPUs->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
+    controlLayout->addWidget(editGPUs, row, 1, 1, 1);
+    controlLayout->addWidget(labelMaxGPUs, row, 2, 1, 1);
+    controlLayout->addWidget(buttonRunInference, row, 1 + editSpan, 1, 1);
+    connect(buttonRunInference, SIGNAL(released()), this, SLOT(runInference()));
+    row++;
+    QLabel * labelImageLabelsFile = new QLabel("Labels:");
+    editImageLabelsFile = new QLineEdit("");
     QPushButton * buttonDatasetLabels = new QPushButton(tr("Browse..."), this);
     connect(buttonDatasetLabels, &QAbstractButton::clicked, this, &inference_control::browseDatasetLabels);
-    labelLabels->setStyleSheet("font-weight: bold; font-style: italic");
-    labelLabels->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelLabels, row, 0, 1, 1);
-    controlLayout->addWidget(editLabels, row, 1, 1, editSpan);
+    labelImageLabelsFile->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageLabelsFile->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelImageLabelsFile, row, 0, 1, 1);
+    controlLayout->addWidget(editImageLabelsFile, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonDatasetLabels, row, 1 + editSpan, 1, 1);
     row++;
-    QLabel * labelDataset = new QLabel("Dataset:");
-    editDataset = new QLineEdit(lastDatasetFilename);
-    QPushButton * buttonDatasetFilename = new QPushButton(tr("Browse..."), this);
-    connect(buttonDatasetFilename, &QAbstractButton::clicked, this, &inference_control::browseDatasetFilename);
-    labelDataset->setStyleSheet("font-weight: bold; font-style: italic");
-    labelDataset->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelDataset, row, 0, 1, 1);
-    controlLayout->addWidget(editDataset, row, 1, 1, editSpan);
-    controlLayout->addWidget(buttonDatasetFilename, row, 1 + editSpan, 1, 1);
-    row++;
-    QLabel * labelFolder = new QLabel("Folder:");
-    editFolder = new QLineEdit(lastDatasetFolder);
+    QLabel * labelImageFolder = new QLabel("Image Folder:");
+    editImageFolder = new QLineEdit("");
     QPushButton * buttonDatasetFolder = new QPushButton(tr("Browse..."), this);
     connect(buttonDatasetFolder, &QAbstractButton::clicked, this, &inference_control::browseDatasetFolder);
-    labelFolder->setStyleSheet("font-weight: bold; font-style: italic");
-    labelFolder->setAlignment(Qt::AlignLeft);
-    controlLayout->addWidget(labelFolder, row, 0, 1, 1);
-    controlLayout->addWidget(editFolder, row, 1, 1, editSpan);
+    labelImageFolder->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageFolder->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelImageFolder, row, 0, 1, 1);
+    controlLayout->addWidget(editImageFolder, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonDatasetFolder, row, 1 + editSpan, 1, 1);
     row++;
+    QLabel * labelImageList = new QLabel("Image List:");
+    editImageListFile = new QLineEdit("");
+    QPushButton * buttonDatasetFilename = new QPushButton(tr("Browse..."), this);
+    connect(buttonDatasetFilename, &QAbstractButton::clicked, this, &inference_control::browseDatasetFilename);
+    labelImageList->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageList->setAlignment(Qt::AlignLeft);
+    controlLayout->addWidget(labelImageList, row, 0, 1, 1);
+    controlLayout->addWidget(editImageListFile, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonDatasetFilename, row, 1 + editSpan, 1, 1);
+    row++;
     QLabel * labelMaxDatasetSize = new QLabel("Image Count:");
-    editMaxDatasetSize = new QLineEdit(lastImageCount);
+    editMaxDatasetSize = new QLineEdit("");
     editMaxDatasetSize->setValidator(new QIntValidator(1,1000000000));
     labelMaxDatasetSize->setStyleSheet("font-weight: bold; font-style: italic");
     labelMaxDatasetSize->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelMaxDatasetSize, row, 0, 1, 1);
     controlLayout->addWidget(editMaxDatasetSize, row, 1, 1, 1);
+    checkRepeatImages = nullptr;
+    if(operationMode) {
+        checkRepeatImages = new QCheckBox("Repeat Images");
+        checkRepeatImages->setChecked(true);
+        controlLayout->addWidget(checkRepeatImages, row, 2, 1, 1);
+    }
     row++;
 
-    QDialogButtonBox * runtimeButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(runtimeButtonBox, &QDialogButtonBox::accepted, this, &inference_control::RunViewer);
-    connect(runtimeButtonBox, &QDialogButtonBox::rejected, this, &inference_control::Cancel);
-    okRuntimeButton = runtimeButtonBox->button(QDialogButtonBox::Ok);
-    QPushButton * cancelRuntimeButton = runtimeButtonBox->button(QDialogButtonBox::Cancel);
-    okRuntimeButton->setText("Start Inference Run-time");
-    okRuntimeButton->setEnabled(false);
-    cancelRuntimeButton->setText("Exit");
-    controlLayout->addWidget(runtimeButtonBox, row, (1 + editSpan)/2, 1, 1);
+    QPushButton * exitButton = new QPushButton("Exit");
+    controlLayout->addWidget(exitButton, row, (1 + editSpan)/2, 1, 1);
+    connect(exitButton, SIGNAL(released()), this, SLOT(exitControl()));
     row++;
 
     setLayout(controlLayout);
+
+    // activate based on configuration
+    loadConfig();
+    modelSelect(comboModelSelect->currentIndex());
 
     // start timer for update
     QTimer *timer = new QTimer();
@@ -336,64 +261,221 @@ inference_control::inference_control(QWidget *parent)
     timer->start(1000);
 }
 
-void inference_control::tick()
+void inference_control::saveConfig()
+{
+    // save configuration
+    QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
+    QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
+    if(fileObj.open(QIODevice::WriteOnly)) {
+        QTextStream fileOutput(&fileObj);
+        fileOutput << BUILD_VERSION << endl;
+        fileOutput << editServerHost->text() << endl;
+        fileOutput << editServerPort->text() << endl;
+        fileOutput << lastModelFile1 << endl;
+        fileOutput << lastModelFile2 << endl;
+        fileOutput << lastDimH << endl;
+        fileOutput << lastDimW << endl;
+        fileOutput << editGPUs->text() << endl;
+        fileOutput << lastCompilerOptions << endl;
+        fileOutput << editImageLabelsFile->text() << endl;
+        fileOutput << editImageListFile->text() << endl;
+        fileOutput << editImageFolder->text() << endl;
+        fileOutput << editMaxDatasetSize->text() << endl;
+    }
+    fileObj.close();
+}
+
+void inference_control::loadConfig()
+{
+    // load default configuration
+    QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
+    QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
+    if(fileObj.open(QIODevice::ReadOnly)) {
+        QTextStream fileInput(&fileObj);
+        QString version = fileInput.readLine();
+        if(version == BUILD_VERSION) {
+            editServerHost->setText(fileInput.readLine());
+            editServerPort->setText(fileInput.readLine());
+            editModelFile1->setText(fileInput.readLine());
+            editModelFile2->setText(fileInput.readLine());
+            editDimH->setText(fileInput.readLine());
+            editDimW->setText(fileInput.readLine());
+            editGPUs->setText(fileInput.readLine());
+            editCompilerOptions->setText(fileInput.readLine());
+            editImageLabelsFile->setText(fileInput.readLine());
+            editImageListFile->setText(fileInput.readLine());
+            editImageFolder->setText(fileInput.readLine());
+            editMaxDatasetSize->setText(fileInput.readLine());
+        }
+    }
+    fileObj.close();
+    // save last options
+    lastDimW = editDimW->text();
+    lastDimH = editDimH->text();
+    lastModelFile1 = editModelFile1->text();
+    lastModelFile2 = editModelFile2->text();
+    lastCompilerOptions = editCompilerOptions->text();
+}
+
+bool inference_control::isConfigValid(QString& err)
+{
+    if(editServerPort->text().toInt() <= 0) { err = "Server: invalid port number."; return false; }
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        if(!QFileInfo(editModelFile1->text()).isFile()) { err = typeModelFile1Label[comboModelSelect->currentIndex()] + editModelFile1->text() + " file doesn't exist."; return false; }
+        if(!QFileInfo(editModelFile2->text()).isFile()) { err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist."; return false; }
+    }
+    if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; return false; }
+    if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; return false; }
+    if(editGPUs->text().toInt() <= 0) { err = "GPUs: must be positive."; return false; }
+    if(editMaxDatasetSize->text().toInt() < 0) { err = "Image Count: must be non-negative."; return false; }
+    return true;
+}
+
+void inference_control::modelSelect(int model)
 {
     QString text;
-    editOutDimW->setText(text.sprintf("%d", dimOutput[0]));
-    editOutDimH->setText(text.sprintf("%d", dimOutput[1]));
-    editOutDimC->setText(text.sprintf("%d", dimOutput[2]));
-    editOutDimN->setText(text.sprintf("%d", dimOutput[3]));
-    if(compilationCompleted && dimOutput[0] == 1 && dimOutput[1] == 1 && dimOutput[2] > 0 && dimOutput[3] == editDimN->text().toInt())
-        okRuntimeButton->setEnabled(true);
+    bool compilationCompleted = (compiler_status.errorCode > 0) && compiler_status.completed;
+    int dimOutput[3] = { compiler_status.dimOutput[0], compiler_status.dimOutput[1], compiler_status.dimOutput[2] };
+    if(model < numModelTypes) {
+        // input dimensions
+        editDimW->setDisabled(false);
+        editDimH->setDisabled(false);
+        // model file selection
+        buttonModelUpload->setEnabled(false);
+        if(connectionSuccessful && editModelFile1->text().length() > 0 && editModelFile2->text().length() > 0) {
+            buttonModelUpload->setEnabled(true);
+        }
+        labelModelFile1->setText(typeModelFile1Label[model]);
+        editModelFile1->setText(lastModelFile1);
+        editModelFile1->setEnabled(true);
+        buttonModelFile1->setEnabled(true);
+        labelModelFile2->setText(typeModelFile2Label[model]);
+        editModelFile2->setText(lastModelFile2);
+        editModelFile2->setEnabled(true);
+        buttonModelFile2->setEnabled(true);
+        labelCompilerOptions->setText("Options:");
+        editCompilerOptions->setReadOnly(false);
+        editCompilerOptions->setText(lastCompilerOptions);
+    }
+    else {
+        model -= numModelTypes;
+        // already compiled
+        compilationCompleted = true;
+        dimOutput[0] = modelList[model].outputDim[0];
+        dimOutput[1] = modelList[model].outputDim[1];
+        dimOutput[2] = modelList[model].outputDim[2];
+        // input & output dimensions
+        editDimW->setDisabled(true);
+        editDimH->setDisabled(true);
+        editDimW->setText(text.sprintf("%d", modelList[model].inputDim[0]));
+        editDimH->setText(text.sprintf("%d", modelList[model].inputDim[1]));
+        // model file selection
+        labelModelFile1->setText("--");
+        editModelFile1->setEnabled(false);
+        editModelFile1->setText("");
+        buttonModelFile1->setEnabled(false);
+        labelModelFile2->setText("--");
+        editModelFile2->setEnabled(false);
+        editModelFile2->setText("");
+        buttonModelFile2->setEnabled(false);
+        buttonModelUpload->setEnabled(false);
+        labelCompilerOptions->setText("--");
+        editCompilerOptions->setReadOnly(true);
+        editCompilerOptions->setText("");
+    }
+    // output dimensions
+    editOutDimW->setText(dimOutput[0] == 0 ? "" : text.sprintf("%d", dimOutput[0]));
+    editOutDimH->setText(dimOutput[1] == 0 ? "" : text.sprintf("%d", dimOutput[1]));
+    editOutDimC->setText(dimOutput[2] == 0 ? "" : text.sprintf("%d", dimOutput[2]));
+    // enable GPUs
+    editGPUs->setEnabled(compilationCompleted);
+    // enable run button
+    buttonRunInference->setEnabled(false);
+    if(compilationCompleted && dimOutput[0] > 0 && dimOutput[1] > 0 && dimOutput[2] > 0 &&
+       editImageLabelsFile->text().length() > 0 && editImageFolder->text().length() > 0)
+    {
+        buttonRunInference->setEnabled(true);
+    }
 }
 
-void inference_control::browsePrototxt()
+void inference_control::tick()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, tr("Caffe ProtoTxt (*.prototxt)"));
-    if(fileName.size() > 0)
-        editPrototxt->setText(fileName);
+    modelSelect(comboModelSelect->currentIndex());
 }
 
-void inference_control::browseCaffeModel()
+void inference_control::onChangeModelFile1(const QString & text)
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, tr("Caffe Model (*.caffemodel)"));
-    if(fileName.size() > 0)
-        editCaffeModel->setText(fileName);
+    if(comboModelSelect->currentIndex() == 0) {
+        lastModelFile1 =  text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangeModelFile2(const QString & text)
+{
+    if(comboModelSelect->currentIndex() == 0) {
+        lastModelFile2 =  text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangeCompilerOptions(const QString & text)
+{
+    if(comboModelSelect->currentIndex() == 0)
+        lastCompilerOptions =  text;
+}
+
+void inference_control::browseModelFile1()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, typeModelFile1Desc[modelType]);
+    if(fileName.size() > 0) {
+        editModelFile1->setText(fileName);
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::browseModelFile2()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, typeModelFile2Desc[modelType]);
+    if(fileName.size() > 0) {
+        editModelFile2->setText(fileName);
+        modelSelect(comboModelSelect->currentIndex());
+    }
 }
 
 void inference_control::browseDatasetLabels()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, tr("Text (*.txt)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Labels File"), nullptr, tr("Labels Text (*.txt)"));
     if(fileName.size() > 0)
-        editLabels->setText(fileName);
-}
-
-void inference_control::browseDatasetFilename()
-{
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), nullptr, tr("Text (*.txt)"));
-    if(fileName.size() > 0)
-        editDataset->setText(fileName);
+        editImageLabelsFile->setText(fileName);
 }
 
 void inference_control::browseDatasetFolder()
 {
-    QString dir = QFileDialog::getExistingDirectory(this, tr("Open Directory"), nullptr,
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select Image Folder"), nullptr,
                         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
     if(dir.size() > 0)
-        editFolder->setText(dir);
+        editImageFolder->setText(dir);
 }
 
-void inference_control::Cancel()
+void inference_control::browseDatasetFilename()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image List File"), nullptr, tr("Image List Text (*.txt)"));
+    if(fileName.size() > 0)
+        editImageListFile->setText(fileName);
+}
+
+void inference_control::exitControl()
 {
     close();
 }
 
-void inference_control::CheckServer()
+void inference_control::connectServer()
 {
     // check configuration
     QString err;
-    if(!isConfigValid(err)) {
-        QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
+    if(editServerHost->text().length() <= 0 || editServerPort->text().toInt() <= 0) {
+        QMessageBox::critical(this, windowTitle(), "Server host/port is not valid", QMessageBox::Ok);
         return;
     }
     // save configuration
@@ -402,18 +484,99 @@ void inference_control::CheckServer()
     // check TCP connection
     QTcpSocket * tcpSocket = new QTcpSocket(this);
     tcpSocket->connectToHost(editServerHost->text(), editServerPort->text().toInt());
+    QString status;
+    connectionSuccessful = false;
+    status = "ERROR: Unable to connect to " + editServerHost->text() + ":" + editServerPort->text();
     if(tcpSocket->waitForConnected(3000)) {
-        QMessageBox::information(this, windowTitle(),
-            "OK: Connected to " + editServerHost->text() + ":" + editServerPort->text(), QMessageBox::Ok);
-    }
-    else {
-        QMessageBox::critical(this, windowTitle(),
-            "ERROR: Unable to connect to " + editServerHost->text() + ":" + editServerPort->text(), QMessageBox::Ok);
+        int pendingModelCount = 0;
+        while(tcpSocket->state() == QAbstractSocket::ConnectedState) {
+            if(tcpSocket->waitForReadyRead()) {
+                InfComCommand cmd;
+                while(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
+                      tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
+                {
+                    if(cmd.magic != INFCOM_MAGIC) {
+                        status.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
+                        break;
+                    }
+                    auto send = [](QTcpSocket * sock, QString& status, const void * buf, size_t len) -> bool {
+                        sock->write((const char *)buf, len);
+                        if(!sock->waitForBytesWritten(3000)) {
+                            status.sprintf("ERROR: write(%ld) failed", len);
+                            return false;
+                        }
+                        return true;
+                    };
+                    if(cmd.command == INFCOM_CMD_DONE) {
+                        break;
+                    }
+                    else if(cmd.command == INFCOM_CMD_SEND_MODE) {
+                        InfComCommand reply = {
+                            INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
+                            { INFCOM_MODE_CONFIGURE },
+                            { 0 }
+                        };
+                        if(!send(tcpSocket, status, &reply, sizeof(reply)))
+                            break;
+                    }
+                    else if(cmd.command == INFCOM_CMD_CONFIG_INFO) {
+                        pendingModelCount = cmd.data[0];
+                        maxGPUs = cmd.data[1];
+                        QString text;
+                        editGPUs->setText(text.sprintf("%d", maxGPUs));
+                        labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
+                        while(comboModelSelect->count() > 1)
+                            comboModelSelect->removeItem(1);
+                        modelList.clear();
+                        connectionSuccessful = true;
+                        status = "OK: Connected to " + editServerHost->text() + ":" + editServerPort->text();
+                        if(pendingModelCount <= 0) {
+                            InfComCommand reply = {
+                                INFCOM_MAGIC, INFCOM_CMD_DONE, { 0 }, { 0 }
+                            };
+                            if(!send(tcpSocket, status, &reply, sizeof(reply)))
+                                break;
+                        }
+                    }
+                    else if(cmd.command == INFCOM_CMD_MODEL_INFO) {
+                        InfComModelInfo info = { { 0 }, { 0 }, { 0 } };
+                        info.inputDim[0] = cmd.data[0];
+                        info.inputDim[1] = cmd.data[1];
+                        info.inputDim[2] = cmd.data[2];
+                        info.outputDim[0] = cmd.data[3];
+                        info.outputDim[1] = cmd.data[4];
+                        info.outputDim[2] = cmd.data[5];
+                        strncpy(info.name, cmd.message, sizeof(info.name));
+                        modelList.push_back(info);
+                        comboModelSelect->addItem(info.name);
+                        pendingModelCount--;
+                        if(pendingModelCount <= 0) {
+                            InfComCommand reply = {
+                                INFCOM_MAGIC, INFCOM_CMD_DONE, { 0 }, { 0 }
+                            };
+                            if(!send(tcpSocket, status, &reply, sizeof(reply)))
+                                break;
+                        }
+                    }
+                    else {
+                        status.sprintf("ERROR: got invalid command received 0x%08x", cmd.command);
+                        break;
+                    }
+                }
+            }
+        }
     }
     tcpSocket->close();
+    labelServerStatus->setText(status);
+
+    // update status
+    if(comboModelSelect->currentIndex() > modelList.length()) {
+        comboModelSelect->setCurrentIndex(modelList.length() - 1);
+    }
+    modelSelect(comboModelSelect->currentIndex());
 }
 
-void inference_control::RunCompiler()
+void inference_control::modelUpload()
 {
     // check configuration
     QString err;
@@ -421,43 +584,54 @@ void inference_control::RunCompiler()
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
         return;
     }
+    buttonModelUpload->setEnabled(false);
+
     // save configuration
     saveConfig();
 
-    // disable compiler button
-    okCompilerButton->setEnabled(false);
-
     // start compiler
     inference_compiler * compiler = new inference_compiler(
+                true,
                 editServerHost->text(), editServerPort->text().toInt(),
-                editPrototxt->text(), editCaffeModel->text(),
-                editDimN->text().toInt(),
-                editDimC->text().toInt(),
+                3,
                 editDimH->text().toInt(),
                 editDimW->text().toInt(),
-                editGPUs->text().toInt(),
+                editModelFile1->text(), editModelFile2->text(),
                 editCompilerOptions->text(),
-                dimOutput, &compilationCompleted);
+                &compiler_status);
     compiler->show();
 }
 
-void inference_control::RunViewer()
+void inference_control::runInference()
 {
     // check configuration
     QString err;
-    if(!isConfigValid(err)) {
+    if(isConfigValid(err)) {
+        if(!QFileInfo(editImageLabelsFile->text()).isFile())
+            err = "Labels: file doesn't exist: " + editImageLabelsFile->text();
+        else if(!QFileInfo(editImageFolder->text()).isDir())
+            err = "Image Folder: doesn't exist: " + editImageFolder->text();
+    }
+    if(err.length() > 0) {
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
         return;
     }
+
     // save configuration
     saveConfig();
 
     // start viewer
-    int dimInput[4] = { editDimW->text().toInt(), editDimH->text().toInt(), editDimC->text().toInt(), editDimN->text().toInt() };
+    QString modelName = comboModelSelect->currentText();
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        modelName = compiler_status.message;
+    }
+    int dimInput[3] = { editDimW->text().toInt(), editDimH->text().toInt(), 3 };
+    int dimOutput[3] = { editOutDimW->text().toInt(), editOutDimH->text().toInt(), editOutDimC->text().toInt() };
     inference_viewer * viewer = new inference_viewer(
-                editServerHost->text(), editServerPort->text().toInt(),
-                editLabels->text(), editDataset->text(), editFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, editMaxDatasetSize->text().toInt());
+                editServerHost->text(), editServerPort->text().toInt(), modelName,
+                editImageLabelsFile->text(), editImageListFile->text(), editImageFolder->text(),
+                dimInput, editGPUs->text().toInt(), dimOutput, editMaxDatasetSize->text().toInt(),
+                checkRepeatImages ? checkRepeatImages->checkState() : false);
     viewer->show();
     close();
 }

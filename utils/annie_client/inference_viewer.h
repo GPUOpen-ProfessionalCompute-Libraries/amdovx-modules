@@ -17,7 +17,7 @@ public:
     // configuration
     QFont statusBarFont;
     QFont exitButtonFont;
-    // image dataset
+    // image data
     bool wordsLoadDone;
     bool labelLoadDone;
     bool imageLoadDone;
@@ -50,17 +50,18 @@ public:
     bool viewRecentResults;
     QString dataLabelsFilename;
     int dataLabelCount;
-    QString datasetFilename;
-    QString datasetFolder;
-    int datasetSize;
-    int datasetStartOffset;
-    QVector<QString> datasetImageFilenames;
-    int inputDim[4];
+    QString dataFilename;
+    QString dataFolder;
+    int imageDataSize;
+    int imageDataStartOffset;
+    QVector<QString> imageDataFilenames;
+    int inputDim[3];
     int GPUs;
-    int outputDim[4];
+    int outputDim[3];
     QString serverHost;
     int serverPort;
-    int maxDatasetSize;
+    QString modelName;
+    int maxImageDataSize;
 };
 
 class inference_viewer : public QWidget
@@ -69,9 +70,10 @@ class inference_viewer : public QWidget
 
 public:
     explicit inference_viewer(
-            QString serverHost, int serverPort,
+            QString serverHost, int serverPort, QString modelName,
             QString labelsFilename, QString dataFilename, QString dataFolder,
-            int dimInput[4], int GPUs, int dimOutput[4], int maxDatasetSize,
+            int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
+            bool repeat_images,
             QWidget *parent = 0);
     ~inference_viewer();
 

@@ -7,13 +7,13 @@
 #include <QLineEdit>
 #include <mutex>
 
-struct model_uploader_status {
+struct inference_compiler_status {
     bool completed;
     int errorCode;
-    int prototxtUploadProgress;
-    int caffeModelUploadProgress;
+    int modelFile1UploadProgress;
+    int modelFile2UploadProgress;
     int compilationProgress;
-    int * dimOutput;
+    int dimOutput[3];
     QString message;
 };
 
@@ -22,11 +22,12 @@ class inference_model_uploader : public QObject
     Q_OBJECT
 public:
     explicit inference_model_uploader(
+            bool enableServer,
             QString serverHost, int serverPort,
-            QString prototxt, QString caffeModel,
-            int n, int c, int h, int w, int gpuCount,
+            int c, int h, int w,
+            QString modelFile1, QString modelFile2,
             QString compilerOptions,
-            model_uploader_status * progress,
+            inference_compiler_status * progress,
             QObject *parent = nullptr);
     ~inference_model_uploader();
 
@@ -40,22 +41,21 @@ public slots:
     void run();
 
 private:
-    static bool abortRequsted;
+    static bool abortRequested;
 
 private:
     std::mutex mutex;
     // config
+    bool enableServer;
     QString serverHost;
     int serverPort;
-    QString prototxt;
-    QString caffeModel;
-    int dimN;
     int dimC;
     int dimH;
     int dimW;
-    int GPUs;
+    QString modelFile1;
+    QString modelFile2;
     QString compilerOptions;
-    model_uploader_status * progress;
+    inference_compiler_status * progress;
 };
 
 class inference_compiler : public QWidget
@@ -63,12 +63,12 @@ class inference_compiler : public QWidget
     Q_OBJECT
 public:
     explicit inference_compiler(
+            bool enableServer,
             QString serverHost, int serverPort,
-            QString prototxt, QString caffeModel,
-            int n, int c, int h, int w, int GPUs,
+            int c, int h, int w,
+            QString modelFile1, QString modelFile2,
             QString compilerOptions,
-            int * dimOutput,
-            bool * completed,
+            inference_compiler_status * progress,
             QWidget *parent = nullptr);
 
 protected:
@@ -84,35 +84,30 @@ public slots:
 
 private:
     // config
+    bool enableServer;
     QString serverHost;
     int serverPort;
-    QString prototxt;
-    QString caffeModel;
-    int dimN;
     int dimC;
     int dimH;
     int dimW;
-    int GPUs;
+    QString modelFile1;
+    QString modelFile2;
     QString compilerOptions;
-    int * dimOutput;
-    bool * completed;
     // status
     QLabel * labelStatus;
-    QLineEdit * editPrototxtUploadProgress;
-    QLineEdit * editCaffeModelUploadProgress;
+    QLineEdit * editModelFile1UploadProgress;
+    QLineEdit * editModelFile2UploadProgress;
     QLineEdit * editCompilerProgress;
-    QLineEdit * editDimN;
     QLineEdit * editDimC;
     QLineEdit * editDimH;
     QLineEdit * editDimW;
-    QLineEdit * editOutDimN;
     QLineEdit * editOutDimC;
     QLineEdit * editOutDimH;
     QLineEdit * editOutDimW;
     QLineEdit * editCompilerMessage;
     QPushButton * okCompilerButton;
     QPushButton * cancelCompilerButton;
-    model_uploader_status progress;
+    inference_compiler_status * progress;
     inference_model_uploader * worker;
 };
 

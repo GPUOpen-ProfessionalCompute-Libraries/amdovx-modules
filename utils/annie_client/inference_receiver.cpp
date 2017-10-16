@@ -11,7 +11,7 @@ void inference_receiver::abort()
 }
 
 inference_receiver::inference_receiver(
-        QString serverHost_, int serverPort_,
+        QString serverHost_, int serverPort_, QString modelName_,
         int GPUs_, int * inputDim_, int * outputDim_, const char * runtimeOptions_,
         QVector<QByteArray> * imageBuffer_,
         runtime_receiver_status * progress_,
@@ -25,6 +25,7 @@ inference_receiver::inference_receiver(
     imageBuffer = imageBuffer_;
     serverHost = serverHost_;
     serverPort = serverPort_;
+    modelName = modelName_;
     GPUs = GPUs_;
     inputDim = inputDim_;
     outputDim = outputDim_;
@@ -57,7 +58,11 @@ void inference_receiver::run()
     //    - keep sending images and tag if server can accept more work
     //    - when results are received add the results to imageIndex, imageLabel, imageSummary queues
 
-#if INFCOM_ENABLED
+    progress->images_sent = 0;
+    progress->images_received = 0;
+    progress->completed_send = false;
+    progress->completed = false;
+
     QTcpSocket * tcpSocket = new QTcpSocket(this);
     tcpSocket->connectToHost(serverHost, serverPort);
     if(tcpSocket->waitForConnected(3000)) {
@@ -67,8 +72,8 @@ void inference_receiver::run()
                 break;
             if(tcpSocket->waitForReadyRead()) {
                 InfComCommand cmd;
-                if(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
-                   tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
+                while(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
+                      tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
                 {
                     if(cmd.magic != INFCOM_MAGIC) {
                         progress->errorCode = -1;
@@ -122,17 +127,22 @@ void inference_receiver::run()
                     else if(cmd.command == INFCOM_CMD_SEND_MODE) {
                         InfComCommand reply = {
                             INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
-                            { INFCOM_MODE_RUNTIME, GPUs,
-                              inputDim[0], inputDim[1], inputDim[2], inputDim[3],
-                              outputDim[0], outputDim[1], outputDim[2], outputDim[3] },
+                            { INFCOM_MODE_INFERENCE, GPUs,
+                              inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2] },
                             { 0 }
                         };
-                        strncpy(reply.message, runtimeOptions, sizeof(reply.message));
+                        QString text = modelName;
+                        if(runtimeOptions || *runtimeOptions) {
+                            text += " ";
+                            text += runtimeOptions;
+                        }
+                        strncpy(reply.message, text.toStdString().c_str(), sizeof(reply.message));
                         if(!send(tcpSocket, progress, &reply, sizeof(reply)))
                             break;
                     }
                     else if(cmd.command == INFCOM_CMD_SEND_IMAGES) {
-                        int count = cmd.data[0];
+                        int count_requested = cmd.data[0];
+                        int count = std::min(imageCount - nextImageToSend, count_requested);
                         InfComCommand reply = {
                             INFCOM_MAGIC, INFCOM_CMD_SEND_IMAGES,
                             { count },
@@ -149,11 +159,18 @@ void inference_receiver::run()
                             }
                             // update nextImageToSend
                             nextImageToSend++;
-                            if(nextImageToSend >= imageCount)
-                                nextImageToSend = 0;
+                            progress->images_sent++;
                         }
                         if(failed)
                             break;
+                        if(nextImageToSend >= imageCount) {
+                            if(progress->repeat_images) {
+                                nextImageToSend = 0;
+                            }
+                            else {
+                                progress->completed_send = true;
+                            }
+                        }
                     }
                     else if(cmd.command == INFCOM_CMD_INFERENCE_RESULT) {
                         int count = cmd.data[0];
@@ -165,8 +182,9 @@ void inference_receiver::run()
                                 int label = cmd.data[2 + 2*i + 1];
                                 imageIndex.push_back(tag);
                                 imageLabel.push_back(label);
-                                imageSummary.push_back("Further information not available yet");
+                                imageSummary.push_back((*labelName)[label]);
                                 perfImageCount++;
+                                progress->images_received++;
                             }
                         }
                     }
@@ -187,25 +205,10 @@ void inference_receiver::run()
         progress->message += " [aborted]";
     tcpSocket->close();
     progress->completed = true;
-    qDebug("inference_receiver::run() terminated: errorCode=%d", progress->errorCode);
-#else
-    // simulate just receiving resuts
-    int counter = 0;
-    while(!abortRequsted) {
-        if(imageCount > 0) {
-            std::lock_guard<std::mutex> guard(mutex);
-            int index = counter % imageCount;
-            imageIndex.push_back(index);
-            imageLabel.push_back(qrand() % labelCount);
-            imageSummary.push_back("Further information not available yet");
-            counter++;
-            if(counter >= imageCount)
-                counter = 0;
-            perfImageCount++;
-        }
-        QThread::msleep(2);
+
+    if(progress->errorCode) {
+        qDebug("inference_receiver::run() terminated: errorCode=%d", progress->errorCode);
     }
-#endif
 }
 
 float inference_receiver::getPerfImagesPerSecond()
@@ -220,8 +223,9 @@ float inference_receiver::getPerfImagesPerSecond()
     return perfRate;
 }
 
-void inference_receiver::setImageCount(int imageCount_, int labelCount_)
+void inference_receiver::setImageCount(int imageCount_, int labelCount_, QVector<QString> * labelName_)
 {
     imageCount = imageCount_;
     labelCount = labelCount_;
+    labelName = labelName_;
 }

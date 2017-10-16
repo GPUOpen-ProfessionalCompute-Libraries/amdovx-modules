@@ -13,6 +13,10 @@ struct runtime_receiver_status {
     bool completed;
     int errorCode;
     QString message;
+    bool repeat_images;
+    bool completed_send;
+    int images_sent;
+    int images_received;
 };
 
 class inference_receiver : public QObject
@@ -20,7 +24,7 @@ class inference_receiver : public QObject
     Q_OBJECT
 public:
     explicit inference_receiver(
-            QString serverHost, int serverPort,
+            QString serverHost, int serverPort, QString modelName,
             int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
             QVector<QByteArray> * imageBuffer,
             runtime_receiver_status * progress,
@@ -28,7 +32,7 @@ public:
     ~inference_receiver();
 
     static void abort();
-    void setImageCount(int imageCount, int labelCount);
+    void setImageCount(int imageCount, int labelCount, QVector<QString> * labelName);
     void getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ);
     float getPerfImagesPerSecond();
 
@@ -53,8 +57,10 @@ private:
     int perfImageCount;
     float perfRate;
     QVector<QByteArray> * imageBuffer;
+    QVector<QString> * labelName;
     QString serverHost;
     int serverPort;
+    QString modelName;
     int GPUs;
     int * inputDim;
     int * outputDim;
