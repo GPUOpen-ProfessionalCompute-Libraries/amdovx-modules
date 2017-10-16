@@ -1329,7 +1329,7 @@ void writeVXCode(
             }
             else if(codeType == "constructor") {
                 ofsCodeC << "    " << layerName + "_size("  << normalization_size << ")," << std::endl;
-                ofsCodeC << "     " << layerName + "_alpha(" << alpha << ")," << std::endl;
+                ofsCodeC << "    " << layerName + "_alpha(" << alpha << ")," << std::endl;
                 ofsCodeC << "    " << layerName + "_beta(" << beta << ")," << std::endl;
                 ofsCodeC << "    " << layerName + "_bias(" << k << ")," << std::endl;
             }
