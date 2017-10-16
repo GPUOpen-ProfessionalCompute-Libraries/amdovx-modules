@@ -777,10 +777,11 @@ void writeGDF(
         }
         else if(type == "Concat") {
             ofsGDF << "node com.amd.nn_extension.concat_layer" ;
+            ofsGDF << " " << node[3];
             for(int i = 4; i < node.size(); i++) {
                 ofsGDF << " " << node[i];
             }
-            ofsGDF << " " << node[3] << std::endl;
+            ofsGDF << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
@@ -1417,9 +1418,11 @@ void writeVXCode(
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "    " <<  output + "_node = " << "vxConcatLayer(graph, " ;
+                ofsCodeC << node[3];
                 for(int i=4;i < node.size(); i++) {
-                    ofsCodeC << node[i] << ", " ;
+                    ofsCodeC << ", " << node[i];
                 }
+                ofsCodeC << ");" << std::endl;
                 ofsCodeC << node[3] << " );" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
