@@ -28,14 +28,16 @@ SOURCES += \
         inference_viewer.cpp \
     inference_receiver.cpp \
     inference_control.cpp \
-    inference_compiler.cpp
+    inference_compiler.cpp \
+    assets.cpp
 
 HEADERS += \
         inference_viewer.h \
     inference_receiver.h \
     inference_control.h \
     inference_compiler.h \
-    inference_comm.h
+    inference_comm.h \
+    assets.h
 
 FORMS += \
         inference_viewer.ui

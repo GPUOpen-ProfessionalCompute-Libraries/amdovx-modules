@@ -34,9 +34,9 @@ public slots:
     void onLogoClick();
 
 protected:
-    void browseDatasetLabels();
-    void browseDatasetFilename();
-    void browseDatasetFolder();
+    void browseDataLabels();
+    void browseDataFilename();
+    void browseDataFolder();
     bool isConfigValid(QString& err);
     void saveConfig();
     void loadConfig();
@@ -61,13 +61,14 @@ private:
     QLineEdit * editCompilerOptions;
     QPushButton * buttonModelFile1;
     QPushButton * buttonModelFile2;
+    QLabel * labelCompilerStatus;
     QLineEdit * editGPUs;
     QLabel * labelMaxGPUs;
     QPushButton * buttonRunInference;
     QLineEdit * editImageLabelsFile;
     QLineEdit * editImageFolder;
     QLineEdit * editImageListFile;
-    QLineEdit * editMaxDatasetSize;
+    QLineEdit * editMaxDataSize;
     QCheckBox * checkRepeatImages;
     inference_compiler_status compiler_status;
     bool operationMode;
