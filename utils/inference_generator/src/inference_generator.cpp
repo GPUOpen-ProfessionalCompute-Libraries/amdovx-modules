@@ -190,16 +190,8 @@ int loadCaffeProtoTxt(
     for(int i = 0; i < msg->layer_size(); i++) {
         // get current layer
         const caffe::LayerParameter layer = msg->layer(i);
-        // discard if layer is input/data or specific to TEST
-        caffe::Phase phase = layer.phase();
-        for(int j = 0; j < layer.include_size(); j++) {
-            if(layer.include(j).phase())
-                phase = layer.include(j).phase();
-        }
-        if(phase == caffe::TEST) {
-            continue;
-        }
-        else if(layer.type() == "Input" || layer.type() == "Data" || layer.type() == "ImageData") {
+
+        if(layer.type() == "Input" || layer.type() == "Data" || layer.type() == "ImageData") {
             outputNameMap[layer.top(0)] = layer.top(0);
 
             if(layer.type() == "Input"  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0))) {
@@ -785,10 +777,11 @@ void writeGDF(
         }
         else if(type == "Concat") {
             ofsGDF << "node com.amd.nn_extension.concat_layer" ;
+            ofsGDF << " " << node[3];
             for(int i = 4; i < node.size(); i++) {
                 ofsGDF << " " << node[i];
             }
-            ofsGDF << " " << node[3] << std::endl;
+            ofsGDF << std::endl;
 #if ENABLE_DUMP_LAYER_DATA
             ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
 #endif
@@ -1425,9 +1418,11 @@ void writeVXCode(
             }
             else if(codeType == "initialize") {
                 ofsCodeC << "    " <<  output + "_node = " << "vxConcatLayer(graph, " ;
+                ofsCodeC << node[3];
                 for(int i=4;i < node.size(); i++) {
-                    ofsCodeC << node[i] << ", " ;
+                    ofsCodeC << ", " << node[i];
                 }
+                ofsCodeC << ");" << std::endl;
                 ofsCodeC << node[3] << " );" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + output + "_node);" << std::endl;
             }
@@ -1659,19 +1654,8 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
         if(layer_parameter.top_size() == 0)
             continue;
 
-        caffe::Phase phase = layer_parameter.phase();
-        for(int j=0;j<layer_parameter.include_size();j++) {
-            if(layer_parameter.include(j).phase()) {
-                phase = layer_parameter.include(j).phase();
-            }
-        }
-
-        if(phase== caffe::TEST) {
-            continue;
-        }
-
         //Check layer name.
-        else if(layer_parameter.type() == "Input" || layer_parameter.type() == "Data" || layer_parameter.type() == "ImageData" ) {
+        if(layer_parameter.type() == "Input" || layer_parameter.type() == "Data" || layer_parameter.type() == "ImageData" ) {
             outputNameMap[layer_parameter.top(0)]= layer_parameter.top(0);
             if(layer_parameter.type() == "Input"  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0))) {
                 inputDim[0] = layer_parameter.input_param().shape(0).dim(0);
