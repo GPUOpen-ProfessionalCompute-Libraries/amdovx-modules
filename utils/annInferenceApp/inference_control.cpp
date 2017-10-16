@@ -20,13 +20,13 @@
 #include <QStyle>
 #include <QDesktopServices>
 
-#define CONFIGURATION_CACHE_FILENAME ".inference_control.txt"
-#define BUILD_VERSION "alpha2"
+#define CONFIGURATION_CACHE_FILENAME ".annInferenceApp.txt"
+#define BUILD_VERSION "alpha1"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
     : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }
 {
-    setWindowTitle("Inference Control");
+    setWindowTitle("annInferenceApp");
     setMinimumWidth(800);
 
     maxGPUs = 1;
@@ -300,8 +300,8 @@ void inference_control::saveConfig()
         fileOutput << editGPUs->text() << endl;
         fileOutput << lastCompilerOptions << endl;
         fileOutput << editImageLabelsFile->text() << endl;
-        fileOutput << editImageListFile->text() << endl;
         fileOutput << editImageFolder->text() << endl;
+        fileOutput << editImageListFile->text() << endl;
         QString text;
         fileOutput << ((maxDataSize > 0) ? text.sprintf("%d", maxDataSize) : "") << endl;
         fileOutput << (repeat_images ? 1 : 0) << endl;
@@ -327,8 +327,8 @@ void inference_control::loadConfig()
             editGPUs->setText(fileInput.readLine());
             editCompilerOptions->setText(fileInput.readLine());
             editImageLabelsFile->setText(fileInput.readLine());
-            editImageListFile->setText(fileInput.readLine());
             editImageFolder->setText(fileInput.readLine());
+            editImageListFile->setText(fileInput.readLine());
             editMaxDataSize->setText(fileInput.readLine());
             bool repeat_images = false;
             if(fileInput.readLine() == "1")
