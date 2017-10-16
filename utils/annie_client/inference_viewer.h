@@ -91,6 +91,8 @@ private:
 private:
     // ui
     Ui::inference_viewer *ui;
+    QTimer * updateTimer;
+    bool timerStopped;
     // state
     inference_state * state;
     QString fatalError;

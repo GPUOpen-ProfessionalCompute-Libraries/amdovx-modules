@@ -15,6 +15,10 @@ struct runtime_receiver_status {
     QString message;
     bool repeat_images;
     bool completed_send;
+    bool completed_decode;
+    bool completed_load;
+    int images_loaded;
+    int images_decoded;
     int images_sent;
     int images_received;
 };

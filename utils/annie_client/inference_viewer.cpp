@@ -13,6 +13,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QFileDialog>
+#include <QDesktopServices>
 
 #define WINDOW_TITLE             "Inference Viewer"
 #define ICON_SIZE                64
@@ -65,7 +66,8 @@ inference_viewer::inference_viewer(
         bool repeat_images_,
         QWidget *parent) :
     QWidget(parent),
-    ui(new Ui::inference_viewer)
+    ui(new Ui::inference_viewer),
+    updateTimer{ nullptr }
 {
     state = new inference_state();
     state->dataLabelsFilename = labelsFilename;
@@ -86,8 +88,13 @@ inference_viewer::inference_viewer(
     progress.errorCode = 0;
     progress.repeat_images = repeat_images_;
     progress.completed_send = false;
+    progress.completed_decode = false;
+    progress.completed_load = false;
     progress.images_received = 0;
     progress.images_sent = 0;
+    progress.images_decoded = 0;
+    progress.images_loaded = 0;
+
     ui->setupUi(this);
     setMinimumWidth(800);
     setMinimumHeight(800);
@@ -95,9 +102,10 @@ inference_viewer::inference_viewer(
     showMaximized();
 
     // start timer for update
-    QTimer *timer = new QTimer(this);
-    connect(timer, SIGNAL(timeout()), this, SLOT(update()));
-    timer->start(40);
+    timerStopped = false;
+    updateTimer = new QTimer(this);
+    connect(updateTimer, SIGNAL(timeout()), this, SLOT(update()));
+    updateTimer->start(40);
 }
 
 void inference_viewer::startReceiver()
@@ -199,18 +207,31 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
     else if(event->key() == Qt::Key_Q) {
         close();
     }
+    else if(event->key() == Qt::Key_A) {
+        if(progress.completed_decode && state->receiver_worker) {
+                state->receiver_worker->abort();
+        }
+    }
     else if(event->key() == Qt::Key_S) {
-        QString fileName = QFileDialog::getSaveFileName(this, tr("New Image List File"), nullptr, tr("Image List Text (*.txt)"));
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Save Inference Results"), nullptr, tr("Text Files (*.txt);;CSV Files (*.csv)"));
         if(fileName.size() > 0) {
             QFile fileObj(fileName);
             if(fileObj.open(QIODevice::WriteOnly)) {
+                bool csvFile =
+                        QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
                 for(int i = 0; i < state->imageDataSize; i++) {
                     int label = state->inferenceResultTop[i];
                     QString text;
-                    text.sprintf("%s %d -- %s\n", state->imageDataFilenames[i].toStdString().c_str(),
-                                 label, state->labelName[label].toStdString().c_str());
+                    text.sprintf("%s%c%d%s%s%s\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                 csvFile ? ',' : ' ',
+                                 label,
+                                 csvFile ? ",\"" : " #",
+                                 state->labelName[label].toStdString().c_str(),
+                                 csvFile ? "\"" : "");
                     fileObj.write(text.toStdString().c_str());
                 }
+                fileObj.close();
+                QDesktopServices::openUrl(QUrl("file://" + fileName));
             }
             else {
                 fatalError.sprintf("ERROR: unable to create: %s", fileName.toStdString().c_str());
@@ -274,16 +295,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
     if(!state->labelLoadDone) {
         if(state->dataFilename.length() == 0) {
             int count = 0;
-            QDirIterator dirIt(state->dataFolder, QDirIterator::Subdirectories);
+            QDirIterator dirIt(state->dataFolder, QDirIterator::NoIteratorFlags);
             while (dirIt.hasNext()) {
                 dirIt.next();
-                if (QFileInfo(dirIt.filePath()).isFile() &&
-                        (QFileInfo(dirIt.filePath()).suffix() == "JPEG" ||
-                         QFileInfo(dirIt.filePath()).suffix() == "jpeg" ||
-                         QFileInfo(dirIt.filePath()).suffix() == "JPG" ||
-                         QFileInfo(dirIt.filePath()).suffix() == "jpg" ||
-                         QFileInfo(dirIt.filePath()).suffix() == "PNG" ||
-                         QFileInfo(dirIt.filePath()).suffix() == "png"))
+                QFileInfo fileInfo = QFileInfo(dirIt.filePath());
+                if (fileInfo.isFile() &&
+                        (QString::compare(fileInfo.suffix(), "jpeg", Qt::CaseInsensitive) ||
+                         QString::compare(fileInfo.suffix(), "jpg", Qt::CaseInsensitive)  ||
+                         QString::compare(fileInfo.suffix(), "png", Qt::CaseInsensitive)))
                 {
                     state->imageDataFilenames.push_back(dirIt.filePath());
                     state->imageLabel.push_back(-1);
@@ -337,6 +356,8 @@ void inference_viewer::paintEvent(QPaintEvent *)
             if(state->imageLoadCount == state->imageDataSize || state->abortLoadingRequested) {
                 state->imageDataSize = state->imageLoadCount;
                 state->imageLoadDone = true;
+                progress.images_loaded = state->imageLoadCount;
+                progress.completed_load = true;
                 break;
             }
             QString fileName = state->imageDataFilenames[state->imageLoadCount];
@@ -353,17 +374,22 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 }
                 state->imageDataSize = state->imageLoadCount;
                 state->imageLoadDone = true;
+                progress.images_loaded = state->imageLoadCount;
+                progress.completed_load = true;
                 break;
             }
             QByteArray byteArray = fileObj.readAll();
             state->imageBuffer.push_back(byteArray);
             state->imageLoadCount++;
+            progress.images_loaded = state->imageLoadCount;
         }
     }
     if(state->imageLoadCount > 0 && !state->imagePixmapDone) {
         for(int i = 0; i < scaleBatchSize; i++) {
             if(state->imageLoadDone && state->imagePixmapCount == state->imageLoadCount) {
                 state->imagePixmapDone = true;
+                progress.images_decoded = state->imagePixmapCount;
+                progress.completed_decode = true;
                 break;
             }
             if(state->imagePixmapCount >= state->imageBuffer.size()) {
@@ -372,10 +398,13 @@ void inference_viewer::paintEvent(QPaintEvent *)
             QPixmap pixmap;
             if(!pixmap.loadFromData(state->imageBuffer[state->imagePixmapCount])) {
                 state->imagePixmapDone = true;
+                progress.images_decoded = state->imagePixmapCount;
+                progress.completed_decode = true;
                 break;
             }
             state->imagePixmap.push_back(pixmap.scaled(ICON_SIZE, ICON_SIZE, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
             state->imagePixmapCount++;
+            progress.images_decoded = state->imagePixmapCount;
         }
         if(state->receiver_worker)
             state->receiver_worker->setImageCount(state->imagePixmapCount, state->labelName.size(), &state->labelName);
@@ -400,6 +429,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
         painter.drawRect(state->statusBarRect);
         if(progress.repeat_images) {
             statusText.sprintf("Cycling through %d images from the image list", state->imagePixmapCount);
+        }
+        else if (progress.completed) {
+            statusText.sprintf("All %d images have been processed", state->imagePixmapCount);
+            if(!timerStopped && updateTimer) {
+                // TODO: something is wrong with timer and paint event triggers
+                timerStopped = true;
+                updateTimer->setInterval(1000);
+            }
         }
         else {
             statusText.sprintf("Sent %d/%d images from the image list and got %d/%d results",
@@ -511,7 +548,12 @@ void inference_viewer::paintEvent(QPaintEvent *)
             int w = ICON_SIZE / 4;
             int h = ICON_SIZE / 4;
             bool enableImageDraw = false;
-            if(progress.repeat_images && (row / 2) < (numRows / 4)) {
+            bool enableZoomInEffect = true;
+            if(!progress.repeat_images)
+                enableZoomInEffect = false;
+            else if(imageCount < (numCols * numRows * 3 / 4))
+                enableZoomInEffect = false;
+            if(enableZoomInEffect && (row / 2) < (numRows / 4)) {
                 if((row % 2) == 0 && (col % 2) == 0) {
                     w += ICON_STRIDE / 4;
                     h += ICON_STRIDE / 4;

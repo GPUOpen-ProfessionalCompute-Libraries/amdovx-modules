@@ -66,11 +66,13 @@ void inference_model_uploader::run()
             while(tcpSocket->state() == QAbstractSocket::ConnectedState) {
                 if(abortRequested)
                     break;
+                bool receivedCommand = false;
                 if(tcpSocket->waitForReadyRead()) {
                     InfComCommand cmd;
                     if(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
                        tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
                     {
+                        receivedCommand = true;
                         if(cmd.magic != INFCOM_MAGIC) {
                             progress->errorCode = -1;
                             progress->message.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
@@ -171,6 +173,9 @@ void inference_model_uploader::run()
                             break;
                         }
                     }
+                }
+                if(!receivedCommand) {
+                    QThread::msleep(2);
                 }
             }
         }

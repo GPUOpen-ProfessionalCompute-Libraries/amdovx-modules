@@ -31,6 +31,7 @@ public slots:
     void onChangeModelFile1(const QString &);
     void onChangeModelFile2(const QString &);
     void onChangeCompilerOptions(const QString &);
+    void onLogoClick();
 
 protected:
     void browseDatasetLabels();

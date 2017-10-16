@@ -70,11 +70,15 @@ void inference_receiver::run()
         while(tcpSocket->state() == QAbstractSocket::ConnectedState) {
             if(abortRequsted)
                 break;
+            bool receivedCommand = false;
             if(tcpSocket->waitForReadyRead()) {
                 InfComCommand cmd;
                 while(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
                       tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
                 {
+                    receivedCommand = true;
+                    if(abortRequsted)
+                        break;
                     if(cmd.magic != INFCOM_MAGIC) {
                         progress->errorCode = -1;
                         progress->message.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
@@ -167,7 +171,7 @@ void inference_receiver::run()
                             if(progress->repeat_images) {
                                 nextImageToSend = 0;
                             }
-                            else {
+                            else if(progress->completed_load && progress->images_loaded == progress->images_sent) {
                                 progress->completed_send = true;
                             }
                         }
@@ -186,6 +190,11 @@ void inference_receiver::run()
                                 perfImageCount++;
                                 progress->images_received++;
                             }
+                            if(!progress->repeat_images && progress->completed_load &&
+                                progress->images_loaded == progress->images_received)
+                            {
+                                abort();
+                            }
                         }
                     }
                     else {
@@ -194,6 +203,9 @@ void inference_receiver::run()
                         break;
                     }
                 }
+            }
+            if(!receivedCommand) {
+                QThread::msleep(2);
             }
         }
     }
@@ -215,7 +227,7 @@ float inference_receiver::getPerfImagesPerSecond()
 {
     std::lock_guard<std::mutex> guard(mutex);
     qint64 msec = perfTimer.elapsed();
-    if(msec > 2000) {
+    if(!progress->completed && msec > 2000) {
         perfRate = (float)perfImageCount * 1000.0 / (float)msec;
         perfImageCount = 0;
         perfTimer.start();
