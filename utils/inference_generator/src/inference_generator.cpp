@@ -1927,9 +1927,9 @@ void generateCode(
     ofsCodeM << "    " << "NetVX net;" << std::endl;
     ofsCodeM << std::endl;
     ofsCodeM << "    " << "// input tensor" << std::endl;
-    ofsCodeM << "    " << "FILE * fInput;" << std::endl;
+    ofsCodeM << "    " << "FILE * fInput = NULL;" << std::endl;
     ofsCodeM << "    " << "fInput = fopen(\"input.f32\", \"rb\" );" << std::endl;
-    ofsCodeM << "    " << "if(!fInput) { std::cout << \" Unable to open the file input.f32 \" << std::endl; fclose(fInput); return -1; } " << std::endl;
+    ofsCodeM << "    " << "if(!fInput) { std::cout << \"Unable to open the file input.f32 \" << std::endl; return -1; } " << std::endl;
     ofsCodeM << "    " << "// calculate input tensor size & read file into tensor" << std::endl;
     ofsCodeM << "    " << "fseek(fInput, 0L, SEEK_END);" << std::endl;
     ofsCodeM << "    " << "size_t inputBytes = ftell(fInput);" << std::endl;
