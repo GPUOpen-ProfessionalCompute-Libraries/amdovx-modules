@@ -91,9 +91,11 @@ import vx_nn
 
 data input  = image:32,32,RGB2
 data output = tensor:4,{32,32,3,1},VX_TYPE_FLOAT32,0
-data flip = scalar:UINT32,1
+data a = scalar:FLOAT32,1.0
+data b = scalar:FLOAT32,0.0
+data reverse_channel_order = scalar:BOOL,0
 read input input.png
-node com.amd.nn_extension.convert_image_to_tensor input output flip
+node com.amd.nn_extension.convert_image_to_tensor input output a b reverse_channel_order
 write output input.f32
 
 ```
