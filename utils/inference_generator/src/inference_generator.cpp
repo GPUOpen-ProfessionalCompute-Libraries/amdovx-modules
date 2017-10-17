@@ -2123,7 +2123,7 @@ int main(int argc, char* argv[])
     bool isVirtualEnabled = true;
     bool generateGDF = true;
     bool generateVXC = false;
-    bool bFuseScaleWithBatchNorm = false;
+    bool bFuseScaleWithBatchNorm = true;
     std::string outputFolder = ".";
     int flags = 0;
     for(; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
@@ -2185,7 +2185,7 @@ int main(int argc, char* argv[])
     std::vector<std::vector<std::string>> net;
 
     flags &= 3;     // we are only interersted in LSBs 0 & 1
-    bFuseScaleWithBatchNorm = (flags & 2) >> 1;
+    bFuseScaleWithBatchNorm = !((flags & 2) >> 1);
 
     // load caffe model (or just .prototxt)
     if(strstr(fileName,".caffemodel")) {
