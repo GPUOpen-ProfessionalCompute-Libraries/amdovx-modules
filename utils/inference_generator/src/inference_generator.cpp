@@ -687,7 +687,7 @@ void writeGDF(
                 // put default scale and bias term
                 std::vector<float> scale_arr(dim[0]);
                 std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
-                std::string fileName_weights = outputFolder + "scale_init.f32";
+                std::string fileName_weights = outputFolder + "/scale_init.f32";
                 FILE *fp = fopen(fileName_weights.c_str(), "wb");
                 if (fp) {
                     fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
