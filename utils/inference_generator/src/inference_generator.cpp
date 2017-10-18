@@ -194,7 +194,6 @@ int loadCaffeProtoTxt(
     // process network layer by layer
     for(int i = 0; i < msg->layer_size(); i++) {
         // get current layer
-
         const caffe::LayerParameter layer = msg->layer(i);
 
         if(layer.type() == "Input" || layer.type() == "Data" || layer.type() == "ImageData") {
