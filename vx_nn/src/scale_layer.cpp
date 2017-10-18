@@ -150,6 +150,9 @@ static vx_status VX_CALLBACK uninitializeScaleLayer(vx_node node, const vx_refer
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bnScaleBiasMeanVarDesc));
+    if(!parameters[4]){
+     clReleaseMemObject(data->bnBias);
+    }
     if (data) {
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;

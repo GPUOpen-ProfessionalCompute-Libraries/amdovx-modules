@@ -1629,7 +1629,7 @@ void writeVXCode(
         else if(type == "Eltwise") {
             int op;
             std::stringstream ss(params);
-            ss >> op;" <<  "
+            ss >> op;
             auto&& dim = tensorMap[output];
             for(int i=4; i < node.size(); i++) {
                 auto&& idim= tensorMap[node[i]];
