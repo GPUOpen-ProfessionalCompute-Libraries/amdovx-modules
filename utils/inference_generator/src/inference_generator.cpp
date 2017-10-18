@@ -980,7 +980,12 @@ void writeVXCode(
                         ofsCodeC << "    " << nextOutput + "_dims  {" << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << "}," << std::endl;
                     }
                     else if(codeType == "initialize") {
-                        ofsCodeC << "    " << nextOutput << " = vxCreateTensor(context,4, " << nextOutput + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        if(isVirtualEnabled){
+                            ofsCodeC << "    " << nextOutput << " = vxCreateVirtualTensor(graph,4, " << nextOutput + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
+                        else{
+                            ofsCodeC << "    " << nextOutput << " = vxCreateTensor(context,4, " << nextOutput + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
                         ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << nextOutput << ");" << std::endl;
                     }
                     else if(codeType == "release_tensors") {
@@ -1013,7 +1018,12 @@ void writeVXCode(
                 ofsCodeC << "    " << layerName + "_dims  {" << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << "}," << std::endl;
             }
             else if(codeType == "initialize") {
-                ofsCodeC << "    " << layerName << " = vxCreateTensor(context,4, " << layerName + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                if(isVirtualEnabled && !isLastLayer ){
+                    ofsCodeC << "    " << layerName << " = vxCreateVirtualTensor(graph,4, " << layerName + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                }
+                else{
+                    ofsCodeC << "    " << layerName << " = vxCreateTensor(context,4, " << layerName + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                }
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << layerName << ");" << std::endl;
             }
             else if(codeType == "release_tensors") {
