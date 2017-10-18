@@ -1817,7 +1817,7 @@ void writeVXCode(
         if(isLastLayer && codeType == "initialize")
         {
             ofsCodeC << std::endl <<"    // verify the built graph" << std::endl;
-            ofsCodeC << "    " << "vxVerifyGraph(graph);" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxVerifyGraph(graph));" << std::endl;
         }
         if(isLastLayer && codeType == "constructor")
         {
