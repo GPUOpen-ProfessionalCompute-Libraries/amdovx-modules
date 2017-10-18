@@ -146,9 +146,10 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
         vx_context   vxContext = vxGetContext((vx_reference)node);
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        cl_float pattern = 0;
-        data->bnBias = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float)*input_dims[2], NULL, NULL);
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->bnBias, &pattern, sizeof(cl_float), 0, input_dims[2], 0, NULL, NULL);
+        cl_float pattern = 0; cl_int err = 0;
+        data->bnBias = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float)*input_dims[2], NULL, &err);
+        if (err) return VX_FAILURE;
+        err = clEnqueueFillBuffer(data->handle->cmdq, data->bnBias, &pattern, sizeof(cl_float), 0, input_dims[2], 0, NULL, NULL);
         if (err) return VX_FAILURE;
     }
 	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
