@@ -1,6 +1,6 @@
 #include "inference_control.h"
 #include "inference_compiler.h"
-#include "inference_comm.h"
+#include "infcom.h"
 #include "assets.h"
 #include <QGridLayout>
 #include <QDialogButtonBox>

@@ -1,5 +1,5 @@
 #include "inference_receiver.h"
-#include "inference_comm.h"
+#include "infcom.h"
 #include <QThread>
 #include <QTcpSocket>
 
@@ -126,6 +126,7 @@ void inference_receiver::run()
                         return true;
                     };
                     if(cmd.command == INFCOM_CMD_DONE) {
+                        abort();
                         break;
                     }
                     else if(cmd.command == INFCOM_CMD_SEND_MODE) {
@@ -146,7 +147,8 @@ void inference_receiver::run()
                     }
                     else if(cmd.command == INFCOM_CMD_SEND_IMAGES) {
                         int count_requested = cmd.data[0];
-                        int count = std::min(imageCount - nextImageToSend, count_requested);
+                        int count = progress->completed_send ? -1 :
+                                        std::min(imageCount - nextImageToSend, count_requested);
                         InfComCommand reply = {
                             INFCOM_MAGIC, INFCOM_CMD_SEND_IMAGES,
                             { count },

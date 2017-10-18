@@ -1,5 +1,5 @@
-#ifndef INFERENCE_COMM_H
-#define INFERENCE_COMM_H
+#ifndef INFCOM_H
+#define INFCOM_H
 
 // Configure Protocol:
 //    client: (connect)
@@ -15,7 +15,7 @@
 // Compiler Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic}
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic,mode}
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODELFILE1
 //    client: InfComCommand:INFCOM_CMD_SEND_MODELFILE1 with data[0]=size-in-bytes message=fileName
 //    client: <byte-stream-of-prototxt> <eof-marker:32-bit>
@@ -61,9 +61,14 @@
 #define INFCOM_MODE_COMPILER                   2
 #define INFCOM_MODE_INFERENCE                  3
 
-// Max Packet Size and EOF marker
-#define INFCOM_MAX_PACKET_SIZE                 8192
+// EOF marker
 #define INFCOM_EOF_MARKER                      0x12344321
+
+// Max images per packet
+#define INFCOM_MAX_IMAGES_PER_PACKET           6
+
+// Max packet size
+#define INFCOM_MAX_PACKET_SIZE                 8192
 
 // InfComCommand for message exchange:
 //    all unspecified values must be ZEROs
@@ -81,4 +86,4 @@ typedef struct {
     char name[64];
 } InfComModelInfo;
 
-#endif // INFERENCE_COMM_H
+#endif

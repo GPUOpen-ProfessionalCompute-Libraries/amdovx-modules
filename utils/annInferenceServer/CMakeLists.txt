@@ -18,41 +18,51 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+
 cmake_minimum_required (VERSION 2.8)
-project (amdovx-modules)
+project (annInferenceServer)
 
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+set (CMAKE_CXX_STANDARD 11)
 
-find_package(OpenCV QUIET)
-find_package(OpenCL QUIET)
-find_package(FFmpeg QUIET)
-find_package(miopengemm PATHS /opt/rocm)
-find_package(miopen     PATHS /opt/rocm)
+find_package(OpenCL REQUIRED)
+find_package(OpenCV REQUIRED)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+include_directories(../../deps/amdovx-core/openvx/include ../../vx_nn)
 
-add_subdirectory(deps/amdovx-core)
+list(APPEND SOURCES
+	common.cpp
+	arguments.cpp
+	netutil.cpp
+	configure.cpp
+	compiler.cpp
+	inference.cpp
+	server.cpp
+	main.cpp
+)
 
-if(OpenCL_FOUND)
-    add_subdirectory (vx_loomsl)
-    add_subdirectory (utils)
-    if(FFMPEG_FOUND)
-        add_subdirectory (vx_loomio_media)
-    endif(FFMPEG_FOUND)
+add_executable(annInferenceServer ${SOURCES})
+
+target_link_libraries(annInferenceServer vx_nn openvx)
+
+if (OpenCL_FOUND)
+	include_directories(${OpenCL_INCLUDE_DIRS}/CL ${OpenCL_INCLUDE_DIRS}/Headers)
+	target_link_libraries(annInferenceServer ${OpenCL_LIBRARIES})
 endif(OpenCL_FOUND)
 
-if(OpenCL_FOUND AND miopengemm_FOUND AND miopen_FOUND)
-    add_subdirectory (vx_nn)
-endif()
-
-if(OpenCV_FOUND)
-    if(${OpenCV_VERSION_MAJOR} EQUAL 3)
-        add_subdirectory (vx_opencv)
-    endif()
+if (OpenCV_FOUND)
+	target_compile_definitions(annInferenceServer PUBLIC ENABLE_OPENCV=1)
+	include_directories(${OpenCV_INCLUDE_DIRS})
+	target_link_libraries(annInferenceServer ${OpenCV_LIBRARIES})
+else(OpenCV_FOUND)
+	target_compile_definitions(annInferenceServer PUBLIC ENABLE_OPENCV=0)
 endif(OpenCV_FOUND)
 
-if(INCLUDE_annInference)
-    add_subdirectory (utils/annInferenceServer)
-endif(INCLUDE_annInference)
+if( POLICY CMP0054 )
+  cmake_policy( SET CMP0054 OLD )
+endif()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+else()
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+endif()

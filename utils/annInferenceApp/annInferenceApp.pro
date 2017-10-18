@@ -24,19 +24,19 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 
 SOURCES += \
-        main.cpp \
-        inference_viewer.cpp \
+    main.cpp \
+    inference_viewer.cpp \
     inference_receiver.cpp \
     inference_control.cpp \
     inference_compiler.cpp \
     assets.cpp
 
 HEADERS += \
-        inference_viewer.h \
+    inference_viewer.h \
     inference_receiver.h \
     inference_control.h \
     inference_compiler.h \
-    inference_comm.h \
+    infcom.h \
     assets.h
 
 FORMS += \
