@@ -187,16 +187,16 @@ static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, c
 {
     BatchNormLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bnScaleBiasMeanVarDesc));
-    if(!parameters[4]){
-        if(data->bnBias) {
-            cl_int err = clReleaseMemObject(data->bnBias);
-            if (err) return VX_FAILURE;
-        }
-    }
     if (data) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->bnScaleBiasMeanVarDesc));
+        if(!parameters[4]){
+            if(data->bnBias) {
+                cl_int err = clReleaseMemObject(data->bnBias);
+                if (err) return VX_FAILURE;
+            }
+        }
         ERROR_CHECK_STATUS(releaseGraphHandle(node, data->handle));
         delete data;
     }
