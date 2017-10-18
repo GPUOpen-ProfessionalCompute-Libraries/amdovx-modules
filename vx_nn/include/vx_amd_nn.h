@@ -25,10 +25,6 @@ THE SOFTWARE.
 #define _VX_AMD_NN_H_
 
 #include <VX/vx.h>
-#include <VX/vx_khr_nn.h>
-#ifdef __cplusplus
-#include <string>
-#endif
 
 /*! \brief [Graph] Creates a Batch Normalization Layer Node.
  * \param [in] graph The handle to the graph.
