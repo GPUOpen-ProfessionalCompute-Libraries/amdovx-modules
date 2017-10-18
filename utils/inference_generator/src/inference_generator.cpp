@@ -173,6 +173,11 @@ int loadCaffeProtoTxt(
         error("failed to parse file: %s\n", prototxtFileName);
     info("loadCaffeProtoTxt: loading %s from %s\n", msg->has_name() ? msg->name().c_str() : "(none)", prototxtFileName);
 
+    if(!(msg->layer_size() > 0)) {
+        std::cerr << "ERROR: [Unsupported caffe prototxt] please upgrade this prototxt, currently uses deprecated V1LayerParameters." << std::endl;
+        return -1;
+    }
+
     // initialize outputNameMap and input dimensions if available
     std::map<std::string,std::string> outputNameMap;
     if(msg->input_size() > 0) {
