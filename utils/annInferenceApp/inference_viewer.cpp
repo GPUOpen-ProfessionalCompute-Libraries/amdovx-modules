@@ -23,7 +23,7 @@
 inference_state::inference_state()
 {
     // initialize
-    wordsLoadDone = false;
+    dataLabels = nullptr;
     labelLoadDone = false;
     imageLoadDone = false;
     imageLoadCount = 0;
@@ -61,16 +61,16 @@ inference_state::inference_state()
 
 inference_viewer::inference_viewer(
         QString serverHost, int serverPort, QString modelName,
-        QString labelsFilename, QString dataFilename, QString dataFolder,
+        QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-        bool repeat_images_,
+        bool repeat_images,
         QWidget *parent) :
     QWidget(parent),
     ui(new Ui::inference_viewer),
     updateTimer{ nullptr }
 {
     state = new inference_state();
-    state->dataLabelsFilename = labelsFilename;
+    state->dataLabels = dataLabels;
     state->dataFolder = dataFolder;
     state->dataFilename = dataFilename;
     state->maxImageDataSize = maxImageDataSize;
@@ -86,7 +86,7 @@ inference_viewer::inference_viewer(
     state->modelName = modelName;
     progress.completed = false;
     progress.errorCode = 0;
-    progress.repeat_images = repeat_images_;
+    progress.repeat_images = repeat_images;
     progress.completed_send = false;
     progress.completed_decode = false;
     progress.completed_load = false;
@@ -108,6 +108,18 @@ inference_viewer::inference_viewer(
     updateTimer->start(40);
 }
 
+inference_viewer::~inference_viewer()
+{
+    inference_receiver::abort();
+    delete state;
+    delete ui;
+}
+
+void inference_viewer::errorString(QString /*err*/)
+{
+    qDebug("ERROR: inference_viewer: ...");
+}
+
 void inference_viewer::startReceiver()
 {
     // start receiver thread
@@ -126,16 +138,15 @@ void inference_viewer::startReceiver()
     state->receiver_thread->terminate();
 }
 
-inference_viewer::~inference_viewer()
+void inference_viewer::terminate()
 {
-    inference_receiver::abort();
-    delete state;
-    delete ui;
-}
-
-void inference_viewer::errorString(QString /*err*/)
-{
-    qDebug("ERROR: inference_viewer: ...");
+    if(state->receiver_worker && !progress.completed && !progress.errorCode) {
+        state->receiver_worker->abort();
+        for(int count = 0; count < 10 && !progress.completed; count++) {
+            QThread::msleep(100);
+        }
+    }
+    close();
 }
 
 void inference_viewer::mousePressEvent(QMouseEvent * event)
@@ -173,7 +184,7 @@ void inference_viewer::mouseReleaseEvent(QMouseEvent * event)
             QMessageBox::StandardButton reply;
             reply = QMessageBox::question(this, windowTitle(), "Do you really want to exit?", QMessageBox::Yes|QMessageBox::No);
             if(reply == QMessageBox::Yes) {
-                close();
+                terminate();
             }
         }
         state->exitButtonPressed = false;
@@ -205,7 +216,7 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
         state->viewRecentResults = !state->viewRecentResults;
     }
     else if(event->key() == Qt::Key_Q) {
-        close();
+        terminate();
     }
     else if(event->key() == Qt::Key_A) {
         if(progress.completed_decode && state->receiver_worker) {
@@ -226,7 +237,7 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
                                  csvFile ? ',' : ' ',
                                  label,
                                  csvFile ? ",\"" : " #",
-                                 state->labelName[label].toStdString().c_str(),
+                                 state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
                                  csvFile ? "\"" : "");
                     fileObj.write(text.toStdString().c_str());
                 }
@@ -271,27 +282,6 @@ void inference_viewer::paintEvent(QPaintEvent *)
     // status bar info
     QString statusText;
 
-    // load labels and images
-    if(!state->wordsLoadDone) {
-        QFile fileObj(state->dataLabelsFilename);
-        if(fileObj.open(QIODevice::ReadOnly)) {
-            QTextStream fileInput(&fileObj);
-            while (!fileInput.atEnd()) {
-                QString line = fileInput.readLine();
-                if(line.size() > 0)
-                    state->labelName.push_back(line);
-            }
-            if(state->labelName.size() != state->outputDim[2]) {
-                fatalError.sprintf("ERROR: need %d labels in %s: found %d", state->outputDim[2],
-                        state->dataLabelsFilename.toStdString().c_str(), state->labelName.size());
-            }
-            state->dataLabelCount = state->labelName.size();
-        }
-        else {
-            fatalError.sprintf("ERROR: unable to open: %s", state->dataLabelsFilename.toStdString().c_str());
-        }
-        state->wordsLoadDone = true;
-    }
     if(!state->labelLoadDone) {
         if(state->dataFilename.length() == 0) {
             int count = 0;
@@ -407,12 +397,12 @@ void inference_viewer::paintEvent(QPaintEvent *)
             progress.images_decoded = state->imagePixmapCount;
         }
         if(state->receiver_worker)
-            state->receiver_worker->setImageCount(state->imagePixmapCount, state->labelName.size(), &state->labelName);
+            state->receiver_worker->setImageCount(state->imagePixmapCount, state->dataLabels ? state->dataLabels->size() : 0, state->dataLabels);
     }
 
     if(!state->receiver_worker && state->imagePixmapCount >= imageCountLimitForInferenceStart && state->imageDataSize > 0) {
         startReceiver();
-        state->receiver_worker->setImageCount(state->imagePixmapCount, state->labelName.size(), &state->labelName);
+        state->receiver_worker->setImageCount(state->imagePixmapCount, state->dataLabels ? state->dataLabels->size() : 0, state->dataLabels);
     }
 
     // initialize painter object
@@ -428,10 +418,15 @@ void inference_viewer::paintEvent(QPaintEvent *)
         painter.setBrush(statusBarColorDecode);
         painter.drawRect(state->statusBarRect);
         if(progress.repeat_images) {
-            statusText.sprintf("Cycling through %d images from the image list", state->imagePixmapCount);
+            statusText.sprintf("Cycling through %d images from the image list [processed %d images]", state->imagePixmapCount, progress.images_received);
         }
         else if (progress.completed) {
-            statusText.sprintf("All %d images have been processed", state->imagePixmapCount);
+            if(progress.errorCode) {
+                statusText.sprintf("Completed: %d/%d images have been processed [error %d]", progress.images_received, state->imagePixmapCount, progress.errorCode);
+            }
+            else {
+                statusText.sprintf("Completed: %d/%d images have been processed", progress.images_received, state->imagePixmapCount);
+            }
             if(!timerStopped && updateTimer) {
                 // TODO: something is wrong with timer and paint event triggers
                 timerStopped = true;
@@ -439,7 +434,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
             }
         }
         else {
-            statusText.sprintf("Sent %d/%d images from the image list and got %d/%d results",
+            statusText.sprintf("Processing: [scheduled %d/%d images] [processed %d/%d images]",
                                progress.images_sent, state->imagePixmapCount,
                                progress.images_received, state->imagePixmapCount);
         }
@@ -607,7 +602,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
         int truthLabel = state->imageLabel[index];
         QString truthSummary = "";
         if(truthLabel >= 0) {
-            truthSummary = state->labelName[truthLabel];
+            truthSummary = state->dataLabels ? (*state->dataLabels)[truthLabel] : "Unknown";
         }
         int resultLabel = state->inferenceResultTop[index];
         QString resultSummary = state->inferenceResultSummary[index];
@@ -637,7 +632,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
         font.setItalic(false);
         setFont(font);
         painter.setPen(Qt::black);
-        text.sprintf("IMAGE#%d", index);
+        text.sprintf("IMAGE#%d", index + 1);
         painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         font.setBold(false);
         font.setItalic(false);

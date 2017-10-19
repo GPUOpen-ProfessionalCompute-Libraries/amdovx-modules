@@ -2,17 +2,22 @@
 #include "common.h"
 #include <stdio.h>
 
-#define INFCOM_DEBUG_DUMP    0 // for debugging network protocol
+#define INFCOM_DEBUG_DUMP      0 // for debugging network protocol
+#define INFCOM_ENABLE_NODELAY  0 // for debugging network protocol
 
 int sendPacket(int sock, const void * buf, size_t len, std::string& clientName)
 {
+#if INFCOM_ENABLE_NODELAY
     int one = 1;
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &one, sizeof(one));
+#endif
     size_t n = send(sock, buf, len, 0);
     if(n != len) {
         return error_close(sock, "send(len:%ld) failed for %s (sent %ld bytes)", len, clientName.c_str(), n);
     }
+#if INFCOM_ENABLE_NODELAY
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &one, sizeof(one));
+#endif
     return 0;
 }
 

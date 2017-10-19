@@ -18,7 +18,6 @@ public:
     QFont statusBarFont;
     QFont exitButtonFont;
     // image data
-    bool wordsLoadDone;
     bool labelLoadDone;
     bool imageLoadDone;
     int imageLoadCount;
@@ -27,7 +26,6 @@ public:
     QVector<QByteArray> imageBuffer;
     QVector<QPixmap> imagePixmap;
     QVector<int> imageLabel;
-    QVector<QString> labelName;
     QVector<int> inferenceResultTop;
     QVector<QString> inferenceResultSummary;
     // receiver
@@ -48,7 +46,7 @@ public:
     int mouseLeftClickY;
     int mouseSelectedImage;
     bool viewRecentResults;
-    QString dataLabelsFilename;
+    QVector<QString> * dataLabels;
     int dataLabelCount;
     QString dataFilename;
     QString dataFolder;
@@ -71,7 +69,7 @@ class inference_viewer : public QWidget
 public:
     explicit inference_viewer(
             QString serverHost, int serverPort, QString modelName,
-            QString labelsFilename, QString dataFilename, QString dataFolder,
+            QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
             int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
             bool repeat_images,
             QWidget *parent = 0);
@@ -85,8 +83,10 @@ protected:
     void mousePressEvent(QMouseEvent * event) override;
     void mouseReleaseEvent(QMouseEvent * event) override;
     void keyReleaseEvent(QKeyEvent *) override;
+
 private:
     void startReceiver();
+    void terminate();
 
 private:
     // ui

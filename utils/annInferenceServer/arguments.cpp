@@ -30,7 +30,6 @@ Arguments::Arguments()
         fatal("clGetPlatformIDs(%d,*,0) => %d (failed)", num_platforms, status);
     }
     cl_uint platform_index = 0;
-    cl_platform_id platform_id = nullptr;
     const char * opencl_platform_override = getenv("AGO_OPENCL_PLATFORM");
     if(opencl_platform_override) {
         cl_uint index = (cl_uint)atoi(opencl_platform_override);
@@ -70,6 +69,16 @@ Arguments::Arguments()
     ///
     loadConfig();
     setConfigurationDir();
+}
+
+Arguments::~Arguments()
+{
+    // release OpenCL resources
+    for(int gpuId = 0; gpuId < num_devices; gpuId++) {
+        if(device_id[gpuId]) {
+            clReleaseDevice(device_id[gpuId]);
+        }
+    }
 }
 
 void Arguments::setConfigurationDir()

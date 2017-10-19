@@ -16,6 +16,7 @@
 class Arguments {
 public:
     Arguments();
+    ~Arguments();
     int initializeConfig(int argc, char * argv[]);
 
     // configuration
@@ -30,6 +31,9 @@ public:
     }
     const std::string& getConfigurationDir() {
         return configurationDir;
+    }
+    cl_platform_id getPlatformId() {
+        return platform_id;
     }
 
     // global mutex

@@ -22,6 +22,7 @@ inference_receiver::inference_receiver(
     perfTimer.start();
     imageCount = 0;
     labelCount = 0;
+    dataLabels = nullptr;
     imageBuffer = imageBuffer_;
     serverHost = serverHost_;
     serverPort = serverPort_;
@@ -188,7 +189,12 @@ void inference_receiver::run()
                                 int label = cmd.data[2 + 2*i + 1];
                                 imageIndex.push_back(tag);
                                 imageLabel.push_back(label);
-                                imageSummary.push_back((*labelName)[label]);
+                                if(dataLabels && label >= 0 && label < dataLabels->size()) {
+                                    imageSummary.push_back((*dataLabels)[label]);
+                                }
+                                else {
+                                    imageSummary.push_back("Unknown");
+                                }
                                 perfImageCount++;
                                 progress->images_received++;
                             }
@@ -237,9 +243,9 @@ float inference_receiver::getPerfImagesPerSecond()
     return perfRate;
 }
 
-void inference_receiver::setImageCount(int imageCount_, int labelCount_, QVector<QString> * labelName_)
+void inference_receiver::setImageCount(int imageCount_, int labelCount_, QVector<QString> * dataLabels_)
 {
     imageCount = imageCount_;
     labelCount = labelCount_;
-    labelName = labelName_;
+    dataLabels = dataLabels_;
 }

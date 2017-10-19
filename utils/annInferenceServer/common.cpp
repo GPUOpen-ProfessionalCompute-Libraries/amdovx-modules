@@ -41,5 +41,6 @@ void fatal(const char * format, ...)
     va_start(args, format);
     int r = vprintf(format, args);
     va_end(args);
+    printf("\n");
     exit(1);
 }

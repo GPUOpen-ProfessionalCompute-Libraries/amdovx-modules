@@ -36,7 +36,7 @@ public:
     ~inference_receiver();
 
     static void abort();
-    void setImageCount(int imageCount, int labelCount, QVector<QString> * labelName);
+    void setImageCount(int imageCount, int labelCount, QVector<QString> * dataLabels);
     void getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ);
     float getPerfImagesPerSecond();
 
@@ -61,7 +61,7 @@ private:
     int perfImageCount;
     float perfRate;
     QVector<QByteArray> * imageBuffer;
-    QVector<QString> * labelName;
+    QVector<QString> * dataLabels;
     QString serverHost;
     int serverPort;
     QString modelName;

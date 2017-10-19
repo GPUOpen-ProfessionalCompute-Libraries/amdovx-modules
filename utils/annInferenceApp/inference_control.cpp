@@ -24,7 +24,7 @@
 #define BUILD_VERSION "alpha1"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
-    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }
+    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr }
 {
     setWindowTitle("annInferenceApp");
     setMinimumWidth(800);
@@ -36,6 +36,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     compiler_status.dimOutput[2] = 0;
     compiler_status.errorCode = 0;
     operationMode = operationMode_;
+    dataLabels = new QVector<QString>();
 
     // default configuration
     QGridLayout * controlLayout = new QGridLayout;
@@ -47,17 +48,27 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     ///
     QLabel * labelIntro = new QLabel("INFERENCE CONTROL PANEL");
     labelIntro->setStyleSheet("font-weight: bold; color: green");
-    labelIntro->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    QPushButton * buttonLogo = new QPushButton();
-    QPixmap pixmap;
-    QByteArray arr(assets::getLogoPngBuf(), assets::getLogoPngLen());
-    pixmap.loadFromData(arr);
-    buttonLogo->setIcon(pixmap);
-    buttonLogo->setIconSize(QSize(64,64));
-    buttonLogo->setFixedSize(QSize(64,64));
-    controlLayout->addWidget(labelIntro, row, 0, 1, editSpan + 1);
-    controlLayout->addWidget(buttonLogo, row, 1 + editSpan, 1, 1, Qt::AlignCenter);
-    connect(buttonLogo, SIGNAL(released()), this, SLOT(onLogoClick()));
+    labelIntro->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    QPushButton * buttonLogo1 = new QPushButton();
+    QPushButton * buttonLogo2 = new QPushButton();
+    QPixmap pixmap1;
+    QPixmap pixmap2;
+    QByteArray arr1(assets::getLogoPng1Buf(), assets::getLogoPng1Len());
+    QByteArray arr2(assets::getLogoPng2Buf(), assets::getLogoPng2Len());
+    pixmap1.loadFromData(arr1);
+    pixmap2.loadFromData(arr2);
+    buttonLogo1->setIcon(pixmap1);
+    buttonLogo1->setIconSize(QSize(96,64));
+    buttonLogo1->setFixedSize(QSize(96,64));
+    buttonLogo1->setFlat(true);
+    buttonLogo2->setIcon(pixmap2);
+    buttonLogo2->setIconSize(QSize(64,64));
+    buttonLogo2->setFixedSize(QSize(64,64));
+    controlLayout->addWidget(buttonLogo1, row, 0, 1, 1, Qt::AlignCenter);
+    controlLayout->addWidget(labelIntro, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonLogo2, row, 1 + editSpan, 1, 1, Qt::AlignCenter);
+    connect(buttonLogo1, SIGNAL(released()), this, SLOT(onLogo1Click()));
+    connect(buttonLogo2, SIGNAL(released()), this, SLOT(onLogo2Click()));
     row++;
 
     QFrame * sepHLine1 = new QFrame();
@@ -655,10 +666,27 @@ void inference_control::runInference()
     // check configuration
     QString err;
     if(isConfigValid(err)) {
-        if(!QFileInfo(editImageLabelsFile->text()).isFile())
-            err = "Labels: file doesn't exist: " + editImageLabelsFile->text();
-        else if(!QFileInfo(editImageFolder->text()).isDir())
+        if(!QFileInfo(editImageFolder->text()).isDir())
             err = "Image Folder: doesn't exist: " + editImageFolder->text();
+        else {
+            QFile fileObj(editImageLabelsFile->text());
+            if(fileObj.open(QIODevice::ReadOnly)) {
+                QTextStream fileInput(&fileObj);
+                dataLabels->clear();
+                while (!fileInput.atEnd()) {
+                    QString line = fileInput.readLine();
+                    if(line.size() > 0)
+                        dataLabels->push_back(line);
+                }
+                if(dataLabels->size() != editOutDimC->text().toInt()) {
+                    err.sprintf("Labels: need %d labels in %s: found %d", editOutDimC->text().toInt(),
+                            editImageLabelsFile->text().toStdString().c_str(), dataLabels->size());
+                }
+            }
+            else {
+                err = "Labels: unable to open: " + editImageLabelsFile->text();
+            }
+        }
     }
     if(err.length() > 0) {
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
@@ -685,14 +713,18 @@ void inference_control::runInference()
     }
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
-                editImageLabelsFile->text(), editImageListFile->text(), editImageFolder->text(),
+                dataLabels, editImageListFile->text(), editImageFolder->text(),
                 dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images);
     viewer->show();
     close();
 }
 
-void inference_control::onLogoClick()
+void inference_control::onLogo1Click()
 {
-    qDebug("clicked");
+    QDesktopServices::openUrl(QUrl("https://amd.com/"));
+}
+
+void inference_control::onLogo2Click()
+{
     QDesktopServices::openUrl(QUrl("https://instinct.radeon.com/en/"));
 }

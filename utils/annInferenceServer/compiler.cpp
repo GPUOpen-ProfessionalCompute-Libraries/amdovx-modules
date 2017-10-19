@@ -127,7 +127,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         }
     }
     fclose(fp);
-    info("found output tensor dimensions %dx%dx%d for %s", &dimOutput[2], &dimOutput[1], &dimOutput[0], modelName);
+    info("found output tensor dimensions %dx%dx%d for %s", dimOutput[2], dimOutput[1], dimOutput[0], modelName);
 
     // step-3: build the module
     chdir(buildFolder.c_str());

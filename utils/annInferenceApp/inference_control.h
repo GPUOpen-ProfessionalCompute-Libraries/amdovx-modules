@@ -31,7 +31,8 @@ public slots:
     void onChangeModelFile1(const QString &);
     void onChangeModelFile2(const QString &);
     void onChangeCompilerOptions(const QString &);
-    void onLogoClick();
+    void onLogo1Click();
+    void onLogo2Click();
 
 protected:
     void browseDataLabels();
@@ -76,6 +77,7 @@ private:
     int modelType;
     int numModelTypes;
     int maxGPUs;
+    QVector<QString> * dataLabels;
     QVector<QString> typeModelFile1Label;
     QVector<QString> typeModelFile1Desc;
     QVector<QString> typeModelFile2Label;
