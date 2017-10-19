@@ -35,6 +35,7 @@ list(APPEND SOURCES
 )
 
 add_executable(loom_shell ${SOURCES})
+install (TARGETS loom_shell DESTINATION bin)
 
 target_link_libraries(loom_shell vx_loomsl openvx)
 

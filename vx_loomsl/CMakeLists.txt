@@ -56,6 +56,9 @@ include_directories (. kernels)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 target_link_libraries(${PROJECT_NAME} ${OpenCL_LIBRARIES} openvx)
 
+install (TARGETS ${PROJECT_NAME} DESTINATION lib)
+install (FILES live_stitch_api.h DESTINATION include)
+
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
