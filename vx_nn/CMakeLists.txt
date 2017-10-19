@@ -78,6 +78,9 @@ list(APPEND SOURCES
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 target_link_libraries(${PROJECT_NAME} openvx MIOpen)
 
+install (TARGETS ${PROJECT_NAME} DESTINATION lib)
+install (FILES include/vx_amd_nn.h DESTINATION include)
+
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")

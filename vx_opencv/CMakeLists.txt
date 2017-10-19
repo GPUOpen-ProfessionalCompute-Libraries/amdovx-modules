@@ -99,6 +99,7 @@ target_link_libraries(vx_opencv openvx)
 include_directories(${OpenCV_INCLUDE_DIRS})
 target_link_libraries(vx_opencv ${OpenCV_LIBRARIES})
 target_compile_definitions(vx_opencv PUBLIC USE_OPENCV_CONTRIB=0)
+install (TARGETS vx_opencv DESTINATION lib)
 
 if (OpenCL_FOUND)
 	include_directories(${OpenCL_INCLUDE_DIRS})

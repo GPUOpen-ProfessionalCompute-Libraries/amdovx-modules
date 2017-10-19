@@ -849,6 +849,8 @@ void writeGDF(
         }
         if(isLastLayer) {
             ofsGDF << "write " << node[3] << " output.f32" << std::endl;
+            auto&& odim = tensorMap[node[3]];
+            printf("#OUTPUT-TENSOR: %s %d %d %d %d\n", node[3].c_str(), odim[0], odim[1], odim[2], odim[3]);
         }
         ofsGDF << std::endl;
     }
