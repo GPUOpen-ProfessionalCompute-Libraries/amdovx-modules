@@ -84,13 +84,15 @@ void getLayerParams(
         int kernel_h = pooling.has_kernel_h() ? pooling.kernel_h() : pooling.kernel_size();
         int kernel_w = pooling.has_kernel_w() ? pooling.kernel_w() : pooling.kernel_size();
         int pool = pooling.pool();
+        int global_pooling = pooling.global_pooling() == true ? 1 : 0;
         params =       std::to_string(kernel_w)
                 + " " + std::to_string(kernel_h)
                 + " " + std::to_string(stride_w)
                 + " " + std::to_string(stride_h)
                 + " " + std::to_string(pad_w)
                 + " " + std::to_string(pad_h)
-                + " " + std::to_string(pool);
+                + " " + std::to_string(pool)
+                + " " + std::to_string(global_pooling);
     }
     else if(layer.type() == "InnerProduct") {
         const caffe::InnerProductParameter& innerprod = layer.inner_product_param();
@@ -304,8 +306,23 @@ int calculateTensorDim(
         }
         else if(type == "Pooling") {
             std::stringstream ss(params);
-            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool;
-            ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool;
+            int kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, pool, global_pooling;
+            ss >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> pool >> global_pooling;
+            if(global_pooling) {
+                // Compute kernel_w and kernel_h and write back the params for the GDF and C-code gen
+                kernel_h = H;
+                kernel_w = W;
+                pad_h = pad_w = 0;
+                stride_h = stride_w = 1;
+                params =        std::to_string(kernel_w)
+                        + " " + std::to_string(kernel_h)
+                        + " " + std::to_string(stride_w)
+                        + " " + std::to_string(stride_h)
+                        + " " + std::to_string(pad_w)
+                        + " " + std::to_string(pad_h)
+                        + " " + std::to_string(pool)
+                        + " " + std::to_string(global_pooling);
+            }
             w = static_cast<int>(ceil( static_cast<float> (W + 2 * pad_w + stride_w - kernel_w)/ stride_w));
             h = static_cast<int>(ceil( static_cast<float> (H + 2 * pad_h + stride_h - kernel_h)/ stride_h));
             if(pad_h > 0) if((h-1)*stride_h >= (H+pad_h)) h=h-1;
