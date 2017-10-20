@@ -65,12 +65,16 @@ public:
     int run();
 
 protected:
+    // scheduler thread workers
     void workMasterInputQ();
     void workDeviceInputCopy(int gpu);
     void workDeviceProcess(int gpu);
     void workDeviceOutputCopy(int gpu);
 
- private:
+private:
+    void dumpBuffer(cl_command_queue cmdq, cl_mem mem, std::string fileName);
+
+private:
     // configuration
     int sock;
     Arguments * args;
@@ -85,30 +89,34 @@ protected:
     void * moduleHandle;
     type_annCreateGraph * annCreateGraph;
     cl_device_id device_id[MAX_NUM_GPU];
-    cl_context opencl_context[MAX_NUM_GPU];
-    vx_context openvx_context[MAX_NUM_GPU];
-    vx_graph openvx_graph[MAX_NUM_GPU];
-    vx_tensor openvx_input[MAX_NUM_GPU];
-    vx_tensor openvx_output[MAX_NUM_GPU];
     int batchSize;
     int inputSizeInBytes;
     int outputSizeInBytes;
     bool deviceLockSuccess;
-    // threads
+    // master input/output queues
+    //   inputQ: input to the scheduler <tag,byteStream,size>
+    //   outputQ: output from the scheduler <tag,label>
+    MessageQueue<std::tuple<int,char *,int>> inputQ;
+    MessageQueue<std::tuple<int,int>>        outputQ;
+    // scheduler thread objects
     std::thread * threadMasterInputQ;
     std::thread * threadDeviceInputCopy[MAX_NUM_GPU];
     std::thread * threadDeviceProcess[MAX_NUM_GPU];
     std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
-    // master input/output queues
-    MessageQueue<std::tuple<int,char *,int>> inputQ;
-    MessageQueue<std::tuple<int,int>>        outputQ;
-    // device queues
+    // scheduler device queues
     MessageQueue<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
     MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemIdle[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemBusy[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceOutputMemIdle[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceOutputMemBusy[MAX_NUM_GPU];
+    // scheduler resources
+    cl_context opencl_context[MAX_NUM_GPU];
+    cl_command_queue opencl_cmdq[MAX_NUM_GPU];
+    vx_context openvx_context[MAX_NUM_GPU];
+    vx_graph openvx_graph[MAX_NUM_GPU];
+    vx_tensor openvx_input[MAX_NUM_GPU];
+    vx_tensor openvx_output[MAX_NUM_GPU];
 };
 
 #endif

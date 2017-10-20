@@ -179,8 +179,8 @@ void Arguments::getPreConfiguredModels()
     }
     for(struct dirent * entry = readdir(dir); entry != nullptr; entry = readdir(dir)) {
         if((entry->d_type & DT_DIR) == DT_DIR && entry->d_name[0] != '.') {
-            std::string annNetworkConfigFile = configurationDir + "/" + entry->d_name + "/annConfig.txt";
-            FILE * fp = fopen(annNetworkConfigFile.c_str(), "r");
+            std::string annModuleConfigFile = configurationDir + "/" + entry->d_name + "/" + MODULE_CONFIG;
+            FILE * fp = fopen(annModuleConfigFile.c_str(), "r");
             if(fp) {
                 int dimInput[3], dimOutput[3];
                 char name[64];
@@ -188,11 +188,11 @@ void Arguments::getPreConfiguredModels()
                                &dimInput[0], &dimInput[1], &dimInput[2],
                                &dimOutput[0], &dimOutput[1], &dimOutput[2]);
                 if(n == 7) {
-                    std::tuple<std::string,int,int,int,int,int,int>
-                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2]);
+                    std::tuple<std::string,int,int,int,int,int,int,std::string>
+                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], entry->d_name);
                     configuredModels.push_back(ann);
-                    info("found pre-configured model name:%s input:%dx%dx%d output:%dx%dx%d",
-                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0]);
+                    info("found pre-configured model [name %s] [input %dx%dx%d] [output %dx%dx%d] [folder %s]",
+                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], entry->d_name);
                 }
                 fclose(fp);
             }

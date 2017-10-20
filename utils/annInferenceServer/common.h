@@ -4,11 +4,14 @@
 // Maximum number of GPUs supported
 #define MAX_NUM_GPU    8
 
+// Module configuration
+#define MODULE_CONFIG  "annmodule.txt"
+
 // Module library name
 #ifdef __APPLE__
-#define MODULE_LIBNAME "annmod.dylib"
+#define MODULE_LIBNAME "libannmodule.dylib"
 #else
-#define MODULE_LIBNAME "annmod.so"
+#define MODULE_LIBNAME "libannmodule.so"
 #endif
 
 // Useful macros

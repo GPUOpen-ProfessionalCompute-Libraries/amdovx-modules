@@ -20,8 +20,8 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     /// \brief generate new model name for this download and create model folders
     ///
     char modelName[64];
-    sprintf(modelName, "model-%08d", args->getNextModelUploadCounter());
-    std::string modelFolder = args->getConfigurationDir() + "/upload/" + modelName;
+    sprintf(modelName, "upload/model-%08d", args->getNextModelUploadCounter());
+    std::string modelFolder = args->getConfigurationDir() + "/" + modelName;
     std::string buildFolder = modelFolder + "/build";
     if(mkdir(modelFolder.c_str(), 0700) < 0 || mkdir(buildFolder.c_str(), 0700) < 0) {
         fatal("unable to create folders: %s and %s", modelFolder.c_str(), buildFolder.c_str());
@@ -65,7 +65,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
             }
         }
         if(byteStream) {
-            std::string fileName = modelFolder + ((i == 0) ? "/net.prototxt" : "/net.caffemodel");
+            std::string fileName = modelFolder + ((i == 0) ? "/deploy.prototxt" : "/weights.caffemodel");
             info("saving INFCOM_CMD_SEND_MODELFILE%d with %d bytes from %s into %s", i + 1, size, clientName.c_str(), fileName.c_str());
             FILE * fp = fopen(fileName.c_str(), "wb");
             if(fp) {
@@ -98,7 +98,8 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 1;
     sprintf(cmdUpdate.message, "inference_generator started ...");
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
-    std::string command = "inference_generator --generate-gdf --generate-vx-code net.caffemodel";
+    // step-1.1: inference_generator on caffemodel for weights
+    std::string command = "inference_generator weights.caffemodel";
     command += " " + std::to_string(args->getBatchSize())
             +  " " + std::to_string(dimInput[2])
             +  " " + std::to_string(dimInput[1])
@@ -108,7 +109,23 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     status = system(command.c_str());
     cmdUpdate.data[0] = (status != 0) ? -2 : 0;
     cmdUpdate.data[1] = 25;
-    sprintf(cmdUpdate.message, "inference_generator completed (status = %d)", status);
+    sprintf(cmdUpdate.message, "inference_generator weights.caffemodel completed (%d)", status);
+    ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    if(status) {
+        return error_close(sock, "command-failed(%d): %s", status, command.c_str());
+    }
+    // step-1.2: inference_generator on prototxt for network structure
+    command = "inference_generator deploy.prototxt";
+    command += " " + std::to_string(args->getBatchSize())
+            +  " " + std::to_string(dimInput[2])
+            +  " " + std::to_string(dimInput[1])
+            +  " " + std::to_string(dimInput[0])
+            +  " >>inference_generator.log";
+    info("executing: %% %s", command.c_str());
+    status = system(command.c_str());
+    cmdUpdate.data[0] = (status != 0) ? -3 : 0;
+    cmdUpdate.data[1] = 50;
+    sprintf(cmdUpdate.message, "inference_generator deploy.prototxt completed (%d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
@@ -122,8 +139,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     char line[1024];
     while(fgets(line, sizeof(line), fp) == line) {
         if(!strncmp(line, "#OUTPUT-TENSOR: ", 16)) {
-            if(sscanf(line, "%*s%*s%*s%d%d%d", &dimOutput[2], &dimOutput[1], &dimOutput[0]) == 3)
-                break;
+            sscanf(line, "%*s%*s%*s%d%d%d", &dimOutput[2], &dimOutput[1], &dimOutput[0]);
         }
     }
     fclose(fp);
@@ -131,7 +147,6 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
 
     // step-3: build the module
     chdir(buildFolder.c_str());
-#if 0 // TODO: enable when ready
     command = "cmake .. >../cmake.log";
     info("executing: %% %s", command.c_str());
     status = system(command.c_str());
@@ -141,8 +156,8 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         status = 1;
         warning("could not locate cmake output: %s", makefilePath.c_str());
     }
-    cmdUpdate.data[0] = (status != 0) ? -3 : 0;
-    cmdUpdate.data[1] = 50;
+    cmdUpdate.data[0] = (status != 0) ? -4 : 0;
+    cmdUpdate.data[1] = 75;
     sprintf(cmdUpdate.message, "cmake completed (status = %d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     if(status) {
@@ -151,8 +166,8 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     command = "make >../make.log";
     info("executing: %% %s", command.c_str());
     status = system(command.c_str());
-    cmdUpdate.data[0] = (status != 0) ? -4 : 0;
-    cmdUpdate.data[1] = 75;
+    cmdUpdate.data[0] = (status != 0) ? -5 : 0;
+    cmdUpdate.data[1] = 99;
     sprintf(cmdUpdate.message, "make completed (status = %d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     if(status) {
@@ -161,19 +176,19 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     std::string modulePath = buildFolder + "/" + MODULE_LIBNAME;
     struct stat sbufModule = { 0 };
     if(stat(modulePath.c_str(), &sbufModule) != 0) {
-        cmdUpdate.data[0] = -5;
+        cmdUpdate.data[0] = -6;
         sprintf(cmdUpdate.message, "couldn't locate generated module");
         ERRCHK(sendCommand(sock, cmdUpdate, clientName));
         return error_close(sock, "could not locate built module: %s", modulePath.c_str());
     }
-#endif
+
     // step-final: send completion status message
     cmdUpdate.data[0] = 1;
     cmdUpdate.data[1] = 100;
     cmdUpdate.data[2] = dimOutput[0];
     cmdUpdate.data[3] = dimOutput[1];
     cmdUpdate.data[4] = dimOutput[2];
-    sprintf(cmdUpdate.message, "upload/%s", modelName);
+    sprintf(cmdUpdate.message, "%s", modelName);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
 
     // add uploaded model to args
@@ -182,6 +197,16 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     args->addUploadedConfig(ann);
     info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d",
             modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0]);
+
+    // create module configuration file
+    std::string annModuleConfigFile = args->getConfigurationDir() + "/" + modelName + "/" + MODULE_CONFIG;
+    fp = fopen(annModuleConfigFile.c_str(), "w");
+    if(fp) {
+        fprintf(fp, "%s\n%d %d %d\n%d %d %d\n", modelName,
+                       dimInput[0], dimInput[1], dimInput[2],
+                       dimOutput[0], dimOutput[1], dimOutput[2]);
+        fclose(fp);
+    }
 
     // send and wait for INFCOM_CMD_DONE message
     InfComCommand reply = {

@@ -193,6 +193,8 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(labelCompilerOptions, row, 0, 1, 1);
     controlLayout->addWidget(editCompilerOptions, row, 1, 1, editSpan);
     row++;
+    connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
+    connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
     connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
     connect(editModelFile2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile2(const QString &)));
     connect(editCompilerOptions, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeCompilerOptions(const QString &)));
@@ -365,8 +367,14 @@ bool inference_control::isConfigValid(QString& err)
 {
     if(editServerPort->text().toInt() <= 0) { err = "Server: invalid port number."; return false; }
     if(comboModelSelect->currentIndex() < numModelTypes) {
-        if(!QFileInfo(editModelFile1->text()).isFile()) { err = typeModelFile1Label[comboModelSelect->currentIndex()] + editModelFile1->text() + " file doesn't exist."; return false; }
-        if(!QFileInfo(editModelFile2->text()).isFile()) { err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist."; return false; }
+        if(!QFileInfo(editModelFile1->text()).isFile()) {
+            err = typeModelFile1Label[comboModelSelect->currentIndex()] + editModelFile1->text() + " file doesn't exist.";
+            return false;
+        }
+        if(!QFileInfo(editModelFile2->text()).isFile()) {
+            err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist.";
+            return false;
+        }
     }
     if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; return false; }
     if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; return false; }
@@ -454,6 +462,22 @@ void inference_control::modelSelect(int model)
 void inference_control::tick()
 {
     modelSelect(comboModelSelect->currentIndex());
+}
+
+void inference_control::onChangeDimH(const QString & text)
+{
+    if(comboModelSelect->currentIndex() == 0) {
+        lastDimH =  text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangeDimW(const QString & text)
+{
+    if(comboModelSelect->currentIndex() == 0) {
+        lastDimW =  text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
 }
 
 void inference_control::onChangeModelFile1(const QString & text)

@@ -72,6 +72,10 @@ void inference_model_uploader::run()
                     if(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
                        tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
                     {
+#if DEBUG_DUMP // TODO remove
+                        qDebug("[recv] 0x%08x 0%d { %d %d %d %d - %d %d %d %d } %s", cmd.magic, cmd.command,
+                               cmd.data[0], cmd.data[1], cmd.data[2], cmd.data[3], cmd.data[4], cmd.data[5], cmd.data[6], cmd.data[7], cmd.message);
+#endif
                         receivedCommand = true;
                         if(cmd.magic != INFCOM_MAGIC) {
                             progress->errorCode = -1;

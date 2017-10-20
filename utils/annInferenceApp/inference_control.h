@@ -28,6 +28,8 @@ public slots:
     void modelUpload();
     void runInference();
     void exitControl();
+    void onChangeDimH(const QString &);
+    void onChangeDimW(const QString &);
     void onChangeModelFile1(const QString &);
     void onChangeModelFile2(const QString &);
     void onChangeCompilerOptions(const QString &);
