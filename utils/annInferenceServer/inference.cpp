@@ -232,10 +232,15 @@ int InferenceEngine::run()
             fatal("InferenceEngine: vxSetContextAttribute(#%d,VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT) failed (%d)", gpu, status);
         vx_size idim[4] = { (vx_size)dimInput[0], (vx_size)dimInput[1], (vx_size)dimInput[2], (vx_size)batchSize };
         vx_size odim[4] = { (vx_size)dimOutput[0], (vx_size)dimOutput[1], (vx_size)dimOutput[2], (vx_size)batchSize };
+#if USE_VX_TENSOR_WITHOUT_CL
+        openvx_input[gpu] = vxCreateTensor(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0);
+        openvx_output[gpu] = vxCreateTensor(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0);
+#else
         vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
         vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
         openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, nullptr, VX_MEMORY_TYPE_OPENCL);
         openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, nullptr, VX_MEMORY_TYPE_OPENCL);
+#endif
         if((status = vxGetStatus((vx_reference)openvx_input[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: vxCreateTensorFromHandle(input#%d) failed (%d)", gpu, status);
         if((status = vxGetStatus((vx_reference)openvx_output[gpu])) != VX_SUCCESS)
@@ -588,6 +593,18 @@ void InferenceEngine::workDeviceProcess(int gpu)
 
         // process the graph
         vx_status status;
+#if USE_VX_TENSOR_WITHOUT_CL
+        int err;
+        vx_map_id map_id;
+        vx_size stride[4];
+        void * ptr = nullptr;
+        status = vxMapTensorPatch(openvx_input[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_OPENCL, 0);
+        err = clEnqueueReadBuffer(opencl_cmdq[gpu], input, 0, 0, stride[3] * batchSize, ptr, 0, NULL, NULL);
+        if(err) fatal("clEnqueueReadBuffer(#%d,%d) failed (%d)", gpu, stride[3] * batchSize, err);
+        err = clFinish(opencl_cmdq[gpu]);
+        if(err) fatal("clFinish(#%d,%d) for read failed (%d)", gpu, err);
+        if(!status) vxUnmapTensorPatch(openvx_input[gpu], map_id);
+#else
         status = vxSwapTensorHandle(openvx_input[gpu], input, nullptr);
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxSwapTensorHandle(input#%d) failed(%d)", gpu, status);
@@ -596,6 +613,7 @@ void InferenceEngine::workDeviceProcess(int gpu)
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxSwapTensorHandle(output#%d) failed(%d)", gpu, status);
         }
+#endif
 #if DEBUG_DUMP // TODO remove
         {{{{static bool onlyonce = true; if(onlyonce) {
             onlyonce = false;
@@ -607,6 +625,15 @@ void InferenceEngine::workDeviceProcess(int gpu)
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
+#if USE_VX_TENSOR_WITHOUT_CL
+        ptr = nullptr;
+        status = vxMapTensorPatch(openvx_output[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_READ_ONLY, VX_MEMORY_TYPE_OPENCL, 0);
+        err = clEnqueueWriteBuffer(opencl_cmdq[gpu], output, 0, 0, stride[3] * batchSize, ptr, 0, NULL, NULL);
+        if(err) fatal("clEnqueueWriteBuffer(#%d,%d) failed (%d)", gpu, stride[3] * batchSize, err);
+        err = clFinish(opencl_cmdq[gpu]);
+        if(err) fatal("clFinish(#%d,%d) for write failed (%d)", gpu, err);
+        if(!status) vxUnmapTensorPatch(openvx_output[gpu], map_id);
+#endif
 #if DEBUG_DUMP // TODO remove
         {{{{static bool onlyonce = true; if(onlyonce) {
             onlyonce = false;

@@ -26,6 +26,7 @@
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
 #define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
+#define USE_VX_TENSOR_WITHOUT_CL       1  // TODO: remove after debug
 #endif
 
 extern "C" {
