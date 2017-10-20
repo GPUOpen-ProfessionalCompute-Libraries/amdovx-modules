@@ -9,6 +9,7 @@
 #include <vector>
 #include <mutex>
 #include <thread>
+#include <condition_variable>
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
 

@@ -1,6 +1,7 @@
 #include "netutil.h"
 #include "common.h"
 #include <stdio.h>
+#include <stdarg.h>
 
 #define INFCOM_DEBUG_DUMP      0 // for debugging network protocol
 #define INFCOM_ENABLE_NODELAY  0 // for debugging network protocol
