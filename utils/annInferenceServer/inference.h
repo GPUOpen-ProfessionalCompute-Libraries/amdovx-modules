@@ -12,7 +12,19 @@
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
 
+// inference scheduler modes
+#define NO_INFERENCE_SCHEDULER      0
+#define SIMPLE_INFERENCE_SCHEDULER  1
+
+// pick inference scheduler mode
+#define INFERENCE_SCHEDULER_MODE    SIMPLE_INFERENCE_SCHEDULER
+
+// simple inference configuration
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
+#endif
+
+// common configuration
 #define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
 #define INFERENCE_SERVICE_IDLE_TIME 1000  // milliseconds
 
@@ -67,9 +79,12 @@ public:
 protected:
     // scheduler thread workers
     void workMasterInputQ();
+
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     void workDeviceInputCopy(int gpu);
     void workDeviceProcess(int gpu);
     void workDeviceOutputCopy(int gpu);
+#endif
 
 private:
     void dumpBuffer(cl_command_queue cmdq, cl_mem mem, std::string fileName);
@@ -98,8 +113,12 @@ private:
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,char *,int>> inputQ;
     MessageQueue<std::tuple<int,int>>        outputQ;
-    // scheduler thread objects
+    // master scheduler thread
     std::thread * threadMasterInputQ;
+
+    // simple inference scheduler
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    // scheduler thread objects
     std::thread * threadDeviceInputCopy[MAX_NUM_GPU];
     std::thread * threadDeviceProcess[MAX_NUM_GPU];
     std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
@@ -117,6 +136,7 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
+#endif
 };
 
 #endif

@@ -13,14 +13,16 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
-      device_id{ nullptr }, opencl_context{ nullptr }, opencl_cmdq{ nullptr },
+      device_id{ nullptr }, deviceLockSuccess{ false },
+      threadMasterInputQ{ nullptr }
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    , opencl_context{ nullptr }, opencl_cmdq{ nullptr },
       openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr },
-      deviceLockSuccess{ false },
-      threadMasterInputQ{ nullptr },
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
+#endif
 {
     // extract model name, options, and module path
     char modelName_[128] = { 0 }, options_[128] = { 0 };
@@ -46,6 +48,7 @@ InferenceEngine::~InferenceEngine()
     if(threadMasterInputQ && threadMasterInputQ->joinable()) {
         threadMasterInputQ->join();
     }
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     for(int i = 0; i < GPUs; i++) {
         if(queueDeviceTagQ[i]) {
             queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
@@ -109,6 +112,7 @@ InferenceEngine::~InferenceEngine()
             clReleaseContext(opencl_context[i]);
         }
     }
+#endif
 
     // release all device resources
     if(deviceLockSuccess) {
@@ -191,6 +195,7 @@ int InferenceEngine::run()
         return -1;
     }
 
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     //////
     /// allocate OpenVX and OpenCL resources
     ///
@@ -268,16 +273,21 @@ int InferenceEngine::run()
             queueDeviceOutputMemIdle[gpu]->enqueue(mem);
         }
     }
+#else
+    info("InferenceEngine: using dummy scheduler");
+#endif
 
     //////
     /// start scheduler threads
     ///
     threadMasterInputQ = new std::thread(&InferenceEngine::workMasterInputQ, this);
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     for(int gpu = 0; gpu < GPUs; gpu++) {
         threadDeviceInputCopy[gpu] = new std::thread(&InferenceEngine::workDeviceInputCopy, this, gpu);
         threadDeviceProcess[gpu] = new std::thread(&InferenceEngine::workDeviceProcess, this, gpu);
         threadDeviceOutputCopy[gpu] = new std::thread(&InferenceEngine::workDeviceOutputCopy, this, gpu);
     }
+#endif
 
     ////////
     /// \brief keep running the inference in loop
@@ -388,7 +398,10 @@ void InferenceEngine::workMasterInputQ()
     args->unlock();
 
     int batchSize = args->getBatchSize();
-    int inputCountInBatch = 0, gpu = 0, totalInputCount = 0;
+    int totalInputCount = 0;
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    int inputCountInBatch = 0, gpu = 0;
+#endif
     for(;;) {
         // get next item from the input queue
         std::tuple<int,char*,int> input;
@@ -400,12 +413,13 @@ void InferenceEngine::workMasterInputQ()
         // check for end of input
         if(tag < 0 || byteStream == nullptr || size == 0)
             break;
+        totalInputCount++;
 
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
         // add the image to selected deviceQ
         std::tuple<char*,int> image(byteStream,size);
         queueDeviceTagQ[gpu]->enqueue(tag);
         queueDeviceImageQ[gpu]->enqueue(image);
-        totalInputCount++;
 
         // at the end of Batch pick another device
         inputCountInBatch++;
@@ -418,19 +432,28 @@ void InferenceEngine::workMasterInputQ()
                 }
             }
         }
+#else
+        // dummy scheduler that takes 4ms/images
+        int label = tag % 10;
+        std::this_thread::sleep_for(std::chrono::milliseconds(4));
+        outputQ.enqueue(std::tuple<int,int>(tag,label));
+#endif
     }
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     for(int i = 0; i < GPUs; i++) {
         int endOfSequenceTag = -1;
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
         queueDeviceTagQ[gpu]->enqueue(endOfSequenceTag);
         queueDeviceImageQ[gpu]->enqueue(endOfSequenceImage);
     }
+#endif
 
     args->lock();
     info("workMasterInputQ: terminated for %s [scheduled %d images]", clientName.c_str(), totalInputCount);
     args->unlock();
 }
 
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 void InferenceEngine::workDeviceInputCopy(int gpu)
 {
     args->lock();
@@ -685,6 +708,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
     info("workDeviceOutputCopy: GPU#%d terminated for %s [processed %d batches, %d images]", gpu, clientName.c_str(), totalBatchCounter, totalImageCounter);
     args->unlock();
 }
+#endif
 
 void InferenceEngine::dumpBuffer(cl_command_queue cmdq, cl_mem mem, std::string fileName)
 {
