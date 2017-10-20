@@ -13,20 +13,20 @@
 #include <vx_ext_amd.h>
 
 // inference scheduler modes
-#define NO_INFERENCE_SCHEDULER      0
-#define SIMPLE_INFERENCE_SCHEDULER  1
+#define NO_INFERENCE_SCHEDULER        0
+#define SIMPLE_INFERENCE_SCHEDULER    1
 
-// pick inference scheduler mode
-#define INFERENCE_SCHEDULER_MODE    SIMPLE_INFERENCE_SCHEDULER
+// configuration
+//   INFERENCE_SCHEDULER_MODE     - pick one of the modes from above
+//   INFERENCE_SERVICE_IDLE_TIME  - inference service idle time (milliseconds) if there is no activity
+#define INFERENCE_SCHEDULER_MODE       SIMPLE_INFERENCE_SCHEDULER
+#define INFERENCE_SERVICE_IDLE_TIME    1
 
 // simple inference configuration
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
-#endif
-
-// common configuration
 #define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
-#define INFERENCE_SERVICE_IDLE_TIME 1000  // milliseconds
+#endif
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -77,10 +77,9 @@ public:
     int run();
 
 protected:
-    // scheduler thread workers
-    void workMasterInputQ();
-
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    // simple scheduler thread workers
+    void workMasterInputQ();
     void workDeviceInputCopy(int gpu);
     void workDeviceProcess(int gpu);
     void workDeviceOutputCopy(int gpu);
@@ -108,16 +107,16 @@ private:
     int inputSizeInBytes;
     int outputSizeInBytes;
     bool deviceLockSuccess;
-    // master input/output queues
-    //   inputQ: input to the scheduler <tag,byteStream,size>
+    // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
-    MessageQueue<std::tuple<int,char *,int>> inputQ;
     MessageQueue<std::tuple<int,int>>        outputQ;
+
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    // master input queues
+    //   inputQ: input to the scheduler <tag,byteStream,size>
+    MessageQueue<std::tuple<int,char *,int>> inputQ;
     // master scheduler thread
     std::thread * threadMasterInputQ;
-
-    // simple inference scheduler
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     // scheduler thread objects
     std::thread * threadDeviceInputCopy[MAX_NUM_GPU];
     std::thread * threadDeviceProcess[MAX_NUM_GPU];

@@ -13,10 +13,10 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
-      device_id{ nullptr }, deviceLockSuccess{ false },
-      threadMasterInputQ{ nullptr }
+      device_id{ nullptr }, deviceLockSuccess{ false }
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-    , opencl_context{ nullptr }, opencl_cmdq{ nullptr },
+    , threadMasterInputQ{ nullptr },
+      opencl_context{ nullptr }, opencl_cmdq{ nullptr },
       openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr },
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
@@ -40,15 +40,15 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
 
 InferenceEngine::~InferenceEngine()
 {
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     // wait for all threads to complete and release all resources
     std::tuple<int,char*,int> endOfSequenceInput(-1,nullptr,0);
-    std::tuple<char*,int> endOfSequenceImage(nullptr,0);
-    int endOfSequenceTag = -1;
     inputQ.enqueue(endOfSequenceInput);
     if(threadMasterInputQ && threadMasterInputQ->joinable()) {
         threadMasterInputQ->join();
     }
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    std::tuple<char*,int> endOfSequenceImage(nullptr,0);
+    int endOfSequenceTag = -1;
     for(int i = 0; i < GPUs; i++) {
         if(queueDeviceTagQ[i]) {
             queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
@@ -196,6 +196,7 @@ int InferenceEngine::run()
     }
 
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    info("InferenceEngine: using SIMPLE_INFERENCE_SCHEDULER");
     //////
     /// allocate OpenVX and OpenCL resources
     ///
@@ -274,14 +275,14 @@ int InferenceEngine::run()
         }
     }
 #else
-    info("InferenceEngine: using dummy scheduler");
+    info("InferenceEngine: using NO_INFERENCE_SCHEDULER");
 #endif
 
     //////
     /// start scheduler threads
     ///
-    threadMasterInputQ = new std::thread(&InferenceEngine::workMasterInputQ, this);
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+    threadMasterInputQ = new std::thread(&InferenceEngine::workMasterInputQ, this);
     for(int gpu = 0; gpu < GPUs; gpu++) {
         threadDeviceInputCopy[gpu] = new std::thread(&InferenceEngine::workDeviceInputCopy, this, gpu);
         threadDeviceProcess[gpu] = new std::thread(&InferenceEngine::workDeviceProcess, this, gpu);
@@ -332,7 +333,12 @@ int InferenceEngine::run()
         // if not endOfImageRequested, request client to send images
         if(!endOfImageRequested) {
             // get number of empty slots in the input queue
-            int imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
+            int imageCountRequested = 0;
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
+#else
+            imageCountRequested = 1;
+#endif
             if(imageCountRequested > 0) {
                 didSomething = true;
                 // send request for upto INFCOM_MAX_IMAGES_PER_PACKET images
@@ -346,7 +352,12 @@ int InferenceEngine::run()
                 // check of endOfImageRequested and receive images one at a time
                 int imageCountReceived = cmd.data[0];
                 if(imageCountReceived < 0) {
+                    // submit the endOfSequence indicator to scheduler
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
                     inputQ.enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
+#else
+                    endOfSequence = true;
+#endif
                     endOfImageRequested = true;
                 }
                 int i = 0;
@@ -368,8 +379,16 @@ int InferenceEngine::run()
                     if(eofMarker != INFCOM_EOF_MARKER) {
                         return error_close(sock, "eofMarker 0x%08x (incorrect)", eofMarker);
                     }
-                    // add (tag,byteStream,size) to input queue
+                    // submit the input (tag,byteStream,size) to scheduler
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
                     inputQ.enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
+#else
+                    // dummy processing that takes 4ms/images
+                    int label = tag % 10;
+                    delete[] byteStream;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(4));
+                    outputQ.enqueue(std::tuple<int,int>(tag,label));
+#endif
                 }
             }
         }
@@ -391,6 +410,7 @@ int InferenceEngine::run()
     return 0;
 }
 
+#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 void InferenceEngine::workMasterInputQ()
 {
     args->lock();
@@ -399,9 +419,7 @@ void InferenceEngine::workMasterInputQ()
 
     int batchSize = args->getBatchSize();
     int totalInputCount = 0;
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     int inputCountInBatch = 0, gpu = 0;
-#endif
     for(;;) {
         // get next item from the input queue
         std::tuple<int,char*,int> input;
@@ -415,7 +433,6 @@ void InferenceEngine::workMasterInputQ()
             break;
         totalInputCount++;
 
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
         // add the image to selected deviceQ
         std::tuple<char*,int> image(byteStream,size);
         queueDeviceTagQ[gpu]->enqueue(tag);
@@ -432,28 +449,21 @@ void InferenceEngine::workMasterInputQ()
                 }
             }
         }
-#else
-        // dummy scheduler that takes 4ms/images
-        int label = tag % 10;
-        std::this_thread::sleep_for(std::chrono::milliseconds(4));
-        outputQ.enqueue(std::tuple<int,int>(tag,label));
-#endif
     }
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+
+    // send endOfSequence indicator to all scheduler threads
     for(int i = 0; i < GPUs; i++) {
         int endOfSequenceTag = -1;
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
         queueDeviceTagQ[gpu]->enqueue(endOfSequenceTag);
         queueDeviceImageQ[gpu]->enqueue(endOfSequenceImage);
     }
-#endif
 
     args->lock();
     info("workMasterInputQ: terminated for %s [scheduled %d images]", clientName.c_str(), totalInputCount);
     args->unlock();
 }
 
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
 void InferenceEngine::workDeviceInputCopy(int gpu)
 {
     args->lock();
