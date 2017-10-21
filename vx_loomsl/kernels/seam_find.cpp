@@ -1420,6 +1420,7 @@ static vx_status VX_CALLBACK seamfind_cost_generate_opencl_codegen(
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_WIDTH, &width, sizeof(width)));
 	ERROR_CHECK_STATUS(vxQueryImage(image, VX_IMAGE_ATTRIBUTE_HEIGHT, &height, sizeof(height)));
 	ERROR_CHECK_STATUS(vxReleaseImage(&image));
+	vx_uint32 max_addr_bytes = ( height * width ) - 8;
 
 	// set kernel configuration
 	vx_uint32 work_items[2] = { (width + 7) / 8, height };
@@ -1449,39 +1450,35 @@ static vx_status VX_CALLBACK seamfind_cost_generate_opencl_codegen(
 		"		 uint op_mag_width, uint op_mag_height, __global uchar * op_mag_buf, uint op_mag_stride, uint op_mag_offset,\n"
 		"		 uint op_phase_width, uint op_phase_height, __global uchar * op_phase_buf, uint op_phase_stride, uint op_phase_offset)\n"
 		"{\n"
+		"  __local uchar lbuf[2448];   // 136x18 pixels\n"
 		"  if (flag) {\n"
 		"    uint x = get_global_id(0) * 8;\n"
 		"    uint y = get_global_id(1);\n"
 		"    int lx = get_local_id(0);\n"
 		"    int ly = get_local_id(1);\n"
 		"    bool valid = (x < %d) && (y < %d);\n"	// width, height
-		, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, width, height);
-	opencl_kernel_code = item;
-	opencl_kernel_code +=
 		"    ip_image_buf += ip_image_offset;\n"
 		"    op_mag_buf += (op_mag_offset + y * op_mag_stride + x);\n"
 		"    op_phase_buf += (op_phase_offset + y * op_phase_stride + x);\n\n"
-		"    __local uchar lbuf[2448];   // 136x18 pixels\n"
 		"    int lstride = 136;\n"
 		"    { // Load 136x18 pixels into LDS using 16x16 workgroup\n"
 		"      int gstride = (int) ip_image_stride;\n"
-		"      int goffset = (y - 1) * gstride + x - 4;\n"
+		"      int goffset = (y-1) * gstride + (x - 4); goffset = max(goffset, 0);\n"
 		"      int loffset = ly * lstride + (lx << 3);\n"
 		"      *(__local uint2 *)(lbuf + loffset) = vload2(0, (__global uint *)(ip_image_buf + goffset));\n"
-		"      bool doExtraLoad = false;\n"
-		"      if (ly < 2) {\n"
-		"        loffset += 16 * lstride;\n"
-		"        goffset += 16 * gstride;\n"
-		"        doExtraLoad = true;\n"
+		"      if (ly < 2) {\n" // bottom row load
+		"        int loffset_b = loffset + (16 * lstride);\n"
+		"        int goffset_b = goffset + (16 * gstride);\n"
+		"        if ( goffset_b >= %d ) goffset_b = goffset + (ip_image_height - 1) * gstride;\n"
+		"        *(__local uint2 *)(lbuf + loffset_b) = vload2(0, (__global uint *)(ip_image_buf + goffset_b));\n"
 		"      }\n"
-		"      else {\n"
-		"        int lid = (ly - 2) * 16 + lx;\n"
-		"        loffset = lid * lstride + 128;\n"
-		"        goffset = (y - ly + lid - 1) * gstride + (((x >> 3) - lx) << 3) + 124;\n"
-		"        doExtraLoad = true;\n"
-		"      }\n"
-		"      if (doExtraLoad) {\n"
-		"        *(__local uint2 *)(lbuf + loffset) = vload2(0, (__global uint *)(ip_image_buf + goffset));\n"
+		"      if (lx == 15) {\n" // right colomn load
+		"        int loffset_r = ly * lstride + 128;\n"
+		"        int goffset_r = goffset + 8;\n"
+		"        *(__local uint2 *)(lbuf + loffset_r) = vload2(0, (__global uint *)(ip_image_buf + min(goffset,%d)));\n"
+				, (int)opencl_local_work[0], (int)opencl_local_work[1], opencl_kernel_function_name, width, height, max_addr_bytes, max_addr_bytes);
+	opencl_kernel_code = item;
+	opencl_kernel_code +=
 		"      }\n"
 		"      barrier(CLK_LOCAL_MEM_FENCE);\n"
 		"    }\n\n"
