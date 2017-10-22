@@ -536,7 +536,7 @@ void inference_control::browseDataFolder()
 
 void inference_control::browseDataFilename()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image List File"), nullptr, tr("Image List Text (*.txt)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Image List File"), nullptr, tr("Image List Text (*.txt);;Image List Text (*.csv)"));
     if(fileName.size() > 0)
         editImageListFile->setText(fileName);
 }

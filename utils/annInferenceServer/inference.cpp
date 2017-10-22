@@ -12,9 +12,12 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
+      reverseInputChannelOrder{ 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
+    , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     , threadMasterInputQ{ nullptr },
       opencl_context{ nullptr }, opencl_cmdq{ nullptr },
       openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr },
@@ -40,7 +43,20 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
 
 InferenceEngine::~InferenceEngine()
 {
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
+    if(openvx_graph) {
+        vxReleaseGraph(&openvx_graph);
+    }
+    if(openvx_input) {
+        vxReleaseTensor(&openvx_input);
+    }
+    if(openvx_output) {
+        vxReleaseTensor(&openvx_output);
+    }
+    if(openvx_context) {
+        vxReleaseContext(&openvx_context);
+    }
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     // wait for all threads to complete and release all resources
     std::tuple<int,char*,int> endOfSequenceInput(-1,nullptr,0);
     inputQ.enqueue(endOfSequenceInput);
@@ -137,7 +153,7 @@ int InferenceEngine::run()
     ///
     bool found = false;
     for(size_t i = 0; i < args->getNumConfigureddModels(); i++) {
-        std::tuple<std::string,int,int,int,int,int,int,std::string> info = args->getConfiguredModelInfo(i);
+        std::tuple<std::string,int,int,int,int,int,int,int,std::string> info = args->getConfiguredModelInfo(i);
         if(std::get<0>(info) == modelName &&
            std::get<1>(info) == dimInput[0] &&
            std::get<2>(info) == dimInput[1] &&
@@ -146,14 +162,15 @@ int InferenceEngine::run()
            std::get<5>(info) == dimOutput[1] &&
            std::get<6>(info) == dimOutput[2])
         {
-            modelPath = args->getConfigurationDir() + "/" + std::get<7>(info);
+            reverseInputChannelOrder = std::get<7>(info);
+            modelPath = args->getConfigurationDir() + "/" + std::get<8>(info);
             found = true;
             break;
         }
     }
     if(!found) {
         for(size_t i = 0; i < args->getNumUploadedModels(); i++) {
-            std::tuple<std::string,int,int,int,int,int,int> info = args->getUploadedModelInfo(i);
+            std::tuple<std::string,int,int,int,int,int,int,int> info = args->getUploadedModelInfo(i);
             if(std::get<0>(info) == modelName &&
                std::get<1>(info) == dimInput[0] &&
                std::get<2>(info) == dimInput[1] &&
@@ -162,6 +179,7 @@ int InferenceEngine::run()
                std::get<5>(info) == dimOutput[1] &&
                std::get<6>(info) == dimOutput[2])
             {
+                reverseInputChannelOrder = std::get<7>(info);
                 modelPath = args->getConfigurationDir() + "/" + modelName;
                 found = true;
                 break;
@@ -205,8 +223,38 @@ int InferenceEngine::run()
     ERRCHK(recvCommand(sock, updateCmd, clientName, INFCOM_CMD_INFERENCE_INITIALIZATION));
     info(updateCmd.message);
 
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-    info("InferenceEngine: using SIMPLE_INFERENCE_SCHEDULER");
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && DONOT_RUN_INFERENCE
+    info("InferenceEngine: using NO_INFERENCE_SCHEDULER and DONOT_RUN_INFERENCE");
+#elif INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
+    { // create OpenVX resources
+        info("InferenceEngine: using NO_INFERENCE_SCHEDULER");
+        vx_status status;
+        openvx_context = vxCreateContext();
+        if((status = vxGetStatus((vx_reference)openvx_context)) != VX_SUCCESS)
+            fatal("InferenceEngine: vxCreateContext() failed (%d)", status);
+        vx_size idim[4] = { (vx_size)dimInput[0], (vx_size)dimInput[1], (vx_size)dimInput[2], (vx_size)batchSize };
+        vx_size odim[4] = { (vx_size)dimOutput[0], (vx_size)dimOutput[1], (vx_size)dimOutput[2], (vx_size)batchSize };
+        openvx_input = vxCreateTensor(openvx_context, 4, idim, VX_TYPE_FLOAT32, 0);
+        openvx_output = vxCreateTensor(openvx_context, 4, odim, VX_TYPE_FLOAT32, 0);
+        if((status = vxGetStatus((vx_reference)openvx_input)) != VX_SUCCESS)
+            fatal("InferenceEngine: vxCreateTensor(input) failed (%d)", status);
+        if((status = vxGetStatus((vx_reference)openvx_output)) != VX_SUCCESS)
+            fatal("InferenceEngine: vxCreateTensor(output) failed (%d)", status);
+        //////
+        // load the model
+        openvx_graph = annCreateGraph(openvx_context, openvx_input, openvx_output, modelPath.c_str());
+        if((status = vxGetStatus((vx_reference)openvx_graph)) != VX_SUCCESS)
+            fatal("InferenceEngine: annCreateGraph() failed (%d)", status);
+
+        // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
+        updateCmd.data[0] = 80;
+        sprintf(updateCmd.message, "completed OpenVX graph");
+        ERRCHK(sendCommand(sock, updateCmd, clientName));
+        ERRCHK(recvCommand(sock, updateCmd, clientName, INFCOM_CMD_INFERENCE_INITIALIZATION));
+        info(updateCmd.message);
+    }
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+    info("InferenceEngine: using LIBRE_INFERENCE_SCHEDULER");
     //////
     /// allocate OpenVX and OpenCL resources
     ///
@@ -245,16 +293,20 @@ int InferenceEngine::run()
 #if USE_VX_TENSOR_WITHOUT_CL
         openvx_input[gpu] = vxCreateTensor(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0);
         openvx_output[gpu] = vxCreateTensor(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0);
+        if((status = vxGetStatus((vx_reference)openvx_input[gpu])) != VX_SUCCESS)
+            fatal("InferenceEngine: vxCreateTensor(input#%d) failed (%d)", gpu, status);
+        if((status = vxGetStatus((vx_reference)openvx_output[gpu])) != VX_SUCCESS)
+            fatal("InferenceEngine: vxCreateTensor(output#%d) failed (%d)", gpu, status);
 #else
         vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
         vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
         openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, nullptr, VX_MEMORY_TYPE_OPENCL);
         openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, nullptr, VX_MEMORY_TYPE_OPENCL);
-#endif
         if((status = vxGetStatus((vx_reference)openvx_input[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: vxCreateTensorFromHandle(input#%d) failed (%d)", gpu, status);
         if((status = vxGetStatus((vx_reference)openvx_output[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: vxCreateTensorFromHandle(output#%d) failed (%d)", gpu, status);
+#endif
         //////
         // load the model
         openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
@@ -303,7 +355,9 @@ int InferenceEngine::run()
     //////
     /// start scheduler threads
     ///
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
+    // nothing to do
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     threadMasterInputQ = new std::thread(&InferenceEngine::workMasterInputQ, this);
     for(int gpu = 0; gpu < GPUs; gpu++) {
         threadDeviceInputCopy[gpu] = new std::thread(&InferenceEngine::workDeviceInputCopy, this, gpu);
@@ -364,10 +418,10 @@ int InferenceEngine::run()
         if(!endOfImageRequested) {
             // get number of empty slots in the input queue
             int imageCountRequested = 0;
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
-#else
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
             imageCountRequested = 1;
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
 #endif
             if(imageCountRequested > 0) {
                 didSomething = true;
@@ -383,10 +437,10 @@ int InferenceEngine::run()
                 int imageCountReceived = cmd.data[0];
                 if(imageCountReceived < 0) {
                     // submit the endOfSequence indicator to scheduler
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-                    inputQ.enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
-#else
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
                     endOfSequence = true;
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+                    inputQ.enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
 #endif
                     endOfImageRequested = true;
                 }
@@ -409,15 +463,67 @@ int InferenceEngine::run()
                     if(eofMarker != INFCOM_EOF_MARKER) {
                         return error_close(sock, "eofMarker 0x%08x (incorrect)", eofMarker);
                     }
-                    // submit the input (tag,byteStream,size) to scheduler
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-                    inputQ.enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
-#else
-                    // dummy processing that takes 4ms/images
-                    int label = tag % 10;
-                    delete[] byteStream;
+
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
+                    // process the input immediately since there is no scheduler
+#if DONOT_RUN_INFERENCE
+                    // simulate the input (tag,byteStream,size) processing using a 4ms sleep
+                    int label = tag % dimOutput[2];
                     std::this_thread::sleep_for(std::chrono::milliseconds(4));
+#else
+                    // decode, scale, and format convert into the OpenVX input buffer
+                    vx_map_id map_id;
+                    vx_size stride[4];
+                    float * ptr = nullptr;
+                    vx_status status;
+                    status = vxMapTensorPatch(openvx_input, 4, NULL, NULL, &map_id, stride, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0);
+                    if(status != VX_SUCCESS) {
+                        fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
+                    }
+                    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
+                    cv::Mat matScaled;
+                    cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
+                    for(int c = 0; c < 3; c++) {
+                        unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
+                        int n = dimInput[0] * dimInput[1];
+                        for(int i = 0; i < n; i++, img += 3) {
+                            ptr[i] = *img;
+                        }
+                    }
+                    status = vxUnmapTensorPatch(openvx_input, map_id);
+                    if(status != VX_SUCCESS) {
+                        fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
+                    }
+                    // process the graph
+                    status = vxProcessGraph(openvx_graph);
+                    if(status != VX_SUCCESS) {
+                        fatal("workDeviceProcess: vxProcessGraph()) failed(%d)", status);
+                    }
+                    ptr = nullptr;
+                    status = vxMapTensorPatch(openvx_output, 4, NULL, NULL, &map_id, stride, (void **)&ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0);
+                    if(status != VX_SUCCESS) {
+                        fatal("workDeviceProcess: vxMapTensorPatch(output)) failed(%d)", status);
+                    }
+                    int label = 0;
+                    float max_prob = ptr[0];
+                    for(int c = 1; c < dimOutput[2]; c++) {
+                        float prob = ptr[c];
+                        if(prob > max_prob) {
+                            label = c;
+                            max_prob = prob;
+                        }
+                    }
+                    status = vxUnmapTensorPatch(openvx_output, map_id);
+                    if(status != VX_SUCCESS) {
+                        fatal("workDeviceProcess: vxUnmapTensorPatch(output)) failed(%d)", status);
+                    }
+#endif
+                    // release byteStream and keep the results in outputQ
+                    delete[] byteStream;
                     outputQ.enqueue(std::tuple<int,int>(tag,label));
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+                    // submit the input (tag,byteStream,size) to scheduler
+                    inputQ.enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
 #endif
                 }
             }
@@ -440,7 +546,7 @@ int InferenceEngine::run()
     return 0;
 }
 
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+#if INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 void InferenceEngine::workMasterInputQ()
 {
     args->lock();
@@ -547,7 +653,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             cv::Mat matScaled;
             cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
             for(int c = 0; c < 3; c++) {
-                unsigned char * img = matScaled.data + 2 - c;
+                unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
                 int n = dimInput[0] * dimInput[1];
                 for(int i = 0; i < n; i++, img += 3) {
                     buf[i] = *img;
@@ -623,7 +729,7 @@ void InferenceEngine::workDeviceProcess(int gpu)
         vx_map_id map_id;
         vx_size stride[4];
         void * ptr = nullptr;
-        status = vxMapTensorPatch(openvx_input[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_OPENCL, 0);
+        status = vxMapTensorPatch(openvx_input[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0);
         err = clEnqueueReadBuffer(opencl_cmdq[gpu], input, 0, 0, stride[3] * batchSize, ptr, 0, NULL, NULL);
         if(err) fatal("clEnqueueReadBuffer(#%d,%d) failed (%d)", gpu, stride[3] * batchSize, err);
         err = clFinish(opencl_cmdq[gpu]);
@@ -652,7 +758,7 @@ void InferenceEngine::workDeviceProcess(int gpu)
         }
 #if USE_VX_TENSOR_WITHOUT_CL
         ptr = nullptr;
-        status = vxMapTensorPatch(openvx_output[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_READ_ONLY, VX_MEMORY_TYPE_OPENCL, 0);
+        status = vxMapTensorPatch(openvx_output[gpu], 4, NULL, NULL, &map_id, stride, &ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST, 0);
         err = clEnqueueWriteBuffer(opencl_cmdq[gpu], output, 0, 0, stride[3] * batchSize, ptr, 0, NULL, NULL);
         if(err) fatal("clEnqueueWriteBuffer(#%d,%d) failed (%d)", gpu, stride[3] * batchSize, err);
         err = clFinish(opencl_cmdq[gpu]);

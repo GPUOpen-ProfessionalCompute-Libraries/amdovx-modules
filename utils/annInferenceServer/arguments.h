@@ -53,11 +53,11 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         return uploadedModels.size();
     }
-    std::tuple<std::string,int,int,int,int,int,int,std::string> getConfiguredModelInfo(int index) {
+    std::tuple<std::string,int,int,int,int,int,int,int,std::string> getConfiguredModelInfo(int index) {
         std::lock_guard<std::mutex> lock(mutex);
         return configuredModels[index];
     }
-    std::tuple<std::string,int,int,int,int,int,int> getUploadedModelInfo(int index) {
+    std::tuple<std::string,int,int,int,int,int,int,int> getUploadedModelInfo(int index) {
         std::lock_guard<std::mutex> lock(mutex);
         return uploadedModels[index];
     }
@@ -67,7 +67,7 @@ public:
         saveConfig();
         return modelFileDownloadCounter;
     }
-    void addUploadedConfig(std::tuple<std::string,int,int,int,int,int,int>& ann) {
+    void addUploadedConfig(std::tuple<std::string,int,int,int,int,int,int,int>& ann) {
         std::lock_guard<std::mutex> lock(mutex);
         uploadedModels.push_back(ann);
     }
@@ -99,8 +99,8 @@ private:
     cl_platform_id platform_id;
     std::string configurationFile;
     std::string configurationDir;
-    std::vector<std::tuple<std::string,int,int,int,int,int,int,std::string>> configuredModels;
-    std::vector<std::tuple<std::string,int,int,int,int,int,int>> uploadedModels;
+    std::vector<std::tuple<std::string,int,int,int,int,int,int,int,std::string>> configuredModels;
+    std::vector<std::tuple<std::string,int,int,int,int,int,int,int>> uploadedModels;
     // misc
     std::mutex mutex;
 };

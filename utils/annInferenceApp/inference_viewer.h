@@ -16,7 +16,7 @@ public:
     inference_state();
     // configuration
     QFont statusBarFont;
-    QFont exitButtonFont;
+    QFont buttonFont;
     // image data
     bool labelLoadDone;
     bool imageLoadDone;
@@ -39,7 +39,9 @@ public:
     // mouse events
     bool abortLoadingRequested;
     bool exitButtonPressed;
+    bool saveButtonPressed;
     QRect exitButtonRect;
+    QRect saveButtonRect;
     QRect statusBarRect;
     bool mouseClicked;
     int mouseLeftClickX;
@@ -86,6 +88,7 @@ protected:
 
 private:
     void startReceiver();
+    void saveResults();
     void terminate();
 
 private:

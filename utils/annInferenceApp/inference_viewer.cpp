@@ -38,10 +38,12 @@ inference_state::inference_state()
     viewRecentResults = false;
     statusBarFont.setFamily(statusBarFont.defaultFamily());
     statusBarFont.setItalic(true);
-    exitButtonFont.setFamily(exitButtonFont.defaultFamily());
-    exitButtonFont.setBold(true);
+    buttonFont.setFamily(buttonFont.defaultFamily());
+    buttonFont.setBold(true);
     exitButtonPressed = false;
     exitButtonRect = QRect(0, 0, 0, 0);
+    saveButtonPressed = false;
+    saveButtonRect = QRect(0, 0, 0, 0);
     statusBarRect = QRect(0, 0, 0, 0);
     abortLoadingRequested = false;
     QTime time = QTime::currentTime();
@@ -149,6 +151,34 @@ void inference_viewer::terminate()
     close();
 }
 
+void inference_viewer::saveResults()
+{
+    QString fileName = QFileDialog::getSaveFileName(this, tr("Save Inference Results"), nullptr, tr("Text Files (*.txt);;CSV Files (*.csv)"));
+    if(fileName.size() > 0) {
+        QFile fileObj(fileName);
+        if(fileObj.open(QIODevice::WriteOnly)) {
+            bool csvFile =
+                    QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
+            for(int i = 0; i < state->imageDataSize; i++) {
+                int label = state->inferenceResultTop[i];
+                QString text;
+                text.sprintf("%s%c%d%s%s%s\n", state->imageDataFilenames[i].toStdString().c_str(),
+                             csvFile ? ',' : ' ',
+                             label,
+                             csvFile ? ",\"" : " #",
+                             state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
+                             csvFile ? "\"" : "");
+                fileObj.write(text.toStdString().c_str());
+            }
+            fileObj.close();
+            QDesktopServices::openUrl(QUrl("file://" + fileName));
+        }
+        else {
+            fatalError.sprintf("ERROR: unable to create: %s", fileName.toStdString().c_str());
+        }
+    }
+}
+
 void inference_viewer::mousePressEvent(QMouseEvent * event)
 {
     if(event->button() == Qt::LeftButton) {
@@ -167,13 +197,22 @@ void inference_viewer::mousePressEvent(QMouseEvent * event)
         {
             state->exitButtonPressed = true;
         }
+        // check save button
+        state->saveButtonPressed = false;
+        if((x >= state->saveButtonRect.x()) &&
+           (x < (state->saveButtonRect.x() + state->saveButtonRect.width())) &&
+           (y >= state->saveButtonRect.y()) &&
+           (y < (state->saveButtonRect.y() + state->saveButtonRect.height())))
+        {
+            state->saveButtonPressed = true;
+        }
     }
 }
 
 void inference_viewer::mouseReleaseEvent(QMouseEvent * event)
 {
     if(event->button() == Qt::LeftButton) {
-        // check exit button
+        // check for exit and save buttons
         int x = event->pos().x();
         int y = event->pos().y();
         if((x >= state->exitButtonRect.x()) &&
@@ -187,7 +226,15 @@ void inference_viewer::mouseReleaseEvent(QMouseEvent * event)
                 terminate();
             }
         }
+        else if((x >= state->saveButtonRect.x()) &&
+                (x < (state->saveButtonRect.x() + state->saveButtonRect.width())) &&
+                (y >= state->saveButtonRect.y()) &&
+                (y < (state->saveButtonRect.y() + state->saveButtonRect.height())))
+        {
+            saveResults();
+        }
         state->exitButtonPressed = false;
+        state->saveButtonPressed = false;
         // abort loading
         if(!state->imageLoadDone &&
            (x >= state->statusBarRect.x()) &&
@@ -224,30 +271,7 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
         }
     }
     else if(event->key() == Qt::Key_S) {
-        QString fileName = QFileDialog::getSaveFileName(this, tr("Save Inference Results"), nullptr, tr("Text Files (*.txt);;CSV Files (*.csv)"));
-        if(fileName.size() > 0) {
-            QFile fileObj(fileName);
-            if(fileObj.open(QIODevice::WriteOnly)) {
-                bool csvFile =
-                        QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
-                for(int i = 0; i < state->imageDataSize; i++) {
-                    int label = state->inferenceResultTop[i];
-                    QString text;
-                    text.sprintf("%s%c%d%s%s%s\n", state->imageDataFilenames[i].toStdString().c_str(),
-                                 csvFile ? ',' : ' ',
-                                 label,
-                                 csvFile ? ",\"" : " #",
-                                 state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
-                                 csvFile ? "\"" : "");
-                    fileObj.write(text.toStdString().c_str());
-                }
-                fileObj.close();
-                QDesktopServices::openUrl(QUrl("file://" + fileName));
-            }
-            else {
-                fatalError.sprintf("ERROR: unable to create: %s", fileName.toStdString().c_str());
-            }
-        }
+        saveResults();
     }
 }
 
@@ -260,24 +284,26 @@ void inference_viewer::paintEvent(QPaintEvent *)
 
     // calculate window layout
     QString exitButtonText = " Close ";
+    QString saveButtonText = " Save ";
     QFontMetrics fontMetrics(state->statusBarFont);
     int buttonTextWidth = fontMetrics.width(exitButtonText);
-    int statusBarX = 8 + 10 + buttonTextWidth + 10 + 8, statusBarY = 8;
+    int statusBarX = 8 + 2*(10 + buttonTextWidth + 10 + 8), statusBarY = 8;
     int statusBarWidth = width() - 8 - statusBarX;
     int statusBarHeight = fontMetrics.height() + 16;
     int imageX = 8;
     int imageY = statusBarY + statusBarHeight + 8;
-    state->exitButtonRect = QRect(8, statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
+    state->saveButtonRect = QRect(8, statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
+    state->exitButtonRect = QRect(8 + (10 + buttonTextWidth + 10 + 8), statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
     state->statusBarRect = QRect(statusBarX, statusBarY, statusBarWidth, statusBarHeight);
     QColor statusBarColorBackground(192, 192, 192);
     QColor statusBarColorLoad(255, 192, 64);
     QColor statusBarColorDecode(128, 192, 255);
     QColor statusBarColorQueue(128, 255, 128);
     QColor statusTextColor(0, 0, 128);
-    QColor exitButtonBorderColor(128, 16, 32);
-    QColor exitButtonBrushColor(150, 150, 175);
-    QColor exitButtonBrushColorPressed(192, 175, 175);
-    QColor exitButtonTextColor(128, 0, 0);
+    QColor buttonBorderColor(128, 16, 32);
+    QColor buttonBrushColor(150, 150, 175);
+    QColor buttonBrushColorPressed(192, 175, 175);
+    QColor buttonTextColor(128, 0, 0);
 
     // status bar info
     QString statusText;
@@ -314,13 +340,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
         else {
             QFile fileObj(state->dataFilename);
             if(fileObj.open(QIODevice::ReadOnly)) {
+                bool csvFile = QString::compare(QFileInfo(state->dataFilename).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
                 QTextStream fileInput(&fileObj);
                 int count = 0;
                 while (!fileInput.atEnd()) {
                     QString line = fileInput.readLine();
                     if(line.size() == 0)
                         continue;
-                    QStringList words = line.split(" ");
+                    QStringList words = line.split(csvFile ? "," : " ");
                     int label = -1;
                     if(words.size() < 1) {
                         fatalError.sprintf("ERROR: incorrectly formatted text at %s#%d: %s", state->dataFilename.toStdString().c_str(), state->imageDataFilenames.size()+1, line.toStdString().c_str());
@@ -519,13 +546,15 @@ void inference_viewer::paintEvent(QPaintEvent *)
         }
     }
 
-    // render exit button
-    setFont(state->exitButtonFont);
-    painter.setPen(exitButtonBorderColor);
-    painter.setBrush(state->exitButtonPressed ? exitButtonBrushColorPressed : exitButtonBrushColor);
+    // render exit and save buttons
+    setFont(state->buttonFont);
+    painter.setPen(buttonBorderColor);
+    painter.setBrush(state->exitButtonPressed ? buttonBrushColorPressed : buttonBrushColor);
     painter.drawRoundedRect(state->exitButtonRect, 4, 4);
-    painter.setPen(exitButtonTextColor);
+    painter.drawRoundedRect(state->saveButtonRect, 4, 4);
+    painter.setPen(buttonTextColor);
     painter.drawText(state->exitButtonRect, Qt::AlignCenter, exitButtonText);
+    painter.drawText(state->saveButtonRect, Qt::AlignCenter, saveButtonText);
 
     // in case fatal error, replace status text with the error message
     if(fatalError.length() > 0)

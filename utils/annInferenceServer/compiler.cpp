@@ -2,18 +2,27 @@
 #include "netutil.h"
 #include "common.h"
 
-int runCompiler(int sock, Arguments * args, std::string& clientName, InfComCommand * cmd)
+int runCompiler(int sock, Arguments * args, std::string& clientName, InfComCommand * cmdMode)
 {
     //////
     /// \brief get and check parameters
     ///
-    int dimInput[3] = { cmd->data[1], cmd->data[2], cmd->data[3] }, mode = cmd->data[4];
+    int dimInput[3] = { cmdMode->data[1], cmdMode->data[2], cmdMode->data[3] };
+    int modelType = cmdMode->data[4];
+    int reverseInputChannelOrder = 0;
     if(dimInput[0] <= 0 || dimInput[1] <= 0 || dimInput[2] != 3) {
-        dumpCommand("X", *cmd);
+        dumpCommand("X", *cmdMode);
         return error_close(sock, "unsupported input dimensions %dx%dx%d", dimInput[2], dimInput[1], dimInput[0]);
     }
-    if(mode != 0) {
-        return error_close(sock, "unsupported compiler mode:%d", mode);
+    if(modelType != 0) {
+        dumpCommand("X", *cmdMode);
+        return error_close(sock, "unsupported compiler model type = %d", modelType);
+    }
+    if(!strcmp(cmdMode->message, "BGR")) {
+        reverseInputChannelOrder = 1;
+    }
+    else if(cmdMode->message[0] != '\0') {
+        return error_close(sock, "unsupported compiler options [%s]", cmdMode->message);
     }
 
     //////
@@ -199,19 +208,20 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
 
     // add uploaded model to args
-    std::tuple<std::string,int,int,int,int,int,int>
-            ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2]);
+    std::tuple<std::string,int,int,int,int,int,int,int>
+            ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder);
     args->addUploadedConfig(ann);
-    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d",
-            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0]);
+    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d reverseInputChannelOrder:%d",
+            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder);
 
     // create module configuration file
     std::string annModuleConfigFile = args->getConfigurationDir() + "/" + modelName + "/" + MODULE_CONFIG;
     fp = fopen(annModuleConfigFile.c_str(), "w");
     if(fp) {
-        fprintf(fp, "%s\n%d %d %d\n%d %d %d\n", modelName,
+        fprintf(fp, "%s\n%d %d %d\n%d %d %d\n%d\n", modelName,
                        dimInput[0], dimInput[1], dimInput[2],
-                       dimOutput[0], dimOutput[1], dimOutput[2]);
+                       dimOutput[0], dimOutput[1], dimOutput[2],
+                       reverseInputChannelOrder);
         fclose(fp);
     }
 

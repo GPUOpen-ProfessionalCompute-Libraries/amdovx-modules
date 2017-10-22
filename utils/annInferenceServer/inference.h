@@ -14,17 +14,21 @@
 #include <vx_ext_amd.h>
 
 // inference scheduler modes
+//   NO_INFERENCE_SCHEDULER    - no scheduler (i.e., network connection with respond back immediately)
+//   LIBRE_INFERENCE_SCHEDULER - simple free flow scheduler that makes use several messaging queues and threads
 #define NO_INFERENCE_SCHEDULER        0
-#define SIMPLE_INFERENCE_SCHEDULER    1
+#define LIBRE_INFERENCE_SCHEDULER     1
 
 // configuration
 //   INFERENCE_SCHEDULER_MODE     - pick one of the modes from above
 //   INFERENCE_SERVICE_IDLE_TIME  - inference service idle time (milliseconds) if there is no activity
-#define INFERENCE_SCHEDULER_MODE       SIMPLE_INFERENCE_SCHEDULER
+#define INFERENCE_SCHEDULER_MODE       LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_SERVICE_IDLE_TIME    1
 
-// simple inference configuration
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+// inference scheduler configuration
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
+#define DONOT_RUN_INFERENCE            0  // for debugging protocols
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
 #define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
 #define USE_VX_TENSOR_WITHOUT_CL       1  // TODO: remove after debug
@@ -79,8 +83,13 @@ public:
     int run();
 
 protected:
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
-    // simple scheduler thread workers
+    // scheduler thread workers
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
+    // no separate threads needed
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+    // libre scheduler needs:
+    //   masterInputQ thread
+    //   device threads for input copy, processing, and output copy
     void workMasterInputQ();
     void workDeviceInputCopy(int gpu);
     void workDeviceProcess(int gpu);
@@ -99,6 +108,7 @@ private:
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
+    int reverseInputChannelOrder;
     std::string clientName;
     std::string modelPath;
     std::string modulePath;
@@ -113,7 +123,13 @@ private:
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>        outputQ;
 
-#if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
+#if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
+    // OpenVX resources
+    vx_context openvx_context;
+    vx_tensor openvx_input;
+    vx_tensor openvx_output;
+    vx_graph openvx_graph;
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     // master input queues
     //   inputQ: input to the scheduler <tag,byteStream,size>
     MessageQueue<std::tuple<int,char *,int>> inputQ;

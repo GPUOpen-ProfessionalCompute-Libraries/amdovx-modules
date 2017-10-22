@@ -184,15 +184,17 @@ void Arguments::getPreConfiguredModels()
             if(fp) {
                 int dimInput[3], dimOutput[3];
                 char name[64];
-                int n = fscanf(fp, "%s%d%d%d%d%d%d", name,
+                int reverseInputChannelOrder;
+                int n = fscanf(fp, "%s%d%d%d%d%d%d%d", name,
                                &dimInput[0], &dimInput[1], &dimInput[2],
-                               &dimOutput[0], &dimOutput[1], &dimOutput[2]);
-                if(n == 7) {
-                    std::tuple<std::string,int,int,int,int,int,int,std::string>
-                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], entry->d_name);
+                               &dimOutput[0], &dimOutput[1], &dimOutput[2],
+                               &reverseInputChannelOrder);
+                if(n == 8) {
+                    std::tuple<std::string,int,int,int,int,int,int,int,std::string>
+                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder, entry->d_name);
                     configuredModels.push_back(ann);
-                    info("found pre-configured model [name %s] [input %dx%dx%d] [output %dx%dx%d] [folder %s]",
-                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], entry->d_name);
+                    info("found pre-configured model [name %s] [input %dx%dx%d] [output %dx%dx%d] [reverseInputChannelOrder %d] [folder %s]",
+                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder, entry->d_name);
                 }
                 fclose(fp);
             }

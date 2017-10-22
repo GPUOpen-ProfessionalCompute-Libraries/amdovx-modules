@@ -78,7 +78,6 @@ void inference_receiver::run()
             }
             else if(cmd.command == INFCOM_CMD_DONE) {
                 connection->sendCmd(cmd);
-                abort();
                 break;
             }
             else if(cmd.command == INFCOM_CMD_INFERENCE_INITIALIZATION) {
@@ -174,7 +173,7 @@ void inference_receiver::run()
         progress->message.sprintf("ERROR: Unable to connect to %s:%d", serverHost.toStdString().c_str(), serverPort);
     }
     if(abortRequsted)
-        progress->message += " [aborted]";
+        progress->message += "[stopped]";
     connection->close();
     delete connection;
     progress->completed = true;

@@ -94,12 +94,17 @@ void dumpCommand(const char * mesg, const InfComCommand& cmd)
 
 int error_close(int sock, const char * format, ...)
 {
-    close(sock);
-    printf("ERROR: ");
+    char text[1024];
     va_list args;
     va_start(args, format);
-    int r = vprintf(format, args);
+    int r = vsprintf(text, format, args);
     va_end(args);
-    printf("\n");
+    printf("ERROR: %s\n", text);
+    InfComCommand cmd = { INFCOM_MAGIC, INFCOM_CMD_DONE, { -1 }, { 0 } };
+    sprintf(cmd.message, "%.40s", text);
+    std::string clientName = "--";
+    sendCommand(sock, cmd, clientName);
+    recvCommand(sock, cmd, clientName, INFCOM_CMD_DONE);
+    close(sock);
     return -1;
 }
