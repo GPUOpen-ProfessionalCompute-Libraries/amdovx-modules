@@ -1,6 +1,6 @@
 #include "inference_compiler.h"
 #include "inference_control.h"
-#include "infcom.h"
+#include "tcpconnection.h"
 #include <QGridLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -13,7 +13,6 @@
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFrame>
-#include <QTcpSocket>
 #include <QTimer>
 #include <QThread>
 
@@ -60,126 +59,57 @@ void inference_model_uploader::run()
 
     if(enableServer)
     {
-        QTcpSocket * tcpSocket = new QTcpSocket(this);
-        tcpSocket->connectToHost(serverHost, serverPort);
-        if(tcpSocket->waitForConnected(3000)) {
-            while(tcpSocket->state() == QAbstractSocket::ConnectedState) {
-                if(abortRequested)
+        // start server connection
+        TcpConnection * connection = new TcpConnection(serverHost, serverPort, 3000, this);
+        if(connection->connected()) {
+            InfComCommand cmd;
+            while(connection->recvCmd(cmd)) {
+                if(cmd.magic != INFCOM_MAGIC) {
+                    progress->errorCode = -1;
+                    progress->message.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
                     break;
-                bool receivedCommand = false;
-                if(tcpSocket->waitForReadyRead()) {
-                    InfComCommand cmd;
-                    if(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
-                       tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
-                    {
-#if DEBUG_DUMP // TODO remove
-                        qDebug("[recv] 0x%08x 0%d { %d %d %d %d - %d %d %d %d } %s", cmd.magic, cmd.command,
-                               cmd.data[0], cmd.data[1], cmd.data[2], cmd.data[3], cmd.data[4], cmd.data[5], cmd.data[6], cmd.data[7], cmd.message);
-#endif
-                        receivedCommand = true;
-                        if(cmd.magic != INFCOM_MAGIC) {
-                            progress->errorCode = -1;
-                            progress->message.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
-                            break;
-                        }
-                        auto send = [](QTcpSocket * sock, inference_compiler_status * progress, const void * buf, size_t len) -> bool {
-                            sock->write((const char *)buf, len);
-                            if(!sock->waitForBytesWritten(3000)) {
-                                progress->errorCode = -1;
-                                progress->message.sprintf("ERROR: write(%ld) failed", len);
-                                return false;
-                            }
-                            return true;
-                        };
-                        auto sendFile = [](QTcpSocket * sock, inference_compiler_status * progress, int command, QString fileName, int * completed) -> bool {
-                            QFile fileObj(fileName);
-                            if(!fileObj.open(QIODevice::ReadOnly)) {
-                                progress->errorCode = -1;
-                                progress->message.sprintf("ERROR: unable to open: %s", fileName.toStdString().c_str());
-                                return false;
-                            }
-                            QByteArray byteArray = fileObj.readAll();
-                            InfComCommand reply = {
-                                INFCOM_MAGIC, command,
-                                { byteArray.size(), 0 },
-                                { 0 }
-                            };
-                            QStringList text = fileName.split("/");
-                            strncpy(reply.message, text[text.size()-1].toStdString().c_str(), sizeof(reply.message));
-                            sock->write((const char *)&reply, sizeof(reply));
-                            if(!sock->waitForBytesWritten()) {
-                                progress->errorCode = -1;
-                                progress->message.sprintf("ERROR: sendFile: write(header:%d) - %s", byteArray.size(), fileName.toStdString().c_str());
-                                return false;
-                            }
-                            progress->message.sprintf("Uploading %s ...", fileName.toStdString().c_str());
-                            const char * buf = byteArray.constData();
-                            int len = byteArray.size();
-                            int pos = 0;
-                            while(pos < len) {
-                                if(abortRequested)
-                                    break;
-                                int pktSize = std::min(INFCOM_MAX_PACKET_SIZE, len-pos);
-                                sock->write(&buf[pos], pktSize);
-                                if(!sock->waitForBytesWritten()) {
-                                    progress->errorCode = -1;
-                                    progress->message.sprintf("ERROR: sendFile: write(data:%d) failed after %d/%d bytes - %s", pktSize, pos, len, fileName.toStdString().c_str());
-                                    return false;
-                                }
-                                pos += pktSize;
-                                *completed = (int)((float)pos * 100.0 / len + 0.5);
-                            }
-                            int eofMarked = INFCOM_EOF_MARKER;
-                            sock->write((const char *)&eofMarked, sizeof(eofMarked));
-                            if(!sock->waitForBytesWritten()) {
-                                progress->errorCode = -1;
-                                progress->message.sprintf("ERROR: sendFile: write(eofMarked:%ld) - %s", sizeof(eofMarked), fileName.toStdString().c_str());
-                                return false;
-                            }
-                            *completed = (int)((float)pos * 100.0 / len + 0.5);
-                            return true;
-                        };
-                        if(cmd.command == INFCOM_CMD_DONE) {
-                            break;
-                        }
-                        else if(cmd.command == INFCOM_CMD_SEND_MODE) {
-                            InfComCommand reply = {
-                                INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
-                                { INFCOM_MODE_COMPILER, dimW, dimH, dimC },
-                                { 0 }
-                            };
-                            strncpy(reply.message, compilerOptions.toStdString().c_str(), sizeof(reply.message));
-                            if(!send(tcpSocket, progress, &reply, sizeof(reply)))
-                                break;
-                        }
-                        else if(cmd.command == INFCOM_CMD_SEND_MODELFILE1) {
-                            if(!sendFile(tcpSocket, progress, INFCOM_CMD_SEND_MODELFILE1, modelFile1, &progress->modelFile1UploadProgress))
-                                break;
-                        }
-                        else if(cmd.command == INFCOM_CMD_SEND_MODELFILE2) {
-                            if(!sendFile(tcpSocket, progress, INFCOM_CMD_SEND_MODELFILE2, modelFile2, &progress->modelFile2UploadProgress))
-                                break;
-                        }
-                        else if(cmd.command == INFCOM_CMD_COMPILER_STATUS) {
-                            progress->completed = (cmd.data[0] != 0) ? true : false;
-                            progress->errorCode = cmd.data[0];
-                            progress->compilationProgress = cmd.data[1];
-                            progress->dimOutput[0] = cmd.data[2];
-                            progress->dimOutput[1] = cmd.data[3];
-                            progress->dimOutput[2] = cmd.data[4];
-                            progress->message = cmd.message;
-                            if(progress->completed)
-                                break;
-                        }
-                        else {
-                            progress->errorCode = -1;
-                            progress->message.sprintf("ERROR: got invalid command 0x%08x", cmd.command);
-                            break;
-                        }
+                }
+                else if(cmd.command == INFCOM_CMD_DONE) {
+                    connection->sendCmd(cmd);
+                    break;
+                }
+                else if(cmd.command == INFCOM_CMD_SEND_MODE) {
+                    InfComCommand reply = {
+                        INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
+                        { INFCOM_MODE_COMPILER, dimW, dimH, dimC },
+                        { 0 }
+                    };
+                    strncpy(reply.message, compilerOptions.toStdString().c_str(), sizeof(reply.message));
+                    connection->sendCmd(reply);
+                }
+                else if(cmd.command == INFCOM_CMD_SEND_MODELFILE1) {
+                    if(!connection->sendFile(INFCOM_CMD_SEND_MODELFILE1, modelFile1, progress->modelFile1UploadProgress, progress->message, abortRequested)) {
+                        progress->errorCode = -1;
+                        break;
                     }
                 }
-                if(!receivedCommand) {
-                    QThread::msleep(2);
+                else if(cmd.command == INFCOM_CMD_SEND_MODELFILE2) {
+                    if(!connection->sendFile(INFCOM_CMD_SEND_MODELFILE2, modelFile2, progress->modelFile2UploadProgress, progress->message, abortRequested)) {
+                        progress->errorCode = -2;
+                        break;
+                    }
+                }
+                else if(cmd.command == INFCOM_CMD_COMPILER_STATUS) {
+                    connection->sendCmd(cmd);
+                    progress->completed = (cmd.data[0] != 0) ? true : false;
+                    progress->errorCode = cmd.data[0];
+                    progress->compilationProgress = cmd.data[1];
+                    progress->dimOutput[0] = cmd.data[2];
+                    progress->dimOutput[1] = cmd.data[3];
+                    progress->dimOutput[2] = cmd.data[4];
+                    progress->message = cmd.message;
+                    if(progress->completed)
+                        break;
+                }
+                else {
+                    progress->errorCode = -1;
+                    progress->message.sprintf("ERROR: got invalid command 0x%08x", cmd.command);
+                    break;
                 }
             }
         }
@@ -189,7 +119,8 @@ void inference_model_uploader::run()
         }
         if(abortRequested)
             progress->message += " [aborted]";
-        tcpSocket->close();
+        connection->close();
+        delete connection;
         progress->completed = true;
     }
     else {
@@ -412,6 +343,11 @@ void inference_compiler::tick()
     else {
         editCompilerMessage->setText(text.sprintf("%s%s",
                       progress->completed ? "[completed] " : "", progress->message.toStdString().c_str()));
+        if(progress->modelFile1UploadProgress == 100 && progress->modelFile2UploadProgress == 100 &&
+           progress->compilationProgress == 100 && progress->completed)
+        {
+            close();
+        }
     }
 }
 

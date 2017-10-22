@@ -1,6 +1,6 @@
 #include "inference_control.h"
 #include "inference_compiler.h"
-#include "infcom.h"
+#include "tcpconnection.h"
 #include "assets.h"
 #include <QGridLayout>
 #include <QDialogButtonBox>
@@ -14,7 +14,6 @@
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFrame>
-#include <QTcpSocket>
 #include <QTimer>
 #include <QCheckBox>
 #include <QStyle>
@@ -558,98 +557,69 @@ void inference_control::connectServer()
     // save configuration
     saveConfig();
 
-    // check TCP connection
-    QTcpSocket * tcpSocket = new QTcpSocket(this);
-    tcpSocket->connectToHost(editServerHost->text(), editServerPort->text().toInt());
-    QString status;
+    // start server connection
+    TcpConnection * connection = new TcpConnection(editServerHost->text(), editServerPort->text().toInt(), 3000, this);
+    // initialize default values
     connectionSuccessful = false;
-    status = "ERROR: Unable to connect to " + editServerHost->text() + ":" + editServerPort->text();
-    if(tcpSocket->waitForConnected(3000)) {
-        int pendingModelCount = 0;
-        while(tcpSocket->state() == QAbstractSocket::ConnectedState) {
-            bool receivedCommand = false;
-            if(tcpSocket->waitForReadyRead()) {
-                InfComCommand cmd;
-                while(tcpSocket->bytesAvailable() >= (qint64)sizeof(cmd) &&
-                      tcpSocket->read((char *)&cmd, sizeof(cmd)) == sizeof(cmd))
-                {
-                    receivedCommand = true;
-                    if(cmd.magic != INFCOM_MAGIC) {
-                        status.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
-                        break;
-                    }
-                    auto send = [](QTcpSocket * sock, QString& status, const void * buf, size_t len) -> bool {
-                        sock->write((const char *)buf, len);
-                        if(!sock->waitForBytesWritten(3000)) {
-                            status.sprintf("ERROR: write(%ld) failed", len);
-                            return false;
-                        }
-                        return true;
-                    };
-                    if(cmd.command == INFCOM_CMD_DONE) {
-                        break;
-                    }
-                    else if(cmd.command == INFCOM_CMD_SEND_MODE) {
-                        InfComCommand reply = {
-                            INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
-                            { INFCOM_MODE_CONFIGURE },
-                            { 0 }
-                        };
-                        if(!send(tcpSocket, status, &reply, sizeof(reply)))
-                            break;
-                    }
-                    else if(cmd.command == INFCOM_CMD_CONFIG_INFO) {
-                        pendingModelCount = cmd.data[0];
-                        maxGPUs = cmd.data[1];
-                        QString text;
-                        editGPUs->setText(text.sprintf("%d", maxGPUs));
-                        editGPUs->setValidator(new QIntValidator(1,maxGPUs));
-                        labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
-                        while(comboModelSelect->count() > 1)
-                            comboModelSelect->removeItem(1);
-                        modelList.clear();
-                        connectionSuccessful = true;
-                        status = "OK: Connected to " + editServerHost->text() + ":" + editServerPort->text();
-                        if(pendingModelCount <= 0) {
-                            InfComCommand reply = {
-                                INFCOM_MAGIC, INFCOM_CMD_DONE, { 0 }, { 0 }
-                            };
-                            if(!send(tcpSocket, status, &reply, sizeof(reply)))
-                                break;
-                        }
-                    }
-                    else if(cmd.command == INFCOM_CMD_MODEL_INFO) {
-                        InfComModelInfo info = { { 0 }, { 0 }, { 0 } };
-                        info.inputDim[0] = cmd.data[0];
-                        info.inputDim[1] = cmd.data[1];
-                        info.inputDim[2] = cmd.data[2];
-                        info.outputDim[0] = cmd.data[3];
-                        info.outputDim[1] = cmd.data[4];
-                        info.outputDim[2] = cmd.data[5];
-                        strncpy(info.name, cmd.message, sizeof(info.name));
-                        modelList.push_back(info);
-                        comboModelSelect->addItem(info.name);
-                        pendingModelCount--;
-                        if(pendingModelCount <= 0) {
-                            InfComCommand reply = {
-                                INFCOM_MAGIC, INFCOM_CMD_DONE, { 0 }, { 0 }
-                            };
-                            if(!send(tcpSocket, status, &reply, sizeof(reply)))
-                                break;
-                        }
-                    }
-                    else {
-                        status.sprintf("ERROR: got invalid command received 0x%08x", cmd.command);
-                        break;
-                    }
-                }
-            }
-            if(!receivedCommand) {
-                QThread::msleep(2);
+    QString status = "ERROR: connect to " + editServerHost->text() + ":" + editServerPort->text() + " is not successful";
+    int pendingModelCount = 0;
+    // loop to process commands from server
+    InfComCommand cmd;
+    while(connection->recvCmd(cmd)) {
+        if(cmd.magic != INFCOM_MAGIC) {
+            status.sprintf("ERROR: got invalid magic 0x%08x", cmd.magic);
+            break;
+        }
+        if(cmd.command == INFCOM_CMD_DONE) {
+            connection->sendCmd(cmd);
+            break;
+        }
+        else if(cmd.command == INFCOM_CMD_SEND_MODE) {
+            InfComCommand reply = {
+                INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
+                { INFCOM_MODE_CONFIGURE },
+                { 0 }
+            };
+            connection->sendCmd(reply);
+        }
+        else if(cmd.command == INFCOM_CMD_CONFIG_INFO) {
+            connection->sendCmd(cmd);
+            pendingModelCount = cmd.data[0];
+            maxGPUs = cmd.data[1];
+            QString text;
+            editGPUs->setText(text.sprintf("%d", maxGPUs));
+            editGPUs->setValidator(new QIntValidator(1,maxGPUs));
+            labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
+            while(comboModelSelect->count() > 1)
+                comboModelSelect->removeItem(1);
+            modelList.clear();
+            connectionSuccessful = true;
+            status = "OK: Connected to " + editServerHost->text() + ":" + editServerPort->text();
+            if(pendingModelCount <= 0) {
+                break;
             }
         }
+        else if(cmd.command == INFCOM_CMD_MODEL_INFO) {
+            connection->sendCmd(cmd);
+            ModelInfo info = {
+                cmd.message,
+                { cmd.data[0], cmd.data[1], cmd.data[2] },
+                { cmd.data[3], cmd.data[4], cmd.data[5] }
+            };
+            modelList.push_back(info);
+            comboModelSelect->addItem(info.name);
+            pendingModelCount--;
+            if(pendingModelCount <= 0) {
+                break;
+            }
+        }
+        else {
+            status.sprintf("ERROR: got invalid command received 0x%08x", cmd.command);
+            break;
+        }
     }
-    tcpSocket->close();
+    connection->close();
+    delete connection;
     labelServerStatus->setText(status);
 
     // update status

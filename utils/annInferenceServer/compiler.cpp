@@ -85,12 +85,12 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     InfComCommand cmdUpdate = {
         INFCOM_MAGIC, INFCOM_CMD_COMPILER_STATUS, { 0 }, { 0 }
     };
-    ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     int status = chdir(modelFolder.c_str());
     if(status < 0) {
         cmdUpdate.data[0] = -1;
         sprintf(cmdUpdate.message, "model folder not found");
         ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+        ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
         return error_close(sock, "chdir('%s') failed", modelFolder.c_str());
     }
     // step-1: run inference generator
@@ -98,6 +98,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 1;
     sprintf(cmdUpdate.message, "inference_generator started ...");
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     // step-1.1: inference_generator on caffemodel for weights
     std::string command = "inference_generator weights.caffemodel";
     command += " " + std::to_string(args->getBatchSize())
@@ -111,6 +112,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 25;
     sprintf(cmdUpdate.message, "inference_generator weights.caffemodel completed (%d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
     }
@@ -127,6 +129,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 50;
     sprintf(cmdUpdate.message, "inference_generator deploy.prototxt completed (%d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
     }
@@ -160,6 +163,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 75;
     sprintf(cmdUpdate.message, "cmake completed (status = %d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
     }
@@ -170,6 +174,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[1] = 99;
     sprintf(cmdUpdate.message, "make completed (status = %d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
     }
@@ -179,6 +184,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         cmdUpdate.data[0] = -6;
         sprintf(cmdUpdate.message, "couldn't locate generated module");
         ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+        ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
         return error_close(sock, "could not locate built module: %s", modulePath.c_str());
     }
 
@@ -190,6 +196,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     cmdUpdate.data[4] = dimOutput[2];
     sprintf(cmdUpdate.message, "%s", modelName);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+    ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
 
     // add uploaded model to args
     std::tuple<std::string,int,int,int,int,int,int>

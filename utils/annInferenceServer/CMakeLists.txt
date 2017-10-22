@@ -41,8 +41,8 @@ list(APPEND SOURCES
 )
 
 add_executable(annInferenceServer ${SOURCES})
-
 target_link_libraries(annInferenceServer vx_nn openvx pthread)
+install (TARGETS annInferenceServer DESTINATION bin)
 
 if (OpenCL_FOUND)
 	include_directories(${OpenCL_INCLUDE_DIRS}/CL ${OpenCL_INCLUDE_DIRS}/Headers)

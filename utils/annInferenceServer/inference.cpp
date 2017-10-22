@@ -194,6 +194,16 @@ int InferenceEngine::run()
         close(sock);
         return -1;
     }
+    info("found requested model:%s input:%dx%dx%d output:%dx%dx%d from %s", modelName.c_str(),
+          dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], clientName.c_str());
+
+    // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
+    InfComCommand updateCmd = {
+        INFCOM_MAGIC, INFCOM_CMD_INFERENCE_INITIALIZATION, { 0 }, "started initialization"
+    };
+    ERRCHK(sendCommand(sock, updateCmd, clientName));
+    ERRCHK(recvCommand(sock, updateCmd, clientName, INFCOM_CMD_INFERENCE_INITIALIZATION));
+    info(updateCmd.message);
 
 #if INFERENCE_SCHEDULER_MODE == SIMPLE_INFERENCE_SCHEDULER
     info("InferenceEngine: using SIMPLE_INFERENCE_SCHEDULER");
@@ -250,6 +260,13 @@ int InferenceEngine::run()
         openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
         if((status = vxGetStatus((vx_reference)openvx_graph[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: annCreateGraph(#%d) failed (%d)", gpu, status);
+
+        // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
+        updateCmd.data[0] = 80 * (gpu + 1) / GPUs;
+        sprintf(updateCmd.message, "completed OpenVX graph for GPU#%d", gpu);
+        ERRCHK(sendCommand(sock, updateCmd, clientName));
+        ERRCHK(recvCommand(sock, updateCmd, clientName, INFCOM_CMD_INFERENCE_INITIALIZATION));
+        info(updateCmd.message);
     }
 
     //////
@@ -295,6 +312,13 @@ int InferenceEngine::run()
     }
 #endif
 
+    // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
+    updateCmd.data[0] = 100;
+    sprintf(updateCmd.message, "inference engine is ready");
+    ERRCHK(sendCommand(sock, updateCmd, clientName));
+    ERRCHK(recvCommand(sock, updateCmd, clientName, INFCOM_CMD_INFERENCE_INITIALIZATION));
+    info(updateCmd.message);
+
     ////////
     /// \brief keep running the inference in loop
     ///
@@ -328,6 +352,7 @@ int InferenceEngine::run()
                     cmd.data[0] = resultCount;
                     ERRCHK(sendCommand(sock, cmd, clientName));
                     resultCountAvailable -= resultCount;
+                    ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
                 }
                 if(endOfSequence) {
                     break;

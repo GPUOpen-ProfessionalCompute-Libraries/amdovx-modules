@@ -7,6 +7,7 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
     //////
     /// \brief send the configuration info
     ///
+    InfComCommand reply;
 
     // send: INFCOM_CMD_CONFIG_INFO { modelCount, numGpus }
     int modelCount = args->getNumConfigureddModels();
@@ -17,6 +18,7 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
     };
     ERRCHK(sendCommand(sock, config_info, clientName));
     info("number of pre-configured models: %d", modelCount);
+    ERRCHK(recvCommand(sock, reply, clientName, INFCOM_CMD_CONFIG_INFO));
     for(size_t i = 0; i < modelCount; i++) {
         // send: INFCOM_CMD_MODEL_INFO { iw, ih, ic, ow, oh, oc } "modelName"
         std::tuple<std::string,int,int,int,int,int,int,std::string> model_config = args->getConfiguredModelInfo(i);
@@ -31,10 +33,10 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
         info("pre-configured model#%d: %s [input %dx%dx%d] [output %dx%dx%d]", i, model_info.message,
              model_info.data[2], model_info.data[1], model_info.data[0],
              model_info.data[5], model_info.data[4], model_info.data[4]);
+        ERRCHK(recvCommand(sock, reply, clientName, INFCOM_CMD_MODEL_INFO));
     }
 
     // wait for INFCOM_CMD_DONE message
-    InfComCommand reply;
     ERRCHK(recvCommand(sock, reply, clientName, INFCOM_CMD_DONE));
 
     return 0;

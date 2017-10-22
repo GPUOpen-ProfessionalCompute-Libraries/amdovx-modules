@@ -282,6 +282,13 @@ void inference_viewer::paintEvent(QPaintEvent *)
     // status bar info
     QString statusText;
 
+    // message from initialization
+    if(progress.message.length() > 0) {
+        statusText = "[";
+        statusText += progress.message;
+        statusText += "] ";
+    }
+
     if(!state->labelLoadDone) {
         if(state->dataFilename.length() == 0) {
             int count = 0;
@@ -418,14 +425,20 @@ void inference_viewer::paintEvent(QPaintEvent *)
         painter.setBrush(statusBarColorDecode);
         painter.drawRect(state->statusBarRect);
         if(progress.repeat_images) {
-            statusText.sprintf("Cycling through %d images from the image list [processed %d images]", state->imagePixmapCount, progress.images_received);
+            QString text;
+            text.sprintf("Cycling through %d images from the image list [processed %d images]", state->imagePixmapCount, progress.images_received);
+            statusText += text;
         }
         else if (progress.completed) {
             if(progress.errorCode) {
-                statusText.sprintf("Completed: %d/%d images have been processed [error %d]", progress.images_received, state->imagePixmapCount, progress.errorCode);
+                QString text;
+                text.sprintf("Completed: %d/%d images have been processed [error %d]", progress.images_received, state->imagePixmapCount, progress.errorCode);
+                statusText += text;
             }
             else {
-                statusText.sprintf("Completed: %d/%d images have been processed", progress.images_received, state->imagePixmapCount);
+                QString text;
+                text.sprintf("Completed: %d/%d images have been processed", progress.images_received, state->imagePixmapCount);
+                statusText += text;
             }
             if(!timerStopped && updateTimer) {
                 // TODO: something is wrong with timer and paint event triggers
@@ -434,9 +447,11 @@ void inference_viewer::paintEvent(QPaintEvent *)
             }
         }
         else {
-            statusText.sprintf("Processing: [scheduled %d/%d images] [processed %d/%d images]",
+            QString text;
+            text.sprintf("Processing: [scheduled %d/%d images] [processed %d/%d images]",
                                progress.images_sent, state->imagePixmapCount,
                                progress.images_received, state->imagePixmapCount);
+            statusText += text;
         }
     }
     else {

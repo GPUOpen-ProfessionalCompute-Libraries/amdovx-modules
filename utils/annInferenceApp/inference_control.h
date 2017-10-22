@@ -45,6 +45,11 @@ protected:
     void loadConfig();
 
 private:
+    struct ModelInfo {
+        QString name;
+        int inputDim[3];
+        int outputDim[3];
+    };
     QLineEdit * editServerHost;
     QLineEdit * editServerPort;
     QPushButton * buttonConnect;
@@ -84,7 +89,7 @@ private:
     QVector<QString> typeModelFile1Desc;
     QVector<QString> typeModelFile2Label;
     QVector<QString> typeModelFile2Desc;
-    QVector<InfComModelInfo> modelList;
+    QVector<ModelInfo> modelList;
     QString lastModelFile1;
     QString lastModelFile2;
     QString lastCompilerOptions;

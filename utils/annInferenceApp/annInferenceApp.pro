@@ -29,7 +29,8 @@ SOURCES += \
     inference_receiver.cpp \
     inference_control.cpp \
     inference_compiler.cpp \
-    assets.cpp
+    assets.cpp \
+    tcpconnection.cpp
 
 HEADERS += \
     inference_viewer.h \
@@ -37,7 +38,8 @@ HEADERS += \
     inference_control.h \
     inference_compiler.h \
     infcom.h \
-    assets.h
+    assets.h \
+    tcpconnection.h
 
 FORMS += \
         inference_viewer.ui
