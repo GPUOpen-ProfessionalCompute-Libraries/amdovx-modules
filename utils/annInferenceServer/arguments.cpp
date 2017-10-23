@@ -108,7 +108,7 @@ void Arguments::loadConfig()
         char version[256], workFolder_[256];
         int modelFileDownloadCounter_;
         int port_, batchSize_, maxPendingBatches_;
-        int numGPUs_, gpuIdList_[MAX_NUM_GPU], maxGpuId_;
+        int numGPUs_, gpuIdList_[MAX_NUM_GPU] = { 0 }, maxGpuId_;
         int n = fscanf(fp, "%s%s%d%d%d%d%d", version, workFolder_, &modelFileDownloadCounter_, &port_, &batchSize_, &maxPendingBatches_, &numGPUs_);
         if(n == 7 && !strcmp(version, BUILD_VERSION)) {
             if(numGPUs_ > num_devices) {
@@ -118,10 +118,10 @@ void Arguments::loadConfig()
                 valid = true;
                 maxGpuId_ = 0;
                 for(int i = 0; i < numGPUs_; i++) {
-                    fscanf(fp, "%d", &gpuIdList_[i]);
+                    n = fscanf(fp, "%d", &gpuIdList_[i]);
                     maxGpuId_ = std::max(maxGpuId_, gpuIdList_[i]);
-                    if(maxGpuId_ >= num_devices) {
-                        warning("reseting GPUs to default as GPU#%d is not within num_devices(%d) in %s", maxGpuId_, num_devices, configurationFile.c_str());
+                    if(n != 1 || maxGpuId_ >= num_devices) {
+                        warning("reseting GPUs to default as gpuId entry is missing or not within num_devices(%d) in %s", num_devices, configurationFile.c_str());
                         valid = false;
                         break;
                     }

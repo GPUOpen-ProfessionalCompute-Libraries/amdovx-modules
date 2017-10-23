@@ -158,7 +158,14 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     info("found output tensor dimensions %dx%dx%d for %s", dimOutput[2], dimOutput[1], dimOutput[0], modelName);
 
     // step-3: build the module
-    chdir(buildFolder.c_str());
+    status = chdir(buildFolder.c_str());
+    if(status < 0) {
+        cmdUpdate.data[0] = -1;
+        sprintf(cmdUpdate.message, "build folder not found");
+        ERRCHK(sendCommand(sock, cmdUpdate, clientName));
+        ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
+        return error_close(sock, "chdir('%s') failed", buildFolder.c_str());
+    }
     command = "cmake .. >../cmake.log";
     info("executing: %% %s", command.c_str());
     status = system(command.c_str());
