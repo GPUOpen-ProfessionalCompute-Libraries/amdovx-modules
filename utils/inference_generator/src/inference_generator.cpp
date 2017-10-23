@@ -1522,6 +1522,7 @@ void generateCode(
     std::ostream& ofsCodeC,
     std::ofstream& ofsCodeM,
     std::ofstream& ofsCodeA,
+    std::ofstream& ofsCodeD,
     std::vector<std::vector<std::string>>& net,
     std::map<std::string,std::vector<int>>& tensorMap,
     std::string tensorType,
@@ -1688,6 +1689,61 @@ void generateCode(
     ofsCodeA << std::endl;
     ofsCodeA << "    return 0;"<< std::endl;
     ofsCodeA << "}" << std::endl;
+   
+    ofsCodeD << "find_path(OPENCL_INCLUDE_DIRS"  << std::endl;
+    ofsCodeD << "NAMES OpenCL/cl.h CL/cl.h" << std::endl;
+    ofsCodeD << "HINTS" << std::endl;
+    ofsCodeD << "${OPENCL_ROOT}/include" << std::endl;
+    ofsCodeD << "$ENV{AMDAPPSDKROOT}/include" << std::endl;
+    ofsCodeD << "$ENV{CUDA_PATH}/include" << std::endl;
+    ofsCodeD << "PATHS" << std::endl;
+    ofsCodeD << "/usr/include" << std::endl;
+    ofsCodeD << "/usr/local/include" << std::endl;
+    ofsCodeD << "/usr/local/cuda/include" << std::endl;
+    ofsCodeD << "/opt/cuda/include" << std::endl;
+    ofsCodeD << "/opt/rocm/opencl/include" << std::endl;
+    ofsCodeD << "DOC \"OpenCL header file path\"" << std::endl;
+    ofsCodeD << ")" << std::endl;
+    ofsCodeD << "mark_as_advanced( OPENCL_INCLUDE_DIRS )" << std::endl << std::endl;
+    ofsCodeD << "if(\"${CMAKE_SIZEOF_VOID_P}\" EQUAL \"8\")" << std::endl;
+    ofsCodeD << "   find_library( OPENCL_LIBRARIES" << std::endl;
+    ofsCodeD << "       NAMES OpenCL" << std::endl;
+    ofsCodeD << "       HINTS" << std::endl;
+    ofsCodeD << "       ${OPENCL_ROOT}/lib" << std::endl;
+    ofsCodeD << "       $ENV{AMDAPPSDKROOT}/lib" << std::endl;
+    ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
+    ofsCodeD << "       DOC \"OpenCL dynamic library path\"" << std::endl;
+    ofsCodeD << "       PATH_SUFFIXES x86_64 x64 x86_64/sdk" << std::endl;
+    ofsCodeD << "       PATHS" << std::endl;
+    ofsCodeD << "       /usr/lib" << std::endl;
+    ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
+    ofsCodeD << "       /opt/cuda/lib" << std::endl;
+    ofsCodeD << "       /opt/rocm/opencl/lib" << std::endl;
+    ofsCodeD << "       )" << std::endl;
+    ofsCodeD << "else( )" << std::endl;
+    ofsCodeD << "   find_library( OPENCL_LIBRARIES" << std::endl;
+    ofsCodeD << "       NAMES OpenCL" << std::endl;
+    ofsCodeD << "       HINTS" << std::endl;
+    ofsCodeD << "       ${OPENCL_ROOT}/lib" << std::endl;
+    ofsCodeD << "       $ENV{AMDAPPSDKROOT}/lib" << std::endl;
+    ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
+    ofsCodeD << "       DOC \"OpenCL dynamic library path\"" << std::endl;
+    ofsCodeD << "       PATH_SUFFIXES x86 Win32" << std::endl;
+    ofsCodeD << "       PATHS" << std::endl;
+    ofsCodeD << "       /usr/lib" << std::endl;
+    ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
+    ofsCodeD << "       /opt/cuda/lib" << std::endl;
+    ofsCodeD << "       )" << std::endl;
+    ofsCodeD << "endif( )" << std::endl;
+    ofsCodeD << "mark_as_advanced( OPENCL_LIBRARIES )" << std::endl << std::endl;
+    ofsCodeD << "include( FindPackageHandleStandardArgs )" << std::endl;
+    ofsCodeD << "find_package_handle_standard_args( OPENCL DEFAULT_MSG OPENCL_LIBRARIES OPENCL_INCLUDE_DIRS )" << std::endl;
+    ofsCodeD << "set(OpenCL_FOUND ${OPENCL_FOUND} CACHE INTERNAL \"\")" << std::endl;
+    ofsCodeD << "set(OpenCL_LIBRARIES ${OPENCL_LIBRARIES} CACHE INTERNAL \"\")" << std::endl;
+    ofsCodeD << "set(OpenCL_INCLUDE_DIRS ${OPENCL_INCLUDE_DIRS} CACHE INTERNAL \"\")" << std::endl;
+    ofsCodeD << "if( NOT OPENCL_FOUND )" << std::endl;
+    ofsCodeD << "   message( STATUS \"FindOpenCL looked for libraries named: OpenCL\" )" << std::endl;
+    ofsCodeD << "endif()" << std::endl;
 }
 
 void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder, int flags)
@@ -1941,7 +1997,10 @@ int main(int argc, char* argv[])
         std::ofstream ofsCodeC(outputFolder + "/annmodule.cpp", std::ios::binary);
         std::ofstream ofsCodeM(outputFolder + "/CMakeLists.txt", std::ios::binary);
         std::ofstream ofsCodeA(outputFolder + "/annunit.cpp", std::ios::binary);
-        generateCode(ofsCodeH, ofsCodeC, ofsCodeM, ofsCodeA, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, outputFolder, bFuseScaleWithBatchNorm);
+        std::string dir = outputFolder + "/cmake";
+        mkdir(dir.c_str(), 0777);
+        std::ofstream ofsCodeD(dir + "/FindOpenCL.cmake", std::ios::binary);
+        generateCode(ofsCodeH, ofsCodeC, ofsCodeM, ofsCodeA, ofsCodeD, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, outputFolder, bFuseScaleWithBatchNorm);
     }
 
     return 0;
