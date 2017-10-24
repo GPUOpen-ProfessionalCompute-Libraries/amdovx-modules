@@ -1622,8 +1622,7 @@ void generateCode(
     ofsCodeM << "set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11\")" << std::endl;
     ofsCodeM << "target_link_libraries(${PROJECT_NAME} openvx vx_nn pthread)" << std::endl;
     ofsCodeM << "add_executable(annunit annunit.cpp)" << std::endl;
-//    ofsCodeM << "set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11\")" << std::endl;
-    ofsCodeM << "target_link_libraries(annunit openvx vx_nn ${PROJECT_NAME})" << std::endl;
+    ofsCodeM << "target_link_libraries(annunit openvx vx_nn pthread ${PROJECT_NAME})" << std::endl;
 
     /////
     // generate simple application
