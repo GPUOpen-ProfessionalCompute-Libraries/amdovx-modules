@@ -250,6 +250,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxBatchNormalizationLayer(vx_graph graph, vx_te
 				(vx_reference)output
 			};
 			node = createNode(graph, VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_eps);
 		}
 	}
 	return node;
