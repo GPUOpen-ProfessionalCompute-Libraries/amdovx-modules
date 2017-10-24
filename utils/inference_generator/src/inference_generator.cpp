@@ -1619,10 +1619,11 @@ void generateCode(
     ofsCodeM << "link_directories    (/opt/rocm/lib)" << std::endl;
     ofsCodeM << "list(APPEND SOURCES annmodule.cpp)" << std::endl;
     ofsCodeM << "add_library(${PROJECT_NAME} SHARED ${SOURCES})" << std::endl;
-    ofsCodeM << "target_link_libraries(${PROJECT_NAME} openvx vx_nn)" << std::endl;
-    ofsCodeM << "add_executable(annunit annunit.cpp)" << std::endl;
-    ofsCodeM << "target_link_libraries(annunit openvx vx_nn ${PROJECT_NAME})" << std::endl;
     ofsCodeM << "set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11\")" << std::endl;
+    ofsCodeM << "target_link_libraries(${PROJECT_NAME} openvx vx_nn pthread)" << std::endl;
+    ofsCodeM << "add_executable(annunit annunit.cpp)" << std::endl;
+//    ofsCodeM << "set(CMAKE_CXX_FLAGS \"${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11\")" << std::endl;
+    ofsCodeM << "target_link_libraries(annunit openvx vx_nn ${PROJECT_NAME})" << std::endl;
 
     /////
     // generate simple application
@@ -1695,12 +1696,12 @@ void generateCode(
     ofsCodeD << "HINTS" << std::endl;
     ofsCodeD << "${OPENCL_ROOT}/include" << std::endl;
     ofsCodeD << "$ENV{AMDAPPSDKROOT}/include" << std::endl;
-    ofsCodeD << "$ENV{CUDA_PATH}/include" << std::endl;
+    //ofsCodeD << "$ENV{CUDA_PATH}/include" << std::endl;
     ofsCodeD << "PATHS" << std::endl;
     ofsCodeD << "/usr/include" << std::endl;
     ofsCodeD << "/usr/local/include" << std::endl;
-    ofsCodeD << "/usr/local/cuda/include" << std::endl;
-    ofsCodeD << "/opt/cuda/include" << std::endl;
+    //ofsCodeD << "/usr/local/cuda/include" << std::endl;
+    //ofsCodeD << "/opt/cuda/include" << std::endl;
     ofsCodeD << "/opt/rocm/opencl/include" << std::endl;
     ofsCodeD << "DOC \"OpenCL header file path\"" << std::endl;
     ofsCodeD << ")" << std::endl;
@@ -1711,13 +1712,13 @@ void generateCode(
     ofsCodeD << "       HINTS" << std::endl;
     ofsCodeD << "       ${OPENCL_ROOT}/lib" << std::endl;
     ofsCodeD << "       $ENV{AMDAPPSDKROOT}/lib" << std::endl;
-    ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
+    //ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
     ofsCodeD << "       DOC \"OpenCL dynamic library path\"" << std::endl;
     ofsCodeD << "       PATH_SUFFIXES x86_64 x64 x86_64/sdk" << std::endl;
     ofsCodeD << "       PATHS" << std::endl;
     ofsCodeD << "       /usr/lib" << std::endl;
-    ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
-    ofsCodeD << "       /opt/cuda/lib" << std::endl;
+    //ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
+    //ofsCodeD << "       /opt/cuda/lib" << std::endl;
     ofsCodeD << "       /opt/rocm/opencl/lib" << std::endl;
     ofsCodeD << "       )" << std::endl;
     ofsCodeD << "else( )" << std::endl;
@@ -1726,13 +1727,13 @@ void generateCode(
     ofsCodeD << "       HINTS" << std::endl;
     ofsCodeD << "       ${OPENCL_ROOT}/lib" << std::endl;
     ofsCodeD << "       $ENV{AMDAPPSDKROOT}/lib" << std::endl;
-    ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
+    //ofsCodeD << "       $ENV{CUDA_PATH}/lib" << std::endl;
     ofsCodeD << "       DOC \"OpenCL dynamic library path\"" << std::endl;
     ofsCodeD << "       PATH_SUFFIXES x86 Win32" << std::endl;
     ofsCodeD << "       PATHS" << std::endl;
     ofsCodeD << "       /usr/lib" << std::endl;
-    ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
-    ofsCodeD << "       /opt/cuda/lib" << std::endl;
+    //ofsCodeD << "       /usr/local/cuda/lib" << std::endl;
+    //ofsCodeD << "       /opt/cuda/lib" << std::endl;
     ofsCodeD << "       )" << std::endl;
     ofsCodeD << "endif( )" << std::endl;
     ofsCodeD << "mark_as_advanced( OPENCL_LIBRARIES )" << std::endl << std::endl;
