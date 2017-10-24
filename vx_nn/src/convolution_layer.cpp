@@ -264,6 +264,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvolutionLayer(vx_graph graph, vx_tensor in
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_CONVOLUTION_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&conv_params);
         }
     }
     return node;

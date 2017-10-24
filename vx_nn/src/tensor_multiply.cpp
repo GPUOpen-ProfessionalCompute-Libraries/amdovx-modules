@@ -195,6 +195,8 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorMultiplyNode(vx_graph graph, vx_tensor 
                 (vx_reference)output
             };
             node = createNode(graph, VX_KERNEL_TENSOR_MULTIPLY, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_overflowpolicy);
+            vxReleaseScalar(&s_roundingpolicy);
         }
     }
     return node;

@@ -241,6 +241,8 @@ VX_API_ENTRY vx_node VX_API_CALL vxFullyConnectedLayer(vx_graph graph, vx_tensor
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_FULLYCONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&overflow);
+            vxReleaseScalar(&rounding);
         }
     }
     return node;

@@ -248,6 +248,12 @@ VX_API_ENTRY vx_node VX_API_CALL vxPoolingLayer(vx_graph graph, vx_tensor inputs
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_POOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_pooling_type);
+            vxReleaseScalar(&s_pooling_size_x);
+            vxReleaseScalar(&s_pooling_size_y);
+            vxReleaseScalar(&s_pooling_padding_x);
+            vxReleaseScalar(&s_pooling_padding_y);
+            vxReleaseScalar(&s_rounding);
         }
     }
     return node;

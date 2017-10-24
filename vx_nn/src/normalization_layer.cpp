@@ -237,6 +237,10 @@ VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor 
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_NORMALIZATION_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_type);
+            vxReleaseScalar(&s_normalization_size);
+            vxReleaseScalar(&s_alpha);
+            vxReleaseScalar(&s_beta);
         }
     }
     return node;
