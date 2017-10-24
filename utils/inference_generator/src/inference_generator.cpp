@@ -1429,12 +1429,19 @@ void writeVXCode(
             if(codeType == "initialize") {
                 ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
                 ofsCodeC << "    " <<  layerName + "_node = " << "vxConcatLayer(graph, ";
+                ofsCodeC << layerName;
+                int param_count = 0;
                 for(int i = 4; i < node.size(); i++) {
                     std::string layerInputs = node[i];
                     formatFileName(layerInputs, "/", "_");
-                    ofsCodeC << layerInputs << ", ";
+                    ofsCodeC << ", " << layerInputs;
+                    param_count++;
                 }
-                ofsCodeC << layerName << " );" << std::endl;
+                while(param_count < 8) {
+                    ofsCodeC << ", NULL";
+                    param_count++;
+                }
+                ofsCodeC << " );" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
             }
