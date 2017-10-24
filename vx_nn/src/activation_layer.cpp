@@ -80,6 +80,9 @@ static vx_status VX_CALLBACK processActivationLayer(vx_node node, const vx_refer
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
     float alpha = 1.0f, beta = 0.0f;
     //miopen activation forward call.
     ERROR_CHECK_MIOPEN_STATUS((miopenActivationForward(miopenHandle, data->activationDesc, &alpha, data->inputDescriptor, data->input_mem, &beta, data->outputDescriptor, data->output_mem)));

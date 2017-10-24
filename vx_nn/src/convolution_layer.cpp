@@ -93,6 +93,9 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     ConvolutionLayerLocalData * data= NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
     //ConvolutionForward.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
