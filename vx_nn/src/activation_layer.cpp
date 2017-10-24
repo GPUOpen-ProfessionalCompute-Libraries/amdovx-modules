@@ -200,6 +200,9 @@ VX_API_ENTRY vx_node VX_API_CALL vxActivationLayer(vx_graph graph, vx_tensor inp
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_ACTIVATION_LAYER, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_function);
+            vxReleaseScalar(&s_a);
+            vxReleaseScalar(&s_b);
         }
     }
     return node;

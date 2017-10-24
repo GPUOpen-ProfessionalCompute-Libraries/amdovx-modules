@@ -185,6 +185,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorAddNode(vx_graph graph, vx_tensor input
                 (vx_reference)output
             };
             node = createNode(graph, VX_KERNEL_TENSOR_ADD, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_policy);
         }
     }
     return node;
