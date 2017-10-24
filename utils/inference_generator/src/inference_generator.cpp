@@ -1188,8 +1188,14 @@ void writeVXCode(
                 ofsCodeC << "    vx_float32 " << layerName << "_bias = " << k << ";" << std::endl;
                 ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
                 ofsCodeC << "    " << layerName + "_node = " << "vxNormalizationLayer( graph, " << inputName << ", " << layerName + "_mode, " << layerName + "_size, " << layerName + "_alpha, " << layerName + "_beta, "
-                         << layerName << ", " << layerName + "_bias );" << std::endl;
+                         << layerName << " );" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
+                ofsCodeC << "    if(" << layerName << "_bias != 1) {" << std::endl;
+                ofsCodeC << "        vx_scalar s_bias = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &" << layerName << "_bias, sizeof(" << layerName << "_bias));" << std::endl;
+                ofsCodeC << "        ERROR_CHECK_OBJECT(s_bias);" << std::endl;
+                ofsCodeC << "        ERROR_CHECK_STATUS(vxSetParameterByIndex(" << layerName << "_node, 6, (vx_reference) s_bias));" << std::endl;
+                ofsCodeC << "        ERROR_CHECK_STATUS(vxReleaseScalar(&s_bias));" << std::endl;
+                ofsCodeC << "    }" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
             }
         }
