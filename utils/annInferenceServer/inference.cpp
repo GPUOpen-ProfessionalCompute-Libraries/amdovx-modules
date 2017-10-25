@@ -644,7 +644,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
             cv::Mat matScaled;
             cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
-            for(int c = 0; c < 3; c++, ptr += (dimInput[0]*dimInput[1])) {
+            for(int c = 0; c < 3; c++, buf += (dimInput[0]*dimInput[1])) {
                 unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
                 int n = dimInput[0] * dimInput[1];
                 for(int i = 0; i < n; i++, img += 3) {
