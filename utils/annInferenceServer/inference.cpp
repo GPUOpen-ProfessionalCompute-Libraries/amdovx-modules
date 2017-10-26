@@ -772,7 +772,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             break;
         }
         cl_int err;
-        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, outputSizeInBytes, 0, NULL, NULL, &err);
+        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceOutputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
