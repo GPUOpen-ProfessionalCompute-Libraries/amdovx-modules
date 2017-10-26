@@ -20,7 +20,7 @@
 #include <QDesktopServices>
 
 #define CONFIGURATION_CACHE_FILENAME ".annInferenceApp.txt"
-#define BUILD_VERSION "alpha1"
+#define BUILD_VERSION "alpha2"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
     : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr }
@@ -87,14 +87,17 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     QLabel * labelServerHost = new QLabel("Server:");
     editServerHost = new QLineEdit("localhost");
     editServerPort = new QLineEdit("28282");
+    editServerPassword = new QLineEdit("");
     buttonConnect = new QPushButton("Connect");
     editServerPort->setValidator(new QIntValidator(1,65535));
+    editServerPassword->setEchoMode(QLineEdit::Password);
     labelServerHost->setStyleSheet("font-weight: bold; font-style: italic");
     labelServerHost->setAlignment(Qt::AlignLeft);
-    connect(buttonConnect, SIGNAL(released()), this, SLOT(connectServer()));
+    connect(buttonConnect, SIGNAL(released()), this, SLOT(runConnection()));
     controlLayout->addWidget(labelServerHost, row, 0, 1, 1);
-    controlLayout->addWidget(editServerHost, row, 1, 1, 2);
-    controlLayout->addWidget(editServerPort, row, editSpan, 1, 1);
+    controlLayout->addWidget(editServerHost, row, 1, 1, 1);
+    controlLayout->addWidget(editServerPort, row, 2, 1, 1);
+    controlLayout->addWidget(editServerPassword, row, 3, 1, 1);
     controlLayout->addWidget(buttonConnect, row, 1 + editSpan, 1, 1);
     row++;
     labelServerStatus = new QLabel("");
@@ -131,7 +134,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     labelModel->setStyleSheet("font-weight: bold; font-style: italic");
     labelModel->setAlignment(Qt::AlignLeft);
     connect(comboModelSelect, SIGNAL(activated(int)), this, SLOT(modelSelect(int)));
-    connect(buttonModelUpload, SIGNAL(released()), this, SLOT(modelUpload()));
+    connect(buttonModelUpload, SIGNAL(released()), this, SLOT(runCompiler()));
     controlLayout->addWidget(labelModel, row, 0, 1, 1);
     controlLayout->addWidget(comboModelSelect, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonModelUpload, row, 1 + editSpan, 1, 1);
@@ -186,17 +189,28 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(buttonModelFile2, row, 1 + editSpan, 1, 1);
     row++;
     labelCompilerOptions = new QLabel("--");
-    editCompilerOptions = new QLineEdit("");
     labelCompilerOptions->setStyleSheet("font-weight: bold; font-style: italic");
     labelCompilerOptions->setAlignment(Qt::AlignLeft);
+    comboInvertInputChannels = new QComboBox();
+    comboInvertInputChannels->addItem("RGB");
+    comboInvertInputChannels->addItem("BGR");
+    comboPublishOptions = new QComboBox();
+    comboPublishOptions->addItem("");
+    comboPublishOptions->addItem("PublishAs");
+    comboPublishOptions->addItem("PublishAs (override)");
+    editModelName = new QLineEdit("");
     controlLayout->addWidget(labelCompilerOptions, row, 0, 1, 1);
-    controlLayout->addWidget(editCompilerOptions, row, 1, 1, editSpan);
+    controlLayout->addWidget(comboInvertInputChannels, row, 1, 1, 1);
+    controlLayout->addWidget(comboPublishOptions, row, 2, 1, 1);
+    controlLayout->addWidget(editModelName, row, 3, 1, 1);
     row++;
     connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
     connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
     connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
     connect(editModelFile2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile2(const QString &)));
-    connect(editCompilerOptions, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeCompilerOptions(const QString &)));
+    connect(comboInvertInputChannels, SIGNAL(activated(int)), this, SLOT(onChangeInputInverserOrder(int)));
+    connect(comboPublishOptions, SIGNAL(activated(int)), this, SLOT(onChangePublishMode(int)));
+    connect(editModelName, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelName(const QString &)));
     labelCompilerStatus = new QLabel("");
     labelCompilerStatus->setStyleSheet("font-style: italic; color: gray;");
     labelCompilerStatus->setAlignment(Qt::AlignLeft);
@@ -309,8 +323,10 @@ void inference_control::saveConfig()
         fileOutput << lastModelFile2 << endl;
         fileOutput << lastDimH << endl;
         fileOutput << lastDimW << endl;
+        fileOutput << lastInverseInputChannelOrder << endl;
+        fileOutput << lastPublishMode << endl;
+        fileOutput << lastModelName << endl;
         fileOutput << editGPUs->text() << endl;
-        fileOutput << lastCompilerOptions << endl;
         fileOutput << editImageLabelsFile->text() << endl;
         fileOutput << editImageFolder->text() << endl;
         fileOutput << editImageListFile->text() << endl;
@@ -336,8 +352,10 @@ void inference_control::loadConfig()
             editModelFile2->setText(fileInput.readLine());
             editDimH->setText(fileInput.readLine());
             editDimW->setText(fileInput.readLine());
+            comboInvertInputChannels->setCurrentIndex(fileInput.readLine().toInt());
+            comboPublishOptions->setCurrentIndex(fileInput.readLine().toInt());
+            editModelName->setText(fileInput.readLine());
             editGPUs->setText(fileInput.readLine());
-            editCompilerOptions->setText(fileInput.readLine());
             editImageLabelsFile->setText(fileInput.readLine());
             editImageFolder->setText(fileInput.readLine());
             editImageListFile->setText(fileInput.readLine());
@@ -359,7 +377,9 @@ void inference_control::loadConfig()
     lastDimH = editDimH->text();
     lastModelFile1 = editModelFile1->text();
     lastModelFile2 = editModelFile2->text();
-    lastCompilerOptions = editCompilerOptions->text();
+    lastInverseInputChannelOrder = comboInvertInputChannels->currentIndex();
+    lastPublishMode = comboPublishOptions->currentIndex();
+    lastModelName = editModelName->text();
 }
 
 bool inference_control::isConfigValid(QString& err)
@@ -374,6 +394,10 @@ bool inference_control::isConfigValid(QString& err)
             err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist.";
             return false;
         }
+    }
+    if((comboPublishOptions->currentIndex() >= 1) && (editModelName->text().length() < 4)) {
+        err = "modelName is invalid or too small.";
+        return false;
     }
     if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; return false; }
     if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; return false; }
@@ -407,9 +431,21 @@ void inference_control::modelSelect(int model)
         editModelFile2->setEnabled(true);
         buttonModelFile2->setEnabled(true);
         labelCompilerOptions->setText("Options:");
-        editCompilerOptions->setReadOnly(false);
-        if(editCompilerOptions->text() != lastCompilerOptions)
-            editCompilerOptions->setText(lastCompilerOptions);
+        comboInvertInputChannels->setDisabled(false);
+        if(comboInvertInputChannels->currentIndex() != lastInverseInputChannelOrder)
+            comboInvertInputChannels->setCurrentIndex(lastInverseInputChannelOrder);
+        comboPublishOptions->setDisabled(false);
+        if(comboPublishOptions->currentIndex() != lastPublishMode)
+            comboPublishOptions->setCurrentIndex(lastPublishMode);
+        if(comboPublishOptions->currentIndex() >= 1) {
+            editModelName->setDisabled(false);
+            if(editModelName->text() != lastModelName)
+                editModelName->setText(lastModelName);
+        }
+        else {
+            editModelName->setDisabled(true);
+            editModelName->setText("");
+        }
         if(compiler_status.completed && compiler_status.errorCode > 0) {
             modelName = compiler_status.message;
         }
@@ -437,8 +473,12 @@ void inference_control::modelSelect(int model)
         buttonModelFile2->setEnabled(false);
         buttonModelUpload->setEnabled(false);
         labelCompilerOptions->setText("--");
-        editCompilerOptions->setReadOnly(true);
-        editCompilerOptions->setText(modelList[model].reverseInputChannelOrder ? "BGR" : "RGB");
+        comboInvertInputChannels->setDisabled(true);
+        comboInvertInputChannels->setCurrentIndex(modelList[model].reverseInputChannelOrder);
+        comboPublishOptions->setDisabled(true);
+        comboPublishOptions->setCurrentIndex(0);
+        editModelName->setDisabled(true);
+        editModelName->setText("");
     }
     if(modelName.length() > 0) {
         labelCompilerStatus->setText("[" + modelName + "]*");
@@ -506,10 +546,25 @@ void inference_control::onChangeModelFile2(const QString & text)
     }
 }
 
-void inference_control::onChangeCompilerOptions(const QString & text)
+void inference_control::onChangeInputInverserOrder(int order)
 {
     if(comboModelSelect->currentIndex() == 0)
-        lastCompilerOptions =  text;
+        lastInverseInputChannelOrder = order;
+}
+
+void inference_control::onChangePublishMode(int mode)
+{
+    if(comboModelSelect->currentIndex() == 0) {
+        lastPublishMode = mode;
+        comboPublishOptions->setCurrentIndex(mode);
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangeModelName(const QString & text)
+{
+    if(comboModelSelect->currentIndex() == 0)
+        lastModelName =  text;
 }
 
 void inference_control::browseModelFile1()
@@ -557,7 +612,7 @@ void inference_control::exitControl()
     close();
 }
 
-void inference_control::connectServer()
+void inference_control::runConnection()
 {
     // check configuration
     QString err;
@@ -641,7 +696,7 @@ void inference_control::connectServer()
     modelSelect(comboModelSelect->currentIndex());
 }
 
-void inference_control::modelUpload()
+void inference_control::runCompiler()
 {
     // check configuration
     QString err;
@@ -655,6 +710,20 @@ void inference_control::modelUpload()
     saveConfig();
 
     // start compiler
+    QString options = "";
+    if(comboInvertInputChannels->currentIndex() == 1)
+        options = "BGR";
+    else
+        options = "RGB";
+    if(comboPublishOptions->currentIndex() >= 1) {
+        options += ",save=" + editModelName->text();
+        if(comboPublishOptions->currentIndex() == 2) {
+            options += ",override";
+        }
+        if(editServerPassword->text().length() > 0) {
+            options += ",passwd=" + editServerPassword->text();
+        }
+    }
     inference_compiler * compiler = new inference_compiler(
                 true,
                 editServerHost->text(), editServerPort->text().toInt(),
@@ -662,7 +731,7 @@ void inference_control::modelUpload()
                 editDimH->text().toInt(),
                 editDimW->text().toInt(),
                 editModelFile1->text(), editModelFile2->text(),
-                editCompilerOptions->text(),
+                options,
                 &compiler_status);
     compiler->show();
 }

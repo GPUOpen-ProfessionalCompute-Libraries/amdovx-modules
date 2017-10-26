@@ -4,11 +4,11 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#define BUILD_VERSION "alpha1"
+#define BUILD_VERSION "alpha2"
 
 Arguments::Arguments()
         : workFolder{ "~" }, modelFileDownloadCounter{ 0 },
-          password{ "annie" },
+          password{ "radeon" },
           port{ 28282 }, batchSize{ 32 }, maxPendingBatches{ 4 }, numGPUs{ 1 }, gpuIdList{ 0 },
           maxGpuId{ 0 }, platform_id{ NULL }, num_devices{ 0 }, device_id{ NULL }, deviceUseCount{ 0 }
 {

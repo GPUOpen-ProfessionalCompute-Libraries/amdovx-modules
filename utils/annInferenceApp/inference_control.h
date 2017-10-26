@@ -21,18 +21,20 @@ signals:
 
 public slots:
     void tick();
-    void connectServer();
+    void runConnection();
+    void runCompiler();
+    void runInference();
     void modelSelect(int model);
     void browseModelFile1();
     void browseModelFile2();
-    void modelUpload();
-    void runInference();
     void exitControl();
     void onChangeDimH(const QString &);
     void onChangeDimW(const QString &);
     void onChangeModelFile1(const QString &);
     void onChangeModelFile2(const QString &);
-    void onChangeCompilerOptions(const QString &);
+    void onChangeInputInverserOrder(int order);
+    void onChangePublishMode(int mode);
+    void onChangeModelName(const QString &);
     void onLogo1Click();
     void onLogo2Click();
 
@@ -53,6 +55,7 @@ private:
     };
     QLineEdit * editServerHost;
     QLineEdit * editServerPort;
+    QLineEdit * editServerPassword;
     QPushButton * buttonConnect;
     QLabel * labelServerStatus;
     QComboBox * comboModelSelect;
@@ -67,7 +70,9 @@ private:
     QLabel * labelCompilerOptions;
     QLineEdit * editModelFile1;
     QLineEdit * editModelFile2;
-    QLineEdit * editCompilerOptions;
+    QComboBox * comboInvertInputChannels;
+    QComboBox * comboPublishOptions;
+    QLineEdit * editModelName;
     QPushButton * buttonModelFile1;
     QPushButton * buttonModelFile2;
     QLabel * labelCompilerStatus;
@@ -93,7 +98,9 @@ private:
     QVector<ModelInfo> modelList;
     QString lastModelFile1;
     QString lastModelFile2;
-    QString lastCompilerOptions;
+    int lastInverseInputChannelOrder;
+    int lastPublishMode;
+    QString lastModelName;
     QString lastDimW;
     QString lastDimH;
 };
