@@ -1,6 +1,7 @@
 #include "compiler.h"
 #include "netutil.h"
 #include "common.h"
+#include <sstream>
 
 int runCompiler(int sock, Arguments * args, std::string& clientName, InfComCommand * cmdMode)
 {
@@ -10,6 +11,9 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     int dimInput[3] = { cmdMode->data[1], cmdMode->data[2], cmdMode->data[3] };
     int modelType = cmdMode->data[4];
     int reverseInputChannelOrder = 0;
+    bool overrideModel = false;
+    std::string saveModelAs;
+    std::string password;
     if(dimInput[0] <= 0 || dimInput[1] <= 0 || dimInput[2] != 3) {
         dumpCommand("X", *cmdMode);
         return error_close(sock, "unsupported input dimensions %dx%dx%d", dimInput[2], dimInput[1], dimInput[0]);
@@ -18,20 +22,88 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         dumpCommand("X", *cmdMode);
         return error_close(sock, "unsupported compiler model type = %d", modelType);
     }
-    if(!strcmp(cmdMode->message, "BGR")) {
-        reverseInputChannelOrder = 1;
+    if(strlen(cmdMode->message) > 0) {
+        std::stringstream ss(cmdMode->message);
+        std::string option;
+        while (std::getline(ss, option, ',')) {
+            info("option %s", option.c_str());
+            if(option == "RGB") {
+                reverseInputChannelOrder = 0;
+            }
+            else if(option == "BGR") {
+                reverseInputChannelOrder = 1;
+            }
+            else if(option == "override") {
+                overrideModel = true;
+            }
+            else if(option.size() > 5 && option.substr(0, 5) == "save=") {
+                saveModelAs = option.substr(5);
+            }
+            else if(option.size() > 7 && option.substr(0, 7) == "passwd=") {
+                password = option.substr(7);
+            }
+            else {
+                return error_close(sock, "unsupported compiler options [%s]", option.c_str());
+            }
+        }
     }
-    else if(cmdMode->message[0] != '\0') {
-        return error_close(sock, "unsupported compiler options [%s]", cmdMode->message);
+    if(saveModelAs.length() > 0) {
+        for(size_t i = 0; i < saveModelAs.length(); i++) {
+            if((i >= 32) ||
+               !((saveModelAs[i] >= 'a' && saveModelAs[i] <= 'z') ||
+                 (saveModelAs[i] >= 'A' && saveModelAs[i] <= 'Z') ||
+                 (saveModelAs[i] >= '0' && saveModelAs[i] <= '9') ||
+                 (saveModelAs[i] == '-') ||
+                 (saveModelAs[i] == '_')))
+            {
+                return error_close(sock, "invalid options: modelName is not valid [%s]", saveModelAs.c_str());
+            }
+        }
+        bool found = false;
+        for(size_t i = 0; i < args->getNumConfigureddModels(); i++) {
+            if(std::get<0>(args->getConfiguredModelInfo(i)) == saveModelAs ||
+               std::get<8>(args->getConfiguredModelInfo(i)) == saveModelAs)
+            {
+                found = true;
+                break;
+            }
+        }
+        if(!found) {
+            for(size_t i = 0; i < args->getNumUploadedModels(); i++) {
+                if(std::get<0>(args->getUploadedModelInfo(i)) == saveModelAs) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if(found && !overrideModel) {
+            return error_close(sock, "modelName already in use [%s]", saveModelAs.c_str());
+        }
+        if(!args->checkPassword(password)) {
+            return error_close(sock, "invalid password");
+        }
     }
 
     //////
     /// \brief generate new model name for this download and create model folders
     ///
     char modelName[64];
-    sprintf(modelName, "upload/model-%08d", args->getNextModelUploadCounter());
+    if(saveModelAs.length() > 0) {
+        sprintf(modelName, "%s", saveModelAs.c_str());
+    }
+    else {
+        sprintf(modelName, "upload/model-%08d", args->getNextModelUploadCounter());
+    }
     std::string modelFolder = args->getConfigurationDir() + "/" + modelName;
     std::string buildFolder = modelFolder + "/build";
+    // remove modelFolder if exists
+    std::string command = "/bin/rm -rf ";
+    command += modelFolder;
+    info("executing: %% %s", command.c_str());
+    if(system(command.c_str()) < 0) {
+        return error_close(sock, "unable to remove folder %s", modelName);
+    }
+    // make folders
     if(mkdir(modelFolder.c_str(), 0700) < 0 || mkdir(buildFolder.c_str(), 0700) < 0) {
         fatal("unable to create folders: %s and %s", modelFolder.c_str(), buildFolder.c_str());
     }
@@ -109,7 +181,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     // step-1.1: inference_generator on caffemodel for weights
-    std::string command = "inference_generator weights.caffemodel";
+    command = "inference_generator weights.caffemodel";
     command += " " + std::to_string(args->getBatchSize())
             +  " " + std::to_string(dimInput[2])
             +  " " + std::to_string(dimInput[1])
@@ -214,13 +286,6 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
 
-    // add uploaded model to args
-    std::tuple<std::string,int,int,int,int,int,int,int>
-            ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder);
-    args->addUploadedConfig(ann);
-    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d reverseInputChannelOrder:%d",
-            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder);
-
     // create module configuration file
     std::string annModuleConfigFile = args->getConfigurationDir() + "/" + modelName + "/" + MODULE_CONFIG;
     fp = fopen(annModuleConfigFile.c_str(), "w");
@@ -231,6 +296,23 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
                        reverseInputChannelOrder);
         fclose(fp);
     }
+    else {
+        fatal("unable to create: %s", annModuleConfigFile.c_str());
+    }
+
+    // add uploaded model to args
+    if(saveModelAs.length() > 0) {
+        std::tuple<std::string,int,int,int,int,int,int,int,std::string>
+                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder, modelName);
+        args->addConfigToPreconfiguredList(ann);
+    }
+    else {
+        std::tuple<std::string,int,int,int,int,int,int,int>
+                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder);
+        args->addConfigToUploadedList(ann);
+    }
+    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d reverseInputChannelOrder:%d",
+            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder);
 
     // send and wait for INFCOM_CMD_DONE message
     InfComCommand reply = {

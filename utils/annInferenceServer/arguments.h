@@ -67,9 +67,26 @@ public:
         saveConfig();
         return modelFileDownloadCounter;
     }
-    void addUploadedConfig(std::tuple<std::string,int,int,int,int,int,int,int>& ann) {
+    void addConfigToUploadedList(std::tuple<std::string,int,int,int,int,int,int,int>& ann) {
         std::lock_guard<std::mutex> lock(mutex);
         uploadedModels.push_back(ann);
+    }
+    void addConfigToPreconfiguredList(std::tuple<std::string,int,int,int,int,int,int,int,std::string>& ann) {
+        std::lock_guard<std::mutex> lock(mutex);
+        bool replaced = false;
+        for(auto it = configuredModels.begin(); it != configuredModels.end(); it++) {
+            if(std::get<0>(*it) == std::get<0>(ann)) {
+                *it = ann;
+                replaced = true;
+                break;
+            }
+        }
+        if(!replaced) {
+            configuredModels.push_back(ann);
+        }
+    }
+    bool checkPassword(std::string code) {
+        return (password == code) ? true : false;
     }
 
     // device resources
@@ -91,6 +108,7 @@ private:
     int maxPendingBatches;
     int numGPUs;
     int gpuIdList[MAX_NUM_GPU];
+    std::string password;
     // derived configuration
     int maxGpuId;
     cl_uint num_devices;

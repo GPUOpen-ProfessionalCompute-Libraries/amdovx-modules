@@ -8,6 +8,7 @@
 
 Arguments::Arguments()
         : workFolder{ "~" }, modelFileDownloadCounter{ 0 },
+          password{ "annie" },
           port{ 28282 }, batchSize{ 32 }, maxPendingBatches{ 4 }, numGPUs{ 1 }, gpuIdList{ 0 },
           maxGpuId{ 0 }, platform_id{ NULL }, num_devices{ 0 }, device_id{ NULL }, deviceUseCount{ 0 }
 {
@@ -109,6 +110,7 @@ void Arguments::loadConfig()
         int modelFileDownloadCounter_;
         int port_, batchSize_, maxPendingBatches_;
         int numGPUs_, gpuIdList_[MAX_NUM_GPU] = { 0 }, maxGpuId_;
+        char password_[256] = { 0 };
         int n = fscanf(fp, "%s%s%d%d%d%d%d", version, workFolder_, &modelFileDownloadCounter_, &port_, &batchSize_, &maxPendingBatches_, &numGPUs_);
         if(n == 7 && !strcmp(version, BUILD_VERSION)) {
             if(numGPUs_ > num_devices) {
@@ -126,6 +128,11 @@ void Arguments::loadConfig()
                         break;
                     }
                 }
+                if(valid) {
+                    if(fscanf(fp, "%s", password_) == 0) {
+                        password_[0] = '\0';
+                    }
+                }
             }
         }
         fclose(fp);
@@ -140,6 +147,7 @@ void Arguments::loadConfig()
                 gpuIdList[i] = gpuIdList_[i];
             }
             maxGpuId = maxGpuId_;
+            password = password_;
             // set configuration directory
             setConfigurationDir();
         }
@@ -164,6 +172,7 @@ void Arguments::saveConfig()
             fprintf(fp, " %d", gpuIdList[i]);
         }
         fprintf(fp, "\n");
+        fprintf(fp, "%s\n", password.c_str());
         fclose(fp);
     }
 }

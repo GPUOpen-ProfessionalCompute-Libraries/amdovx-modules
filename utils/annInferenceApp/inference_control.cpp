@@ -397,16 +397,19 @@ void inference_control::modelSelect(int model)
             buttonModelUpload->setEnabled(true);
         }
         labelModelFile1->setText(typeModelFile1Label[model]);
-        editModelFile1->setText(lastModelFile1);
+        if(editModelFile1->text() != lastModelFile1)
+            editModelFile1->setText(lastModelFile1);
         editModelFile1->setEnabled(true);
         buttonModelFile1->setEnabled(true);
         labelModelFile2->setText(typeModelFile2Label[model]);
-        editModelFile2->setText(lastModelFile2);
+        if(editModelFile2->text() != lastModelFile2)
+            editModelFile2->setText(lastModelFile2);
         editModelFile2->setEnabled(true);
         buttonModelFile2->setEnabled(true);
         labelCompilerOptions->setText("Options:");
         editCompilerOptions->setReadOnly(false);
-        editCompilerOptions->setText(lastCompilerOptions);
+        if(editCompilerOptions->text() != lastCompilerOptions)
+            editCompilerOptions->setText(lastCompilerOptions);
         if(compiler_status.completed && compiler_status.errorCode > 0) {
             modelName = compiler_status.message;
         }
@@ -435,7 +438,7 @@ void inference_control::modelSelect(int model)
         buttonModelUpload->setEnabled(false);
         labelCompilerOptions->setText("--");
         editCompilerOptions->setReadOnly(true);
-        editCompilerOptions->setText("");
+        editCompilerOptions->setText(modelList[model].reverseInputChannelOrder ? "BGR" : "RGB");
     }
     if(modelName.length() > 0) {
         labelCompilerStatus->setText("[" + modelName + "]*");
@@ -444,9 +447,17 @@ void inference_control::modelSelect(int model)
         labelCompilerStatus->setText("");
     }
     // output dimensions
-    editOutDimW->setText(dimOutput[0] == 0 ? "" : text.sprintf("%d", dimOutput[0]));
-    editOutDimH->setText(dimOutput[1] == 0 ? "" : text.sprintf("%d", dimOutput[1]));
-    editOutDimC->setText(dimOutput[2] == 0 ? "" : text.sprintf("%d", dimOutput[2]));
+    for(int i = 0; i < 3; i++) {
+        text = "";
+        if(dimOutput[i] != 0)
+            text.sprintf("%d", dimOutput[i]);
+        if(i == 0 && editOutDimW->text() != text)
+            editOutDimW->setText(text);
+        if(i == 1 && editOutDimH->text() != text)
+            editOutDimH->setText(text);
+        if(i == 2 && editOutDimC->text() != text)
+            editOutDimC->setText(text);
+    }
     // enable GPUs
     editGPUs->setEnabled(compilationCompleted);
     // enable run button
@@ -604,7 +615,8 @@ void inference_control::connectServer()
             ModelInfo info = {
                 cmd.message,
                 { cmd.data[0], cmd.data[1], cmd.data[2] },
-                { cmd.data[3], cmd.data[4], cmd.data[5] }
+                { cmd.data[3], cmd.data[4], cmd.data[5] },
+                cmd.data[6]
             };
             modelList.push_back(info);
             comboModelSelect->addItem(info.name);

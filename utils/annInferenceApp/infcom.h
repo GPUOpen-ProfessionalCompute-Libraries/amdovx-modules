@@ -17,7 +17,7 @@
 // Compiler Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic,mode}
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic,mode} [message=options]
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODELFILE1
 //    client: InfComCommand:INFCOM_CMD_SEND_MODELFILE1 with data[0]=size-in-bytes message=fileName
 //    client: <byte-stream-of-prototxt> <eof-marker:32-bit>

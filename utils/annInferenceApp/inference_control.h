@@ -49,6 +49,7 @@ private:
         QString name;
         int inputDim[3];
         int outputDim[3];
+        int reverseInputChannelOrder;
     };
     QLineEdit * editServerHost;
     QLineEdit * editServerPort;

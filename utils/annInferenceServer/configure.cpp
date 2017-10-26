@@ -25,7 +25,9 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
         InfComCommand model_info = {
             INFCOM_MAGIC, INFCOM_CMD_MODEL_INFO,
             { std::get<1>(model_config), std::get<2>(model_config), std::get<3>(model_config),
-              std::get<4>(model_config), std::get<5>(model_config), std::get<6>(model_config) },
+              std::get<4>(model_config), std::get<5>(model_config), std::get<6>(model_config),
+              std::get<7>(model_config)
+            },
             { 0 }
         };
         strncpy(model_info.message, std::get<0>(model_config).c_str(), sizeof(model_info.message));

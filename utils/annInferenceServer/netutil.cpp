@@ -14,7 +14,8 @@ int sendPacket(int sock, const void * buf, size_t len, std::string& clientName)
 #endif
     size_t n = send(sock, buf, len, 0);
     if(n != len) {
-        return error_close(sock, "send(len:%ld) failed for %s (sent %ld bytes)", len, clientName.c_str(), n);
+        close(sock);
+        return error("send(len:%ld) failed for %s (sent %ld bytes)", len, clientName.c_str(), n);
     }
 #if INFCOM_ENABLE_NODELAY
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &one, sizeof(one));
@@ -31,7 +32,8 @@ int recvPacket(int sock, void * buf, size_t len, std::string& clientName)
         return -1;
     }
     else if(n != len) {
-        return error_close(sock, "recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), n);
+        close(sock);
+        return error("recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), n);
     }
     return 0;
 }
@@ -49,7 +51,8 @@ int recvBuffer(int sock, void * buf, size_t len, std::string& clientName)
         byteStream += n;
     }
     if(remaining > 0) {
-        return error_close(sock, "recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), len - remaining);
+        close(sock);
+        return error("recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), len - remaining);
     }
     return 0;
 }
@@ -68,11 +71,13 @@ int recvCommand(int sock, InfComCommand& cmd, std::string& clientName, int expec
         return -1;
 
     if(cmd.magic != INFCOM_MAGIC) {
-        return error_close(sock, "recv() incorrect InfComCommand from %s (magic is 0x%08x instead of 0x%08x)", clientName.c_str(), cmd.magic, INFCOM_MAGIC);
+        close(sock);
+        return error("recv() incorrect InfComCommand from %s (magic is 0x%08x instead of 0x%08x)", clientName.c_str(), cmd.magic, INFCOM_MAGIC);
     }
 
     if(expectedCommand >= 0 && expectedCommand != cmd.command) {
-        return error_close(sock, "recv() incorrect InfComCommand from %s (command is 0x%08x instead of 0x%08x)", clientName.c_str(), cmd.command, expectedCommand);
+        close(sock);
+        return error("recv() incorrect InfComCommand from %s (command is 0x%08x instead of 0x%08x)", clientName.c_str(), cmd.command, expectedCommand);
     }
 
 #if INFCOM_DEBUG_DUMP

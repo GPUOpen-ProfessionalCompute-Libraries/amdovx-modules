@@ -71,6 +71,8 @@ void inference_model_uploader::run()
                 }
                 else if(cmd.command == INFCOM_CMD_DONE) {
                     connection->sendCmd(cmd);
+                    progress->errorCode = cmd.data[0];
+                    progress->message.sprintf("%s", cmd.message);
                     break;
                 }
                 else if(cmd.command == INFCOM_CMD_SEND_MODE) {
