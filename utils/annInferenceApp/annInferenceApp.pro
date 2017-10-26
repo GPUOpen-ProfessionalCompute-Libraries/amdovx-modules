@@ -8,6 +8,9 @@ QT       += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
+# With C++11 support
+CONFIG += c++11
+
 TARGET = annInferenceApp
 TEMPLATE = app
 
