@@ -1234,15 +1234,6 @@ void writeVXCode(
             }
             declare_tensor_check[bias] = true;
 
-            // put default scale and bias term
-            std::vector<float> scale_arr(dim[0]);
-            std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
-            std::string fileName_weights = "scale_init.f32";
-            FILE *fp = fopen(fileName_weights.c_str(), "wb");
-            if (fp) {
-                fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
-                fclose(fp);
-            }
             bias = "NULL";
 
             if (bfuse_scale_layer) {
@@ -1303,6 +1294,16 @@ void writeVXCode(
                 }
             }
             else{
+                // put default scale and bias term
+                std::vector<float> scale_arr(dim[0]);
+                std::fill(scale_arr.begin(), scale_arr.end(), 1.0);
+                std::string fileName_weights = "scale_init.f32";
+                FILE *fp = fopen(fileName_weights.c_str(), "wb");
+                if (fp) {
+                    fwrite(scale_arr.data(), sizeof(float), dim[0], fp);
+                    fclose(fp);
+                }
+
                 weights = layerName +"_W1";
                 if(codeType == "initialize") {
                     ofsCodeC << "    vx_size " << weights << "_dims[1] = { " << dim[0] << " };" << std::endl;
