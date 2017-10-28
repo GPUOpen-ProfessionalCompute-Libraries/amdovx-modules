@@ -875,6 +875,7 @@ void inference_control::runInference()
                 dataLabels->clear();
                 while (!fileInput.atEnd()) {
                     QString line = fileInput.readLine();
+                    line = line.trimmed();
                     if(line.size() > 0)
                         dataLabels->push_back(line);
                 }

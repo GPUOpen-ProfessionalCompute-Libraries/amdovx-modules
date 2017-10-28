@@ -159,15 +159,50 @@ void inference_viewer::saveResults()
         if(fileObj.open(QIODevice::WriteOnly)) {
             bool csvFile =
                     QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
+            if(csvFile) {
+                if(state->imageLabel[0] >= 0) {
+                    fileObj.write("#FileName,outputLabel,truthLabel,Matched?,outputLabelText,truthLabelText\n");
+                }
+                else {
+                    fileObj.write("#FileName,outputLabel,outputLabelText\n");
+                }
+            }
+            else {
+                if(state->imageLabel[0] >= 0) {
+                    fileObj.write("#FileName outputLabel truthLabel Matched? #outputLabelText #truthLabelText\n");
+                }
+                else {
+                    fileObj.write("#FileName outputLabel #outputLabelText\n");
+                }
+            }
             for(int i = 0; i < state->imageDataSize; i++) {
                 int label = state->inferenceResultTop[i];
+                int truth = state->imageLabel[i];
                 QString text;
-                text.sprintf("%s%c%d%s%s%s\n", state->imageDataFilenames[i].toStdString().c_str(),
-                             csvFile ? ',' : ' ',
-                             label,
-                             csvFile ? ",\"" : " #",
-                             state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
-                             csvFile ? "\"" : "");
+                if(csvFile) {
+                    if(truth >= 0) {
+                        text.sprintf("%s,%d,%d,%s,\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                     label, truth, label == truth ? "Yes" : "No",
+                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
+                                     state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                    }
+                    else {
+                        text.sprintf("%s,%d,\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(), label,
+                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown");
+                    }
+                }
+                else {
+                    if(truth >= 0) {
+                        text.sprintf("%s %d %d %s #%s #%s\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                     label, truth, label == truth ? "Yes" : "No",
+                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
+                                     state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                    }
+                    else {
+                        text.sprintf("%s %d #%s\n", state->imageDataFilenames[i].toStdString().c_str(), label,
+                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown");
+                    }
+                }
                 fileObj.write(text.toStdString().c_str());
             }
             fileObj.close();
@@ -344,8 +379,8 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 QTextStream fileInput(&fileObj);
                 int count = 0;
                 while (!fileInput.atEnd()) {
-                    QString line = fileInput.readLine();
-                    if(line.size() == 0)
+                    QString line = fileInput.readLine().trimmed();
+                    if(line.size() == 0 || line[0] == '#')
                         continue;
                     QStringList words = line.split(csvFile ? "," : " ");
                     int label = -1;
@@ -356,7 +391,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
                     if(words.size() > 1) {
                         label = words[1].toInt();
                     }
-                    state->imageDataFilenames.push_back(words[0]);
+                    state->imageDataFilenames.push_back(words[0].trimmed());
                     state->imageLabel.push_back(label);
                     state->inferenceResultTop.push_back(-1);
                     state->inferenceResultSummary.push_back("Not available");
@@ -614,10 +649,39 @@ void inference_viewer::paintEvent(QPaintEvent *)
             if(enableImageDraw) {
                 painter.drawPixmap(x, y, w, h, state->imagePixmap[index]);
                 if(state->imageLabel[index] >= 0) {
+                    int cx = x + w, cy = y + h;
                     if(state->inferenceResultTop[index] == state->imageLabel[index]) {
+                        painter.setPen(Qt::green);
+                        painter.setBrush(Qt::darkGreen);
+                        QPoint points[] = {
+                            { cx - 10, cy -  4 },
+                            { cx -  8, cy -  6 },
+                            { cx -  6, cy -  4 },
+                            { cx -  4, cy - 10 },
+                            { cx -  2, cy -  8 },
+                            { cx -  5, cy -  2 },
+                        };
+                        painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
                         painter.setPen(Qt::darkGreen);
                     }
                     else {
+                        painter.setPen(Qt::red);
+                        painter.setBrush(Qt::white);
+                        QPoint points[] = {
+                            { cx - 10, cy -  9 },
+                            { cx -  9, cy - 10 },
+                            { cx -  6, cy -  7 },
+                            { cx -  3, cy - 10 },
+                            { cx -  2, cy -  9 },
+                            { cx -  5, cy -  6 },
+                            { cx -  2, cy -  3 },
+                            { cx -  3, cy -  2 },
+                            { cx -  6, cy -  5 },
+                            { cx -  9, cy -  2 },
+                            { cx - 10, cy -  3 },
+                            { cx -  7, cy -  6 },
+                        };
+                        painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
                         painter.setPen(Qt::red);
                     }
                     painter.setBrush(Qt::NoBrush);
@@ -641,6 +705,9 @@ void inference_viewer::paintEvent(QPaintEvent *)
     state->mouseClicked = false;
 
     // view inference results
+    QFont font = state->statusBarFont;
+    font.setBold(true);
+    font.setItalic(false);
     if(state->mouseSelectedImage >= 0) {
         int index = state->mouseSelectedImage;
         int truthLabel = state->imageLabel[index];
@@ -659,10 +726,46 @@ void inference_viewer::paintEvent(QPaintEvent *)
         painter.drawRect(x, y, w, h);
         painter.drawPixmap(x + 4, y + 4, ICON_SIZE * 2, ICON_SIZE * 2, state->imagePixmap[index]);
         if(truthLabel >= 0) {
+            int cx = x + 4 + ICON_SIZE * 2 + 16;
+            int cy = y + 4 + ICON_SIZE     + 12;
             if(truthLabel == resultLabel) {
+                painter.setPen(Qt::darkGreen);
+                painter.setBrush(Qt::green);
+                QPoint points[] = {
+                    { cx - 10, cy -  4 },
+                    { cx -  8, cy -  6 },
+                    { cx -  6, cy -  4 },
+                    { cx -  4, cy - 10 },
+                    { cx -  2, cy -  8 },
+                    { cx -  5, cy -  2 },
+                };
+                painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
+                setFont(font);
+                painter.setPen(Qt::darkGreen);
+                painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "MATCHED");
                 painter.setPen(Qt::darkGreen);
             }
             else {
+                painter.setPen(Qt::red);
+                painter.setBrush(Qt::white);
+                QPoint points[] = {
+                    { cx - 10, cy -  9 },
+                    { cx -  9, cy - 10 },
+                    { cx -  6, cy -  7 },
+                    { cx -  3, cy - 10 },
+                    { cx -  2, cy -  9 },
+                    { cx -  5, cy -  6 },
+                    { cx -  2, cy -  3 },
+                    { cx -  3, cy -  2 },
+                    { cx -  6, cy -  5 },
+                    { cx -  9, cy -  2 },
+                    { cx - 10, cy -  3 },
+                    { cx -  7, cy -  6 },
+                };
+                painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
+                setFont(font);
+                painter.setPen(Qt::darkRed);
+                painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "MISMATCHED");
                 painter.setPen(Qt::red);
             }
             painter.setBrush(Qt::NoBrush);
@@ -671,9 +774,6 @@ void inference_viewer::paintEvent(QPaintEvent *)
         painter.setPen(statusTextColor);
         painter.setBrush(Qt::white);
         QString text;
-        QFont font = state->statusBarFont;
-        font.setBold(true);
-        font.setItalic(false);
         setFont(font);
         painter.setPen(Qt::black);
         text.sprintf("IMAGE#%d", index + 1);
