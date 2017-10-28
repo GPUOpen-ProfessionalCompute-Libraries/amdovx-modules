@@ -161,7 +161,7 @@ void inference_viewer::saveResults()
                     QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
             if(csvFile) {
                 if(state->imageLabel[0] >= 0) {
-                    fileObj.write("#FileName,outputLabel,truthLabel,Matched?,outputLabelText,truthLabelText\n");
+                    fileObj.write("#FileName,outputLabel,groundTruthLabel,Matched?,outputLabelText,groundTruthLabelText\n");
                 }
                 else {
                     fileObj.write("#FileName,outputLabel,outputLabelText\n");
@@ -169,7 +169,7 @@ void inference_viewer::saveResults()
             }
             else {
                 if(state->imageLabel[0] >= 0) {
-                    fileObj.write("#FileName outputLabel truthLabel Matched? #outputLabelText #truthLabelText\n");
+                    fileObj.write("#FileName outputLabel groundTruthLabel Matched? #outputLabelText #groundTruthLabelText\n");
                 }
                 else {
                     fileObj.write("#FileName outputLabel #outputLabelText\n");
@@ -782,14 +782,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
         font.setItalic(false);
         setFont(font);
         painter.setPen(Qt::blue);
-        text.sprintf("[label=%d] ", resultLabel);
+        text.sprintf("classified as [label=%d] ", resultLabel);
         text += resultSummary;
         painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 8, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         if(truthLabel >= 0) {
             font.setItalic(true);
             setFont(font);
             painter.setPen(Qt::gray);
-            text.sprintf("truth: [label=%d] ", truthLabel);
+            text.sprintf("ground truth: [label=%d] ", truthLabel);
             text += truthSummary;
             painter.drawText(QRect(x + 4, y + 4 + ICON_SIZE * 2 + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         }
