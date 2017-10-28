@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QIntValidator>
+#include <QDoubleValidator>
 #include <QMessageBox>
 #include <QFileInfo>
 #include <QFrame>
@@ -23,7 +24,8 @@
 #define BUILD_VERSION "alpha2"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
-    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr }
+    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr },
+      lastPreprocessMpy{ "1", "1", "1" }, lastPreprocessAdd{ "0", "0", "0" }
 {
     setWindowTitle("annInferenceApp");
     setMinimumWidth(800);
@@ -188,7 +190,35 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editModelFile2, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonModelFile2, row, 1 + editSpan, 1, 1);
     row++;
-    labelCompilerOptions = new QLabel("--");
+    labelPreprocessMpy = new QLabel("Preprocess(mpy):");
+    labelPreprocessMpy->setStyleSheet("font-weight: bold; font-style: italic");
+    labelPreprocessMpy->setAlignment(Qt::AlignLeft);
+    editPreprocessMpyC0 = new QLineEdit("");
+    editPreprocessMpyC1 = new QLineEdit("");
+    editPreprocessMpyC2 = new QLineEdit("");
+    editPreprocessMpyC0->setValidator(new QDoubleValidator());
+    editPreprocessMpyC1->setValidator(new QDoubleValidator());
+    editPreprocessMpyC2->setValidator(new QDoubleValidator());
+    controlLayout->addWidget(labelPreprocessMpy, row, 0, 1, 1);
+    controlLayout->addWidget(editPreprocessMpyC0, row, 1, 1, 1);
+    controlLayout->addWidget(editPreprocessMpyC1, row, 2, 1, 1);
+    controlLayout->addWidget(editPreprocessMpyC2, row, 3, 1, 1);
+    row++;
+    labelPreprocessAdd = new QLabel("Preprocess(add):");
+    labelPreprocessAdd->setStyleSheet("font-weight: bold; font-style: italic");
+    labelPreprocessAdd->setAlignment(Qt::AlignLeft);
+    editPreprocessAddC0 = new QLineEdit("");
+    editPreprocessAddC1 = new QLineEdit("");
+    editPreprocessAddC2 = new QLineEdit("");
+    editPreprocessAddC0->setValidator(new QDoubleValidator());
+    editPreprocessAddC1->setValidator(new QDoubleValidator());
+    editPreprocessAddC2->setValidator(new QDoubleValidator());
+    controlLayout->addWidget(labelPreprocessAdd, row, 0, 1, 1);
+    controlLayout->addWidget(editPreprocessAddC0, row, 1, 1, 1);
+    controlLayout->addWidget(editPreprocessAddC1, row, 2, 1, 1);
+    controlLayout->addWidget(editPreprocessAddC2, row, 3, 1, 1);
+    row++;
+    labelCompilerOptions = new QLabel("Options:");
     labelCompilerOptions->setStyleSheet("font-weight: bold; font-style: italic");
     labelCompilerOptions->setAlignment(Qt::AlignLeft);
     comboInvertInputChannels = new QComboBox();
@@ -209,6 +239,12 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
     connect(editModelFile2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile2(const QString &)));
     connect(comboInvertInputChannels, SIGNAL(activated(int)), this, SLOT(onChangeInputInverserOrder(int)));
+    connect(editPreprocessMpyC0, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessMpyC0(const QString &)));
+    connect(editPreprocessMpyC1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessMpyC1(const QString &)));
+    connect(editPreprocessMpyC2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessMpyC2(const QString &)));
+    connect(editPreprocessAddC0, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessAddC0(const QString &)));
+    connect(editPreprocessAddC1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessAddC1(const QString &)));
+    connect(editPreprocessAddC2, SIGNAL(textChanged(const QString &)), this, SLOT(onChangePreprocessAddC2(const QString &)));
     connect(comboPublishOptions, SIGNAL(activated(int)), this, SLOT(onChangePublishMode(int)));
     connect(editModelName, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelName(const QString &)));
     labelCompilerStatus = new QLabel("");
@@ -430,7 +466,6 @@ void inference_control::modelSelect(int model)
             editModelFile2->setText(lastModelFile2);
         editModelFile2->setEnabled(true);
         buttonModelFile2->setEnabled(true);
-        labelCompilerOptions->setText("Options:");
         comboInvertInputChannels->setDisabled(false);
         if(comboInvertInputChannels->currentIndex() != lastInverseInputChannelOrder)
             comboInvertInputChannels->setCurrentIndex(lastInverseInputChannelOrder);
@@ -449,6 +484,24 @@ void inference_control::modelSelect(int model)
         if(compiler_status.completed && compiler_status.errorCode > 0) {
             modelName = compiler_status.message;
         }
+        editPreprocessMpyC0->setDisabled(false);
+        editPreprocessMpyC1->setDisabled(false);
+        editPreprocessMpyC2->setDisabled(false);
+        editPreprocessAddC0->setDisabled(false);
+        editPreprocessAddC1->setDisabled(false);
+        editPreprocessAddC2->setDisabled(false);
+        if(editPreprocessMpyC0->text() != lastPreprocessMpy[0])
+            editPreprocessMpyC0->setText(lastPreprocessMpy[0]);
+        if(editPreprocessMpyC1->text() != lastPreprocessMpy[1])
+            editPreprocessMpyC1->setText(lastPreprocessMpy[1]);
+        if(editPreprocessMpyC2->text() != lastPreprocessMpy[2])
+            editPreprocessMpyC2->setText(lastPreprocessMpy[2]);
+        if(editPreprocessAddC0->text() != lastPreprocessAdd[0])
+            editPreprocessAddC0->setText(lastPreprocessAdd[0]);
+        if(editPreprocessAddC1->text() != lastPreprocessAdd[1])
+            editPreprocessAddC1->setText(lastPreprocessAdd[1]);
+        if(editPreprocessAddC2->text() != lastPreprocessAdd[2])
+            editPreprocessAddC2->setText(lastPreprocessAdd[2]);
     }
     else {
         model -= numModelTypes;
@@ -472,13 +525,24 @@ void inference_control::modelSelect(int model)
         editModelFile2->setText("");
         buttonModelFile2->setEnabled(false);
         buttonModelUpload->setEnabled(false);
-        labelCompilerOptions->setText("--");
         comboInvertInputChannels->setDisabled(true);
         comboInvertInputChannels->setCurrentIndex(modelList[model].reverseInputChannelOrder);
         comboPublishOptions->setDisabled(true);
         comboPublishOptions->setCurrentIndex(0);
         editModelName->setDisabled(true);
         editModelName->setText("");
+        editPreprocessMpyC0->setDisabled(true);
+        editPreprocessMpyC1->setDisabled(true);
+        editPreprocessMpyC2->setDisabled(true);
+        editPreprocessAddC0->setDisabled(true);
+        editPreprocessAddC1->setDisabled(true);
+        editPreprocessAddC2->setDisabled(true);
+        editPreprocessMpyC0->setText(text.sprintf("%g", modelList[model].preprocessMpy[0]));
+        editPreprocessMpyC1->setText(text.sprintf("%g", modelList[model].preprocessMpy[1]));
+        editPreprocessMpyC2->setText(text.sprintf("%g", modelList[model].preprocessMpy[2]));
+        editPreprocessAddC0->setText(text.sprintf("%g", modelList[model].preprocessAdd[0]));
+        editPreprocessAddC1->setText(text.sprintf("%g", modelList[model].preprocessAdd[1]));
+        editPreprocessAddC2->setText(text.sprintf("%g", modelList[model].preprocessAdd[2]));
     }
     if(modelName.length() > 0) {
         labelCompilerStatus->setText("[" + modelName + "]*");
@@ -516,7 +580,7 @@ void inference_control::tick()
 
 void inference_control::onChangeDimH(const QString & text)
 {
-    if(comboModelSelect->currentIndex() == 0) {
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastDimH =  text;
         modelSelect(comboModelSelect->currentIndex());
     }
@@ -524,7 +588,7 @@ void inference_control::onChangeDimH(const QString & text)
 
 void inference_control::onChangeDimW(const QString & text)
 {
-    if(comboModelSelect->currentIndex() == 0) {
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastDimW =  text;
         modelSelect(comboModelSelect->currentIndex());
     }
@@ -532,7 +596,7 @@ void inference_control::onChangeDimW(const QString & text)
 
 void inference_control::onChangeModelFile1(const QString & text)
 {
-    if(comboModelSelect->currentIndex() == 0) {
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastModelFile1 =  text;
         modelSelect(comboModelSelect->currentIndex());
     }
@@ -540,7 +604,7 @@ void inference_control::onChangeModelFile1(const QString & text)
 
 void inference_control::onChangeModelFile2(const QString & text)
 {
-    if(comboModelSelect->currentIndex() == 0) {
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastModelFile2 =  text;
         modelSelect(comboModelSelect->currentIndex());
     }
@@ -548,13 +612,63 @@ void inference_control::onChangeModelFile2(const QString & text)
 
 void inference_control::onChangeInputInverserOrder(int order)
 {
-    if(comboModelSelect->currentIndex() == 0)
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastInverseInputChannelOrder = order;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessMpyC0(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessMpy[0] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessMpyC1(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessMpy[1] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessMpyC2(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessMpy[2] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessAddC0(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessAdd[0] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessAddC1(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessAdd[1] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
+}
+
+void inference_control::onChangePreprocessAddC2(const QString& text)
+{
+    if(comboModelSelect->currentIndex() < numModelTypes) {
+        lastPreprocessAdd[2] = text;
+        modelSelect(comboModelSelect->currentIndex());
+    }
 }
 
 void inference_control::onChangePublishMode(int mode)
 {
-    if(comboModelSelect->currentIndex() == 0) {
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastPublishMode = mode;
         comboPublishOptions->setCurrentIndex(mode);
         modelSelect(comboModelSelect->currentIndex());
@@ -563,8 +677,9 @@ void inference_control::onChangePublishMode(int mode)
 
 void inference_control::onChangeModelName(const QString & text)
 {
-    if(comboModelSelect->currentIndex() == 0)
+    if(comboModelSelect->currentIndex() < numModelTypes) {
         lastModelName =  text;
+    }
 }
 
 void inference_control::browseModelFile1()
@@ -671,7 +786,9 @@ void inference_control::runConnection()
                 cmd.message,
                 { cmd.data[0], cmd.data[1], cmd.data[2] },
                 { cmd.data[3], cmd.data[4], cmd.data[5] },
-                cmd.data[6]
+                cmd.data[6],
+                { *(float *)&cmd.data[7], *(float *)&cmd.data[8], *(float *)&cmd.data[9] },
+                { *(float *)&cmd.data[10], *(float *)&cmd.data[11], *(float *)&cmd.data[12] }
             };
             modelList.push_back(info);
             comboModelSelect->addItem(info.name);
@@ -710,13 +827,9 @@ void inference_control::runCompiler()
     saveConfig();
 
     // start compiler
-    QString options = "";
-    if(comboInvertInputChannels->currentIndex() == 1)
-        options = "BGR";
-    else
-        options = "RGB";
+    QString options;
     if(comboPublishOptions->currentIndex() >= 1) {
-        options += ",save=" + editModelName->text();
+        options = "save=" + editModelName->text();
         if(comboPublishOptions->currentIndex() == 2) {
             options += ",override";
         }
@@ -724,6 +837,16 @@ void inference_control::runCompiler()
             options += ",passwd=" + editServerPassword->text();
         }
     }
+    float preprocessMpy[3] = {
+        editPreprocessMpyC0->text().toFloat(),
+        editPreprocessMpyC1->text().toFloat(),
+        editPreprocessMpyC2->text().toFloat()
+    };
+    float preprocessAdd[3] = {
+        editPreprocessAddC0->text().toFloat(),
+        editPreprocessAddC1->text().toFloat(),
+        editPreprocessAddC2->text().toFloat()
+    };
     inference_compiler * compiler = new inference_compiler(
                 true,
                 editServerHost->text(), editServerPort->text().toInt(),
@@ -731,6 +854,8 @@ void inference_control::runCompiler()
                 editDimH->text().toInt(),
                 editDimW->text().toInt(),
                 editModelFile1->text(), editModelFile2->text(),
+                comboInvertInputChannels->currentIndex(),
+                preprocessMpy, preprocessAdd,
                 options,
                 &compiler_status);
     compiler->show();

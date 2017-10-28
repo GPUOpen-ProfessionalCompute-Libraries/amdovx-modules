@@ -53,11 +53,11 @@ public:
         std::lock_guard<std::mutex> lock(mutex);
         return uploadedModels.size();
     }
-    std::tuple<std::string,int,int,int,int,int,int,int,std::string> getConfiguredModelInfo(int index) {
+    std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string> getConfiguredModelInfo(int index) {
         std::lock_guard<std::mutex> lock(mutex);
         return configuredModels[index];
     }
-    std::tuple<std::string,int,int,int,int,int,int,int> getUploadedModelInfo(int index) {
+    std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float> getUploadedModelInfo(int index) {
         std::lock_guard<std::mutex> lock(mutex);
         return uploadedModels[index];
     }
@@ -67,11 +67,11 @@ public:
         saveConfig();
         return modelFileDownloadCounter;
     }
-    void addConfigToUploadedList(std::tuple<std::string,int,int,int,int,int,int,int>& ann) {
+    void addConfigToUploadedList(std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>& ann) {
         std::lock_guard<std::mutex> lock(mutex);
         uploadedModels.push_back(ann);
     }
-    void addConfigToPreconfiguredList(std::tuple<std::string,int,int,int,int,int,int,int,std::string>& ann) {
+    void addConfigToPreconfiguredList(std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>& ann) {
         std::lock_guard<std::mutex> lock(mutex);
         bool replaced = false;
         for(auto it = configuredModels.begin(); it != configuredModels.end(); it++) {
@@ -117,8 +117,8 @@ private:
     cl_platform_id platform_id;
     std::string configurationFile;
     std::string configurationDir;
-    std::vector<std::tuple<std::string,int,int,int,int,int,int,int,std::string>> configuredModels;
-    std::vector<std::tuple<std::string,int,int,int,int,int,int,int>> uploadedModels;
+    std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
+    std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc
     std::mutex mutex;
 };

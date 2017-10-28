@@ -10,7 +10,9 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     ///
     int dimInput[3] = { cmdMode->data[1], cmdMode->data[2], cmdMode->data[3] };
     int modelType = cmdMode->data[4];
-    int reverseInputChannelOrder = 0;
+    int reverseInputChannelOrder = cmdMode->data[5];
+    float preprocessMpy[3] = { *(float *)&cmdMode->data[6], *(float *)&cmdMode->data[7], *(float *)&cmdMode->data[8] };
+    float preprocessAdd[3] = { *(float *)&cmdMode->data[9], *(float *)&cmdMode->data[10], *(float *)&cmdMode->data[11] };
     bool overrideModel = false;
     std::string saveModelAs;
     std::string password;
@@ -27,13 +29,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         std::string option;
         while (std::getline(ss, option, ',')) {
             info("option %s", option.c_str());
-            if(option == "RGB") {
-                reverseInputChannelOrder = 0;
-            }
-            else if(option == "BGR") {
-                reverseInputChannelOrder = 1;
-            }
-            else if(option == "override") {
+            if(option == "override") {
                 overrideModel = true;
             }
             else if(option.size() > 5 && option.substr(0, 5) == "save=") {
@@ -62,7 +58,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         bool found = false;
         for(size_t i = 0; i < args->getNumConfigureddModels(); i++) {
             if(std::get<0>(args->getConfiguredModelInfo(i)) == saveModelAs ||
-               std::get<8>(args->getConfiguredModelInfo(i)) == saveModelAs)
+               std::get<14>(args->getConfiguredModelInfo(i)) == saveModelAs)
             {
                 found = true;
                 break;
@@ -290,10 +286,12 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     std::string annModuleConfigFile = args->getConfigurationDir() + "/" + modelName + "/" + MODULE_CONFIG;
     fp = fopen(annModuleConfigFile.c_str(), "w");
     if(fp) {
-        fprintf(fp, "%s\n%d %d %d\n%d %d %d\n%d\n", modelName,
+        fprintf(fp, "%s\n%d %d %d\n%d %d %d\n%d\n%g %g %g %g %g %g\n", modelName,
                        dimInput[0], dimInput[1], dimInput[2],
                        dimOutput[0], dimOutput[1], dimOutput[2],
-                       reverseInputChannelOrder);
+                       reverseInputChannelOrder,
+                       preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+                       preprocessAdd[0], preprocessAdd[1], preprocessAdd[2]);
         fclose(fp);
     }
     else {
@@ -302,17 +300,27 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
 
     // add uploaded model to args
     if(saveModelAs.length() > 0) {
-        std::tuple<std::string,int,int,int,int,int,int,int,std::string>
-                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder, modelName);
+        std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>
+                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2],
+                reverseInputChannelOrder,
+                preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+                preprocessAdd[0], preprocessAdd[1], preprocessAdd[2],
+                modelName);
         args->addConfigToPreconfiguredList(ann);
     }
     else {
-        std::tuple<std::string,int,int,int,int,int,int,int>
-                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder);
+        std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>
+                ann(modelName, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2],
+                reverseInputChannelOrder,
+                preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+                preprocessAdd[0], preprocessAdd[1], preprocessAdd[2]);
         args->addConfigToUploadedList(ann);
     }
-    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d reverseInputChannelOrder:%d",
-            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder);
+    info("added uploaded model name:%s input:%dx%dx%d output:%dx%dx%d reverseInputChannelOrder:%d mpy:[%g %g %g] add:[%g %g %g]",
+            modelName, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0],
+            reverseInputChannelOrder,
+            preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+            preprocessAdd[0], preprocessAdd[1], preprocessAdd[2]);
 
     // send and wait for INFCOM_CMD_DONE message
     InfComCommand reply = {

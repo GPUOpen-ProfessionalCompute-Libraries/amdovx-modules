@@ -194,16 +194,28 @@ void Arguments::getPreConfiguredModels()
                 int dimInput[3], dimOutput[3];
                 char name[64];
                 int reverseInputChannelOrder;
-                int n = fscanf(fp, "%s%d%d%d%d%d%d%d", name,
+                float preprocessMpy[3] = { 1, 1, 1 };
+                float preprocessAdd[3] = { 0, 0, 0 };
+                int n = fscanf(fp, "%s%d%d%d%d%d%d%d%g%g%g%g%g%g", name,
                                &dimInput[0], &dimInput[1], &dimInput[2],
                                &dimOutput[0], &dimOutput[1], &dimOutput[2],
-                               &reverseInputChannelOrder);
-                if(n == 8) {
-                    std::tuple<std::string,int,int,int,int,int,int,int,std::string>
-                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2], reverseInputChannelOrder, entry->d_name);
+                               &reverseInputChannelOrder,
+                               &preprocessMpy[0], &preprocessMpy[1], &preprocessMpy[2],
+                               &preprocessAdd[0], &preprocessAdd[1], &preprocessAdd[2]);
+                if(n == 8 || n == 14) {
+                    std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>
+                            ann(name, dimInput[0], dimInput[1], dimInput[2], dimOutput[0], dimOutput[1], dimOutput[2],
+                                reverseInputChannelOrder,
+                                preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+                                preprocessAdd[0], preprocessAdd[1], preprocessAdd[2],
+                                entry->d_name);
                     configuredModels.push_back(ann);
-                    info("found pre-configured model [name %s] [input %dx%dx%d] [output %dx%dx%d] [reverseInputChannelOrder %d] [folder %s]",
-                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0], reverseInputChannelOrder, entry->d_name);
+                    info("found pre-configured model [name %s] [input %dx%dx%d] [output %dx%dx%d] [reverseInputChannelOrder %d] [mpy %g %g %g] [add %g %g %g] [folder %s]",
+                            name, dimInput[2], dimInput[1], dimInput[0], dimOutput[2], dimOutput[1], dimOutput[0],
+                            reverseInputChannelOrder,
+                            preprocessMpy[0], preprocessMpy[1], preprocessMpy[2],
+                            preprocessAdd[0], preprocessAdd[1], preprocessAdd[2],
+                            entry->d_name);
                 }
                 fclose(fp);
             }

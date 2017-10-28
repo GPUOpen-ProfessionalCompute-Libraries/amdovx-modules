@@ -28,6 +28,9 @@ inference_model_uploader::inference_model_uploader(
         QString serverHost_, int serverPort_,
         int c, int h, int w,
         QString modelFile1_, QString modelFile2_,
+        int reverseInputChannelOrder_,
+        float preprocessMpy_[3],
+        float preprocessAdd_[3],
         QString compilerOptions_,
         inference_compiler_status * progress_,
         QObject *parent) : QObject(parent)
@@ -40,6 +43,13 @@ inference_model_uploader::inference_model_uploader(
     dimW = w;
     modelFile1 = modelFile1_;
     modelFile2 = modelFile2_;
+    reverseInputChannelOrder = reverseInputChannelOrder_;
+    preprocessMpy[0] = preprocessMpy_[0];
+    preprocessMpy[1] = preprocessMpy_[1];
+    preprocessMpy[2] = preprocessMpy_[2];
+    preprocessAdd[0] = preprocessAdd_[0];
+    preprocessAdd[1] = preprocessAdd_[1];
+    preprocessAdd[2] = preprocessAdd_[2];
     compilerOptions = compilerOptions_;
     progress = progress_;
     abortRequested = false;
@@ -78,7 +88,11 @@ void inference_model_uploader::run()
                 else if(cmd.command == INFCOM_CMD_SEND_MODE) {
                     InfComCommand reply = {
                         INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
-                        { INFCOM_MODE_COMPILER, dimW, dimH, dimC },
+                        { INFCOM_MODE_COMPILER, dimW, dimH, dimC, 0,
+                          reverseInputChannelOrder,
+                          *(int *)&preprocessMpy[0], *(int *)&preprocessMpy[1], *(int *)&preprocessMpy[2],
+                          *(int *)&preprocessAdd[0], *(int *)&preprocessAdd[1], *(int *)&preprocessAdd[2]
+                        },
                         { 0 }
                     };
                     strncpy(reply.message, compilerOptions.toStdString().c_str(), sizeof(reply.message));
@@ -152,6 +166,7 @@ void inference_compiler::startModelUploader()
     QThread * thread = new QThread;
     worker = new inference_model_uploader(enableServer, serverHost, serverPort,
                         dimC, dimH, dimW, modelFile1, modelFile2,
+                        reverseInputChannelOrder, preprocessMpy, preprocessAdd,
                         compilerOptions,
                         progress);
     worker->moveToThread(thread);
@@ -169,6 +184,9 @@ inference_compiler::inference_compiler(
         QString serverHost_, int serverPort_,
         int c, int h, int w,
         QString modelFile1_, QString modelFile2_,
+        int reverseInputChannelOrder_,
+        float preprocessMpy_[3],
+        float preprocessAdd_[3],
         QString compilerOptions_,
         inference_compiler_status * progress_,
         QWidget *parent) : QWidget(parent)
@@ -184,6 +202,13 @@ inference_compiler::inference_compiler(
     dimW = w;
     modelFile1 = modelFile1_;
     modelFile2 = modelFile2_;
+    reverseInputChannelOrder = reverseInputChannelOrder_;
+    preprocessMpy[0] = preprocessMpy_[0];
+    preprocessMpy[1] = preprocessMpy_[1];
+    preprocessMpy[2] = preprocessMpy_[2];
+    preprocessAdd[0] = preprocessAdd_[0];
+    preprocessAdd[1] = preprocessAdd_[1];
+    preprocessAdd[2] = preprocessAdd_[2];
     compilerOptions = compilerOptions_;
     progress = progress_;
 

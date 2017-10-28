@@ -7,8 +7,8 @@
 //    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_CONFIGURE}
 //  * server: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
 //    client: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
-//  * server: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc} message=modelName
-//    client: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc} message=modelName
+//  * server: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
+//    client: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
 //  * server: (repeat INFCOM_CMD_MODEL_INFO for each of numModels)
 //  * client: InfComCommand:INFCOM_CMD_DONE
 //  * server: InfComCommand:INFCOM_CMD_DONE
@@ -17,7 +17,7 @@
 // Compiler Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic,mode} [message=options]
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_COMPILER,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2} [message=options]
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODELFILE1
 //    client: InfComCommand:INFCOM_CMD_SEND_MODELFILE1 with data[0]=size-in-bytes message=fileName
 //    client: <byte-stream-of-prototxt> <eof-marker:32-bit>

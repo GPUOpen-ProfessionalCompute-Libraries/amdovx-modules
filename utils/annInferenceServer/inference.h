@@ -108,6 +108,8 @@ private:
     int dimInput[3];
     int dimOutput[3];
     int reverseInputChannelOrder;
+    float preprocessMpy[3];
+    float preprocessAdd[3];
     std::string clientName;
     std::string modelPath;
     std::string modulePath;

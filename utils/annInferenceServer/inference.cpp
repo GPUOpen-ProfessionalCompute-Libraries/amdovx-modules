@@ -12,7 +12,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      reverseInputChannelOrder{ 0 },
+      reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
@@ -153,7 +153,7 @@ int InferenceEngine::run()
     ///
     bool found = false;
     for(size_t i = 0; i < args->getNumConfigureddModels(); i++) {
-        std::tuple<std::string,int,int,int,int,int,int,int,std::string> info = args->getConfiguredModelInfo(i);
+        std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string> info = args->getConfiguredModelInfo(i);
         if(std::get<0>(info) == modelName &&
            std::get<1>(info) == dimInput[0] &&
            std::get<2>(info) == dimInput[1] &&
@@ -163,14 +163,20 @@ int InferenceEngine::run()
            std::get<6>(info) == dimOutput[2])
         {
             reverseInputChannelOrder = std::get<7>(info);
-            modelPath = args->getConfigurationDir() + "/" + std::get<8>(info);
+            preprocessMpy[0] = std::get<8>(info);
+            preprocessMpy[1] = std::get<9>(info);
+            preprocessMpy[2] = std::get<10>(info);
+            preprocessAdd[0] = std::get<11>(info);
+            preprocessAdd[1] = std::get<12>(info);
+            preprocessAdd[2] = std::get<13>(info);
+            modelPath = args->getConfigurationDir() + "/" + std::get<14>(info);
             found = true;
             break;
         }
     }
     if(!found) {
         for(size_t i = 0; i < args->getNumUploadedModels(); i++) {
-            std::tuple<std::string,int,int,int,int,int,int,int> info = args->getUploadedModelInfo(i);
+            std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float> info = args->getUploadedModelInfo(i);
             if(std::get<0>(info) == modelName &&
                std::get<1>(info) == dimInput[0] &&
                std::get<2>(info) == dimInput[1] &&
@@ -180,6 +186,12 @@ int InferenceEngine::run()
                std::get<6>(info) == dimOutput[2])
             {
                 reverseInputChannelOrder = std::get<7>(info);
+                preprocessMpy[0] = std::get<8>(info);
+                preprocessMpy[1] = std::get<9>(info);
+                preprocessMpy[2] = std::get<10>(info);
+                preprocessAdd[0] = std::get<11>(info);
+                preprocessAdd[1] = std::get<12>(info);
+                preprocessAdd[2] = std::get<13>(info);
                 modelPath = args->getConfigurationDir() + "/" + modelName;
                 found = true;
                 break;
@@ -476,10 +488,11 @@ int InferenceEngine::run()
                     cv::Mat matScaled;
                     cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
                     for(int c = 0; c < 3; c++, ptr += (dimInput[0]*dimInput[1])) {
+                        float a = preprocessMpy[c], b = preprocessAdd[c];
                         unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
                         int n = dimInput[0] * dimInput[1];
                         for(int i = 0; i < n; i++, img += 3) {
-                            ptr[i] = *img;
+                            ptr[i] = *img * a + b;
                         }
                     }
                     status = vxUnmapTensorPatch(openvx_input, map_id);
@@ -645,10 +658,11 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             cv::Mat matScaled;
             cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
             for(int c = 0; c < 3; c++, buf += (dimInput[0]*dimInput[1])) {
+                float a = preprocessMpy[c], b = preprocessAdd[c];
                 unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
                 int n = dimInput[0] * dimInput[1];
                 for(int i = 0; i < n; i++, img += 3) {
-                    buf[i] = *img;
+                    buf[i] = *img * a + b;
                 }
             }
 

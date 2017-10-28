@@ -26,6 +26,9 @@ public:
             QString serverHost, int serverPort,
             int c, int h, int w,
             QString modelFile1, QString modelFile2,
+            int reverseInputChannelOrder,
+            float preprocessMpy[3],
+            float preprocessAdd[3],
             QString compilerOptions,
             inference_compiler_status * progress,
             QObject *parent = nullptr);
@@ -54,6 +57,9 @@ private:
     int dimW;
     QString modelFile1;
     QString modelFile2;
+    int reverseInputChannelOrder;
+    float preprocessMpy[3];
+    float preprocessAdd[3];
     QString compilerOptions;
     inference_compiler_status * progress;
 };
@@ -67,6 +73,9 @@ public:
             QString serverHost, int serverPort,
             int c, int h, int w,
             QString modelFile1, QString modelFile2,
+            int reverseInputChannelOrder,
+            float preprocessMpy[3],
+            float preprocessAdd[3],
             QString compilerOptions,
             inference_compiler_status * progress,
             QWidget *parent = nullptr);
@@ -92,6 +101,9 @@ private:
     int dimW;
     QString modelFile1;
     QString modelFile2;
+    int reverseInputChannelOrder;
+    float preprocessMpy[3];
+    float preprocessAdd[3];
     QString compilerOptions;
     // status
     QLabel * labelStatus;

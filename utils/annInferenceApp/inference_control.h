@@ -33,6 +33,12 @@ public slots:
     void onChangeModelFile1(const QString &);
     void onChangeModelFile2(const QString &);
     void onChangeInputInverserOrder(int order);
+    void onChangePreprocessMpyC0(const QString &);
+    void onChangePreprocessMpyC1(const QString &);
+    void onChangePreprocessMpyC2(const QString &);
+    void onChangePreprocessAddC0(const QString &);
+    void onChangePreprocessAddC1(const QString &);
+    void onChangePreprocessAddC2(const QString &);
     void onChangePublishMode(int mode);
     void onChangeModelName(const QString &);
     void onLogo1Click();
@@ -52,6 +58,8 @@ private:
         int inputDim[3];
         int outputDim[3];
         int reverseInputChannelOrder;
+        float preprocessMpy[3];
+        float preprocessAdd[3];
     };
     QLineEdit * editServerHost;
     QLineEdit * editServerPort;
@@ -75,6 +83,14 @@ private:
     QLineEdit * editModelName;
     QPushButton * buttonModelFile1;
     QPushButton * buttonModelFile2;
+    QLabel * labelPreprocessMpy;
+    QLineEdit * editPreprocessMpyC0;
+    QLineEdit * editPreprocessMpyC1;
+    QLineEdit * editPreprocessMpyC2;
+    QLabel * labelPreprocessAdd;
+    QLineEdit * editPreprocessAddC0;
+    QLineEdit * editPreprocessAddC1;
+    QLineEdit * editPreprocessAddC2;
     QLabel * labelCompilerStatus;
     QLineEdit * editGPUs;
     QLabel * labelMaxGPUs;
@@ -103,6 +119,8 @@ private:
     QString lastModelName;
     QString lastDimW;
     QString lastDimH;
+    QString lastPreprocessMpy[3];
+    QString lastPreprocessAdd[3];
 };
 
 #endif // INFERENCE_CONTROL_H
