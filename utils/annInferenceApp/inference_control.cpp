@@ -89,17 +89,13 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     QLabel * labelServerHost = new QLabel("Server:");
     editServerHost = new QLineEdit("localhost");
     editServerPort = new QLineEdit("28282");
-    editServerPassword = new QLineEdit("");
     buttonConnect = new QPushButton("Connect");
-    editServerPort->setValidator(new QIntValidator(1,65535));
-    editServerPassword->setEchoMode(QLineEdit::Password);
     labelServerHost->setStyleSheet("font-weight: bold; font-style: italic");
     labelServerHost->setAlignment(Qt::AlignLeft);
     connect(buttonConnect, SIGNAL(released()), this, SLOT(runConnection()));
     controlLayout->addWidget(labelServerHost, row, 0, 1, 1);
-    controlLayout->addWidget(editServerHost, row, 1, 1, 1);
-    controlLayout->addWidget(editServerPort, row, 2, 1, 1);
-    controlLayout->addWidget(editServerPassword, row, 3, 1, 1);
+    controlLayout->addWidget(editServerHost, row, 1, 1, 2);
+    controlLayout->addWidget(editServerPort, row, 3, 1, 1);
     controlLayout->addWidget(buttonConnect, row, 1 + editSpan, 1, 1);
     row++;
     labelServerStatus = new QLabel("");
@@ -131,15 +127,15 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     row++;
     QLabel * labelModel = new QLabel("CNN Model:");
     comboModelSelect = new QComboBox();
-    buttonModelUpload = new QPushButton(tr("Upload"), this);
+    buttonCompile = new QPushButton(tr("Upload && Compile"), this);
     comboModelSelect->addItem("Upload a pre-trained Caffe model (i.e., .prototxt and .caffemodel)");
     labelModel->setStyleSheet("font-weight: bold; font-style: italic");
     labelModel->setAlignment(Qt::AlignLeft);
     connect(comboModelSelect, SIGNAL(activated(int)), this, SLOT(modelSelect(int)));
-    connect(buttonModelUpload, SIGNAL(released()), this, SLOT(runCompiler()));
+    connect(buttonCompile, SIGNAL(released()), this, SLOT(runCompiler()));
     controlLayout->addWidget(labelModel, row, 0, 1, 1);
     controlLayout->addWidget(comboModelSelect, row, 1, 1, editSpan);
-    controlLayout->addWidget(buttonModelUpload, row, 1 + editSpan, 1, 1);
+    controlLayout->addWidget(buttonCompile, row, 1 + editSpan, 1, 1);
     row++;
     QLabel * labelInputDim = new QLabel("CxHxW(inp):");
     QLineEdit * editDimC = new QLineEdit("3");
@@ -229,10 +225,14 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     comboPublishOptions->addItem("PublishAs");
     comboPublishOptions->addItem("PublishAs (override)");
     editModelName = new QLineEdit("");
+    editServerPassword = new QLineEdit("");
+    editServerPort->setValidator(new QIntValidator(1,65535));
+    editServerPassword->setEchoMode(QLineEdit::Password);
     controlLayout->addWidget(labelCompilerOptions, row, 0, 1, 1);
     controlLayout->addWidget(comboInvertInputChannels, row, 1, 1, 1);
     controlLayout->addWidget(comboPublishOptions, row, 2, 1, 1);
     controlLayout->addWidget(editModelName, row, 3, 1, 1);
+    controlLayout->addWidget(editServerPassword, row, 4, 1, 1);
     row++;
     connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
     connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
@@ -269,7 +269,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     QLabel * labelGPUs = new QLabel("GPUs:");
     editGPUs = new QLineEdit("1");
     labelMaxGPUs = new QLabel("");
-    buttonRunInference = new QPushButton("Run");
+    buttonInference = new QPushButton("Run");
     editGPUs->setValidator(new QIntValidator(1,maxGPUs));
     editGPUs->setEnabled(false);
     labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
@@ -277,8 +277,8 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
     controlLayout->addWidget(editGPUs, row, 1, 1, 1);
     controlLayout->addWidget(labelMaxGPUs, row, 2, 1, 1);
-    controlLayout->addWidget(buttonRunInference, row, 1 + editSpan, 1, 1);
-    connect(buttonRunInference, SIGNAL(released()), this, SLOT(runInference()));
+    controlLayout->addWidget(buttonInference, row, 1 + editSpan, 1, 1);
+    connect(buttonInference, SIGNAL(released()), this, SLOT(runInference()));
     row++;
     QLabel * labelImageLabelsFile = new QLabel("Labels:");
     editImageLabelsFile = new QLineEdit("");
@@ -418,26 +418,39 @@ void inference_control::loadConfig()
     lastModelName = editModelName->text();
 }
 
-bool inference_control::isConfigValid(QString& err)
+bool inference_control::isConfigValid(QPushButton * button, QString& err)
 {
-    if(editServerPort->text().toInt() <= 0) { err = "Server: invalid port number."; return false; }
-    if(comboModelSelect->currentIndex() < numModelTypes) {
-        if(!QFileInfo(editModelFile1->text()).isFile()) {
-            err = typeModelFile1Label[comboModelSelect->currentIndex()] + editModelFile1->text() + " file doesn't exist.";
-            return false;
-        }
-        if(!QFileInfo(editModelFile2->text()).isFile()) {
-            err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist.";
-            return false;
+    if(editServerHost->text().length() <= 0) { err = "Server invalid server host"; editServerHost->setFocus(); return false; }
+    if(editServerPort->text().toInt() <= 0) { err = "Server: invalid server port"; editServerPort->setFocus(); return false; }
+    if(button == buttonCompile) {
+        if(comboModelSelect->currentIndex() < numModelTypes) {
+            if(!QFileInfo(editModelFile1->text()).isFile()) {
+                err = typeModelFile1Label[comboModelSelect->currentIndex()] + editModelFile1->text() + " file doesn't exist.";
+                editModelFile1->setFocus();
+                return false;
+            }
+            if(!QFileInfo(editModelFile2->text()).isFile()) {
+                err = typeModelFile2Label[comboModelSelect->currentIndex()] + editModelFile2->text() + " file doesn't exist.";
+                editModelFile2->setFocus();
+                return false;
+            }
+            if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; editDimW->setFocus(); return false; }
+            if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; editDimH->setFocus(); return false; }
+            if((comboPublishOptions->currentIndex() >= 1) && (editModelName->text().length() < 4)) {
+                editModelName->setFocus();
+                err = "modelName is invalid or too small.";
+                return false;
+            }
+            if((comboPublishOptions->currentIndex() >= 1) && (editServerPassword->text().length() == 0)) {
+                editServerPassword->setFocus();
+                err = "Need to enter password to publish. Note that the default server password is 'radeon'.";
+                return false;
+            }
         }
     }
-    if((comboPublishOptions->currentIndex() >= 1) && (editModelName->text().length() < 4)) {
-        err = "modelName is invalid or too small.";
-        return false;
+    if(button == buttonInference) {
+        if(editGPUs->text().toInt() <= 0) { err = "GPUs: must be positive."; editGPUs->setFocus(); return false; }
     }
-    if(editDimW->text().toInt() <= 0) { err = "Dimensions: width must be positive."; return false; }
-    if(editDimH->text().toInt() <= 0) { err = "Dimensions: height must be positive."; return false; }
-    if(editGPUs->text().toInt() <= 0) { err = "GPUs: must be positive."; return false; }
     return true;
 }
 
@@ -452,9 +465,9 @@ void inference_control::modelSelect(int model)
         editDimW->setDisabled(false);
         editDimH->setDisabled(false);
         // model file selection
-        buttonModelUpload->setEnabled(false);
+        buttonCompile->setEnabled(false);
         if(connectionSuccessful && editModelFile1->text().length() > 0 && editModelFile2->text().length() > 0) {
-            buttonModelUpload->setEnabled(true);
+            buttonCompile->setEnabled(true);
         }
         labelModelFile1->setText(typeModelFile1Label[model]);
         if(editModelFile1->text() != lastModelFile1)
@@ -476,10 +489,13 @@ void inference_control::modelSelect(int model)
             editModelName->setDisabled(false);
             if(editModelName->text() != lastModelName)
                 editModelName->setText(lastModelName);
+            editServerPassword->setDisabled(false);
         }
         else {
             editModelName->setDisabled(true);
             editModelName->setText("");
+            editServerPassword->setDisabled(true);
+            editServerPassword->setText("");
         }
         if(compiler_status.completed && compiler_status.errorCode > 0) {
             modelName = compiler_status.message;
@@ -524,13 +540,15 @@ void inference_control::modelSelect(int model)
         editModelFile2->setEnabled(false);
         editModelFile2->setText("");
         buttonModelFile2->setEnabled(false);
-        buttonModelUpload->setEnabled(false);
+        buttonCompile->setEnabled(false);
         comboInvertInputChannels->setDisabled(true);
         comboInvertInputChannels->setCurrentIndex(modelList[model].reverseInputChannelOrder);
         comboPublishOptions->setDisabled(true);
         comboPublishOptions->setCurrentIndex(0);
         editModelName->setDisabled(true);
         editModelName->setText("");
+        editServerPassword->setDisabled(true);
+        editServerPassword->setText("");
         editPreprocessMpyC0->setDisabled(true);
         editPreprocessMpyC1->setDisabled(true);
         editPreprocessMpyC2->setDisabled(true);
@@ -565,11 +583,11 @@ void inference_control::modelSelect(int model)
     // enable GPUs
     editGPUs->setEnabled(compilationCompleted);
     // enable run button
-    buttonRunInference->setEnabled(false);
+    buttonInference->setEnabled(false);
     if(compilationCompleted && dimOutput[0] > 0 && dimOutput[1] > 0 && dimOutput[2] > 0 &&
        editImageLabelsFile->text().length() > 0 && editImageFolder->text().length() > 0)
     {
-        buttonRunInference->setEnabled(true);
+        buttonInference->setEnabled(true);
     }
 }
 
@@ -731,8 +749,8 @@ void inference_control::runConnection()
 {
     // check configuration
     QString err;
-    if(editServerHost->text().length() <= 0 || editServerPort->text().toInt() <= 0) {
-        QMessageBox::critical(this, windowTitle(), "Server host/port is not valid", QMessageBox::Ok);
+    if(!isConfigValid(buttonConnect, err)) {
+        QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
         return;
     }
     // save configuration
@@ -817,11 +835,11 @@ void inference_control::runCompiler()
 {
     // check configuration
     QString err;
-    if(!isConfigValid(err)) {
+    if(!isConfigValid(buttonCompile, err)) {
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
         return;
     }
-    buttonModelUpload->setEnabled(false);
+    buttonCompile->setEnabled(false);
 
     // save configuration
     saveConfig();
@@ -865,7 +883,7 @@ void inference_control::runInference()
 {
     // check configuration
     QString err;
-    if(isConfigValid(err)) {
+    if(isConfigValid(buttonInference, err)) {
         if(!QFileInfo(editImageFolder->text()).isDir())
             err = "Image Folder: doesn't exist: " + editImageFolder->text();
         else {
@@ -910,7 +928,10 @@ void inference_control::runInference()
     int maxDataSize = editMaxDataSize->text().toInt();
     if(maxDataSize < 0) {
         repeat_images = true;
-        maxDataSize = abs(maxDataSize);
+        if(maxDataSize == -1)
+            maxDataSize = 0;
+        else
+            maxDataSize = abs(maxDataSize);
     }
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,

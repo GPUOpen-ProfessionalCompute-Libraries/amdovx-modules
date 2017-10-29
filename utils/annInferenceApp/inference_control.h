@@ -48,7 +48,7 @@ protected:
     void browseDataLabels();
     void browseDataFilename();
     void browseDataFolder();
-    bool isConfigValid(QString& err);
+    bool isConfigValid(QPushButton * button, QString& err);
     void saveConfig();
     void loadConfig();
 
@@ -67,7 +67,7 @@ private:
     QPushButton * buttonConnect;
     QLabel * labelServerStatus;
     QComboBox * comboModelSelect;
-    QPushButton * buttonModelUpload;
+    QPushButton * buttonCompile;
     QLineEdit * editDimH;
     QLineEdit * editDimW;
     QLineEdit * editOutDimC;
@@ -94,7 +94,7 @@ private:
     QLabel * labelCompilerStatus;
     QLineEdit * editGPUs;
     QLabel * labelMaxGPUs;
-    QPushButton * buttonRunInference;
+    QPushButton * buttonInference;
     QLineEdit * editImageLabelsFile;
     QLineEdit * editImageFolder;
     QLineEdit * editImageListFile;
