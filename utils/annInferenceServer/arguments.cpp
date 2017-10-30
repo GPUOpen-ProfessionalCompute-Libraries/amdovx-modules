@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-#define BUILD_VERSION "alpha2"
+#define BUILD_VERSION "alpha3"
 
 Arguments::Arguments()
         : workFolder{ "~" }, modelFileDownloadCounter{ 0 },
@@ -64,6 +64,12 @@ Arguments::Arguments()
         fatal("clGetDeviceIDs(*,CL_DEVICE_TYPE_GPU,%d,...) => %d", MAX_NUM_GPU, status);
     }
     info("using OpenCL platform#%d with %d GPU devices ...", platform_index, num_devices);
+
+    // set default config to use all GPUs
+    numGPUs = num_devices;
+    for(int gpuId = 0; gpuId < num_devices; gpuId++) {
+        gpuIdList[gpuId] = gpuId;
+    }
 
     ////////
     /// \brief load default configuration
