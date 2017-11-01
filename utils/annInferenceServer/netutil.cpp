@@ -25,15 +25,20 @@ int sendPacket(int sock, const void * buf, size_t len, std::string& clientName)
 
 int recvPacket(int sock, void * buf, size_t len, std::string& clientName)
 {
-    size_t n = recv(sock, buf, len, 0);
-    if(n == 0) {
-        info("recv(len:%ld) from %s (got %ld bytes) -- disconnecting ...", len, clientName.c_str(), n);
-        close(sock);
-        return -1;
+    char *header = (char *)buf;
+    int expected_len = len;
+    while(expected_len)
+    {
+        int n = recv(sock, header, expected_len, 0);
+        if(n < 1) {
+            break;
+        }
+        header += n;
+        expected_len -= n;
     }
-    else if(n != len) {
+    if(expected_len > 0) {
         close(sock);
-        return error("recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), n);
+        return error("recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), len - expected_len);
     }
     return 0;
 }
