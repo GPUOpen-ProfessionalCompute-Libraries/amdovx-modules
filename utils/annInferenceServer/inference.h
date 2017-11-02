@@ -31,6 +31,9 @@
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
 #define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
+#define MAX_DEVICE_QUEUE_DEPTH      1024  // number of images
+#define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
+#define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
 #endif
 
 extern "C" {
@@ -154,6 +157,10 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
+#if USE_CL_COPY_INSTEAD_OF_CL_MAP
+    float * inputCopyBuffer[MAX_NUM_GPU];
+    float * outputCopyBuffer[MAX_NUM_GPU];
+#endif
 #endif
 };
 
