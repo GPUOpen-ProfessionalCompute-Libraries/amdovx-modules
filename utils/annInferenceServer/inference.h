@@ -123,7 +123,7 @@ private:
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>        outputQ;
-    vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, unsigned char *inp, float *out);
+    vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     // OpenVX resources

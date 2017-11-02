@@ -147,7 +147,7 @@ InferenceEngine::~InferenceEngine()
     }
 }
 
-vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, unsigned char *inp, float *buf)
+vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
 {
     int length = width*height;
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
@@ -558,7 +558,7 @@ int InferenceEngine::run()
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
                     }
-                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], byteStream, ptr);
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr);
                     status = vxUnmapTensorPatch(openvx_input, map_id);
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
@@ -717,7 +717,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             }
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], byteStream, buf);
+            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
             // release byteStream
             delete[] byteStream;
         }
