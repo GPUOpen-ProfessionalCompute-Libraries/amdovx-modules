@@ -147,6 +147,72 @@ InferenceEngine::~InferenceEngine()
     }
 }
 
+vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, unsigned char *inp, float *buf)
+{
+    int length = width*height;
+    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
+    cv::Mat matScaled;
+    cv::resize(matOrig, matScaled, cv::Size(width, height));
+
+#if USE_SSE_FORMAT_CONVERSION
+    __m128i mask_B, mask_G, mask_R;
+    if (reverseInputChannelOrder)
+    {
+        mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+        mask_R = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+    }
+    else
+    {
+        mask_R = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+        mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+    }
+    int alignedLength = length& ~3;
+    float * B_buf = buf;
+    float * G_buf = B_buf + length;
+    float * R_buf = G_buf + length;
+    int i = 0;
+    unsigned char * img = matScaled.data;
+
+    __m128 fR, fG, fB;
+    for (; i < alignedLength; i += 4)
+    {
+        __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+        fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+        fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+        fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+        fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+        fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+        fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+        fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+        fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+        fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+        _mm_storeu_ps(B_buf, fB);
+        _mm_storeu_ps(G_buf, fG);
+        _mm_storeu_ps(R_buf, fR);
+        B_buf += 4; G_buf += 4; R_buf += 4;
+        img += 12;
+    }
+    for (; i < length; i++, img += 3) {
+        B_buf[i] = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+        G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+        R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+    }
+#else
+    for (int c = 0; c < 3; c++, ptr += length) {
+        float a = preprocessMpy[c], b = preprocessAdd[c];
+        unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
+        for (int i = 0; i < length; i++, img += 3) {
+            ptr[i] = *img * a + b;
+        }
+    }
+#endif
+    matOrig.release();
+    matScaled.release();
+    return VX_SUCCESS;
+}
+
 int InferenceEngine::run()
 {
     //////
@@ -492,65 +558,7 @@ int InferenceEngine::run()
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
                     }
-                    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
-                    cv::Mat matScaled;
-                    cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
-#if USE_SSE_FORMAT_CONVERSION
-                    __m128i mask_B, mask_G, mask_R;
-                    if (reverseInputChannelOrder)
-                    {
-                        mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
-                        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
-                        mask_R = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
-                    }
-                    else
-                    {
-                        mask_R = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
-                        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
-                        mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
-                    }
-                    int length = (dimInput[0] * dimInput[1]);
-                    int alignedLength = length& ~3;
-                    float * B_buf = buf;
-                    float * G_buf = B_buf + length;
-                    float * R_buf = G_buf + length;
-                    int i = 0;
-                    unsigned char * img = matScaled.data;
-                   
-                    __m128 fR, fG, fB;
-                    for (; i < alignedLength; i += 4)
-                    {
-                        __m128i pix0 = _mm_loadu_si128((__m128i *) img);
-                        fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
-                        fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
-                        fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
-                        fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-                        fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-                        fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-                        fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-                        fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-                        fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-                        _mm_storeu_ps(B_buf, fB);
-                        _mm_storeu_ps(G_buf, fG);
-                        _mm_storeu_ps(R_buf, fR);
-                        B_buf += 4; G_buf += 4; R_buf += 4;
-                        img += 12;
-                    }
-                    for (; i < length; i++, img += 3) {
-                        B_buf[i] = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-                        G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-                        R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
-                    }
-#else
-                    for(int c = 0; c < 3; c++, ptr += (dimInput[0]*dimInput[1])) {
-                        float a = preprocessMpy[c], b = preprocessAdd[c];
-                        unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
-                        int n = dimInput[0] * dimInput[1];
-                        for(int i = 0; i < n; i++, img += 3) {
-                            ptr[i] = *img * a + b;
-                        }
-                    }
-#endif
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], byteStream, ptr);
                     status = vxUnmapTensorPatch(openvx_input, map_id);
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
@@ -709,68 +717,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             }
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
-            cv::Mat matScaled;
-            cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
-
-#if USE_SSE_FORMAT_CONVERSION
-            __m128i mask_B, mask_G, mask_R;
-            if (reverseInputChannelOrder)
-            {
-                mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
-                mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
-                mask_R = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
-            }
-            else
-            {
-                mask_R = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
-                mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
-                mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
-            }
-            int length = (dimInput[0] * dimInput[1]);
-            int alignedLength = length& ~3;
-            float * B_buf = buf;
-            float * G_buf = B_buf + length;
-            float * R_buf = G_buf + length;
-            int i = 0;
-            unsigned char * img = matScaled.data;
-           
-            __m128 fR, fG, fB;
-            for (; i < alignedLength; i += 4)
-            {
-                __m128i pix0 = _mm_loadu_si128((__m128i *) img);
-                fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
-                fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
-                fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
-                fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-                fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-                fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-                fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-                fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-                fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-                _mm_storeu_ps(B_buf, fB);
-                _mm_storeu_ps(G_buf, fG);
-                _mm_storeu_ps(R_buf, fR);
-                B_buf += 4; G_buf += 4; R_buf += 4;
-                img += 12;
-            }
-            for (; i < length; i++, img += 3) {
-                B_buf[i] = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-                G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-                R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
-            }
-#else
-
-            for(int c = 0; c < 3; c++, buf += (dimInput[0]*dimInput[1])) {
-                float a = preprocessMpy[c], b = preprocessAdd[c];
-                unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
-                int n = dimInput[0] * dimInput[1];
-                for(int i = 0; i < n; i++, img += 3) {
-                    buf[i] = *img * a + b;
-                }
-            }
-#endif
-
+            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], byteStream, buf);
             // release byteStream
             delete[] byteStream;
         }
