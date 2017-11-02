@@ -34,7 +34,6 @@
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // number of images
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 #define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
-
 #endif
 
 extern "C" {
