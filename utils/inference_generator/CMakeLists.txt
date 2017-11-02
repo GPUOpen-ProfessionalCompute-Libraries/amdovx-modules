@@ -24,8 +24,7 @@ project(inference_generator)
 set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
-file(DOWNLOAD "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/caffe.proto")
-PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/caffe.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS proto/caffe.proto)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND SOURCES
