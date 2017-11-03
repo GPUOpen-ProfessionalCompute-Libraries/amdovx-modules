@@ -317,11 +317,14 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     labelMaxDataSize->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelMaxDataSize, row, 0, 1, 1);
     controlLayout->addWidget(editMaxDataSize, row, 1, 1, 1);
+    checkScaledImages = new QCheckBox("Scale Images");
+    checkScaledImages->setChecked(true);
+    controlLayout->addWidget(checkScaledImages, row, 2, 1, 1);
     checkRepeatImages = nullptr;
     if(operationMode) {
         checkRepeatImages = new QCheckBox("Repeat Images");
         checkRepeatImages->setChecked(true);
-        controlLayout->addWidget(checkRepeatImages, row, 2, 1, 1);
+        controlLayout->addWidget(checkRepeatImages, row, 3, 1, 1);
     }
     row++;
 
@@ -347,6 +350,9 @@ void inference_control::saveConfig()
         repeat_images = true;
         maxDataSize = abs(maxDataSize);
     }
+    bool sendScaledImages = false;
+    if(checkScaledImages && checkScaledImages->checkState())
+        sendScaledImages = true;
     // save configuration
     QString homeFolder = QStandardPaths::standardLocations(QStandardPaths::HomeLocation)[0];
     QFile fileObj(homeFolder + "/" + CONFIGURATION_CACHE_FILENAME);
@@ -369,6 +375,7 @@ void inference_control::saveConfig()
         QString text;
         fileOutput << ((maxDataSize > 0) ? text.sprintf("%d", maxDataSize) : "") << endl;
         fileOutput << (repeat_images ? 1 : 0) << endl;
+        fileOutput << (sendScaledImages ? 1 : 0) << endl;
     }
     fileObj.close();
 }
@@ -404,6 +411,12 @@ void inference_control::loadConfig()
             }
             else if(repeat_images && editMaxDataSize->text().length() > 0 && editMaxDataSize->text()[0] != '-') {
                 editMaxDataSize->setText("-" + editMaxDataSize->text());
+            }
+            bool sendScaledImages = true;
+            if(fileInput.readLine() == "0")
+                sendScaledImages = false;
+            if(checkScaledImages) {
+                checkScaledImages->setChecked(sendScaledImages);
             }
         }
     }
@@ -933,10 +946,13 @@ void inference_control::runInference()
         else
             maxDataSize = abs(maxDataSize);
     }
+    bool sendScaledImages = false;
+    if(checkScaledImages && checkScaledImages->checkState())
+        sendScaledImages = true;
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
                 dataLabels, editImageListFile->text(), editImageFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images);
+                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages);
     viewer->show();
     close();
 }

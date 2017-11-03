@@ -62,6 +62,7 @@ public:
     int serverPort;
     QString modelName;
     int maxImageDataSize;
+    bool sendScaledImages;
 };
 
 class inference_viewer : public QWidget
@@ -73,7 +74,7 @@ public:
             QString serverHost, int serverPort, QString modelName,
             QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
             int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-            bool repeat_images,
+            bool repeat_images, bool sendScaledImages,
             QWidget *parent = 0);
     ~inference_viewer();
 
