@@ -153,50 +153,147 @@ void getLayerParams(
     }
 }
 
-int loadCaffeProtoTxt(
-    const char * prototxtFileName,
-    std::vector<std::vector<std::string>>& net,
-    int inputDim[4])
+void getV1LayerParams(
+    const caffe::V1LayerParameter& layer,
+    std::string& params)
 {
-    // verify that the version of the library that we linked against is
-    // compatible with the version of the headers we compiled against.
-    GOOGLE_PROTOBUF_VERIFY_VERSION;
-
-    //google::protobuf::Message * msg = new google::protobuf::Message();
-    caffe::NetParameter * msg = new caffe::NetParameter();
-
-    // open prototxt and parse
-    int fd = open(prototxtFileName, O_RDONLY);
-    if(fd < 0)
-        error("unable to open: %s\n", prototxtFileName);
-    google::protobuf::io::FileInputStream fi(fd);
-    fi.SetCloseOnDelete(true);
-    if (!google::protobuf::TextFormat::Parse(&fi, msg))
-        error("failed to parse file: %s\n", prototxtFileName);
-    info("loadCaffeProtoTxt: loading %s from %s\n", msg->has_name() ? msg->name().c_str() : "(none)", prototxtFileName);
-
-    if(!(msg->layer_size() > 0)) {
-        std::cerr << "ERROR: [Unsupported caffe prototxt] please upgrade this prototxt, currently uses deprecated V1LayerParameters." << std::endl;
-        return -1;
+    if(layer.type() == caffe::V1LayerParameter_LayerType_CONVOLUTION) {
+        const caffe::ConvolutionParameter& conv = layer.convolution_param();
+        int pad_h = conv.has_pad_h() ? conv.pad_h() : (conv.pad_size() > 0 ? conv.pad(0) : 0);
+        int pad_w = conv.has_pad_w() ? conv.pad_w() : (conv.pad_size() > 1 ? conv.pad(1) : pad_h);
+        int stride_h = conv.has_stride_h() ? conv.stride_h() : (conv.stride_size() > 0 ? conv.stride(0) : 1);
+        int stride_w = conv.has_stride_w() ? conv.stride_w() : (conv.stride_size() > 1 ? conv.stride(1) : stride_h);
+        int kernel_h = conv.has_kernel_h() ? conv.kernel_h() : (conv.kernel_size_size() > 0 ? conv.kernel_size(0) : 0);
+        int kernel_w = conv.has_kernel_w() ? conv.kernel_w() : (conv.kernel_size_size() > 1 ? conv.kernel_size(1) : kernel_h);
+        int k = conv.num_output();
+        int dilation_h = conv.dilation_size() > 0 ? conv.dilation(0) : 1;
+        int dilation_w = conv.dilation_size() > 1 ? conv.dilation(1) : dilation_h;
+        int bias_term = conv.bias_term();
+        int group = conv.has_group() ? conv.group() : 0;
+        params =       std::to_string(k)
+                + " " + std::to_string(kernel_w)
+                + " " + std::to_string(kernel_h)
+                + " " + std::to_string(stride_w)
+                + " " + std::to_string(stride_h)
+                + " " + std::to_string(pad_w)
+                + " " + std::to_string(pad_h)
+                + " " + std::to_string(dilation_w)
+                + " " + std::to_string(dilation_h)
+                + " " + std::to_string(bias_term)
+                + " " + std::to_string(group);
     }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_POOLING) {
+        const caffe::PoolingParameter& pooling = layer.pooling_param();
+        int pad_h = pooling.has_pad_h() ? pooling.pad_h() : pooling.pad();
+        int pad_w = pooling.has_pad_w() ? pooling.pad_w() : pooling.pad();
+        int stride_h = pooling.has_stride_h() ? pooling.stride_h() : pooling.stride();
+        int stride_w = pooling.has_stride_w() ? pooling.stride_w() : pooling.stride();
+        int kernel_h = pooling.has_kernel_h() ? pooling.kernel_h() : pooling.kernel_size();
+        int kernel_w = pooling.has_kernel_w() ? pooling.kernel_w() : pooling.kernel_size();
+        int pool = pooling.pool();
+        int global_pooling = pooling.global_pooling() == true ? 1 : 0;
+        params =       std::to_string(kernel_w)
+                + " " + std::to_string(kernel_h)
+                + " " + std::to_string(stride_w)
+                + " " + std::to_string(stride_h)
+                + " " + std::to_string(pad_w)
+                + " " + std::to_string(pad_h)
+                + " " + std::to_string(pool)
+                + " " + std::to_string(global_pooling);
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_INNER_PRODUCT) {
+        const caffe::InnerProductParameter& innerprod = layer.inner_product_param();
+        int k = innerprod.num_output();
+        int bias_term = innerprod.bias_term();
+        params = std::to_string(k) + " " + std::to_string(bias_term);
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_LRN) {
+        const caffe::LRNParameter& lrn = layer.lrn_param();
+        const caffe::LRNParameter::NormRegion& norm_region = lrn.norm_region();
+        params =       std::to_string(lrn.local_size())
+                + " " + std::to_string(lrn.alpha())
+                + " " + std::to_string(lrn.beta())
+                + " " + std::to_string(norm_region)
+                + " " + std::to_string(lrn.k());
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_DROPOUT) {
+        const caffe::DropoutParameter& dropout = layer.dropout_param();
+        params = std::to_string(dropout.dropout_ratio());
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_ELTWISE) {
+        const caffe::EltwiseParameter& eltwise = layer.eltwise_param();
+        params = std::to_string(eltwise.operation());
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_DECONVOLUTION) {
+        const caffe::ConvolutionParameter& conv = layer.convolution_param();
+        int pad_h = conv.has_pad_h() ? conv.pad_h() : (conv.pad_size() > 0 ? conv.pad(0) : 0);
+        int pad_w = conv.has_pad_w() ? conv.pad_w() : (conv.pad_size() > 1 ? conv.pad(1) : pad_h);
+        int stride_h = conv.has_stride_h() ? conv.stride_h() : (conv.stride_size() > 0 ? conv.stride(0) : 1);
+        int stride_w = conv.has_stride_w() ? conv.stride_w() : (conv.stride_size() > 1 ? conv.stride(1) : stride_h);
+        int kernel_h = conv.has_kernel_h() ? conv.kernel_h() : (conv.kernel_size_size() > 0 ? conv.kernel_size(0) : 0);
+        int kernel_w = conv.has_kernel_w() ? conv.kernel_w() : (conv.kernel_size_size() > 1 ? conv.kernel_size(1) : kernel_h);
+        int k = conv.num_output();
+        int dilation_h = conv.dilation_size() > 0 ? conv.dilation(0) : 1;
+        int dilation_w = conv.dilation_size() > 1 ? conv.dilation(1) : dilation_h;
+        int bias_term = conv.bias_term();
+        params =       std::to_string(k)
+                + " " + std::to_string(kernel_w)
+                + " " + std::to_string(kernel_h)
+                + " " + std::to_string(stride_w)
+                + " " + std::to_string(stride_h)
+                + " " + std::to_string(pad_w)
+                + " " + std::to_string(pad_h)
+                + " " + std::to_string(dilation_w)
+                + " " + std::to_string(dilation_h)
+                + " " + std::to_string(bias_term);
+    }
+}
 
+std::string convertV1LayerTypeToString(caffe::V1LayerParameter_LayerType V1type)
+{
+    if(V1type == caffe::V1LayerParameter_LayerType_CONCAT)
+        return("Concat");
+    else if(V1type == caffe::V1LayerParameter_LayerType_CONVOLUTION)
+        return("Convolution");
+    else if(V1type == caffe::V1LayerParameter_LayerType_DECONVOLUTION)
+        return("Deconvolution");
+    else if(V1type == caffe::V1LayerParameter_LayerType_DROPOUT)
+        return("Dropout");
+    else if(V1type == caffe::V1LayerParameter_LayerType_ELTWISE)
+        return("Eltwise");
+    else if(V1type == caffe::V1LayerParameter_LayerType_INNER_PRODUCT)
+        return("InnerProduct");
+    else if(V1type == caffe::V1LayerParameter_LayerType_LRN)
+        return("LRN");
+    else if(V1type == caffe::V1LayerParameter_LayerType_POOLING)
+        return("Pooling");
+    else if(V1type == caffe::V1LayerParameter_LayerType_RELU)
+        return("ReLU");
+    else if(V1type == caffe::V1LayerParameter_LayerType_SOFTMAX)
+        return("Softmax");
+}
+
+void parseProtoTxt(caffe::NetParameter * param,
+                              std::vector<std::vector<std::string>>& net,
+                              int inputDim[4])
+{
     // initialize outputNameMap and input dimensions if available
     std::map<std::string,std::string> outputNameMap;
-    if(msg->input_size() > 0) {
-        outputNameMap[msg->input(0)] = msg->input(0);
+    if(param->input_size() > 0) {
+        outputNameMap[param->input(0)] = param->input(0);
     }
 
-    if(msg->input_dim_size() == 4  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0)) ) {
-        inputDim[0] = msg->input_dim(0);
-        inputDim[1] = msg->input_dim(1);
-        inputDim[2] = msg->input_dim(2);
-        inputDim[3] = msg->input_dim(3);
+    if(param->input_dim_size() == 4  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0)) ) {
+        inputDim[0] = param->input_dim(0);
+        inputDim[1] = param->input_dim(1);
+        inputDim[2] = param->input_dim(2);
+        inputDim[3] = param->input_dim(3);
     }
 
     // process network layer by layer
-    for(int i = 0; i < msg->layer_size(); i++) {
+    for(int i = 0; i < param->layer_size(); i++) {
         // get current layer
-        const caffe::LayerParameter layer = msg->layer(i);
+        const caffe::LayerParameter layer = param->layer(i);
 
         if(layer.type() == "Input" || layer.type() == "Data" || layer.type() == "ImageData") {
             outputNameMap[layer.top(0)] = layer.top(0);
@@ -254,7 +351,114 @@ int loadCaffeProtoTxt(
         // update output name with layer name
         outputNameMap[layer.top(0)] = layer.name();
     }
+}
 
+void parseV1LayerProtoTxt(caffe::NetParameter * param,
+                              std::vector<std::vector<std::string>>& net,
+                              int inputDim[4])
+{
+    // initialize outputNameMap and input dimensions if available
+    std::map<std::string,std::string> outputNameMap;
+    if(param->input_size() > 0) {
+        outputNameMap[param->input(0)] = param->input(0);
+    }
+
+    if(param->input_dim_size() == 4  && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0)) ) {
+        inputDim[0] = param->input_dim(0);
+        inputDim[1] = param->input_dim(1);
+        inputDim[2] = param->input_dim(2);
+        inputDim[3] = param->input_dim(3);
+    }
+
+    // process network layer by layer
+    for(int i = 0; i < param->layers_size(); i++) {
+        // get current layer
+        const caffe::V1LayerParameter layer = param->layers(i);
+
+        if(layer.type() == caffe::V1LayerParameter_LayerType_DATA || layer.type() == caffe::V1LayerParameter_LayerType_IMAGE_DATA) {
+            outputNameMap[layer.top(0)] = layer.top(0);
+            continue;
+        }
+
+        //Split type.
+        if(layer.type()== caffe::V1LayerParameter_LayerType_SPLIT) {
+            for(int j=0; j< layer.top_size() ; j++ )
+            {
+                // get layer information and add to net
+                std::vector<std::string> node;
+                node.push_back(convertV1LayerTypeToString(layer.type()));
+                node.push_back("");
+                node.push_back(layer.top(j));
+                node.push_back(layer.top(j));
+                for(int z = 0; z < layer.bottom_size();z++) {
+                    if(outputNameMap.find(layer.bottom(z)) == outputNameMap.end()) {
+                        outputNameMap[layer.bottom(z)] = layer.bottom(z);
+                    }
+                    node.push_back(outputNameMap[layer.bottom(z)]);
+
+                }
+                net.push_back(node);
+
+                // update output name with layer name
+                outputNameMap[layer.top(j)] = layer.top(j);
+            }
+            continue;
+        }
+
+        // get layer information and add to net
+        std::vector<std::string> node;
+        std::string params;
+        getV1LayerParams(layer, params);
+        node.push_back(convertV1LayerTypeToString(layer.type()));
+        node.push_back(params);
+        node.push_back(layer.top(0));
+        node.push_back(layer.name());
+        for(int j = 0; j < layer.bottom_size()  ; j++) {
+            if(outputNameMap.find(layer.bottom(j)) == outputNameMap.end()) {
+                outputNameMap[layer.bottom(j)] = layer.bottom(j);
+            }
+            node.push_back(outputNameMap[layer.bottom(j)]);
+        }
+        net.push_back(node);
+
+        // update output name with layer name
+        outputNameMap[layer.top(0)] = layer.name();
+    }
+}
+
+int loadCaffeProtoTxt(
+    const char * prototxtFileName,
+    std::vector<std::vector<std::string>>& net,
+    int inputDim[4])
+{
+    // verify that the version of the library that we linked against is
+    // compatible with the version of the headers we compiled against.
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+    //google::protobuf::Message * msg = new google::protobuf::Message();
+    caffe::NetParameter * msg = new caffe::NetParameter();
+
+    // open prototxt and parse
+    int fd = open(prototxtFileName, O_RDONLY);
+    if(fd < 0)
+        error("unable to open: %s\n", prototxtFileName);
+    google::protobuf::io::FileInputStream fi(fd);
+    fi.SetCloseOnDelete(true);
+    if (!google::protobuf::TextFormat::Parse(&fi, msg))
+        error("failed to parse file: %s\n", prototxtFileName);
+    info("loadCaffeProtoTxt: loading %s from %s\n", msg->has_name() ? msg->name().c_str() : "(none)", prototxtFileName);
+
+    if(msg->layer_size() > 0) {
+        parseProtoTxt(msg, net, inputDim);
+    }
+    else if(msg->layers_size() > 0) {
+        info("Reading V1 layer parameters from %s\n", prototxtFileName);
+        parseV1LayerProtoTxt(msg, net, inputDim);
+    }
+    else {
+        error("No 'layers' or 'layer' fields found in the prototxt\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -857,6 +1061,51 @@ void writeGDF(
 }
 
 void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string outputFolder)
+{
+    std:: string layer_name;
+    if(layer_parameter.has_name()) {
+        layer_name = layer_parameter.name();
+        formatFileName(layer_name,"/","_");
+    }
+
+    std::string fileName_weights = outputFolder + "/weights/" + layer_name + ".f32";
+    std::string fileName_bias = outputFolder + "/bias/" + layer_name + ".f32";
+    FILE * fs_weights;
+    FILE * fs_bias;
+    fs_weights = fopen(fileName_weights.c_str(), "wb");
+    fs_bias    = fopen(fileName_bias.c_str(),"wb");
+    if(!fs_weights || !fs_bias) {
+        printf("ERROR: unable to create dump files: make sure weights and bias folders are writable.\n");
+        exit(1);
+    }
+    int blob_size = layer_parameter.blobs_size();
+    if(blob_size > 0) {
+        //Extracting the weights.
+        const caffe::BlobProto& weights_blob = layer_parameter.blobs(0);
+        int weightsize = weights_blob.data_size();
+
+        for(int i=0;i<weightsize;i++) {
+            float weight = weights_blob.data(i);
+            fwrite(&weight,sizeof(float),1,fs_weights);
+        }
+        //Extraction of bias if exists.
+        if(blob_size >= 2) {
+            //Extraction of Bias.
+            const caffe::BlobProto bias_blob = layer_parameter.blobs(1);
+            int biassize = bias_blob.data_size();
+
+            for(int i=0; i < biassize; i++) {
+                float bias = bias_blob.data(i);
+                fwrite(&bias,sizeof(float),1,fs_bias);
+            }
+        }
+    }
+
+    fclose(fs_weights);
+    fclose(fs_bias);
+}
+
+void dumpV1LayerData(const caffe::V1LayerParameter& layer_parameter, std::string outputFolder)
 {
     std:: string layer_name;
     if(layer_parameter.has_name()) {
@@ -1850,6 +2099,100 @@ void parseCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::
     }
 }
 
+void parseV1LayerCaffeModel(const caffe::NetParameter& net_parameter, std::vector<std::vector<std::string>>& net, int inputDim[4], std::string outputFolder, int flags)
+{
+    if(net_parameter.has_name())
+        std::cout<<"Fetching the weights for : " << net_parameter.name()<< std::endl;
+
+    std::map<std::string,std::string> outputNameMap, splitNameMap;
+    if(net_parameter.input_size() > 0) {
+        outputNameMap[net_parameter.input(0)] = net_parameter.input(0);
+    }
+
+    if(net_parameter.input_dim_size()==4 && ((inputDim[0]==0) || (inputDim[1]==0) || (inputDim[2]==0) || (inputDim[3]==0)))
+    {
+        inputDim[0] = net_parameter.input_dim(0);
+        inputDim[1] = net_parameter.input_dim(1);
+        inputDim[2] = net_parameter.input_dim(2);
+        inputDim[3] = net_parameter.input_dim(3);
+    }
+
+    //extract layer information.
+    for(int i=0; i < net_parameter.layers_size() ;i++)
+    {
+        const caffe::V1LayerParameter& layer_parameter = net_parameter.layers(i);
+
+        if(layer_parameter.top_size() == 0)
+            continue;
+
+        //Check layer name.
+        if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_DATA || layer_parameter.type() == caffe::V1LayerParameter_LayerType_IMAGE_DATA) {
+            outputNameMap[layer_parameter.top(0)]= layer_parameter.top(0);
+            continue;
+        }
+
+        //dump layer data.
+        dumpV1LayerData(layer_parameter, outputFolder);
+
+        // enable Split optimization using a bit in flags (i.e., remove Split by using variable renaming instead of a copy)
+        bool isSplitEnabled = (flags & 1);
+        if(!isSplitEnabled) {
+            if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_SPLIT) {
+                for(int j = 0; j < layer_parameter.top_size(); j++) {
+                    // get layer information and add to net
+                    std::vector<std::string> node;
+                    node.push_back(convertV1LayerTypeToString(layer_parameter.type()));
+                    node.push_back("");
+                    node.push_back(layer_parameter.top(j));
+                    node.push_back(layer_parameter.top(j));
+                    for(int z = 0; z < layer_parameter.bottom_size();z++) {
+                        if(outputNameMap.find(layer_parameter.bottom(z)) == outputNameMap.end()) {
+                            outputNameMap[layer_parameter.bottom(z)] = layer_parameter.bottom(z);
+                        }
+                        node.push_back(outputNameMap[layer_parameter.bottom(z)]);
+                    }
+                    net.push_back(node);
+                    // update output name with layer name
+                    outputNameMap[layer_parameter.top(j)] = layer_parameter.top(j);
+                }
+                continue;
+            }
+        }
+        else
+        {
+            //Split type.
+            if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_SPLIT) {
+                splitNameMap[layer_parameter.name()]= layer_parameter.bottom(0);
+                for(int j=0; j< layer_parameter.top_size() ; j++ ) {
+                    splitNameMap[layer_parameter.top(j)] = layer_parameter.bottom(0);
+                }
+                continue;
+            }
+        }
+
+        // get layer information and add to net
+        std::vector<std::string> node;
+        std::string params;
+        getV1LayerParams(layer_parameter, params);
+        node.push_back(convertV1LayerTypeToString(layer_parameter.type()));
+        node.push_back(params);
+        node.push_back(layer_parameter.top(0));
+        node.push_back(layer_parameter.name());
+        for(int j = 0; j < layer_parameter.bottom_size()  ; j++) {
+            if(isSplitEnabled && (strstr(layer_parameter.bottom(j).c_str(),"split"))) {
+                outputNameMap[layer_parameter.bottom(j)]= splitNameMap[layer_parameter.bottom(j)];
+            }
+            if(outputNameMap.find(layer_parameter.bottom(j)) == outputNameMap.end()) {
+                outputNameMap[layer_parameter.bottom(j)] = layer_parameter.bottom(j);
+            }
+            node.push_back(outputNameMap[layer_parameter.bottom(j)]);
+        }
+        net.push_back(node);
+        // update output name with layer name
+        outputNameMap[layer_parameter.top(0)] = layer_parameter.name();
+    }
+}
+
 int loadCaffeModelFile(
     const char* fileName,
     std::vector<std::vector<std::string>>& net,
@@ -1867,12 +2210,16 @@ int loadCaffeModelFile(
     bool isSuccess = net_parameter.ParseFromIstream(&input);
     if(isSuccess) {
         std::cout << "CaffeModel Read Successful" << std::endl;
-        int layer_param_size = net_parameter.layer_size();
-        if(layer_param_size > 0) {
+        if(net_parameter.layer_size() > 0) {
             parseCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
         }
+        else if(net_parameter.layers_size() > 0) {
+            info("Reading V1 layer caffe model\n");
+            parseV1LayerCaffeModel(net_parameter, net, inputDim, outputFolder, flags);
+
+        }
         else {
-            std::cerr << "ERROR: [Unsupported caffemodel] please upgrade this caffemodel, currently uses deprecated V1LayerParameters." << std::endl;
+            error("No 'layers' or 'layer' fields found in the caffemodel\n");
             return -1;
         }
     }
