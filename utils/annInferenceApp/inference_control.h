@@ -100,6 +100,7 @@ private:
     QLineEdit * editImageListFile;
     QLineEdit * editMaxDataSize;
     QCheckBox * checkRepeatImages;
+    QCheckBox * checkScaledImages;
     inference_compiler_status compiler_status;
     bool operationMode;
     bool connectionSuccessful;
