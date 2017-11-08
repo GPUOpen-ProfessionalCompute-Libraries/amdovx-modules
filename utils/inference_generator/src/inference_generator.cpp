@@ -750,7 +750,10 @@ void writeGDF(
                     ofsGDF << "node org.khronos.nn_extension.convolution_layer ";
                     ofsGDF << node[4] << "_grp" << g << " ";
                     ofsGDF << node[3] << "_grp" << g << "_W ";
-                    ofsGDF << node[3] << "_grp" << g << "_B ";
+                    if(bias_term)
+                        ofsGDF << node[3] << "_grp" << g << "_B ";
+                    else
+                        ofsGDF << "NULL ";
                     ofsGDF << node[3] << "_params ";
                     ofsGDF << node[3] << "_grp" << g << std::endl;
 
