@@ -689,37 +689,122 @@ void writeGDF(
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term, group;
             ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term >> group;
-            std::string weights = output + "_W";
-            auto&& dim = tensorMap[weights];
-            ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
-            ofsGDF << "init " << weights << " ";
-            if(group > 1) ofsGDF << "@repeat~" << group << "~";
-            ofsGDF << "weights/" << layer_name << ".f32" << std::endl;
-#if ENABLE_DIRECTIVE
-            ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-#endif
-            tensorCheck[weights] = true;
-            std::string bias = "NULL";
-            if(bias_term) {
-                bias = output + "_B";
-                ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
-                ofsGDF << "init " << bias << " ";
-                if(group > 1) ofsGDF << "@repeat~" << group << "~";
-                ofsGDF << "bias/"<< layer_name << ".f32" << std::endl;
-#if ENABLE_DIRECTIVE
-                ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
-#endif
-                tensorCheck[bias] = true;
-            }
 
-            ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
-            ofsGDF << "node org.khronos.nn_extension.convolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
-                   << node[3] <<"_params"
-                   << " " << node[3]
-                   << std::endl;
-#if ENABLE_DUMP_LAYER_DATA
-            ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+            if(group > 1) {
+                // Slice the input tensor into group tensors
+                auto&& dim = tensorMap[node[4]];
+                dim[1] /= group;
+
+                for(int g = 0; g < group; g++) {
+                    if(!isVirtualEnabled) {
+                        ofsGDF << "data " << node[4] << "_grp" << g << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    }
+                    else {
+                        ofsGDF << "data " << node[4] << "_grp" << g << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    }
+                }
+
+                // Conv
+                dim = tensorMap[node[3]];
+                dim[1] /= group;
+                auto&& dim_w = tensorMap[output + "_W"];
+                dim_w[0] /= group; dim_w[1] /= group;
+
+                for(int g = 0; g < group; g++) {
+                    if(!isVirtualEnabled) {
+                        ofsGDF << "data " << output << "_grp" << g << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    }
+                    else {
+                        ofsGDF << "data " << output << "_grp" << g << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    }
+
+                    ofsGDF << "data " << output << "_grp" << g << "_W" << " = tensor:4,{" << dim_w[3] << "," << dim_w[2] << "," << dim_w[1] << "," << dim_w[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    ofsGDF << "init " << output << "_grp" << g << "_W weights/" << layer_name << "_grp" << g << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+                    ofsGDF << "directive " << output << "_grp" << g << "_W" << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
 #endif
+
+                    if(bias_term){
+                        ofsGDF << "data " << output << "_grp" << g << "_B" << " = tensor:1,{" << k / group << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        ofsGDF << "init " << output << "_grp" << g << "_B bias/" << layer_name << "_grp" << g << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+                        ofsGDF << "directive " << output << "_grp" << g << "_B" << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+                    }
+                }
+
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                tensorCheck[output + "_W"] = true;
+                if(bias_term) tensorCheck[output + "_B"] = true;
+
+                ofsGDF << "node com.amd.nn_extension.slice_layer ";
+                ofsGDF << node[4];
+                for(int g = 0; g < group; g++) {
+                    ofsGDF << " " << node[4] << "_grp" << g;
+                }
+                ofsGDF << std::endl;
+#if ENABLE_DUMP_LAYER_DATA
+                for(int g = 0; g < group; g++) {
+                    ofsGDF << "write "<< node[4] << "_grp" << g << " out/"<< node[4] << "_grp" << g << ".f32" << std::endl;
+                }
+#endif
+
+                for(int g = 0; g < group; g++) {
+                    ofsGDF << "node org.khronos.nn_extension.convolution_layer ";
+                    ofsGDF << node[4] << "_grp" << g << " ";
+                    ofsGDF << node[3] << "_grp" << g << "_W ";
+                    ofsGDF << node[3] << "_grp" << g << "_B ";
+                    ofsGDF << node[3] << "_params ";
+                    ofsGDF << node[3] << "_grp" << g << std::endl;
+
+#if ENABLE_DUMP_LAYER_DATA
+                    ofsGDF << "write "<< node[3] << "_grp" << g << " out/"<< layer_name << ".f32" << std::endl;
+#endif
+                }
+
+                ofsGDF << "node com.amd.nn_extension.concat_layer ";
+                ofsGDF << node[3];
+                for(int g = 0; g < group; g++) {
+                    ofsGDF << " " << node[3] << "_grp" << g;
+                }
+                ofsGDF << std::endl;
+#if ENABLE_DUMP_LAYER_DATA
+                for(int g = 0; g < group; g++) {
+                    ofsGDF << "write "<< node[3] << "_grp" << g << " out/"<< node[3] << "_grp" << g << ".f32" << std::endl;
+                }
+#endif
+            }
+            else {
+                std::string weights = output + "_W";
+                auto&& dim = tensorMap[weights];
+                ofsGDF << "data " << weights << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                ofsGDF << "init " << weights << " ";
+                ofsGDF << "weights/" << layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+                ofsGDF << "directive " << weights << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+                tensorCheck[weights] = true;
+                std::string bias = "NULL";
+                if(bias_term) {
+                    bias = output + "_B";
+                    ofsGDF << "data " << bias << " = tensor:1,{" << k << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    ofsGDF << "init " << bias << " ";
+                    ofsGDF << "bias/"<< layer_name << ".f32" << std::endl;
+#if ENABLE_DIRECTIVE
+                    ofsGDF << "directive " << bias << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
+#endif
+                    tensorCheck[bias] = true;
+                }
+
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                ofsGDF << "node org.khronos.nn_extension.convolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
+                       << node[3] <<"_params"
+                       << " " << node[3]
+                       << std::endl;
+#if ENABLE_DUMP_LAYER_DATA
+                ofsGDF << "write "<< node[3] << " out/"<< layer_name << ".f32" << std::endl;
+#endif
+            }
         }
         else if (type == "Deconvolution") {
             std::stringstream ss(params);
@@ -1111,6 +1196,50 @@ void dumpV1LayerData(const caffe::V1LayerParameter& layer_parameter, std::string
     if(layer_parameter.has_name()) {
         layer_name = layer_parameter.name();
         formatFileName(layer_name,"/","_");
+    }
+
+    if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_CONVOLUTION)
+    {
+        const caffe::ConvolutionParameter& conv = layer_parameter.convolution_param();
+        int num_groups = conv.has_group() ? conv.group() : 0;
+        if(num_groups > 1)
+        {
+            int blob_size = layer_parameter.blobs_size();
+            const caffe::BlobProto& weights_blob = layer_parameter.blobs(0);
+            int weightsize_per_grp = weights_blob.data_size() / num_groups;
+            int biassize_per_grp = (blob_size >= 2) ? layer_parameter.blobs(1).data_size() / num_groups : 0;
+
+            for(int grp = 0; grp < num_groups; grp++)
+            {
+                std::stringstream fileName_weights;
+                fileName_weights << outputFolder << "/weights/" << layer_name << "_grp" << grp << ".f32";
+                std::stringstream fileName_bias;
+                fileName_bias << outputFolder << "/bias/" << layer_name << "_grp" << grp << ".f32";
+
+                FILE * fs_weights = fopen(fileName_weights.str().c_str(), "wb");
+                FILE * fs_bias    = fopen(fileName_bias.str().c_str(),"wb");
+                if(!fs_weights || !fs_bias) {
+                    printf("ERROR: unable to create dump files: make sure weights and bias folders are writable.\n");
+                    exit(1);
+                }
+
+                // Write weights
+                for(int i = weightsize_per_grp * grp; i < (weightsize_per_grp * (grp + 1)); i++) {
+                    float weight = weights_blob.data(i);
+                    fwrite(&weight, sizeof(float), 1, fs_weights);
+                }
+
+                if(blob_size >= 2) {
+                    // Write bias
+                    const caffe::BlobProto bias_blob = layer_parameter.blobs(1);
+                    for(int i = biassize_per_grp * grp; i < (biassize_per_grp * (grp + 1)); i++) {
+                        float bias = bias_blob.data(i);
+                        fwrite(&bias,sizeof(float),1,fs_bias);
+                    }
+                }
+            }
+            return;
+        }
     }
 
     std::string fileName_weights = outputFolder + "/weights/" + layer_name + ".f32";
