@@ -1394,50 +1394,176 @@ void writeVXCode(
         auto&& params = node[1];
         if(type == "Convolution") {
             std::stringstream ss(params);
-            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term;
-            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term;
-            std::string weights = layerName + "_W";
-            std::string dim_weights = output + "_W";
-            auto&& dim = tensorMap[dim_weights];
-            if(codeType == "initialize") {
-                ofsCodeC << "    vx_size " << weights << "_dims[4] = { " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " };" << std::endl;
-                ofsCodeC << "    vx_tensor " << weights << ";" << std::endl;
-                ofsCodeC << "    " << weights << " = vxCreateTensor(context,4, " << weights + "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
-                ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << weights << "); " << std::endl;
-                ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << weights << ", dataFolder + \"/weights/" + layerName + ".f32\"));" << std::endl;
-            }
-            else if(codeType == "release") {
-                ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << weights << "));" << std::endl;
-            }
-            declare_tensor_check[weights] = true;
-            std::string bias = "NULL";
-            if(bias_term) {
-                bias = layerName + "_B";
+            int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term, group;
+            ss >> k >> kernel_w >> kernel_h >> stride_w >> stride_h >> pad_w >> pad_h >> dilation_w >> dilation_h >> bias_term >> group;
+            if(group > 1) {
+                auto&& idim = tensorMap[inputName];
+
                 if(codeType == "initialize") {
-                    ofsCodeC << "    vx_size " << bias << "_dims[1] = { " << k << " };" << std::endl;
-                    ofsCodeC << "    vx_tensor " << bias << ";" << std::endl;
-                    ofsCodeC << "    " << bias << " = vxCreateTensor(context,1, " << bias + "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
-                    ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
-                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << bias << ", dataFolder + \"/bias/" + layerName + ".f32\"));" << std::endl;
+                    ofsCodeC << "    vx_size " << inputName << "_grp_dims[4] = { " << idim[3] << ", " << idim[2] << ", " << idim[1]/group << ", " << idim[0] << " };" << std::endl;
+                    ofsCodeC << "    vx_size " << layerName << "_grp_dims[4] = { " << odim[3] << ", " << odim[2] << ", " << odim[1]/group << ", " << odim[0] << " };" << std::endl;
+                    for(int g = 0; g < group; g++) {
+                        // Input tensor for the group-g conv
+                        ofsCodeC << "    vx_tensor " << inputName << "_grp" << g << ";" << std::endl;
+                        if(isVirtualEnabled){
+                            ofsCodeC << "    " << inputName << "_grp" << g << " = vxCreateVirtualTensor(graph,4, " << inputName << "_grp_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
+                        else{
+                            ofsCodeC << "    " << inputName << "_grp" << g << " = vxCreateTensor(context,4, " << inputName << "_grp_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
+                        ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << inputName << "_grp" << g << ");" << std::endl;
+
+                        // Output tensor for the group-g conv
+                        ofsCodeC << "    vx_tensor " << layerName << "_grp" << g << ";" << std::endl;
+                        if(isVirtualEnabled){
+                            ofsCodeC << "    " << layerName << "_grp" << g << " = vxCreateVirtualTensor(graph,4, " << layerName << "_grp_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
+                        else{
+                            ofsCodeC << "    " << layerName << "_grp" << g << " = vxCreateTensor(context,4, " << layerName << "_grp_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
+                        }
+                        ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << layerName << "_grp" << g << ");" << std::endl;
+
+                    }
+
+                    // Slice conv input
+                    ofsCodeC << "    vx_node " << inputName << "_grp_slice_node;" << std::endl;
+                    ofsCodeC << "    " <<  inputName << "_grp_slice_node = " << "vxSliceLayer(graph, ";
+                    ofsCodeC << inputName;
+                    for(int g = 0; g < 8; g++) {
+                        if(g < group)
+                            ofsCodeC << ", " << inputName << "_grp" << g;
+                        else
+                            ofsCodeC << ", NULL";
+                    }
+                    ofsCodeC << ");" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << inputName << "_grp_slice_node);" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << inputName << "_grp_slice_node));" << std::endl;
+
+                    // Concat conv output
+                    ofsCodeC << "    vx_node " << layerName << "_grp_concat_node;" << std::endl;
+                    ofsCodeC << "    " <<  layerName << "_grp_concat_node = " << "vxConcatLayer(graph, ";
+                    ofsCodeC << layerName;
+                    for(int g = 0; g < 8; g++) {
+                        if(g < group)
+                            ofsCodeC << ", " << layerName << "_grp" << g;
+                        else
+                            ofsCodeC << ", NULL";
+                    }
+                    ofsCodeC << ");" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << layerName << "_grp_concat_node);" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName << "_grp_concat_node));" << std::endl;
                 }
                 else if(codeType == "release") {
-                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << bias << "));" << std::endl;
+                    for(int g = 0; g < group; g++) {
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << inputName << "_grp" << g << "));" << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << layerName << "_grp" << g << "));" << std::endl;
+                    }
                 }
-                declare_tensor_check[bias] = true;
+
+                auto&& dim = tensorMap[output + "_W"];
+                if(codeType == "initialize") {
+                    ofsCodeC << "    vx_size " << layerName << "_W" << "_dims[4] = { " << dim[3] << ", " << dim[2] << ", " << dim[1]/group << ", " << dim[0]/group << " };" << std::endl;
+                    for(int g = 0; g < group; g++) {
+                        ofsCodeC << "    vx_tensor " << layerName << "_grp" << g << "_W" << ";" << std::endl;
+                        ofsCodeC << "    " << layerName << "_grp" << g << "_W" << " = vxCreateTensor(context,4, " << layerName << "_W" << "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << layerName << "_grp" << g << "_W" << "); " << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << layerName << "_grp" << g << "_W" << ", dataFolder + \"/weights/" << layerName << "_grp" << g << ".f32\"));" << std::endl;
+                    }
+                }
+                else if(codeType == "release") {
+                    for(int g = 0; g < group; g++) {
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << layerName << "_grp" << g << "_W" << "));" << std::endl;
+                    }
+                }
+                declare_tensor_check[output + "_W"] = true;
+                if(bias_term) {
+                    if(codeType == "initialize") {
+                        ofsCodeC << "    vx_size " << layerName << "_B" << "_dims[1] = { " << k/group << " };" << std::endl;
+                        for(int g = 0; g < group; g++) {
+                            ofsCodeC << "    vx_tensor " << layerName << "_grp" << g << "_B" << ";" << std::endl;
+                            ofsCodeC << "    " << layerName << "_grp" << g << "_B" << " = vxCreateTensor(context,1, " << layerName << "_B"  "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
+                            ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << layerName << "_grp" << g << "_B" << "); " << std::endl;
+                            ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << layerName << "_grp" << g << "_B" << ", dataFolder + \"/bias/" << layerName << "_grp" << g << ".f32\"));" << std::endl;
+                        }
+                    }
+                    else if(codeType == "release") {
+                        for(int g = 0; g < group; g++) {
+                            ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << layerName << "_grp" << g << "_B" << "));" << std::endl;
+                        }
+                    }
+                    declare_tensor_check[layerName + "_B"] = true;
+                }
+
+                if(codeType == "initialize") {
+                    ofsCodeC << "    vx_nn_convolution_params_t " << layerName << "_params;" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.padding_x = " << pad_w << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.padding_y = " << pad_h << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.dilation_x = " << dilation_w - 1 << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.dilation_y = " << dilation_h - 1 << ";" << std::endl;
+
+                    for(int g = 0; g < group; g++) {
+                        ofsCodeC << "    vx_node " << layerName << "_grp" << g << "_node;" << std::endl;
+                        ofsCodeC << "    " << layerName << "_grp" << g << "_node = " << "vxConvolutionLayer(graph, ";
+                        ofsCodeC << inputName << "_grp" << g << ", ";
+                        ofsCodeC << layerName << "_grp" << g << "_W, ";
+                        if(bias_term)
+                            ofsCodeC << layerName << "_grp" << g << "_B, ";
+                        else
+                            ofsCodeC << "NULL, ";
+                        ofsCodeC << "&" << layerName + "_params, " << "sizeof(" << layerName + "_params ), ";
+                        ofsCodeC << layerName << "_grp" << g << ");" << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << layerName << "_grp" << g << "_node);" << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName << "_grp" << g << "_node));" << std::endl;
+                    }
+                }
             }
-            if(codeType == "initialize") {
-                ofsCodeC << "    vx_nn_convolution_params_t " << layerName << "_params;" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.padding_x = " << pad_w << ";" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.padding_y = " << pad_h << ";" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.dilation_x = " << dilation_w - 1 << ";" << std::endl;
-                ofsCodeC << "    " << layerName + "_params.dilation_y = " << dilation_h - 1 << ";" << std::endl;
-                ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
-                ofsCodeC << "    " << layerName + "_node = " << "vxConvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, " << "sizeof(" << layerName + "_params ), " << layerName << ");" << std::endl;
-                ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
-                ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
+            else {
+                std::string weights = layerName + "_W";
+                std::string dim_weights = output + "_W";
+                auto&& dim = tensorMap[dim_weights];
+                if(codeType == "initialize") {
+                    ofsCodeC << "    vx_size " << weights << "_dims[4] = { " << dim[3] << ", " << dim[2] << ", " << dim[1] << ", " << dim[0] << " };" << std::endl;
+                    ofsCodeC << "    vx_tensor " << weights << ";" << std::endl;
+                    ofsCodeC << "    " << weights << " = vxCreateTensor(context,4, " << weights + "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << weights << "); " << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << weights << ", dataFolder + \"/weights/" + layerName + ".f32\"));" << std::endl;
+                }
+                else if(codeType == "release") {
+                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << weights << "));" << std::endl;
+                }
+                declare_tensor_check[weights] = true;
+                std::string bias = "NULL";
+                if(bias_term) {
+                    bias = layerName + "_B";
+                    if(codeType == "initialize") {
+                        ofsCodeC << "    vx_size " << bias << "_dims[1] = { " << k << " };" << std::endl;
+                        ofsCodeC << "    vx_tensor " << bias << ";" << std::endl;
+                        ofsCodeC << "    " << bias << " = vxCreateTensor(context,1, " << bias + "_dims, " << tensorType << ", " << fixedPosition << ");" << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << bias << "); " << std::endl;
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(copyTensor(" << bias << ", dataFolder + \"/bias/" + layerName + ".f32\"));" << std::endl;
+                    }
+                    else if(codeType == "release") {
+                        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << bias << "));" << std::endl;
+                    }
+                    declare_tensor_check[bias] = true;
+                }
+                if(codeType == "initialize") {
+                    ofsCodeC << "    vx_nn_convolution_params_t " << layerName << "_params;" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.padding_x = " << pad_w << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.padding_y = " << pad_h << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.overflow_policy = " << convertPolicy << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.rounding_policy = " << roundPolicy << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.down_scale_size_rounding = " << "VX_NN_DS_SIZE_ROUNDING_FLOOR ;" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.dilation_x = " << dilation_w - 1 << ";" << std::endl;
+                    ofsCodeC << "    " << layerName + "_params.dilation_y = " << dilation_h - 1 << ";" << std::endl;
+                    ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
+                    ofsCodeC << "    " << layerName + "_node = " << "vxConvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, " << "sizeof(" << layerName + "_params ), " << layerName << ");" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
+                    ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
+                }
             }
         }
         else if(type == "Deconvolution") {
