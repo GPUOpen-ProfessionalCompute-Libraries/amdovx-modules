@@ -692,33 +692,30 @@ void writeGDF(
 
             if(group > 1) {
                 // Slice the input tensor into group tensors
-                auto&& dim = tensorMap[node[4]];
-                dim[1] /= group;
+                auto&& dim_ip_grp = tensorMap[node[4]];
 
                 for(int g = 0; g < group; g++) {
                     if(!isVirtualEnabled) {
-                        ofsGDF << "data " << node[4] << "_grp" << g << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        ofsGDF << "data " << node[4] << "_grp" << g << " = tensor:4,{" << dim_ip_grp[3] << "," << dim_ip_grp[2] << "," << dim_ip_grp[1]/group << "," << dim_ip_grp[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     }
                     else {
-                        ofsGDF << "data " << node[4] << "_grp" << g << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        ofsGDF << "data " << node[4] << "_grp" << g << " = virtual-tensor:4,{" << dim_ip_grp[3] << "," << dim_ip_grp[2] << "," << dim_ip_grp[1]/group << "," << dim_ip_grp[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     }
                 }
 
                 // Conv
-                dim = tensorMap[node[3]];
-                dim[1] /= group;
+                auto&& dim_op_grp = tensorMap[node[3]];
                 auto&& dim_w = tensorMap[output + "_W"];
-                dim_w[0] /= group; dim_w[1] /= group;
 
                 for(int g = 0; g < group; g++) {
                     if(!isVirtualEnabled) {
-                        ofsGDF << "data " << output << "_grp" << g << " = tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        ofsGDF << "data " << output << "_grp" << g << " = tensor:4,{" << dim_op_grp[3] << "," << dim_op_grp[2] << "," << dim_op_grp[1]/group << "," << dim_op_grp[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     }
                     else {
-                        ofsGDF << "data " << output << "_grp" << g << " = virtual-tensor:4,{" << dim[3] << "," << dim[2] << "," << dim[1] << "," << dim[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                        ofsGDF << "data " << output << "_grp" << g << " = virtual-tensor:4,{" << dim_op_grp[3] << "," << dim_op_grp[2] << "," << dim_op_grp[1]/group << "," << dim_op_grp[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     }
 
-                    ofsGDF << "data " << output << "_grp" << g << "_W" << " = tensor:4,{" << dim_w[3] << "," << dim_w[2] << "," << dim_w[1] << "," << dim_w[0] << "}," << tensorType << "," << fixedPointPosition << std::endl;
+                    ofsGDF << "data " << output << "_grp" << g << "_W" << " = tensor:4,{" << dim_w[3] << "," << dim_w[2] << "," << dim_w[1]/group << "," << dim_w[0]/group << "}," << tensorType << "," << fixedPointPosition << std::endl;
                     ofsGDF << "init " << output << "_grp" << g << "_W weights/" << layer_name << "_grp" << g << ".f32" << std::endl;
 #if ENABLE_DIRECTIVE
                     ofsGDF << "directive " << output << "_grp" << g << "_W" << " VX_DIRECTIVE_AMD_COPY_TO_OPENCL" << std::endl;
