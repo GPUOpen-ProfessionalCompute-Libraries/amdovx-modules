@@ -715,6 +715,7 @@ void InferenceEngine::workMasterInputQ()
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
         queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
         queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
+        queueDeviceTagQ[i]->endOfSequence();
         queueDeviceImageQ[i]->endOfSequence();
     }
     args->lock();
@@ -894,6 +895,8 @@ void InferenceEngine::workDeviceProcess(int gpu)
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
 #else
+        info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
+        std::this_thread::sleep_for(std::chrono::milliseconds(4));  // simulate some work
 #endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);

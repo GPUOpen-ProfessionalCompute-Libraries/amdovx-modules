@@ -34,7 +34,7 @@
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 #define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
-#define USE_ADVANCED_MESSAGE_Q         1
+#define USE_ADVANCED_MESSAGE_Q         0
 #define NUM_DECODER_THREADS            0
 #define DONOT_RUN_INFERENCE            0  // for timing analysis
 #endif
