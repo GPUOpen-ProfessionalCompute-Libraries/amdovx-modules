@@ -30,7 +30,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       opencl_context{ nullptr }, opencl_cmdq{ nullptr },
       openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr },
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
-      queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
+      inputQ(nullptr), queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
 #if USE_CL_COPY_INSTEAD_OF_CL_MAP
@@ -70,7 +70,7 @@ InferenceEngine::~InferenceEngine()
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     // wait for all threads to complete and release all resources
     std::tuple<int,char*,int> endOfSequenceInput(-1,nullptr,0);
-    inputQ.enqueue(endOfSequenceInput);
+    inputQ->enqueue(endOfSequenceInput);
     if(threadMasterInputQ && threadMasterInputQ->joinable()) {
         threadMasterInputQ->join();
     }
@@ -82,6 +82,7 @@ InferenceEngine::~InferenceEngine()
         }
         if(queueDeviceImageQ[i]) {
             queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
+            queueDeviceImageQ[i]->endOfSequence();
         }
         if(threadDeviceInputCopy[i] && threadDeviceInputCopy[i]->joinable()) {
             threadDeviceInputCopy[i]->join();
@@ -148,7 +149,8 @@ InferenceEngine::~InferenceEngine()
 #endif
     }
 #endif
-
+    // delete inputQ
+    if (inputQ) delete inputQ;
     // release all device resources
     if(deviceLockSuccess) {
         args->releaseGpuDevices(GPUs, device_id);
@@ -223,6 +225,24 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     matScaled.release();
     return VX_SUCCESS;
 }
+
+void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf)
+{
+    for (int i = start; i <= end; i++)
+    {
+        std::tuple<char*, int> image = batch_Q[i];
+        char * byteStream = std::get<0>(image);
+        int size = std::get<1>(image);
+        if (byteStream == nullptr || size == 0) {
+            break;
+        }
+        // decode, scale, and format convert into the OpenCL buffer
+        float * buf = tens_buf + dim[0] * dim[1] * dim[2] * i;
+        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf);
+        delete[] byteStream;
+    }
+}
+
 
 int InferenceEngine::run()
 {
@@ -356,7 +376,12 @@ int InferenceEngine::run()
     info("InferenceEngine: using LIBRE_INFERENCE_SCHEDULER");
     //////
     /// allocate OpenVX and OpenCL resources
-    ///
+    /// 
+#if  USE_ADVANCED_MESSAGE_Q
+    inputQ = new MessageQueueAdvanced<std::tuple<int,char *,int>>(MAX_INPUT_QUEUE_DEPTH);
+#else
+    inputQ = new MessageQueue<std::tuple<int,char *,int>>();
+#endif
     for(int gpu = 0; gpu < GPUs; gpu++) {
         //////
         // create OpenCL context
@@ -379,8 +404,13 @@ int InferenceEngine::run()
         }
 
         // create scheduler device queues
+#if  USE_ADVANCED_MESSAGE_Q
+        queueDeviceTagQ[gpu] = new MessageQueueAdvanced<int>(MAX_DEVICE_QUEUE_DEPTH);
+        queueDeviceImageQ[gpu] = new MessageQueueAdvanced<std::tuple<char*,int>>(MAX_INPUT_QUEUE_DEPTH);
+#else
         queueDeviceTagQ[gpu] = new MessageQueue<int>();
         queueDeviceImageQ[gpu] = new MessageQueue<std::tuple<char*,int>>();
+#endif
         queueDeviceInputMemIdle[gpu] = new MessageQueue<cl_mem>();
         queueDeviceInputMemBusy[gpu] = new MessageQueue<cl_mem>();
         queueDeviceOutputMemIdle[gpu] = new MessageQueue<cl_mem>();
@@ -510,7 +540,7 @@ int InferenceEngine::run()
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
             imageCountRequested = 1;
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
-            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
+            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ->size();
 #endif
             if(imageCountRequested > 0) {
                 didSomething = true;
@@ -529,7 +559,7 @@ int InferenceEngine::run()
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
                     endOfSequence = true;
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
-                    inputQ.enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
+                    inputQ->enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
 #endif
                     endOfImageRequested = true;
                 }
@@ -607,7 +637,7 @@ int InferenceEngine::run()
 #endif
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
                     // submit the input (tag,byteStream,size) to scheduler
-                    inputQ.enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
+                    inputQ->enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
 #endif
                 }
             }
@@ -643,7 +673,7 @@ void InferenceEngine::workMasterInputQ()
     for(;;) {
         // get next item from the input queue
         std::tuple<int,char*,int> input;
-        inputQ.dequeue(input);
+        inputQ->dequeue(input);
         int tag = std::get<0>(input);
         char * byteStream = std::get<1>(input);
         int size = std::get<2>(input);
@@ -652,12 +682,13 @@ void InferenceEngine::workMasterInputQ()
         if(tag < 0 || byteStream == nullptr || size == 0)
             break;
         totalInputCount++;
-
+#if !USE_ADVANCED_MESSAGE_Q
 #if MAX_DEVICE_QUEUE_DEPTH
         // make sure that device queue are stay within the limit
         while(queueDeviceTagQ[gpu]->size() >= MAX_DEVICE_QUEUE_DEPTH) {
             std::this_thread::sleep_for(std::chrono::milliseconds(DEVICE_QUEUE_FULL_SLEEP_MSEC));
         }
+#endif
 #endif
 
         // add the image to selected deviceQ
@@ -682,10 +713,10 @@ void InferenceEngine::workMasterInputQ()
     for(int i = 0; i < GPUs; i++) {
         int endOfSequenceTag = -1;
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
-        queueDeviceTagQ[gpu]->enqueue(endOfSequenceTag);
-        queueDeviceImageQ[gpu]->enqueue(endOfSequenceImage);
+        queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
+        queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
+        queueDeviceImageQ[i]->endOfSequence();
     }
-
     args->lock();
     info("workMasterInputQ: terminated for %s [scheduled %d images]", clientName.c_str(), totalInputCount);
     args->unlock();
@@ -709,7 +740,12 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
     if(err) {
         fatal("workDeviceInputCopy: clCreateCommandQueue(device_id[%d]) failed (%d)", gpu, err);
     }
-
+#if (NUM_DECODER_THREADS > 1)
+    int num_dec_threads = NUM_DECODER_THREADS;
+    std::vector<std::tuple<char*, int>> batch_q;
+    int sub_batch_size = batchSize/num_dec_threads;
+    std::vector<std::thread> dec_threads(num_dec_threads);
+#endif
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
         // get an empty OpenCL buffer and lock the buffer for writing
@@ -731,6 +767,35 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         // get next batch of inputs and convert them into tensor and release input byteStream
         // TODO: replace with an efficient implementation
         int inputCount = 0;
+#if (NUM_DECODER_THREADS > 1)
+        queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
+        inputCount = batch_q.size();
+        if (inputCount){
+            if (inputCount < batchSize)
+            {
+                sub_batch_size = (inputCount+num_dec_threads-1)/num_dec_threads;
+                endOfSequenceReached = true;
+            }
+            int start = 0; int end = sub_batch_size-1;
+            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
+            {
+                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr);
+                start += sub_batch_size;
+                end += sub_batch_size;
+            }
+            start = std::min(start, (inputCount - 1));
+            end = std::min(end, (inputCount-1));
+            // do some work in this thread
+            DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, mapped_ptr);
+            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
+            {
+                dec_threads[t].join();
+            }
+            dec_threads.clear();
+            batch_q.clear();
+        }else
+            endOfSequenceReached = true;
+#else
         for(; inputCount < batchSize; inputCount++) {
             // get next item from the input queue and check for end of input
             std::tuple<char*,int> image;
@@ -747,7 +812,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             // release byteStream
             delete[] byteStream;
         }
-
+#endif
 #if USE_CL_COPY_INSTEAD_OF_CL_MAP
         err = clEnqueueWriteBuffer(cmdq, mem, CL_TRUE, 0, inputSizeInBytes, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -823,11 +888,13 @@ void InferenceEngine::workDeviceProcess(int gpu)
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxSwapTensorHandle(output#%d) failed(%d)", gpu, status);
         }
+#if !DONOT_RUN_INFERENCE
         status = vxProcessGraph(openvx_graph[gpu]);
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
-
+#else
+#endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);
         queueDeviceOutputMemBusy[gpu]->enqueue(output);
