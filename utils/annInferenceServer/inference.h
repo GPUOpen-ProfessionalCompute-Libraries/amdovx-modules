@@ -30,10 +30,13 @@
 #define DONOT_RUN_INFERENCE            0  // for debugging protocols
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
-#define MAX_INPUT_QUEUE_DEPTH       1024  // number of images
-#define MAX_DEVICE_QUEUE_DEPTH      1024  // number of images
+#define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
+#define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 #define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
+#define USE_ADVANCED_MESSAGE_Q         1
+#define NUM_DECODER_THREADS            0
+#define DONOT_RUN_INFERENCE            0  // for timing analysis
 #endif
 
 extern "C" {
@@ -69,6 +72,8 @@ public:
         queue.pop();
         dequeueCount++;
     }
+    void endOfSequence(){
+    }
 
 private:
     int enqueueCount;
@@ -77,6 +82,82 @@ private:
     mutable std::mutex mutex;
     std::condition_variable signal;
 };
+
+template<typename T>
+class MessageQueueAdvanced {
+public:
+    MessageQueueAdvanced(int maxSize) : count{ 0 }, maxQSize(maxSize), end_of_sequence(0){
+    }
+    size_t size() {
+        return count;
+    }
+    void enqueue(T const& value) {
+        while (true){
+            if (size() < maxQSize){
+                q_mtx.lock();
+                queue.push(value);
+                count++;
+                q_mtx.unlock();
+                signal.notify_one();
+                break;
+            }else
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(DEVICE_QUEUE_FULL_SLEEP_MSEC));
+            }
+        }
+    }
+    void dequeue(T& value) {
+        std::unique_lock<std::mutex> lock(q_mtx);
+        while (count <= 0) {
+            signal.wait(lock);
+        }
+        value = queue.front();
+        queue.pop();
+        count--;
+    }
+    void dequeueBatch(int batchsize, std::vector<T>& BatchQ){
+        while (true){
+            std::unique_lock<std::mutex> lock(q_mtx);
+            //pop batch
+            if (count >= batchsize)
+            {
+                for (int i = 0; i < batchsize; i++){
+                    BatchQ.push_back(queue.front());
+                    queue.pop();
+                    count--;
+                }
+                break;
+            }
+            else if (end_of_sequence)
+            {
+                // pop remaining
+                int size_rem = count;
+                for (int i = 0; i < size_rem; i++){
+                    BatchQ.push_back(queue.front());
+                    queue.pop();
+                    count--;
+                }
+                break;
+            }
+            else
+            {
+                signal.wait(lock);
+            }
+        }
+    }
+    void endOfSequence(){
+        std::lock_guard<std::mutex> lock(q_mtx);
+        end_of_sequence = 1;
+    }
+private:
+    int count;
+    int maxQSize;
+    int end_of_sequence;
+    std::queue<T> queue;
+    std::mutex q_mtx;
+    std::condition_variable signal;
+};
+
 
 class InferenceEngine {
 public:
@@ -88,7 +169,7 @@ protected:
     // scheduler thread workers
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
     // no separate threads needed
-#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+#elif INFERENCE_SCHEDULER_MODE >= LIBRE_INFERENCE_SCHEDULER
     // libre scheduler needs:
     //   masterInputQ thread
     //   device threads for input copy, processing, and output copy
@@ -127,6 +208,7 @@ private:
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>        outputQ;
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
+    void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     // OpenVX resources
@@ -135,9 +217,43 @@ private:
     vx_tensor openvx_output;
     vx_graph openvx_graph;
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
+    // master scheduler thread
+    std::thread * threadMasterInputQ;
+    // scheduler thread objects
+    std::thread * threadDeviceInputCopy[MAX_NUM_GPU];
+    std::thread * threadDeviceProcess[MAX_NUM_GPU];
+    std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
+    //   inputQ: input to the scheduler <tag,byteStream,size>
+#if  USE_ADVANCED_MESSAGE_Q
+    MessageQueueAdvanced<std::tuple<int,char *,int>> *inputQ;
+    // scheduler device queues
+    MessageQueueAdvanced<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
+    MessageQueueAdvanced<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
+#else
+    MessageQueue<std::tuple<int,char *,int>> *inputQ;
+    // scheduler device queues
+    MessageQueue<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
+    MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
+#endif
+    MessageQueue<cl_mem>                 * queueDeviceInputMemIdle[MAX_NUM_GPU];
+    MessageQueue<cl_mem>                 * queueDeviceInputMemBusy[MAX_NUM_GPU];
+    MessageQueue<cl_mem>                 * queueDeviceOutputMemIdle[MAX_NUM_GPU];
+    MessageQueue<cl_mem>                 * queueDeviceOutputMemBusy[MAX_NUM_GPU];
+    // scheduler resources
+    cl_context opencl_context[MAX_NUM_GPU];
+    cl_command_queue opencl_cmdq[MAX_NUM_GPU];
+    vx_context openvx_context[MAX_NUM_GPU];
+    vx_graph openvx_graph[MAX_NUM_GPU];
+    vx_tensor openvx_input[MAX_NUM_GPU];
+    vx_tensor openvx_output[MAX_NUM_GPU];
+ #if USE_CL_COPY_INSTEAD_OF_CL_MAP
+    float * inputCopyBuffer[MAX_NUM_GPU];
+    float * outputCopyBuffer[MAX_NUM_GPU];
+ #endif
+#elif INFERENCE_SCHEDULER_MODE == ADVANCED_INFERENCE_SCHEDULER
     // master input queues
     //   inputQ: input to the scheduler <tag,byteStream,size>
-    MessageQueue<std::tuple<int,char *,int>> inputQ;
+    MessageQueueAdvanced<std::tuple<int,char *,int>> *inputQ;
     // master scheduler thread
     std::thread * threadMasterInputQ;
     // scheduler thread objects
@@ -145,7 +261,7 @@ private:
     std::thread * threadDeviceProcess[MAX_NUM_GPU];
     std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
     // scheduler device queues
-    MessageQueue<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
+    MessageQueueAdvanced<int>            * queueDeviceTagQ[MAX_NUM_GPU];
     MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemIdle[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemBusy[MAX_NUM_GPU];
@@ -158,10 +274,10 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
+ #if USE_CL_COPY_INSTEAD_OF_CL_MAP
     float * inputCopyBuffer[MAX_NUM_GPU];
     float * outputCopyBuffer[MAX_NUM_GPU];
-#endif
+ #endif
 #endif
 };
 
