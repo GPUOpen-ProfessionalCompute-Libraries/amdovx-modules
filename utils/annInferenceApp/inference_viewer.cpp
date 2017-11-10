@@ -778,6 +778,27 @@ void inference_viewer::paintEvent(QPaintEvent *)
             painter.setBrush(Qt::NoBrush);
             painter.drawRect(x + 4, y + 4, ICON_SIZE * 2, ICON_SIZE * 2);
         }
+        else if(truthLabel == -1) {
+            int cx = x + 4 + ICON_SIZE * 2 + 16;
+            int cy = y + 4 + ICON_SIZE     + 12;
+            painter.setPen(Qt::darkBlue);
+            painter.setBrush(Qt::blue);
+            QPoint points[] = {
+                { cx - 10, cy -  4 },
+                { cx -  8, cy -  6 },
+                { cx -  6, cy -  4 },
+                { cx -  4, cy - 10 },
+                { cx -  2, cy -  8 },
+                { cx -  5, cy -  2 },
+            };
+            painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
+            setFont(font);
+            painter.setPen(Qt::darkBlue);
+            painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "CATEGORY NOT IN DATABASE");
+            painter.setPen(Qt::darkBlue);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(x + 4, y + 4, ICON_SIZE * 2, ICON_SIZE * 2);
+        }
         painter.setPen(statusTextColor);
         painter.setBrush(Qt::white);
         QString text;
@@ -797,6 +818,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
             setFont(font);
             painter.setPen(Qt::gray);
             text.sprintf("ground truth: [label=%d] ", truthLabel);
+            text += truthSummary;
+            painter.drawText(QRect(x + 4, y + 4 + ICON_SIZE * 2 + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
+        }
+        else if(truthLabel == -1) {
+            font.setItalic(true);
+            setFont(font);
+            painter.setPen(Qt::blue);
+            text.sprintf("ground truth: Image has not been classified");
             text += truthSummary;
             painter.drawText(QRect(x + 4, y + 4 + ICON_SIZE * 2 + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         }

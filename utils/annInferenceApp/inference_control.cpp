@@ -47,8 +47,8 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     //////////////
     /// \brief labelIntro
     ///
-    QLabel * labelIntro = new QLabel("INFERENCE CONTROL PANEL");
-    labelIntro->setStyleSheet("font-weight: bold; color: green");
+    QLabel * labelIntro = new QLabel("OBJECT RECOGNITION CONTROL PANEL");
+    labelIntro->setStyleSheet("font-weight: bold; color: green; font-size: 24px;");
     labelIntro->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
     QPushButton * buttonLogo1 = new QPushButton();
     QPushButton * buttonLogo2 = new QPushButton();
@@ -82,15 +82,15 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     /// \brief labelServer
     ///
     QLabel * labelServer = new QLabel("Inference Server");
-    labelServer->setStyleSheet("font-weight: bold; color: red");
+    labelServer->setStyleSheet("font-weight: bold; color: red; font-size: 21px;");
     controlLayout->addWidget(labelServer, row, 0, 1, 5);
     row++;
 
-    QLabel * labelServerHost = new QLabel("Server:");
+    QLabel * labelServerHost = new QLabel("Remote Server:");
     editServerHost = new QLineEdit("localhost");
     editServerPort = new QLineEdit("28282");
     buttonConnect = new QPushButton("Connect");
-    labelServerHost->setStyleSheet("font-weight: bold; font-style: italic");
+    labelServerHost->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelServerHost->setAlignment(Qt::AlignLeft);
     connect(buttonConnect, SIGNAL(released()), this, SLOT(runConnection()));
     controlLayout->addWidget(labelServerHost, row, 0, 1, 1);
@@ -99,7 +99,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(buttonConnect, row, 1 + editSpan, 1, 1);
     row++;
     labelServerStatus = new QLabel("");
-    labelServerStatus->setStyleSheet("font-style: italic");
+    labelServerStatus->setStyleSheet("font-style: italic; font-size: 18px;");
     labelServerStatus->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelServerStatus, row, 1, 1, editSpan);
     QPushButton * exitButton = new QPushButton("Exit");
@@ -122,14 +122,14 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     typeModelFile2Desc.push_back("CaffeModel (*.caffemodel)");
     numModelTypes++;
     QLabel * labelCompiler = new QLabel("Inference Compiler");
-    labelCompiler->setStyleSheet("font-weight: bold; color: red");
+    labelCompiler->setStyleSheet("font-weight: bold; color: red; font-size: 21px;");
     controlLayout->addWidget(labelCompiler, row, 0, 1, 5);
     row++;
     QLabel * labelModel = new QLabel("CNN Model:");
     comboModelSelect = new QComboBox();
     buttonCompile = new QPushButton(tr("Upload && Compile"), this);
     comboModelSelect->addItem("Upload a pre-trained Caffe model (i.e., .prototxt and .caffemodel)");
-    labelModel->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModel->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelModel->setAlignment(Qt::AlignLeft);
     connect(comboModelSelect, SIGNAL(activated(int)), this, SLOT(modelSelect(int)));
     connect(buttonCompile, SIGNAL(released()), this, SLOT(runCompiler()));
@@ -145,7 +145,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editDimH->setValidator(new QIntValidator(1,16384));
     editDimW->setValidator(new QIntValidator(1,16384));
     editDimC->setEnabled(false);
-    labelInputDim->setStyleSheet("font-weight: bold; font-style: italic");
+    labelInputDim->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelInputDim->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelInputDim, row, 0, 1, 1);
     controlLayout->addWidget(editDimC, row, 1, 1, 1);
@@ -159,7 +159,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editOutDimC->setEnabled(false);
     editOutDimH->setEnabled(false);
     editOutDimW->setEnabled(false);
-    labelOutputDim->setStyleSheet("font-weight: bold; font-style: italic");
+    labelOutputDim->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelOutputDim->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelOutputDim, row, 0, 1, 1);
     controlLayout->addWidget(editOutDimC, row, 1, 1, 1);
@@ -170,7 +170,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editModelFile1 = new QLineEdit("");
     buttonModelFile1 = new QPushButton(tr("Browse..."), this);
     connect(buttonModelFile1, &QAbstractButton::clicked, this, &inference_control::browseModelFile1);
-    labelModelFile1->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModelFile1->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelModelFile1->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelModelFile1, row, 0, 1, 1);
     controlLayout->addWidget(editModelFile1, row, 1, 1, editSpan);
@@ -180,14 +180,14 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editModelFile2 = new QLineEdit("");
     buttonModelFile2 = new QPushButton(tr("Browse..."), this);
     connect(buttonModelFile2, &QAbstractButton::clicked, this, &inference_control::browseModelFile2);
-    labelModelFile2->setStyleSheet("font-weight: bold; font-style: italic");
+    labelModelFile2->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelModelFile2->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelModelFile2, row, 0, 1, 1);
     controlLayout->addWidget(editModelFile2, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonModelFile2, row, 1 + editSpan, 1, 1);
     row++;
     labelPreprocessMpy = new QLabel("Preprocess(mpy):");
-    labelPreprocessMpy->setStyleSheet("font-weight: bold; font-style: italic");
+    labelPreprocessMpy->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelPreprocessMpy->setAlignment(Qt::AlignLeft);
     editPreprocessMpyC0 = new QLineEdit("");
     editPreprocessMpyC1 = new QLineEdit("");
@@ -201,7 +201,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editPreprocessMpyC2, row, 3, 1, 1);
     row++;
     labelPreprocessAdd = new QLabel("Preprocess(add):");
-    labelPreprocessAdd->setStyleSheet("font-weight: bold; font-style: italic");
+    labelPreprocessAdd->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelPreprocessAdd->setAlignment(Qt::AlignLeft);
     editPreprocessAddC0 = new QLineEdit("");
     editPreprocessAddC1 = new QLineEdit("");
@@ -215,7 +215,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editPreprocessAddC2, row, 3, 1, 1);
     row++;
     labelCompilerOptions = new QLabel("Options:");
-    labelCompilerOptions->setStyleSheet("font-weight: bold; font-style: italic");
+    labelCompilerOptions->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelCompilerOptions->setAlignment(Qt::AlignLeft);
     comboInvertInputChannels = new QComboBox();
     comboInvertInputChannels->addItem("RGB");
@@ -248,7 +248,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     connect(comboPublishOptions, SIGNAL(activated(int)), this, SLOT(onChangePublishMode(int)));
     connect(editModelName, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelName(const QString &)));
     labelCompilerStatus = new QLabel("");
-    labelCompilerStatus->setStyleSheet("font-style: italic; color: gray;");
+    labelCompilerStatus->setStyleSheet("font-style: italic; color: gray;; font-size: 18px;");
     labelCompilerStatus->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelCompilerStatus, row, 1, 1, editSpan + 1);
     row++;
@@ -263,7 +263,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     /// \brief labelRuntime
     ///
     QLabel * labelRuntime = new QLabel("Inference Run-time");
-    labelRuntime->setStyleSheet("font-weight: bold; color: red");
+    labelRuntime->setStyleSheet("font-weight: bold; color: red; font-size: 21px;");
     controlLayout->addWidget(labelRuntime, row, 0, 1, 5);
     row++;
     QLabel * labelGPUs = new QLabel("GPUs:");
@@ -272,7 +272,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     buttonInference = new QPushButton("Run");
     editGPUs->setValidator(new QIntValidator(1,maxGPUs));
     editGPUs->setEnabled(false);
-    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic");
+    labelGPUs->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelGPUs->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelGPUs, row, 0, 1, 1);
     controlLayout->addWidget(editGPUs, row, 1, 1, 1);
@@ -284,7 +284,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editImageLabelsFile = new QLineEdit("");
     QPushButton * buttonDataLabels = new QPushButton(tr("Browse..."), this);
     connect(buttonDataLabels, &QAbstractButton::clicked, this, &inference_control::browseDataLabels);
-    labelImageLabelsFile->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageLabelsFile->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelImageLabelsFile->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelImageLabelsFile, row, 0, 1, 1);
     controlLayout->addWidget(editImageLabelsFile, row, 1, 1, editSpan);
@@ -294,7 +294,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editImageFolder = new QLineEdit("");
     QPushButton * buttonDataFolder = new QPushButton(tr("Browse..."), this);
     connect(buttonDataFolder, &QAbstractButton::clicked, this, &inference_control::browseDataFolder);
-    labelImageFolder->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelImageFolder->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelImageFolder, row, 0, 1, 1);
     controlLayout->addWidget(editImageFolder, row, 1, 1, editSpan);
@@ -304,7 +304,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     editImageListFile = new QLineEdit("");
     QPushButton * buttonDataFilename = new QPushButton(tr("Browse..."), this);
     connect(buttonDataFilename, &QAbstractButton::clicked, this, &inference_control::browseDataFilename);
-    labelImageList->setStyleSheet("font-weight: bold; font-style: italic");
+    labelImageList->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelImageList->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelImageList, row, 0, 1, 1);
     controlLayout->addWidget(editImageListFile, row, 1, 1, editSpan);
@@ -313,11 +313,11 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     QLabel * labelMaxDataSize = new QLabel("Image Count:");
     editMaxDataSize = new QLineEdit("");
     editMaxDataSize->setValidator(new QIntValidator());
-    labelMaxDataSize->setStyleSheet("font-weight: bold; font-style: italic");
+    labelMaxDataSize->setStyleSheet("font-weight: bold; font-style: italic; font-size: 18px;");
     labelMaxDataSize->setAlignment(Qt::AlignLeft);
     controlLayout->addWidget(labelMaxDataSize, row, 0, 1, 1);
     controlLayout->addWidget(editMaxDataSize, row, 1, 1, 1);
-    checkScaledImages = new QCheckBox("Scale Images");
+    checkScaledImages = new QCheckBox("Scale Images On Client");
     checkScaledImages->setChecked(true);
     controlLayout->addWidget(checkScaledImages, row, 2, 1, 1);
     checkRepeatImages = nullptr;
@@ -597,9 +597,11 @@ void inference_control::modelSelect(int model)
     editGPUs->setEnabled(compilationCompleted);
     // enable run button
     buttonInference->setEnabled(false);
+    buttonInference->setStyleSheet("");
     if(compilationCompleted && dimOutput[0] > 0 && dimOutput[1] > 0 && dimOutput[2] > 0 &&
        editImageLabelsFile->text().length() > 0 && editImageFolder->text().length() > 0)
     {
+        buttonInference->setStyleSheet("background-color: green; color: white;");
         buttonInference->setEnabled(true);
     }
 }
