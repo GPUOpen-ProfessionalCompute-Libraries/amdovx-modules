@@ -769,13 +769,24 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         // TODO: replace with an efficient implementation
         int inputCount = 0;
 #if (NUM_DECODER_THREADS > 1)
-        queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
-        inputCount = batch_q.size();
+        //queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
+        // dequeue batch
+        for (; inputCount<batchSize; inputCount++)
+        {
+            std::tuple<char*, int> image;
+            queueDeviceImageQ[gpu]->dequeue(image);
+            char * byteStream = std::get<0>(image);
+            int size = std::get<1>(image);
+            if(byteStream == nullptr || size == 0) {
+                endOfSequenceReached = true;
+                break;
+            }
+            batch_q.push_back(image);
+        }
         if (inputCount){
             if (inputCount < batchSize)
             {
                 sub_batch_size = (inputCount+num_dec_threads-1)/num_dec_threads;
-                endOfSequenceReached = true;
             }
             int start = 0; int end = sub_batch_size-1;
             for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
@@ -794,8 +805,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             }
             dec_threads.clear();
             batch_q.clear();
-        }else
-            endOfSequenceReached = true;
+        }
 #else
         for(; inputCount < batchSize; inputCount++) {
             // get next item from the input queue and check for end of input
@@ -844,7 +854,6 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         }
 
     }
-
     // release OpenCL command queue
     clReleaseCommandQueue(cmdq);
 
