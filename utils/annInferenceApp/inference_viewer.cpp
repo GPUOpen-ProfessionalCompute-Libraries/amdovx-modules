@@ -794,7 +794,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
             painter.drawConvexPolygon(points, sizeof(points)/sizeof(points[0]));
             setFont(font);
             painter.setPen(Qt::darkBlue);
-            painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "NOT IN DATABASE");
+            painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "CATEGORY NOT IN DATABASE");
             painter.setPen(Qt::darkBlue);
             painter.setBrush(Qt::NoBrush);
             painter.drawRect(x + 4, y + 4, ICON_SIZE * 2, ICON_SIZE * 2);
