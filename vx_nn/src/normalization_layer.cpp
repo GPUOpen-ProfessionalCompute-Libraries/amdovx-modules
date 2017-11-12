@@ -86,6 +86,9 @@ static vx_status VX_CALLBACK processNormalizationLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
     float alpha = 1.0f, beta = 0.0f;
     //Apply Normalization forward.
     ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, data->workspace));
@@ -234,6 +237,10 @@ VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor 
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_NORMALIZATION_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_type);
+            vxReleaseScalar(&s_normalization_size);
+            vxReleaseScalar(&s_alpha);
+            vxReleaseScalar(&s_beta);
         }
     }
     return node;

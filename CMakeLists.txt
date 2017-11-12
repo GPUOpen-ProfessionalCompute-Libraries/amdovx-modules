@@ -30,8 +30,9 @@ find_package(miopengemm PATHS /opt/rocm)
 find_package(miopen     PATHS /opt/rocm)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_INSTALL_PREFIX /opt/rocm)
 
 add_subdirectory(deps/amdovx-core)
 
@@ -45,6 +46,7 @@ endif(OpenCL_FOUND)
 
 if(OpenCL_FOUND AND miopengemm_FOUND AND miopen_FOUND)
     add_subdirectory (vx_nn)
+    add_subdirectory (utils/annInferenceServer)
 endif()
 
 if(OpenCV_FOUND)

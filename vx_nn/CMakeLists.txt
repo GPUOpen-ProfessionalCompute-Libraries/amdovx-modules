@@ -72,10 +72,14 @@ list(APPEND SOURCES
     src/tensor_multiply.cpp
     src/tensor_convert_depth_node.cpp
     src/argmax_layer.cpp
+    src/scale_layer.cpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 target_link_libraries(${PROJECT_NAME} openvx MIOpen)
+
+install (TARGETS ${PROJECT_NAME} DESTINATION lib)
+install (FILES include/vx_amd_nn.h DESTINATION include)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
