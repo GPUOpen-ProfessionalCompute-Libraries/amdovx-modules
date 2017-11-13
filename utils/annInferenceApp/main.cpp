@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[])
 {
-    int enable_repeat_images = 0;
+    int enable_repeat_images = 1;
     if(argv[1]) enable_repeat_images = atoi(argv[1]);
     QApplication a(argc, argv);
     inference_control control(enable_repeat_images);
