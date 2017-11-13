@@ -27,16 +27,16 @@
 
 // inference scheduler configuration
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
-#define DONOT_RUN_INFERENCE            0  // for debugging protocols
+#define DONOT_RUN_INFERENCE            0  // for debugging
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
 #define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
-#define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
-#define USE_ADVANCED_MESSAGE_Q         0
-#define NUM_DECODER_THREADS            0
-#define DONOT_RUN_INFERENCE            0  // for timing analysis
+#define USE_SSE_FORMAT_CONVERSION      1  // enable/disable SSE intrinsics for format conversion
+#define NUM_DECODER_THREADS            0  // number of threads for jpeg decode, scale, and format conversion job
+#define DONOT_RUN_INFERENCE            0  // for debugging
+#define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
 
 extern "C" {
@@ -51,12 +51,22 @@ extern "C" {
 template<typename T>
 class MessageQueue {
 public:
-    MessageQueue() : enqueueCount{ 0 }, dequeueCount{ 0 } {
+    MessageQueue() : enqueueCount{ 0 }, dequeueCount{ 0 }, maxQueueDepth{ 0 } {
     }
+    void setMaxQueueDepth(int maxDepth) {
+        maxQueueDepth = maxDepth;
+    }
+
     size_t size() {
         return enqueueCount - dequeueCount;
     }
     void enqueue(T const& value) {
+        if(maxQueueDepth > 0) {
+            // make sure that device queue are stay within the limit
+            while(size() >= maxQueueDepth) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(DEVICE_QUEUE_FULL_SLEEP_MSEC));
+            }
+        }
         mutex.lock();
         queue.push(value);
         enqueueCount++;
@@ -72,17 +82,17 @@ public:
         queue.pop();
         dequeueCount++;
     }
-    void endOfSequence(){
-    }
 
 private:
     int enqueueCount;
     int dequeueCount;
+    int maxQueueDepth;
     std::queue<T> queue;
     mutable std::mutex mutex;
     std::condition_variable signal;
 };
 
+#if USE_ADVANCED_MESSAGE_Q
 template<typename T>
 class MessageQueueAdvanced {
 public:
@@ -157,7 +167,7 @@ private:
     std::mutex q_mtx;
     std::condition_variable signal;
 };
-
+#endif
 
 class InferenceEngine {
 public:
@@ -169,7 +179,7 @@ protected:
     // scheduler thread workers
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
     // no separate threads needed
-#elif INFERENCE_SCHEDULER_MODE >= LIBRE_INFERENCE_SCHEDULER
+#elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     // libre scheduler needs:
     //   masterInputQ thread
     //   device threads for input copy, processing, and output copy
@@ -225,12 +235,12 @@ private:
     std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
     //   inputQ: input to the scheduler <tag,byteStream,size>
 #if  USE_ADVANCED_MESSAGE_Q
-    MessageQueueAdvanced<std::tuple<int,char *,int>> *inputQ;
+    MessageQueueAdvanced<std::tuple<int,char *,int>> inputQ;
     // scheduler device queues
     MessageQueueAdvanced<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
     MessageQueueAdvanced<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
 #else
-    MessageQueue<std::tuple<int,char *,int>> *inputQ;
+    MessageQueue<std::tuple<int,char *,int>> inputQ;
     // scheduler device queues
     MessageQueue<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
     MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
@@ -246,10 +256,6 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
- #if USE_CL_COPY_INSTEAD_OF_CL_MAP
-    float * inputCopyBuffer[MAX_NUM_GPU];
-    float * outputCopyBuffer[MAX_NUM_GPU];
- #endif
 #elif INFERENCE_SCHEDULER_MODE == ADVANCED_INFERENCE_SCHEDULER
     // master input queues
     //   inputQ: input to the scheduler <tag,byteStream,size>
@@ -274,10 +280,6 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
- #if USE_CL_COPY_INSTEAD_OF_CL_MAP
-    float * inputCopyBuffer[MAX_NUM_GPU];
-    float * outputCopyBuffer[MAX_NUM_GPU];
- #endif
 #endif
 };
 

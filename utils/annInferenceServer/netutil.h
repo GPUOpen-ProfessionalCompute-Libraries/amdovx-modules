@@ -14,8 +14,7 @@
 #include <unistd.h>
 #include <string>
 
-int sendPacket(int sock, const void * buf, size_t len, std::string& clientName);
-int recvPacket(int sock,       void * buf, size_t len, std::string& clientName);
+int sendBuffer(int sock, const void * buf, size_t len, std::string& clientName);
 int recvBuffer(int sock,       void * buf, size_t len, std::string& clientName);
 
 int sendCommand(int sock, const InfComCommand& cmd, std::string& clientName);

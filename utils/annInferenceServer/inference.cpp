@@ -7,13 +7,13 @@
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
 
+#if USE_SSE_FORMAT_CONVERSION
 #if _WIN32
 #include <intrin.h>
 #else
 #include <x86intrin.h>
 #endif
-
-#define     USE_SSE_FORMAT_CONVERSION     1
+#endif
 
 InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clientName_, InfComCommand * cmd)
     : sock{ sock_ }, args{ args_ }, clientName{ clientName_ },
@@ -30,11 +30,11 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       opencl_context{ nullptr }, opencl_cmdq{ nullptr },
       openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr },
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
-      inputQ(nullptr), queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
+      queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-    , inputCopyBuffer{ nullptr }, outputCopyBuffer{ nullptr }
+#if  USE_ADVANCED_MESSAGE_Q
+    , inputQ(MAX_INPUT_QUEUE_DEPTH)
 #endif
 #endif
 {
@@ -70,7 +70,7 @@ InferenceEngine::~InferenceEngine()
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
     // wait for all threads to complete and release all resources
     std::tuple<int,char*,int> endOfSequenceInput(-1,nullptr,0);
-    inputQ->enqueue(endOfSequenceInput);
+    inputQ.enqueue(endOfSequenceInput);
     if(threadMasterInputQ && threadMasterInputQ->joinable()) {
         threadMasterInputQ->join();
     }
@@ -82,7 +82,6 @@ InferenceEngine::~InferenceEngine()
         }
         if(queueDeviceImageQ[i]) {
             queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
-            queueDeviceImageQ[i]->endOfSequence();
         }
         if(threadDeviceInputCopy[i] && threadDeviceInputCopy[i]->joinable()) {
             threadDeviceInputCopy[i]->join();
@@ -139,18 +138,8 @@ InferenceEngine::~InferenceEngine()
         if(opencl_context[i]) {
             clReleaseContext(opencl_context[i]);
         }
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-        if(inputCopyBuffer[i]) {
-            delete[] inputCopyBuffer[i];
-        }
-        if(outputCopyBuffer[i]) {
-            delete[] outputCopyBuffer[i];
-        }
-#endif
     }
 #endif
-    // delete inputQ
-    if (inputQ) delete inputQ;
     // release all device resources
     if(deviceLockSuccess) {
         args->releaseGpuDevices(GPUs, device_id);
@@ -377,11 +366,6 @@ int InferenceEngine::run()
     //////
     /// allocate OpenVX and OpenCL resources
     /// 
-#if  USE_ADVANCED_MESSAGE_Q
-    inputQ = new MessageQueueAdvanced<std::tuple<int,char *,int>>(MAX_INPUT_QUEUE_DEPTH);
-#else
-    inputQ = new MessageQueue<std::tuple<int,char *,int>>();
-#endif
     for(int gpu = 0; gpu < GPUs; gpu++) {
         //////
         // create OpenCL context
@@ -409,6 +393,7 @@ int InferenceEngine::run()
         queueDeviceImageQ[gpu] = new MessageQueueAdvanced<std::tuple<char*,int>>(MAX_INPUT_QUEUE_DEPTH);
 #else
         queueDeviceTagQ[gpu] = new MessageQueue<int>();
+        queueDeviceTagQ[gpu]->setMaxQueueDepth(MAX_DEVICE_QUEUE_DEPTH);
         queueDeviceImageQ[gpu] = new MessageQueue<std::tuple<char*,int>>();
 #endif
         queueDeviceInputMemIdle[gpu] = new MessageQueue<cl_mem>();
@@ -431,10 +416,6 @@ int InferenceEngine::run()
             queueDeviceInputMemIdle[gpu]->enqueue(memInput);
             queueDeviceOutputMemIdle[gpu]->enqueue(memOutput);
         }
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-        inputCopyBuffer[gpu] = new float[inputSizeInBytes/4];
-        outputCopyBuffer[gpu] = new float[outputSizeInBytes/4];
-#endif
 
         //////
         // create OpenVX context
@@ -540,7 +521,7 @@ int InferenceEngine::run()
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
             imageCountRequested = 1;
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
-            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ->size();
+            imageCountRequested = MAX_INPUT_QUEUE_DEPTH - inputQ.size();
 #endif
             if(imageCountRequested > 0) {
                 didSomething = true;
@@ -559,7 +540,7 @@ int InferenceEngine::run()
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
                     endOfSequence = true;
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
-                    inputQ->enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
+                    inputQ.enqueue(std::tuple<int,char*,int>(-1,nullptr,0));
 #endif
                     endOfImageRequested = true;
                 }
@@ -567,7 +548,7 @@ int InferenceEngine::run()
                 for(; i < imageCountReceived; i++) {
                     // get header with tag and size info
                     int header[2] = { 0, 0 };
-                    ERRCHK(recvPacket(sock, &header, sizeof(header), clientName));
+                    ERRCHK(recvBuffer(sock, &header, sizeof(header), clientName));
                     int tag = header[0];
                     int size = header[1];
                     // do sanity check with unreasonable parameters
@@ -578,7 +559,7 @@ int InferenceEngine::run()
                     char * byteStream = new char [size];
                     ERRCHK(recvBuffer(sock, byteStream, size, clientName));
                     int eofMarker = 0;
-                    ERRCHK(recvPacket(sock, &eofMarker, sizeof(eofMarker), clientName));
+                    ERRCHK(recvBuffer(sock, &eofMarker, sizeof(eofMarker), clientName));
                     if(eofMarker != INFCOM_EOF_MARKER) {
                         return error_close(sock, "eofMarker 0x%08x (incorrect)", eofMarker);
                     }
@@ -637,7 +618,7 @@ int InferenceEngine::run()
 #endif
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
                     // submit the input (tag,byteStream,size) to scheduler
-                    inputQ->enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
+                    inputQ.enqueue(std::tuple<int,char*,int>(tag,byteStream,size));
 #endif
                 }
             }
@@ -673,7 +654,7 @@ void InferenceEngine::workMasterInputQ()
     for(;;) {
         // get next item from the input queue
         std::tuple<int,char*,int> input;
-        inputQ->dequeue(input);
+        inputQ.dequeue(input);
         int tag = std::get<0>(input);
         char * byteStream = std::get<1>(input);
         int size = std::get<2>(input);
@@ -682,14 +663,6 @@ void InferenceEngine::workMasterInputQ()
         if(tag < 0 || byteStream == nullptr || size == 0)
             break;
         totalInputCount++;
-#if !USE_ADVANCED_MESSAGE_Q
-#if MAX_DEVICE_QUEUE_DEPTH
-        // make sure that device queue are stay within the limit
-        while(queueDeviceTagQ[gpu]->size() >= MAX_DEVICE_QUEUE_DEPTH) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(DEVICE_QUEUE_FULL_SLEEP_MSEC));
-        }
-#endif
-#endif
 
         // add the image to selected deviceQ
         std::tuple<char*,int> image(byteStream,size);
@@ -715,8 +688,6 @@ void InferenceEngine::workMasterInputQ()
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
         queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
         queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
-        queueDeviceTagQ[i]->endOfSequence();
-        queueDeviceImageQ[i]->endOfSequence();
     }
     args->lock();
     info("workMasterInputQ: terminated for %s [scheduled %d images]", clientName.c_str(), totalInputCount);
@@ -756,14 +727,10 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             fatal("workDeviceInputCopy: unexpected nullptr in queueDeviceInputMemIdle[%d]", gpu);
         }
         cl_int err;
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-        float * mapped_ptr = inputCopyBuffer[gpu];
-#else
         float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, inputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceInputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
-#endif
 
         // get next batch of inputs and convert them into tensor and release input byteStream
         // TODO: replace with an efficient implementation
@@ -824,12 +791,6 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             delete[] byteStream;
         }
 #endif
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-        err = clEnqueueWriteBuffer(cmdq, mem, CL_TRUE, 0, inputSizeInBytes, mapped_ptr, 0, NULL, NULL);
-        if(err) {
-            fatal("workDeviceInputCopy: clEnqueueWriteBuffer(#%d) failed (%d)", gpu, err);
-        }
-#else
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -839,7 +800,6 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         if(err) {
             fatal("workDeviceInputCopy: clFinish(#%d) failed (%d)", gpu, err);
         }
-#endif
 
         if(inputCount > 0) {
             // add the input for processing
@@ -950,18 +910,10 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             break;
         }
         cl_int err;
-#if USE_CL_COPY_INSTEAD_OF_CL_MAP
-        float * mapped_ptr = outputCopyBuffer[gpu];
-        err = clEnqueueReadBuffer(cmdq, mem, CL_TRUE, 0, outputSizeInBytes, mapped_ptr, 0, NULL, NULL);
-        if(err) {
-            fatal("workDeviceOutputCopy: clEnqueueReadBuffer(#%d) failed (%d)", gpu, err);
-        }
-#else
         float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceOutputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
-#endif
 
         // get next batch of inputs
         int outputCount = 0;
@@ -988,7 +940,6 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             outputQ.enqueue(std::tuple<int,int>(tag,label));
         }
 
-#if !USE_CL_COPY_INSTEAD_OF_CL_MAP
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -998,7 +949,6 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
         if(err) {
             fatal("workDeviceOutputCopy: clFinish(#%d) failed (%d)", gpu, err);
         }
-#endif
 
         // add the output back to idle queue
         queueDeviceOutputMemIdle[gpu]->enqueue(mem);
