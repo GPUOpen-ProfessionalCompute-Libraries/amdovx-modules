@@ -3,6 +3,7 @@
 
 #include "arguments.h"
 #include "infcom.h"
+#include "profiler.h"
 #include <string>
 #include <tuple>
 #include <queue>
@@ -30,11 +31,11 @@
 #define DONOT_RUN_INFERENCE            0  // for debugging protocols
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
-#define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
+#define MAX_INPUT_QUEUE_DEPTH       2048  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 #define USE_CL_COPY_INSTEAD_OF_CL_MAP  0  // use OpenCL read/write instead of map calls
-#define USE_ADVANCED_MESSAGE_Q         0
+#define USE_ADVANCED_MESSAGE_Q         1
 #define NUM_DECODER_THREADS            0
 #define DONOT_RUN_INFERENCE            0  // for timing analysis
 #endif

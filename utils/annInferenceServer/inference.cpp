@@ -50,6 +50,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
+    PROFILER_INITIALIZE();
 }
 
 InferenceEngine::~InferenceEngine()
@@ -158,6 +159,7 @@ InferenceEngine::~InferenceEngine()
     if(moduleHandle) {
         dlclose(moduleHandle);
     }
+    PROFILER_SHUTDOWN();
 }
 
 vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
@@ -671,6 +673,7 @@ void InferenceEngine::workMasterInputQ()
     int totalInputCount = 0;
     int inputCountInBatch = 0, gpu = 0;
     for(;;) {
+        PROFILER_START(AnnInferenceServer, workMasterInputQ);
         // get next item from the input queue
         std::tuple<int,char*,int> input;
         inputQ->dequeue(input);
@@ -695,6 +698,7 @@ void InferenceEngine::workMasterInputQ()
         std::tuple<char*,int> image(byteStream,size);
         queueDeviceTagQ[gpu]->enqueue(tag);
         queueDeviceImageQ[gpu]->enqueue(image);
+        PROFILER_STOP(AnnInferenceServer, workMasterInputQ);
 
         // at the end of Batch pick another device
         inputCountInBatch++;
@@ -749,6 +753,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
 #endif
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
+        PROFILER_START(AnnInferenceServer, workDeviceInputCopyBatch);
         // get an empty OpenCL buffer and lock the buffer for writing
         cl_mem mem = nullptr;
         queueDeviceInputMemIdle[gpu]->dequeue(mem);
@@ -817,9 +822,11 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 endOfSequenceReached = true;
                 break;
             }
+            PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
             DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
+            PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             // release byteStream
             delete[] byteStream;
         }
@@ -852,7 +859,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             // add the input back to idle queue
             queueDeviceInputMemIdle[gpu]->enqueue(mem);
         }
-
+        PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyBatch)
     }
     // release OpenCL command queue
     clReleaseCommandQueue(cmdq);
@@ -874,6 +881,7 @@ void InferenceEngine::workDeviceProcess(int gpu)
 
     int processCounter = 0;
     for(;;) {
+        PROFILER_START(AnnInferenceServer, workDeviceProcess)
         // get a busy OpenCL buffer for input and check for end of sequence marker
         cl_mem input = nullptr;
         queueDeviceInputMemBusy[gpu]->dequeue(input);
@@ -911,6 +919,7 @@ void InferenceEngine::workDeviceProcess(int gpu)
         queueDeviceInputMemIdle[gpu]->enqueue(input);
         queueDeviceOutputMemBusy[gpu]->enqueue(output);
         processCounter++;
+        PROFILER_STOP(AnnInferenceServer, workDeviceProcess)
     }
 
     // add the endOfSequenceMarker to next stage
@@ -943,6 +952,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
+        PROFILER_START(AnnInferenceServer, workDeviceOutputCopy)
         // get an output OpenCL buffer and lock the buffer for reading
         cl_mem mem = nullptr;
         queueDeviceOutputMemBusy[gpu]->dequeue(mem);
@@ -1008,6 +1018,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             totalBatchCounter++;
             totalImageCounter += outputCount;
         }
+        PROFILER_STOP(AnnInferenceServer, workDeviceOutputCopy)
     }
 
     // release OpenCL command queue
