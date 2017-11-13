@@ -5,7 +5,7 @@
 // PROFILER_MODE:
 //   0 - no profiling
 //   1 - default profiling
-#define PROFILER_MODE 1
+#define PROFILER_MODE 0
 
 #if PROFILER_MODE
 #ifndef _WIN32
