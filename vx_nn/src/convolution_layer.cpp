@@ -154,7 +154,9 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
+    if(parameters[2]) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
+    }
 
     //Convolution Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->conv_desc));

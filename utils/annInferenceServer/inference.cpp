@@ -7,6 +7,14 @@
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
 
+#if USE_SSE_FORMAT_CONVERSION
+#if _WIN32
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+#endif
+
 InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clientName_, InfComCommand * cmd)
     : sock{ sock_ }, args{ args_ }, clientName{ clientName_ },
       GPUs{ cmd->data[1] },
@@ -25,6 +33,9 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
+#if  USE_ADVANCED_MESSAGE_Q
+    , inputQ(MAX_INPUT_QUEUE_DEPTH)
+#endif
 #endif
 {
     // extract model name, options, and module path
@@ -129,7 +140,6 @@ InferenceEngine::~InferenceEngine()
         }
     }
 #endif
-
     // release all device resources
     if(deviceLockSuccess) {
         args->releaseGpuDevices(GPUs, device_id);
@@ -138,6 +148,90 @@ InferenceEngine::~InferenceEngine()
         dlclose(moduleHandle);
     }
 }
+
+vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
+{
+    int length = width*height;
+    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
+    cv::Mat matScaled;
+    cv::resize(matOrig, matScaled, cv::Size(width, height));
+
+#if USE_SSE_FORMAT_CONVERSION
+    __m128i mask_B, mask_G, mask_R;
+    if (reverseInputChannelOrder)
+    {
+        mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+        mask_R = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+    }
+    else
+    {
+        mask_R = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+        mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+        mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+    }
+    int alignedLength = length& ~3;
+    float * B_buf = buf;
+    float * G_buf = B_buf + length;
+    float * R_buf = G_buf + length;
+    int i = 0;
+    unsigned char * img = matScaled.data;
+
+    __m128 fR, fG, fB;
+    for (; i < alignedLength; i += 4)
+    {
+        __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+        fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+        fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+        fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+        fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+        fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+        fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+        fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+        fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+        fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+        _mm_storeu_ps(B_buf, fB);
+        _mm_storeu_ps(G_buf, fG);
+        _mm_storeu_ps(R_buf, fR);
+        B_buf += 4; G_buf += 4; R_buf += 4;
+        img += 12;
+    }
+    for (; i < length; i++, img += 3) {
+        B_buf[i] = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+        G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+        R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+    }
+#else
+    for (int c = 0; c < 3; c++, ptr += length) {
+        float a = preprocessMpy[c], b = preprocessAdd[c];
+        unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
+        for (int i = 0; i < length; i++, img += 3) {
+            ptr[i] = *img * a + b;
+        }
+    }
+#endif
+    matOrig.release();
+    matScaled.release();
+    return VX_SUCCESS;
+}
+
+void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf)
+{
+    for (int i = start; i <= end; i++)
+    {
+        std::tuple<char*, int> image = batch_Q[i];
+        char * byteStream = std::get<0>(image);
+        int size = std::get<1>(image);
+        if (byteStream == nullptr || size == 0) {
+            break;
+        }
+        // decode, scale, and format convert into the OpenCL buffer
+        float * buf = tens_buf + dim[0] * dim[1] * dim[2] * i;
+        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf);
+        delete[] byteStream;
+    }
+}
+
 
 int InferenceEngine::run()
 {
@@ -271,7 +365,7 @@ int InferenceEngine::run()
     info("InferenceEngine: using LIBRE_INFERENCE_SCHEDULER");
     //////
     /// allocate OpenVX and OpenCL resources
-    ///
+    /// 
     for(int gpu = 0; gpu < GPUs; gpu++) {
         //////
         // create OpenCL context
@@ -294,8 +388,14 @@ int InferenceEngine::run()
         }
 
         // create scheduler device queues
+#if  USE_ADVANCED_MESSAGE_Q
+        queueDeviceTagQ[gpu] = new MessageQueueAdvanced<int>(MAX_DEVICE_QUEUE_DEPTH);
+        queueDeviceImageQ[gpu] = new MessageQueueAdvanced<std::tuple<char*,int>>(MAX_INPUT_QUEUE_DEPTH);
+#else
         queueDeviceTagQ[gpu] = new MessageQueue<int>();
+        queueDeviceTagQ[gpu]->setMaxQueueDepth(MAX_DEVICE_QUEUE_DEPTH);
         queueDeviceImageQ[gpu] = new MessageQueue<std::tuple<char*,int>>();
+#endif
         queueDeviceInputMemIdle[gpu] = new MessageQueue<cl_mem>();
         queueDeviceInputMemBusy[gpu] = new MessageQueue<cl_mem>();
         queueDeviceOutputMemIdle[gpu] = new MessageQueue<cl_mem>();
@@ -448,7 +548,7 @@ int InferenceEngine::run()
                 for(; i < imageCountReceived; i++) {
                     // get header with tag and size info
                     int header[2] = { 0, 0 };
-                    ERRCHK(recvPacket(sock, &header, sizeof(header), clientName));
+                    ERRCHK(recvBuffer(sock, &header, sizeof(header), clientName));
                     int tag = header[0];
                     int size = header[1];
                     // do sanity check with unreasonable parameters
@@ -459,7 +559,7 @@ int InferenceEngine::run()
                     char * byteStream = new char [size];
                     ERRCHK(recvBuffer(sock, byteStream, size, clientName));
                     int eofMarker = 0;
-                    ERRCHK(recvPacket(sock, &eofMarker, sizeof(eofMarker), clientName));
+                    ERRCHK(recvBuffer(sock, &eofMarker, sizeof(eofMarker), clientName));
                     if(eofMarker != INFCOM_EOF_MARKER) {
                         return error_close(sock, "eofMarker 0x%08x (incorrect)", eofMarker);
                     }
@@ -484,17 +584,7 @@ int InferenceEngine::run()
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
                     }
-                    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
-                    cv::Mat matScaled;
-                    cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
-                    for(int c = 0; c < 3; c++, ptr += (dimInput[0]*dimInput[1])) {
-                        float a = preprocessMpy[c], b = preprocessAdd[c];
-                        unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
-                        int n = dimInput[0] * dimInput[1];
-                        for(int i = 0; i < n; i++, img += 3) {
-                            ptr[i] = *img * a + b;
-                        }
-                    }
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr);
                     status = vxUnmapTensorPatch(openvx_input, map_id);
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
@@ -596,10 +686,9 @@ void InferenceEngine::workMasterInputQ()
     for(int i = 0; i < GPUs; i++) {
         int endOfSequenceTag = -1;
         std::tuple<char*,int> endOfSequenceImage(nullptr,0);
-        queueDeviceTagQ[gpu]->enqueue(endOfSequenceTag);
-        queueDeviceImageQ[gpu]->enqueue(endOfSequenceImage);
+        queueDeviceTagQ[i]->enqueue(endOfSequenceTag);
+        queueDeviceImageQ[i]->enqueue(endOfSequenceImage);
     }
-
     args->lock();
     info("workMasterInputQ: terminated for %s [scheduled %d images]", clientName.c_str(), totalInputCount);
     args->unlock();
@@ -623,7 +712,12 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
     if(err) {
         fatal("workDeviceInputCopy: clCreateCommandQueue(device_id[%d]) failed (%d)", gpu, err);
     }
-
+#if (NUM_DECODER_THREADS > 1)
+    int num_dec_threads = NUM_DECODER_THREADS;
+    std::vector<std::tuple<char*, int>> batch_q;
+    int sub_batch_size = batchSize/num_dec_threads;
+    std::vector<std::thread> dec_threads(num_dec_threads);
+#endif
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
         // get an empty OpenCL buffer and lock the buffer for writing
@@ -641,6 +735,45 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         // get next batch of inputs and convert them into tensor and release input byteStream
         // TODO: replace with an efficient implementation
         int inputCount = 0;
+#if (NUM_DECODER_THREADS > 1)
+        //queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
+        // dequeue batch
+        for (; inputCount<batchSize; inputCount++)
+        {
+            std::tuple<char*, int> image;
+            queueDeviceImageQ[gpu]->dequeue(image);
+            char * byteStream = std::get<0>(image);
+            int size = std::get<1>(image);
+            if(byteStream == nullptr || size == 0) {
+                endOfSequenceReached = true;
+                break;
+            }
+            batch_q.push_back(image);
+        }
+        if (inputCount){
+            if (inputCount < batchSize)
+            {
+                sub_batch_size = (inputCount+num_dec_threads-1)/num_dec_threads;
+            }
+            int start = 0; int end = sub_batch_size-1;
+            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
+            {
+                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr);
+                start += sub_batch_size;
+                end += sub_batch_size;
+            }
+            start = std::min(start, (inputCount - 1));
+            end = std::min(end, (inputCount-1));
+            // do some work in this thread
+            DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, mapped_ptr);
+            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
+            {
+                dec_threads[t].join();
+            }
+            dec_threads.clear();
+            batch_q.clear();
+        }
+#else
         for(; inputCount < batchSize; inputCount++) {
             // get next item from the input queue and check for end of input
             std::tuple<char*,int> image;
@@ -651,25 +784,13 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 endOfSequenceReached = true;
                 break;
             }
-
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, byteStream), CV_LOAD_IMAGE_UNCHANGED);
-            cv::Mat matScaled;
-            cv::resize(matOrig, matScaled, cv::Size(dimInput[0], dimInput[1]));
-            for(int c = 0; c < 3; c++, buf += (dimInput[0]*dimInput[1])) {
-                float a = preprocessMpy[c], b = preprocessAdd[c];
-                unsigned char * img = matScaled.data + (reverseInputChannelOrder ? c : (2 - c));
-                int n = dimInput[0] * dimInput[1];
-                for(int i = 0; i < n; i++, img += 3) {
-                    buf[i] = *img * a + b;
-                }
-            }
-
+            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
             // release byteStream
             delete[] byteStream;
         }
-
+#endif
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -693,7 +814,6 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         }
 
     }
-
     // release OpenCL command queue
     clReleaseCommandQueue(cmdq);
 
@@ -738,11 +858,15 @@ void InferenceEngine::workDeviceProcess(int gpu)
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxSwapTensorHandle(output#%d) failed(%d)", gpu, status);
         }
+#if !DONOT_RUN_INFERENCE
         status = vxProcessGraph(openvx_graph[gpu]);
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
-
+#else
+        info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
+        std::this_thread::sleep_for(std::chrono::milliseconds(4));  // simulate some work
+#endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);
         queueDeviceOutputMemBusy[gpu]->enqueue(output);

@@ -6,7 +6,7 @@
 #define INFCOM_DEBUG_DUMP      0 // for debugging network protocol
 #define INFCOM_ENABLE_NODELAY  0 // for debugging network protocol
 
-int sendPacket(int sock, const void * buf, size_t len, std::string& clientName)
+int sendBuffer(int sock, const void * buf, size_t len, std::string& clientName)
 {
 #if INFCOM_ENABLE_NODELAY
     int one = 1;
@@ -20,21 +20,6 @@ int sendPacket(int sock, const void * buf, size_t len, std::string& clientName)
 #if INFCOM_ENABLE_NODELAY
     setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &one, sizeof(one));
 #endif
-    return 0;
-}
-
-int recvPacket(int sock, void * buf, size_t len, std::string& clientName)
-{
-    size_t n = recv(sock, buf, len, 0);
-    if(n == 0) {
-        info("recv(len:%ld) from %s (got %ld bytes) -- disconnecting ...", len, clientName.c_str(), n);
-        close(sock);
-        return -1;
-    }
-    else if(n != len) {
-        close(sock);
-        return error("recv(len:%ld) failed for %s (received %ld bytes)", len, clientName.c_str(), n);
-    }
     return 0;
 }
 
@@ -62,12 +47,12 @@ int sendCommand(int sock, const InfComCommand& cmd, std::string& clientName)
 #if INFCOM_DEBUG_DUMP
     dumpCommand("sendCommand", cmd);
 #endif
-    return sendPacket(sock, &cmd, sizeof(cmd), clientName);
+    return sendBuffer(sock, &cmd, sizeof(cmd), clientName);
 }
 
 int recvCommand(int sock, InfComCommand& cmd, std::string& clientName, int expectedCommand)
 {
-    if(recvPacket(sock, &cmd, sizeof(cmd), clientName) < 0)
+    if(recvBuffer(sock, &cmd, sizeof(cmd), clientName) < 0)
         return -1;
 
     if(cmd.magic != INFCOM_MAGIC) {

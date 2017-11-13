@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QFileDialog>
 #include <QDesktopServices>
+#include <QBuffer>
 
 #define WINDOW_TITLE             "Inference Viewer"
 #define ICON_SIZE                64
@@ -65,7 +66,7 @@ inference_viewer::inference_viewer(
         QString serverHost, int serverPort, QString modelName,
         QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-        bool repeat_images,
+        bool repeat_images, bool sendScaledImages,
         QWidget *parent) :
     QWidget(parent),
     ui(new Ui::inference_viewer),
@@ -86,6 +87,7 @@ inference_viewer::inference_viewer(
     state->serverHost = serverHost;
     state->serverPort = serverPort;
     state->modelName = modelName;
+    state->sendScaledImages = sendScaledImages;
     progress.completed = false;
     progress.errorCode = 0;
     progress.repeat_images = repeat_images;
@@ -461,6 +463,11 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 progress.completed_decode = true;
                 break;
             }
+            if(state->sendScaledImages) {
+                QBuffer buffer(&state->imageBuffer[state->imagePixmapCount]);
+                auto scaled = pixmap.scaled(state->inputDim[0], state->inputDim[1], Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                scaled.save(&buffer, "PNG");
+            }
             state->imagePixmap.push_back(pixmap.scaled(ICON_SIZE, ICON_SIZE, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
             state->imagePixmapCount++;
             progress.images_decoded = state->imagePixmapCount;
@@ -790,6 +797,14 @@ void inference_viewer::paintEvent(QPaintEvent *)
             setFont(font);
             painter.setPen(Qt::gray);
             text.sprintf("ground truth: [label=%d] ", truthLabel);
+            text += truthSummary;
+            painter.drawText(QRect(x + 4, y + 4 + ICON_SIZE * 2 + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
+        }
+        else {
+            font.setItalic(true);
+            setFont(font);
+            painter.setPen(Qt::gray);
+            text.sprintf("ground truth: not available");
             text += truthSummary;
             painter.drawText(QRect(x + 4, y + 4 + ICON_SIZE * 2 + 4, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         }
