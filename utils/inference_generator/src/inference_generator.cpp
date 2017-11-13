@@ -271,6 +271,8 @@ std::string convertV1LayerTypeToString(caffe::V1LayerParameter_LayerType V1type)
         return("ReLU");
     else if(V1type == caffe::V1LayerParameter_LayerType_SOFTMAX)
         return("Softmax");
+    else
+        return("UnknownLayer");
 }
 
 void parseProtoTxt(caffe::NetParameter * param,
