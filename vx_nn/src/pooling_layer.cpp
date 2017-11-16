@@ -108,27 +108,6 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
         data->mode = miopenPoolingAverage;
     }
 
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
-
-    //workspace memory.
-    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingGetWorkSpaceSize(data->output_desc, &data->pooling_workspace_size));
-    if (data->pooling_workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->pooling_workspace_size = (data->pooling_workspace_size + 3) & ~3;
-        data->pooling_workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->pooling_workspace_size, NULL, NULL);
-        if (!data->pooling_workspace) {
-            return VX_FAILURE;
-        }
-        cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size,
-                                         0,NULL, NULL);
-        if(err) return VX_FAILURE;
-    }
-
     //Set Descriptors.
     vx_size kernel_w;
     vx_size kernel_h;
@@ -148,11 +127,29 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w + ((output_dims[0] - 1) / 2)) / (output_dims[0] - 1)) : 1;
     stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
 
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet2dPoolingDescriptor(data->pool_desc, data->mode, kernel_h, kernel_w, pad_h, pad_w, stride_h , stride_w));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->output_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
     ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
+
+    //workspace memory.
+    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingGetWorkSpaceSize(data->output_desc, &data->pooling_workspace_size));
+    if (data->pooling_workspace_size > 0) {
+        vx_context   vxContext = vxGetContext((vx_reference)node);
+        cl_context context;
+        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
+        data->pooling_workspace_size = (data->pooling_workspace_size + 3) & ~3;
+        data->pooling_workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->pooling_workspace_size, NULL, NULL);
+        if (!data->pooling_workspace) {
+            return VX_FAILURE;
+        }
+        cl_float pattern = 0;
+        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size,
+                                         0,NULL, NULL);
+        if(err) return VX_FAILURE;
+    }
     
     //Declare Memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
