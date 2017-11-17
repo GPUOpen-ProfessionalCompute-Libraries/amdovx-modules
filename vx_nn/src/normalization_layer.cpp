@@ -91,7 +91,7 @@ static vx_status VX_CALLBACK processNormalizationLayer(vx_node node, const vx_re
 
     float alpha = 1.0f, beta = 0.0f;
     //Apply Normalization forward.
-    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, data->workspace));
+    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, nullptr));
     return VX_SUCCESS;
 }
 
@@ -140,23 +140,6 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
-    //Workspace size.
-    ERROR_CHECK_MIOPEN_STATUS(miopenLRNGetWorkSpaceSize(data->output_desc, &data->workspace_size));
-    if (data->workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace_size = (data->workspace_size + 3) & ~3;
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
-        if (!data->workspace) {
-            return VX_FAILURE;
-        }
-        cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->workspace,&pattern,sizeof(cl_float),0,data->workspace_size,
-                                         0,NULL, NULL);
-        if(err) return VX_FAILURE;
-    }
-
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "lrn input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "LRN Mode : " << data->mode << std::endl;
@@ -173,7 +156,6 @@ static vx_status VX_CALLBACK uninitializeNormalizationLayer(vx_node node, const 
 {
     NormalizationLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyLRNDescriptor(data->lrnDesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
