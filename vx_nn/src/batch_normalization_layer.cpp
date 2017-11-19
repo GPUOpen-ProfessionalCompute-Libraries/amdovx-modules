@@ -160,22 +160,6 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
 	data->eps = 0.00001;
 	ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &data->eps, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
-	//Workspace size.
-	ERROR_CHECK_MIOPEN_STATUS(miopenLRNGetWorkSpaceSize(data->output_desc, &data->workspace_size));
-	if (data->workspace_size > 0) {
-		vx_context   vxContext = vxGetContext((vx_reference)node);
-		cl_context context;
-		ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-		data->workspace_size = (data->workspace_size + 3) & ~3;
-		data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
-		if (!data->workspace) {
-			return VX_FAILURE;
-		}
-		cl_float pattern = 0;
-		cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
-		if (err) return VX_FAILURE;
-	}
-
 #if ENABLE_DEBUG_PRINT_DIMS
 	std::cout << "batch_normalization input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
 	std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
