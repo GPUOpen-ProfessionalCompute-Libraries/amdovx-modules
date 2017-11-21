@@ -3,6 +3,7 @@
 
 #include "arguments.h"
 #include "infcom.h"
+#include "profiler.h"
 #include <string>
 #include <tuple>
 #include <queue>
