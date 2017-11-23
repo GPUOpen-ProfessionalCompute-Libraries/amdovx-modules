@@ -177,6 +177,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorSubtractNode(vx_graph graph, vx_tensor 
                 (vx_reference)output
             };
             node = createNode(graph, VX_KERNEL_TENSOR_SUBTRACT, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_policy);
         }
     }
     return node;

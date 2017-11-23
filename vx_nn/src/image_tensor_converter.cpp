@@ -133,18 +133,21 @@ static vx_status VX_CALLBACK opencl_codegen(
 
         char item[8192];
         sprintf(item,
-            "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-            "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
-            "{\n"
-            "    uint x = get_global_id(0) * 4;\n"
-            "    uint y = get_global_id(1);\n"
-            "    if(x < %d && y < %d) {\n"
-            "        uint u4 = *(__global uint *)&i0_buf[i0_offset + y * i0_stride + x];\n"
-            "        *(__global float4 *)&o0_buf[o0_offset + y * o0_stride.s1 + x * o0_stride.s0] =\n"
-            "            (float4)(amd_unpack0(u4), amd_unpack1(u4), amd_unpack2(u4), amd_unpack3(u4));\n"
-            "    }\n"
-            "}\n"
+                "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+                "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+                "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
+                "{\n"
+                "    uint x = get_global_id(0) * 4;\n"
+                "    uint y = get_global_id(1);\n"
+                "    if(x < %d && y < %d) {\n"
+                "        uint u4 = *(__global uint *)&i0_buf[i0_offset + y * i0_stride + x];\n"
+                "        float p0 = a * amd_unpack0(u4) + b;\n"
+                "        float p1 = a * amd_unpack1(u4) + b;\n"
+                "        float p2 = a * amd_unpack2(u4) + b;\n"
+                "        float p3 = a * amd_unpack3(u4) + b;\n"
+                "        *(__global float4 *)&o0_buf[o0_offset + y * o0_stride.s1 + x * o0_stride.s0] = (float4)(p0 , p1, p2, p3);\n"
+                "    }\n"
+                "}\n"
             , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
         opencl_kernel_code = item;
     }
