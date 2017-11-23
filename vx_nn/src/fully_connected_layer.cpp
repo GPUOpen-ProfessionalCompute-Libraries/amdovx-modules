@@ -95,6 +95,9 @@ static vx_status VX_CALLBACK processFullyConnectedLayer(vx_node node, const vx_r
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopen_handle = data->handle->miopen_handle;
 
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
     //ConvolutionForward.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc, data->weight_mem, data->convdesc, data->algo, &data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
@@ -120,7 +123,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+    if(parameters[2]) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+    }
 
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
@@ -129,7 +134,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat,1, bias_dims[0], 1, 1));
+    if(parameters[2]) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat,1, bias_dims[0], 1, 1));
+    }
 
     //fully connected to convolution conversion.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->convdesc));
@@ -139,7 +146,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->weight_mem, sizeof(data->weight_mem)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+    if(parameters[2]) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+    }
 
     //Workspace Size.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->convdesc, data->output_desc, &data->workspace_size));
@@ -238,6 +247,8 @@ VX_API_ENTRY vx_node VX_API_CALL vxFullyConnectedLayer(vx_graph graph, vx_tensor
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_FULLYCONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&overflow);
+            vxReleaseScalar(&rounding);
         }
     }
     return node;

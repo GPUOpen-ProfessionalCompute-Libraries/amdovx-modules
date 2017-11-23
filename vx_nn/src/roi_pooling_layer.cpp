@@ -108,6 +108,7 @@ VX_API_ENTRY vx_node vxROIPoolingLayer(vx_graph graph, vx_tensor input_data, vx_
             };
             node = createNode(graph, VX_KERNEL_ROIPOOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
         }
+        vxReleaseScalar(&roi_params);
     }
     return node;
 }

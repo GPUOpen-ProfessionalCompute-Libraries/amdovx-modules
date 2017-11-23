@@ -22,12 +22,102 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
+void slice_codegen_batchsz1(std::string& opencl_code, vx_size work_items, vx_size input_dims[4], int num_outputs, vx_size op_size_per_batch[8])
+{
+    vx_size op_buffer_offset[8];
+    for(int i = 0; i < num_outputs; i++) {
+        op_buffer_offset[i] = 0;
+        for(int j = 0; j < i; j++) {
+            op_buffer_offset[i] += op_size_per_batch[j];
+        }
+    }
+
+    char item[8192];
+    sprintf(item,
+        "{\n"
+        "  size_t id = get_global_id(0);\n"
+        "  if(id < %ld)\n"  // work_items
+        "  {\n"
+        "    in += in_offset >> 2;\n\n"
+        , work_items);
+    opencl_code += item;
+
+    sprintf(item,
+        "    if(id < %ld)\n"   // op_size_per_batch[0]
+        "    {\n"
+        "      out0 = out0 + (out0_offset >> 2);\n"
+        "      out0[id] = in[id];\n"
+        "    }\n"
+        , op_size_per_batch[0]);
+    opencl_code += item;
+
+    for(int i = 1; i < num_outputs; i++) {
+        sprintf(item,
+            "    else if((id >= %ld) && (id < %ld))\n"  // op_buffer_offset[i], op_buffer_offset[i] + op_size_per_batch[i]
+            "    {\n"
+            "      out%d = out%d + (out%d_offset >> 2);\n"    // i, i, i
+            "      out%d[id - %ld] = in[id];\n"    // i, ip_buffer_offset[i]
+            "    }\n"
+            , op_buffer_offset[i], op_buffer_offset[i] + op_size_per_batch[i], i, i, i, i, op_buffer_offset[i]);
+        opencl_code += item;
+    }
+    opencl_code +=
+            "  }\n"
+            "}\n";
+}
+
+void slice_codegen_batchszN(std::string& opencl_code, vx_size work_items, vx_size input_dims[4], int num_outputs, vx_size op_size_per_batch[8])
+{
+    vx_size op_buffer_offset[8];
+    for(int i = 0; i < num_outputs; i++) {
+        op_buffer_offset[i] = 0;
+        for(int j = 0; j < i; j++) {
+            op_buffer_offset[i] += op_size_per_batch[j];
+        }
+    }
+
+    char item[8192];
+    sprintf(item,
+        "{\n"
+        "  size_t id = get_global_id(0);\n"
+        "  if(id < %ld)\n"  // work_items
+        "  {\n"
+        "    size_t batch_id = id / %ld;     // in_c*in_h*in_w\n"  // input_dims[2] * input_dims[1] * input_dims[0]
+        "    size_t id_within_batch = id - batch_id * %ld;\n\n"    // input_dims[2] * input_dims[1] * input_dims[0]
+        "    in += in_offset >> 2;\n\n"
+        , work_items, input_dims[2] * input_dims[1] * input_dims[0], input_dims[2] * input_dims[1] * input_dims[0]);
+    opencl_code += item;
+
+    sprintf(item,
+        "    if(id_within_batch < %ld)\n"   // op_size_per_batch[0]
+        "    {\n"
+        "      out0 = out0 + (out0_offset >> 2) + (batch_id * %ld);\n"   // op_size_per_batch[0]
+        "      out0[id_within_batch] = in[id];\n"
+        "    }\n"
+        , op_size_per_batch[0], op_size_per_batch[0]);
+    opencl_code += item;
+
+    for(int i = 1; i < num_outputs; i++) {
+        sprintf(item,
+            "    else if((id_within_batch >= %ld) && (id_within_batch < %ld))\n"  // op_buffer_offset[i], op_buffer_offset[i] + op_size_per_batch[i]
+            "    {\n"
+            "      out%d = out%d + (out%d_offset >> 2) + (batch_id * %ld);\n"    // i, i, i, op_size_per_batch[i]
+            "      out%d[id_within_batch - %ld] = in[id];\n"    // i, op_buffer_offset[i]
+            "    }\n"
+            , op_buffer_offset[i], op_buffer_offset[i] + op_size_per_batch[i], i, i, i, op_size_per_batch[i], i, op_buffer_offset[i]);
+        opencl_code += item;
+    }
+    opencl_code +=
+            "  }\n"
+            "}\n";
+}
+
 static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     //check tensor dims.
     vx_enum type;
     vx_size num_dims;
-    vx_size input_dims[4], output1_dims[4], output2_dims[4];
+    vx_size input_dims[4], outputn_dims[4], num_channels = 0;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
@@ -38,27 +128,45 @@ static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output1_dims, sizeof(output1_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
+    if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    num_channels = outputn_dims[2];
+    //output tensor configuration
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, output2_dims, sizeof(output2_dims)));
-
-    if ((output2_dims[3] != input_dims[3]) && (input_dims[3] != output1_dims[3])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output2_dims[1] != input_dims[1]) && (input_dims[1] != output1_dims[1])) return VX_ERROR_INVALID_DIMENSION;
-    if ((output2_dims[0] != input_dims[0]) && (input_dims[0] != output1_dims[0])) return VX_ERROR_INVALID_DIMENSION;
-
-    //output tensor configuration.
-    type = VX_TYPE_FLOAT32;
-    num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output1_dims, sizeof(output1_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
+    if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    num_channels += outputn_dims[2];
+    //output tensor configuration
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_DIMS, output2_dims, sizeof(output2_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
+
+    int i = 3;
+    while(parameters[i] && (i < 9)) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+        if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
+        if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
+        if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+        num_channels += outputn_dims[2];
+
+        //output tensor configuration
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[i], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[i], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[i], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
+
+        i++;
+    }
+
+    if(num_channels != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
 
     return VX_SUCCESS;
 }
@@ -90,42 +198,60 @@ static vx_status VX_CALLBACK opencl_codegen(
     )
 {
     //get tensor dimensions
-    vx_size input_dims[4], output1_dims[4], output2_dims[4];
-    vx_size num_of_dims;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims)));
+    vx_size input_dims[4];
+    vx_size op_size_per_batch[8], batch_size = 0, ip_batch_stride = 0;
+
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output1_dims, sizeof(output1_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, output2_dims, sizeof(output2_dims)));
+    batch_size = input_dims[3];
+    ip_batch_stride = input_dims[2] * input_dims[1] * input_dims[0];
+#if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "slice input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << std::endl;
+#endif
+
+    int i = 1;
+    while(parameters[i] && (i < 9)) {
+        vx_size output_dims[4];
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+        op_size_per_batch[i-1] = output_dims[2] * output_dims[1] * output_dims[0];
+#if ENABLE_DEBUG_PRINT_DIMS
+        std::cout << "slice output " << i << " " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
+#endif
+
+        i++;
+    }
+    int num_outputs = i - 1;
 
     strcpy(opencl_kernel_function_name, "slice_layer");
-
-    vx_uint32 input_dim_size = input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3];
-    vx_uint32 output1_dim_size = output1_dims[0] * output1_dims[1] * output1_dims[2] * output1_dims[3];
-    vx_uint32 work_items[1] = {  output1_dim_size };
-
+    vx_size work_items = input_dims[3] * input_dims[2] * input_dims[1] * input_dims[0];
     opencl_work_dim = 1;
-    opencl_global_work[0] = input_dim_size;
+    opencl_local_work[0] = 128;
+    opencl_global_work[0] = (work_items + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
 
     // Setting variables required by the interface
     opencl_local_buffer_usage_mask = 0;
     opencl_local_buffer_size_in_bytes = 0;
 
-    if (num_of_dims == 4) {
-        char item[8192];
-        sprintf(item,
-                "__kernel void slice_layer(__global float * in, uint in_offset, __global float * out1, uint out1_offset, __global float * out2, uint out2_offset) \n"
-                "{ \n"
-                "     size_t id = get_global_id(0);"
-                "     size_t output1_size= %d;"
-                "     if(id < output1_size) \n"
-                "          out1[id] = in[id]; \n"
-                "     else \n"
-                "          out2[id-output1_size] = in[id];"
-                " }\n"
-                "", work_items[0]
-                );
+    char item[8192];
+    sprintf(item,
+        "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+        "void %s(__global float * in, uint in_offset, uint4 in_stride" // opencl_kernel_function_name
+        , (int)opencl_local_work[0], opencl_kernel_function_name);
+    opencl_kernel_code = item;
 
-        opencl_kernel_code = item;
+    for(int i = 0; i < num_outputs; i++) {
+        sprintf(item,
+            ",\n"
+            "                  __global float * out%d, uint out%d_offset, uint4 out%d_stride"  // i, i, i
+            , i, i, i);
+        opencl_kernel_code += item;
+    }
+    opencl_kernel_code += ")\n";
+
+    if(input_dims[3] == 1) {
+        slice_codegen_batchsz1(opencl_kernel_code, work_items, input_dims, num_outputs, op_size_per_batch);
+    }
+    else {
+        slice_codegen_batchszN(opencl_kernel_code, work_items, input_dims, num_outputs, op_size_per_batch);
     }
 
     return VX_SUCCESS;
@@ -140,7 +266,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishSliceLayer(vx_context context)
 {
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.slice_layer", VX_KERNEL_SLICE_LAYER_AMD, host_kernel, 3, validateSliceLayer, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.slice_layer", VX_KERNEL_SLICE_LAYER_AMD, host_kernel, 9, validateSliceLayer, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -152,6 +278,12 @@ vx_status publishSliceLayer(vx_context context)
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 8, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
 
     //finalize and release kernel object.
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -160,7 +292,7 @@ vx_status publishSliceLayer(vx_context context)
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, vx_tensor output1, vx_tensor output2)
+VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, vx_tensor output1, vx_tensor output2, vx_tensor output3, vx_tensor output4, vx_tensor output5, vx_tensor output6, vx_tensor output7, vx_tensor output8)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -168,7 +300,13 @@ VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, v
         vx_reference params[] = {
             (vx_reference)input,
             (vx_reference)output1,
-            (vx_reference)output2
+            (vx_reference)output2,
+            (vx_reference)output3,
+            (vx_reference)output4,
+            (vx_reference)output5,
+            (vx_reference)output6,
+            (vx_reference)output7,
+            (vx_reference)output8
         };
         node = createNode(graph, VX_KERNEL_SLICE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
