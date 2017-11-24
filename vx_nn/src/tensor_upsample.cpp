@@ -98,9 +98,9 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_uint32 input_dim_size = input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3];
 
     opencl_work_dim = 3;
-    opencl_global_work[0] = output_dims[0];
-    opencl_global_work[1] = output_dims[1];
-    opencl_global_work[2] = output_dims[2] * output_dims[3];
+    opencl_global_work[0] = input_dims[0];
+    opencl_global_work[1] = input_dims[1];
+    opencl_global_work[2] = input_dims[2] * input_dims[3];
 
     // Setting variables required by the interface
     opencl_local_buffer_usage_mask = 0;
