@@ -121,6 +121,7 @@ vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);
 vx_status publishTensorConvertDepth(vx_context context);
 vx_status publishScaleLayer(vx_context context);
+vx_status publishTensorUpsample(vx_context context);
 
 
 //////////////////////////////////////////////////////////////////////
