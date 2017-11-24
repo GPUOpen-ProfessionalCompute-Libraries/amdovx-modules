@@ -43,8 +43,8 @@ static vx_status VX_CALLBACK validateTensorUpsamling(vx_node node, const vx_refe
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    //if (output_dims[1] != 2*input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    //if (output_dims[0] != 2*input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[1] != 2*input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[0] != 2*input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
