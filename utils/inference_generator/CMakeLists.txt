@@ -24,17 +24,18 @@ project(inference_generator)
 set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
-file(DOWNLOAD "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/caffe.proto")
-PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/caffe.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS proto/caffe.proto)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND SOURCES
-	src/inference_generator.cpp
+        src/inference_generator.cpp
         ${PROTO_SRCS} ${PROTO_HDRS}
     )
 
 add_executable(inference_generator ${SOURCES})
 target_link_libraries(inference_generator ${PROTOBUF_LIBRARIES})
+
+install (TARGETS inference_generator DESTINATION bin)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
