@@ -138,10 +138,12 @@ VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, v
  * \param [in] graph The handle to the graph.
  * \param [in] inputs The input tensor data. 3 lower dimensions represent a single input, 4th dimension for batch of inputs is optional. Dimension layout is [width, height, #IFM, #batches].
  * \param [out] outputs The output tensor data. Output will have the same number of dimensions as input. Output tensor data type must be same as the inputs.
+ * The width and height dimensions of output must be integer multiple of input.
+ * The batch and channel dimensions of output and input must be same.
  * \return <tt> vx_node</tt>.
  * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
-VX_API_ENTRY vx_node VX_API_CALL vxTensorUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output);
+VX_API_ENTRY vx_node VX_API_CALL vxTensorNearestUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output);
 
 #endif
