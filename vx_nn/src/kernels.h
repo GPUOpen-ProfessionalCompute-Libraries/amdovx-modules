@@ -80,6 +80,7 @@ enum user_kernel_e
     VX_KERNEL_CONCAT_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
     VX_KERNEL_SLICE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
     VX_KERNEL_SCALE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x008,
+    VX_KERNEL_NEAREST_UPSAMPLE_LAYER_AMD     = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x009,
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -120,6 +121,7 @@ vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);
 vx_status publishTensorConvertDepth(vx_context context);
 vx_status publishScaleLayer(vx_context context);
+vx_status publishTensorUpsample(vx_context context);
 
 
 //////////////////////////////////////////////////////////////////////
