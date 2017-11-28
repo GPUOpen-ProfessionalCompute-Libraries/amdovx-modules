@@ -130,4 +130,20 @@ VX_API_ENTRY vx_node VX_API_CALL vxConcatLayer(vx_graph graph, vx_tensor output,
  */
 VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, vx_tensor output1, vx_tensor output2, vx_tensor output3, vx_tensor output4, vx_tensor output5, vx_tensor output6, vx_tensor output7, vx_tensor output8);
 
+/*! \brief [Graph] Creates a Convolutional Network Upsampling Layer Node.
+ * \details Upsampling is done on the width and height dimensions of the <tt>\ref vx_tensor</tt>. Therefore, we use here the term x for the width dimension and y for the height dimension.\n
+ * The Upsampling accept input images as tensors of several types. They always output resized images as float32 tensors.
+ * This function supports 4D and 3D tensors as input and output. 4D tensors are for batches of images, 3D tensors for individual images.
+ * Upsampling use resize method NEAREST_NEIGHBOR. This should be extand to support other resizing methods like: Bilinear interpolation, Bicubic interpolation and Area interpolation.
+ * \param [in] graph The handle to the graph.
+ * \param [in] inputs The input tensor data. 3 lower dimensions represent a single input, 4th dimension for batch of inputs is optional. Dimension layout is [width, height, #IFM, #batches].
+ * \param [out] outputs The output tensor data. Output will have the same number of dimensions as input. Output tensor data type must be same as the inputs.
+ * The width and height dimensions of output must be integer multiple of input.
+ * The batch and channel dimensions of output and input must be same.
+ * \return <tt> vx_node</tt>.
+ * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
+ * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
+ */
+VX_API_ENTRY vx_node VX_API_CALL vxTensorNearestUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output);
+
 #endif
