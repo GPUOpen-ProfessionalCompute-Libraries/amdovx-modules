@@ -139,7 +139,7 @@ static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * para
 //! \brief The kernel publisher.
 vx_status publishTensorUpsample(vx_context context) {
 
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.openvx.tensor_upsample", VX_KERNEL_UPSAMPLE_LAYER_AMD, host_kernel, 2, validateTensorUpsamling, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.nearest_upsample_layer", VX_KERNEL_NEAREST_UPSAMPLE_LAYER_AMD, host_kernel, 2, validateTensorUpsamling, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -158,7 +158,7 @@ vx_status publishTensorUpsample(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxTensorUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output)
+VX_API_ENTRY vx_node VX_API_CALL vxTensorNearestUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -167,9 +167,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorUpsampleNode(vx_graph graph, vx_tensor 
             (vx_reference)input,
             (vx_reference)output
         };
-        node = createNode(graph, VX_KERNEL_UPSAMPLE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_NEAREST_UPSAMPLE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
-
-
