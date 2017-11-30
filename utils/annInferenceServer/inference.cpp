@@ -155,7 +155,8 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
 
 #if USE_SSE_OPTIMIZATION
-    unsigned char *data_resize = new unsigned char[length * 3];
+    unsigned int aligned_size = ((length+width) * 3 + 128)&~127;
+    unsigned char *data_resize = new unsigned char[aligned_size];
     RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, width, height);
 
     __m128i mask_B, mask_G, mask_R;
@@ -243,7 +244,7 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
             Xmap[x] = (swidth - 1)*3;
         }
         else
-            Xmap[x] = xmap*3;
+            Xmap[x] = (xmap<0)? 0: xmap*3;
         xf = ((xpos & 0xffff) + 0x80) >> 8;
         Xf[x] = xf;
         Xf1[x] = (0x100 - xf);
@@ -267,7 +268,7 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         }
         else
         {
-            pSrc1 = Rgb_in + ym*stride;
+            pSrc1 = (ym<0)? Rgb_in : (Rgb_in + ym*stride);
             pSrc2 = pSrc1 + stride;
         }
         __m128i w_y = _mm_setr_epi32(fy1, fy, fy1, fy);
