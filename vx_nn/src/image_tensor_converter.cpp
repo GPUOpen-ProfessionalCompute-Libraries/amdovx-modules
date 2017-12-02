@@ -102,7 +102,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
+            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float ka, float kb, uint reverse_channel_order)\n"
             "{\n"
             "    uint x = get_global_id(0);\n"
             "    uint y = get_global_id(1);\n"
@@ -110,9 +110,9 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        uint ioffset = i0_offset + y * i0_stride + x * 3;\n"
             "        uint2 rgb2 = vload2(0, (__global uint *)&i0_buf[ioffset & ~3]);\n"
             "        uint rgb = amd_bytealign(rgb2.s1, rgb2.s0, ioffset & 3);\n"
-            "        float r = a * amd_unpack0(rgb) + b;\n"
-            "        float g = a * amd_unpack1(rgb) + b;\n"
-            "        float b = a * amd_unpack2(rgb) + b;\n"
+            "        float r = ka * amd_unpack0(rgb) + kb;\n"
+            "        float g = ka * amd_unpack1(rgb) + kb;\n"
+            "        float b = ka * amd_unpack2(rgb) + kb;\n"
             "        o0_buf += o0_offset + y * o0_stride.s1 + x * o0_stride.s0;\n"
             "        *(__global float *)&o0_buf[               0] = reverse_channel_order ? b : r;\n"
             "        *(__global float *)&o0_buf[    o0_stride.s2] =                             g;\n"
