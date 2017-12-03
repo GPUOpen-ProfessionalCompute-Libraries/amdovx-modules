@@ -170,6 +170,9 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorConvertDepthNode(vx_graph graph, vx_ten
                 (vx_reference)output
             };
             node = createNode(graph, VX_KERNEL_TENSOR_CONVERT_DEPTH, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_policy);
+            vxReleaseScalar(&s_norm);
+            vxReleaseScalar(&s_offset);
         }
     }
     return node;

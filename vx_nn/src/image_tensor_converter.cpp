@@ -102,7 +102,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
+            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float ka, float kb, uint reverse_channel_order)\n"
             "{\n"
             "    uint x = get_global_id(0);\n"
             "    uint y = get_global_id(1);\n"
@@ -110,9 +110,9 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        uint ioffset = i0_offset + y * i0_stride + x * 3;\n"
             "        uint2 rgb2 = vload2(0, (__global uint *)&i0_buf[ioffset & ~3]);\n"
             "        uint rgb = amd_bytealign(rgb2.s1, rgb2.s0, ioffset & 3);\n"
-            "        float r = a * amd_unpack0(rgb) + b;\n"
-            "        float g = a * amd_unpack1(rgb) + b;\n"
-            "        float b = a * amd_unpack2(rgb) + b;\n"
+            "        float r = ka * amd_unpack0(rgb) + kb;\n"
+            "        float g = ka * amd_unpack1(rgb) + kb;\n"
+            "        float b = ka * amd_unpack2(rgb) + kb;\n"
             "        o0_buf += o0_offset + y * o0_stride.s1 + x * o0_stride.s0;\n"
             "        *(__global float *)&o0_buf[               0] = reverse_channel_order ? b : r;\n"
             "        *(__global float *)&o0_buf[    o0_stride.s2] =                             g;\n"
@@ -133,18 +133,21 @@ static vx_status VX_CALLBACK opencl_codegen(
 
         char item[8192];
         sprintf(item,
-            "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
-            "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
-            "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
-            "{\n"
-            "    uint x = get_global_id(0) * 4;\n"
-            "    uint y = get_global_id(1);\n"
-            "    if(x < %d && y < %d) {\n"
-            "        uint u4 = *(__global uint *)&i0_buf[i0_offset + y * i0_stride + x];\n"
-            "        *(__global float4 *)&o0_buf[o0_offset + y * o0_stride.s1 + x * o0_stride.s0] =\n"
-            "            (float4)(amd_unpack0(u4), amd_unpack1(u4), amd_unpack2(u4), amd_unpack3(u4));\n"
-            "    }\n"
-            "}\n"
+                "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+                "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+                "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
+                "{\n"
+                "    uint x = get_global_id(0) * 4;\n"
+                "    uint y = get_global_id(1);\n"
+                "    if(x < %d && y < %d) {\n"
+                "        uint u4 = *(__global uint *)&i0_buf[i0_offset + y * i0_stride + x];\n"
+                "        float p0 = a * amd_unpack0(u4) + b;\n"
+                "        float p1 = a * amd_unpack1(u4) + b;\n"
+                "        float p2 = a * amd_unpack2(u4) + b;\n"
+                "        float p3 = a * amd_unpack3(u4) + b;\n"
+                "        *(__global float4 *)&o0_buf[o0_offset + y * o0_stride.s1 + x * o0_stride.s0] = (float4)(p0 , p1, p2, p3);\n"
+                "    }\n"
+                "}\n"
             , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
         opencl_kernel_code = item;
     }
@@ -192,21 +195,21 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertImageToTensorNode(vx_graph graph, vx_i
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
-        vx_scalar b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
-        vx_scalar s = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
-        if(vxGetStatus((vx_reference)s) == VX_SUCCESS) {
+        vx_scalar s_a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
+        vx_scalar s_b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
+        vx_scalar s_order = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
+        if(vxGetStatus((vx_reference)s_order) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)input,
                 (vx_reference)output,
-                (vx_reference)a,
-                (vx_reference)b,
-                (vx_reference)s
+                (vx_reference)s_a,
+                (vx_reference)s_b,
+                (vx_reference)s_order
             };
             node = createNode(graph, VX_KERNEL_CONVERT_IMAGE_TO_TENSOR_AMD, params, sizeof(params) / sizeof(params[0]));
-            vxReleaseScalar(&a);
-            vxReleaseScalar(&b);
-            vxReleaseScalar(&s);
+            vxReleaseScalar(&s_a);
+            vxReleaseScalar(&s_b);
+            vxReleaseScalar(&s_order);
         }
     }
     return node;

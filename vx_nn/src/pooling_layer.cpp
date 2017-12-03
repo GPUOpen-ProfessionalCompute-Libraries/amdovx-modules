@@ -84,7 +84,10 @@ static vx_status VX_CALLBACK processPoolingLayer(vx_node node, const vx_referenc
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
-    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, data->pooling_workspace, data->pooling_workspace_size));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
+    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, nullptr, 0));
 
     return VX_SUCCESS;
 }
@@ -103,27 +106,6 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     }
     else if (modeType == VX_NN_POOLING_AVG) {
         data->mode = miopenPoolingAverage;
-    }
-
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
-
-    //workspace memory.
-    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingGetWorkSpaceSize(data->output_desc, &data->pooling_workspace_size));
-    if (data->pooling_workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->pooling_workspace_size = (data->pooling_workspace_size + 3) & ~3;
-        data->pooling_workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->pooling_workspace_size, NULL, NULL);
-        if (!data->pooling_workspace) {
-            return VX_FAILURE;
-        }
-        cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size,
-                                         0,NULL, NULL);
-        if(err) return VX_FAILURE;
     }
 
     //Set Descriptors.
@@ -145,6 +127,7 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w + ((output_dims[0] - 1) / 2)) / (output_dims[0] - 1)) : 1;
     stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
 
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet2dPoolingDescriptor(data->pool_desc, data->mode, kernel_h, kernel_w, pad_h, pad_w, stride_h , stride_w));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->output_desc)));
@@ -172,7 +155,6 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 {
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(data->pooling_workspace && clReleaseMemObject(data->pooling_workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
@@ -245,6 +227,12 @@ VX_API_ENTRY vx_node VX_API_CALL vxPoolingLayer(vx_graph graph, vx_tensor inputs
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_POOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_pooling_type);
+            vxReleaseScalar(&s_pooling_size_x);
+            vxReleaseScalar(&s_pooling_size_y);
+            vxReleaseScalar(&s_pooling_padding_x);
+            vxReleaseScalar(&s_pooling_padding_y);
+            vxReleaseScalar(&s_rounding);
         }
     }
     return node;
