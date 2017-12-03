@@ -61,7 +61,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxScaleLayer(vx_graph graph, vx_tensor inputs, 
  * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
-VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_reference output);
+VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayer(vx_graph graph, vx_tensor input, vx_reference output);
 
 /*! \brief [Graph] Creates a Image to Tensor Node.
  * \param [in] graph The handle to the graph.
@@ -88,20 +88,6 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertImageToTensorNode(vx_graph graph, vx_i
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
 VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_tensor input, vx_image output, vx_float32 a, vx_float32 b, vx_bool reverse_channel_order);
-
-/*! \brief [Graph] Creates a Element Wise Layer Node.
- * \param [in] graph The handle to the graph.
- * \param [in] inputs The input 1 tensor data.
- * \param [in] inputs The input 2 tensor data.
- * \param [in] inputs The alpha1 vx_float32 data.
- * \param [in] inputs The alpha2 vx_float32 data.
- * \param [in] inputs The beta vx_float32 data.
- * \param [out] outputs The output tensor data.
- * \return <tt> vx_node</tt>.
- * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
- * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
- */
-VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_float32 alpha1, vx_float32 alpha2, vx_float32 beta, vx_tensor output);
 
 /*! \brief [Graph] Creates a Concat Layer Node.
  * \param [in] graph The handle to the graph.
@@ -142,6 +128,6 @@ VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, v
  * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
-VX_API_ENTRY vx_node VX_API_CALL vxTensorNearestUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output);
+VX_API_ENTRY vx_node VX_API_CALL vxTensorNearestUpsampleLayer(vx_graph graph, vx_tensor input, vx_tensor output);
 
 #endif

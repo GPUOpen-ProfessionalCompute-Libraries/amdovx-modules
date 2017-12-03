@@ -62,7 +62,6 @@ list(APPEND SOURCES
     src/roi_pooling_layer.cpp
     src/softmax_layer.cpp
     src/batch_normalization_layer.cpp
-    src/elementwise_layer.cpp
     src/concat_layer.cpp
     src/slice_layer.cpp
     src/image_tensor_converter.cpp
@@ -70,10 +69,10 @@ list(APPEND SOURCES
     src/tensor_add.cpp
     src/tensor_subtract.cpp
     src/tensor_multiply.cpp
-    src/tensor_convert_depth_node.cpp
+    src/tensor_convert_depth.cpp
     src/argmax_layer.cpp
     src/scale_layer.cpp
-    src/tensor_upsample.cpp
+    src/nearest_upsample_layer.cpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
