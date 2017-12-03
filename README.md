@@ -9,10 +9,10 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
 * [vx_opencv](vx_opencv/README.md): OpenVX module that implemented a mechanism to access OpenCV functionality as OpenVX kernels
 
 **Inference Application Development Workflow**
-[Block-Diagram-Inference-Workflow](doc/images/block_diagram_inference_workflow.png)
+![Block-Diagram-Inference-Workflow](doc/images/block_diagram_inference_workflow.png)
 
 **Sample Inference Application**
-[Block-Diagram-Inference-Sample](doc/images/block_diagram_inference_sample.png)
+![Block-Diagram-Inference-Sample](doc/images/block_diagram_inference_sample.png)
 
 Refer to [Wiki](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/wiki) page for further details.
 
