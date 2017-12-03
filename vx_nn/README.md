@@ -23,7 +23,7 @@ Tensor Convert from Image|vxConvertImageToTensorNode|com.amd.nn_extension.conver
 Tensor Convert to Image|vxConvertTensorToImageNode|com.amd.nn_extension.convert_tensor_to_image
 Tensor Multiply|vxTensorMultiplyNode|org.khronos.openvx.tensor_multiply
 Tensor Subtract|vxTensorSubtractNode|org.khronos.openvx.tensor_subtract
-Upsample|vxTensorNearestUpsampleLayer|com.amd.nn_extension.nearest_upsample_layer
+Upsample Nearest Neighborhood|vxUpsampleNearestLayer|com.amd.nn_extension.upsample_nearest_layer
 
 ### Example 1: Convert an image to a tensor of type float32
 Use the below GDF with RunVX.

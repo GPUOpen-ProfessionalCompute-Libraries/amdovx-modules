@@ -72,7 +72,7 @@ list(APPEND SOURCES
     src/tensor_convert_depth.cpp
     src/argmax_layer.cpp
     src/scale_layer.cpp
-    src/nearest_upsample_layer.cpp
+    src/upsample_nearest_layer.cpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
