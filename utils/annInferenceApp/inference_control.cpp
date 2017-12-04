@@ -969,7 +969,7 @@ void inference_control::runInference()
 
 void inference_control::onLogo1Click()
 {
-    QDesktopServices::openUrl(QUrl("https://amd.com/"));
+    QDesktopServices::openUrl(QUrl("http://www.amd.com/en"));
 }
 
 void inference_control::onLogo2Click()
