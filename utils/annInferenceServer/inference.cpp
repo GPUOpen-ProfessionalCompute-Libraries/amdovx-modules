@@ -279,10 +279,10 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         for (; x < aligned_width; x += 4)
         {
             // load 2 pixels each
-            p01 = _mm_loadl_epi64((const __m128i*) &pSrc1[Xmap[x]]);
-            p23 = _mm_loadl_epi64((const __m128i*) &pSrc1[Xmap[x+1]]);
-            ps01 = _mm_loadl_epi64((const __m128i*) &pSrc2[Xmap[x]]);
-            ps23 = _mm_loadl_epi64((const __m128i*) &pSrc2[Xmap[x + 1]]);
+            p01 = _mm_loadu_si128((const __m128i*) &pSrc1[Xmap[x]]);
+            p23 = _mm_loadu_si128((const __m128i*) &pSrc1[Xmap[x+1]]);
+            ps01 = _mm_loadu_si128((const __m128i*) &pSrc2[Xmap[x]]);
+            ps23 = _mm_loadu_si128((const __m128i*) &pSrc2[Xmap[x + 1]]);
             // unpcklo for p01 and ps01
             p01 = _mm_unpacklo_epi8(p01, ps01);
             p23 = _mm_unpacklo_epi8(p23, ps23);
