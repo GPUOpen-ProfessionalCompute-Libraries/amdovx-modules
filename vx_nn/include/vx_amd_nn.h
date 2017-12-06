@@ -61,7 +61,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxScaleLayer(vx_graph graph, vx_tensor inputs, 
  * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
-VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayerNode(vx_graph graph, vx_tensor input, vx_reference output);
+VX_API_ENTRY vx_node VX_API_CALL vxArgmaxLayer(vx_graph graph, vx_tensor input, vx_reference output);
 
 /*! \brief [Graph] Creates a Image to Tensor Node.
  * \param [in] graph The handle to the graph.
@@ -89,20 +89,6 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertImageToTensorNode(vx_graph graph, vx_i
  */
 VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_tensor input, vx_image output, vx_float32 a, vx_float32 b, vx_bool reverse_channel_order);
 
-/*! \brief [Graph] Creates a Element Wise Layer Node.
- * \param [in] graph The handle to the graph.
- * \param [in] inputs The input 1 tensor data.
- * \param [in] inputs The input 2 tensor data.
- * \param [in] inputs The alpha1 vx_float32 data.
- * \param [in] inputs The alpha2 vx_float32 data.
- * \param [in] inputs The beta vx_float32 data.
- * \param [out] outputs The output tensor data.
- * \return <tt> vx_node</tt>.
- * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
- * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
- */
-VX_API_ENTRY vx_node VX_API_CALL vxElementwiseLayer(vx_graph graph, vx_tensor input1, vx_tensor input2, vx_float32 alpha1, vx_float32 alpha2, vx_float32 beta, vx_tensor output);
-
 /*! \brief [Graph] Creates a Concat Layer Node.
  * \param [in] graph The handle to the graph.
  * \param [out] outputs The output tensor data.
@@ -129,5 +115,19 @@ VX_API_ENTRY vx_node VX_API_CALL vxConcatLayer(vx_graph graph, vx_tensor output,
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
 VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, vx_tensor output1, vx_tensor output2, vx_tensor output3, vx_tensor output4, vx_tensor output5, vx_tensor output6, vx_tensor output7, vx_tensor output8);
+
+/*! \brief [Graph] Creates a Convolutional Network Upsampling Layer Node.
+ * \details Upsampling is done on the width and height dimensions of the <tt>\ref vx_tensor</tt>. Therefore, we use here the term x for the width dimension and y for the height dimension.\n
+ * The Upsampling accept input images as tensors of several types. They always output resized images as float32 tensors.
+ * This function supports 4D and 3D tensors as input and output. 4D tensors are for batches of images, 3D tensors for individual images.
+ * Upsampling use resize method NEAREST_NEIGHBOR.
+ * \param [in] graph The handle to the graph.
+ * \param [in] inputs The input tensor data.
+ * \param [out] outputs The output tensor data. Output will have the same number of dimensions as input. Output tensor data type must be same as the inputs. The width and height dimensions of output must be integer multiple of input. The batch and channel dimensions of output and input must be same.
+ * \return <tt> vx_node</tt>.
+ * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
+ * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
+ */
+VX_API_ENTRY vx_node VX_API_CALL vxUpsampleNearestLayer(vx_graph graph, vx_tensor input, vx_tensor output);
 
 #endif

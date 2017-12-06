@@ -193,21 +193,21 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_t
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
-        vx_scalar b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
-        vx_scalar s = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
-        if(vxGetStatus((vx_reference)s) == VX_SUCCESS) {
+        vx_scalar s_a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
+        vx_scalar s_b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
+        vx_scalar s_order = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
+        if(vxGetStatus((vx_reference)s_order) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)input,
                 (vx_reference)output,
-                (vx_reference)a,
-                (vx_reference)b,
-                (vx_reference)s
+                (vx_reference)s_a,
+                (vx_reference)s_b,
+                (vx_reference)s_order
             };
             node = createNode(graph, VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD, params, sizeof(params) / sizeof(params[0]));
-            vxReleaseScalar(&a);
-            vxReleaseScalar(&b);
-            vxReleaseScalar(&s);
+            vxReleaseScalar(&s_a);
+            vxReleaseScalar(&s_b);
+            vxReleaseScalar(&s_order);
         }
     }
     return node;

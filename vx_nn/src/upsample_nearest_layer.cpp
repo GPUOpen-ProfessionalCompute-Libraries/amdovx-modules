@@ -22,9 +22,8 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
-static vx_status VX_CALLBACK validateTensorUpsamling(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
+static vx_status VX_CALLBACK validate(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
-
     // check tensor dims.
     vx_enum type;
     vx_size num_dims;
@@ -34,8 +33,6 @@ static vx_status VX_CALLBACK validateTensorUpsamling(vx_node node, const vx_refe
     if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-
- 
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -132,14 +129,15 @@ static vx_status VX_CALLBACK opencl_codegen(
 }
 
 //! \brief The kernel execution.
-static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num) {
+static vx_status VX_CALLBACK host_kernel(vx_node node, const vx_reference * parameters, vx_uint32 num)
+{
     return VX_ERROR_NOT_IMPLEMENTED;
 }
 
 //! \brief The kernel publisher.
-vx_status publishTensorUpsample(vx_context context) {
-
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.openvx.tensor_upsample", VX_KERNEL_UPSAMPLE_LAYER_AMD, host_kernel, 2, validateTensorUpsamling, nullptr, nullptr);
+vx_status publishUpsampleNearest(vx_context context)
+{
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.upsample_nearest_layer", VX_KERNEL_UPSAMPLE_NEAREST_LAYER_AMD, host_kernel, 2, validate, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = query_target_support;
@@ -158,7 +156,7 @@ vx_status publishTensorUpsample(vx_context context) {
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxTensorUpsampleNode(vx_graph graph, vx_tensor input, vx_tensor output)
+VX_API_ENTRY vx_node VX_API_CALL vxUpsampleNearestLayer(vx_graph graph, vx_tensor input, vx_tensor output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -167,9 +165,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorUpsampleNode(vx_graph graph, vx_tensor 
             (vx_reference)input,
             (vx_reference)output
         };
-        node = createNode(graph, VX_KERNEL_UPSAMPLE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_UPSAMPLE_NEAREST_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
-
-

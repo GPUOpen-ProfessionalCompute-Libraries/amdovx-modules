@@ -76,11 +76,10 @@ enum user_kernel_e
     VX_KERNEL_ARGMAX_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x002,
     VX_KERNEL_CONVERT_IMAGE_TO_TENSOR_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x003,
     VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
-    VX_KERNEL_ELEMENTWISE_LAYER_AMD          = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x005,
     VX_KERNEL_CONCAT_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
     VX_KERNEL_SLICE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
     VX_KERNEL_SCALE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x008,
-    VX_KERNEL_UPSAMPLE_LAYER_AMD             = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x009,
+    VX_KERNEL_UPSAMPLE_NEAREST_LAYER_AMD     = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x009,
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -109,7 +108,6 @@ vx_status publishNormalizationLayer(vx_context context);
 vx_status publishActivationLayer(vx_context context);
 vx_status publishROIPoolingLayer(vx_context context);
 vx_status publishDeconvolutionLayer(vx_context context);
-vx_status publishElementwiseLayer(vx_context context);
 vx_status publishBatchNormalizationLayer(vx_context context);
 vx_status publishArgmaxLayer(vx_context context);
 vx_status publishConcatLayer(vx_context context);
@@ -121,8 +119,7 @@ vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);
 vx_status publishTensorConvertDepth(vx_context context);
 vx_status publishScaleLayer(vx_context context);
-vx_status publishTensorUpsample(vx_context context);
-
+vx_status publishUpsampleNearest(vx_context context);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The module entry point for publishing/unpublishing kernels
