@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
-void lut_u8_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size)
+void lut_U8U8_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size)
 {
     char item[8192];
     sprintf(item,
@@ -40,7 +40,7 @@ void lut_u8_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg
     opencl_code = item;
 }
 
-void lut_u8_codegen_packed(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size)
+void lut_U8U8_codegen_packed(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size)
 {
     char item[8192];
     sprintf(item,
@@ -64,7 +64,51 @@ void lut_u8_codegen_packed(std::string& opencl_code, char * kern_name, vx_size l
     opencl_code = item;
 }
 
-void lut_i16_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size)
+void lut_S16U8_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size, int max_idx)
+{
+    char item[8192];
+    sprintf(item,
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global uchar * in, uint in_offset, uint4 in_stride, __global short * lut, uint lut_count, uint lut_offset, __global short * out, uint out_offset, uint4 out_stride)\n" // opencl_kernel_function_name
+            "{\n"
+            "  size_t id = get_global_id(0);\n"
+            "  in  += in_offset;\n"
+            "  out += (out_offset >> 1);\n"
+            "  lut += lut_offset;\n"
+            "  if(id < %d) {\n" // work_size
+            "    out[id] = lut[min((int)in[id], %d)];\n"    // max_idx
+            "  }\n"
+            "}\n"
+            , (int)local_wg_size, kern_name, (int) work_size, max_idx);
+    opencl_code = item;
+}
+
+void lut_S16U8_codegen_packed(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size, int max_idx)
+{
+    char item[8192];
+    sprintf(item,
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global uint * in, uint in_offset, uint4 in_stride, __global short * lut, uint lut_count, uint lut_offset, __global uint2 * out, uint out_offset, uint4 out_stride)\n" // opencl_kernel_function_name
+            "{\n"
+            "  size_t id = get_global_id(0);\n"
+            "  in  += (in_offset >> 2);\n"
+            "  out += (out_offset >> 3);\n"
+            "  lut += lut_offset;\n"
+            "  if(id < %d) {\n" // work_size
+            "    uint2 res;\n"
+            "    res.s0  = lut[min((int)(in[id]      ) & 255, %d)] & 65535;\n"    // max_idx
+            "    res.s0 |= lut[min((int)(in[id] >> 8 ) & 255, %d)] << 16;\n"      // max_idx
+            "    res.s1  = lut[min((int)(in[id] >> 16) & 255, %d)] & 65535;\n"    // max_idx
+            "    res.s1 |= lut[min((int)(in[id] >> 24) & 255, %d)] << 16;\n"      // max_idx
+            "    out[id] = res;\n"
+            "  }\n"
+            "}\n"
+            , (int)local_wg_size, kern_name, (int) work_size, max_idx, max_idx, max_idx, max_idx);
+    opencl_code = item;
+}
+
+
+void lut_S16S16_codegen(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size, int min_idx, int max_idx)
 {
     char item[8192];
     sprintf(item,
@@ -76,10 +120,33 @@ void lut_i16_codegen(std::string& opencl_code, char * kern_name, vx_size local_w
             "  out += (out_offset >> 1);\n"
             "  lut += lut_offset;\n"
             "  if(id < %d) {\n" // work_size
-            "    out[id] = lut[in[id]];\n"
+            "    int idx = min(max((int)in[id], %d), %d);\n"    // min_idx, max_idx
+            "    out[id] = lut[idx];\n"
             "  }\n"
             "}\n"
-            , (int)local_wg_size, kern_name, (int) work_size);
+            , (int)local_wg_size, kern_name, (int) work_size, min_idx, max_idx);
+    opencl_code = item;
+}
+
+void lut_S16S16_codegen_packed(std::string& opencl_code, char * kern_name, vx_size local_wg_size, vx_uint32 work_size, int min_idx, int max_idx)
+{
+    char item[8192];
+    sprintf(item,
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global uint * in, uint in_offset, uint4 in_stride, __global short * lut, uint lut_count, uint lut_offset, __global uint * out, uint out_offset, uint4 out_stride)\n" // opencl_kernel_function_name
+            "{\n"
+            "  size_t id = get_global_id(0);\n"
+            "  in  += (in_offset >> 2);\n"
+            "  out += (out_offset >> 2);\n"
+            "  lut += lut_offset;\n"
+            "  if(id < %d) {\n" // work_size
+            "    uint res;\n"
+            "    res  = lut[min(max((int)( in[id]        & 65535), %d), %d)];\n"   // min_idx, max_idx
+            "    res |= lut[min(max((int)((in[id] >> 16) & 65535), %d), %d)] << 16;\n"   // min_idx, max_idx
+            "    out[id] = res;\n"
+            "  }\n"
+            "}\n"
+            , (int)local_wg_size, kern_name, (int) work_size, min_idx, max_idx, min_idx, max_idx);
     opencl_code = item;
 }
 
@@ -143,11 +210,16 @@ static vx_status VX_CALLBACK tensorTableLookup_opencl_codegen(
     vx_uint32& opencl_local_buffer_size_in_bytes   // [output] reserved: must be ZERO
 )
 {
-    vx_size dims[4], num_of_dims = 0;
-    vx_enum output_type;
+    vx_size dims[4], num_of_dims = 0, lut_count = 0;
+    vx_enum input_type, output_type;
+    vx_uint32 lut_offs = 0;
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, dims, sizeof(dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &input_type, sizeof(input_type)));
+
+    ERROR_CHECK_STATUS(vxQueryLUT((vx_lut)parameters[1], VX_LUT_OFFSET, &lut_offs, sizeof(lut_offs)));
+    ERROR_CHECK_STATUS(vxQueryLUT((vx_lut)parameters[1], VX_LUT_COUNT, &lut_count, sizeof(lut_count)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &output_type, sizeof(output_type)));
 
@@ -157,11 +229,22 @@ static vx_status VX_CALLBACK tensorTableLookup_opencl_codegen(
         work_size *= dims[i];
     }
 
-    bool use_packed_kern;
-    use_packed_kern = ((work_size & 3) == 0) ? true : false;
+    bool use_packed_kern = false;
 
-    if(use_packed_kern)
-        work_size >>= 2;
+    if(output_type == VX_TYPE_UINT8) {
+        use_packed_kern = ((work_size & 3) == 0) ? true : false;
+        if(use_packed_kern) work_size >>= 2;        // four pixels processed in a work item
+    }
+    else {
+        if(input_type == VX_TYPE_UINT8) {
+            use_packed_kern = ((work_size & 3) == 0) ? true : false;
+            if(use_packed_kern) work_size >>= 2;    // four pixels processed in a work item
+        }
+        else {
+            use_packed_kern = ((work_size & 1) == 0) ? true : false;
+            if(use_packed_kern) work_size >>= 1;    // two pixels processed in a work item
+        }
+    }
 
     opencl_work_dim = 1;
     opencl_local_work[0] = 128;
@@ -173,12 +256,26 @@ static vx_status VX_CALLBACK tensorTableLookup_opencl_codegen(
 
     if(output_type == VX_TYPE_UINT8) {
         if(use_packed_kern)
-            lut_u8_codegen_packed(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size);
+            lut_U8U8_codegen_packed(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size);
         else
-            lut_u8_codegen(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size);
+            lut_U8U8_codegen(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size);
     }
-    else
-        lut_i16_codegen(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size);
+    else {
+        int min_idx = -1 * (int)lut_offs;
+        int max_idx = (int) (lut_count - lut_offs - 1);
+        if(input_type == VX_TYPE_UINT8) {
+            if(use_packed_kern)
+                lut_S16U8_codegen_packed(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size, max_idx);
+            else
+                lut_S16U8_codegen(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size, max_idx);
+        }
+        else {
+            if(use_packed_kern)
+                lut_S16S16_codegen_packed(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size, min_idx, max_idx);
+            else
+                lut_S16S16_codegen(opencl_kernel_code, opencl_kernel_function_name, opencl_local_work[0], work_size, min_idx, max_idx);
+        }
+    }
 
     return VX_SUCCESS;
 }
