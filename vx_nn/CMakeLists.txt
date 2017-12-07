@@ -73,6 +73,7 @@ list(APPEND SOURCES
     src/argmax_layer.cpp
     src/scale_layer.cpp
     src/upsample_nearest_layer.cpp
+    src/tensor_table_lookup.cpp
     )
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
