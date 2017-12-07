@@ -22,9 +22,7 @@ int main(int argc, char *argv[])
     control.setWindowIcon(QIcon(":/images/vega_icon_250.png"));
     QSplashScreen splash;
     splash.setPixmap(QPixmap(":/images/inference_app_splash.png"));
-    splash.show();
-    splashDelay(5000);
-    splash.hide();
+    splash.show(); splashDelay(5000); splash.hide();
     control.show();
 
     return a.exec();
