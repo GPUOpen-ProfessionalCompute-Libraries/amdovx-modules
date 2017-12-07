@@ -1,0 +1,8 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+  <file>images/vega_icon_150.png</file>
+  <file>images/vega_icon_200.png</file>
+  <file>images/vega_icon_250.png</file>
+  <file>images/inference_app_splash.png</file>
+</qresource>
+</RCC>

@@ -1,5 +1,17 @@
 #include "inference_control.h"
 #include <QApplication>
+#include <QSplashScreen>
+#include <QTime>
+#include <QIcon>
+
+void splashDelay(int millisecondsToWait)
+{
+    QTime dieTime = QTime::currentTime().addMSecs(millisecondsToWait);
+    while( QTime::currentTime() < dieTime )
+    {
+        QCoreApplication::processEvents( QEventLoop::AllEvents, 100 );
+    }
+}
 
 int main(int argc, char *argv[])
 {
@@ -7,6 +19,12 @@ int main(int argc, char *argv[])
     if(argv[1]) enable_repeat_images = atoi(argv[1]);
     QApplication a(argc, argv);
     inference_control control(enable_repeat_images);
+    control.setWindowIcon(QIcon(":/images/vega_icon_250.png"));
+    QSplashScreen splash;
+    splash.setPixmap(QPixmap(":/images/inference_app_splash.png"));
+    splash.show();
+    splashDelay(5000);
+    splash.hide();
     control.show();
 
     return a.exec();
