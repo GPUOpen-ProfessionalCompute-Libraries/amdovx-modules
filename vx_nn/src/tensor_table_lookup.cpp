@@ -176,6 +176,7 @@ static vx_status VX_CALLBACK validateTensorTableLookup(vx_node node, const vx_re
     if((input_ndims >= 3) && (input_dims[2] != input_dims[2])) return VX_ERROR_INVALID_DIMENSION;
     if((input_ndims >= 4) && (input_dims[3] != input_dims[3])) return VX_ERROR_INVALID_DIMENSION;
     if(lut_type != output_type) return VX_ERROR_INVALID_TYPE;
+    if((input_type == VX_TYPE_INT16) && (output_type == VX_TYPE_UINT8)) return VX_ERROR_INVALID_TYPE;
 
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_DATA_TYPE, &output_type, sizeof(output_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_NUMBER_OF_DIMS, &output_ndims, sizeof(output_ndims)));
