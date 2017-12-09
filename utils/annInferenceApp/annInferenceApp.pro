@@ -32,7 +32,8 @@ SOURCES += \
     inference_control.cpp \
     inference_compiler.cpp \
     assets.cpp \
-    tcpconnection.cpp
+    tcpconnection.cpp \
+    inference_panel.cpp
 
 HEADERS += \
     inference_viewer.h \
@@ -41,10 +42,12 @@ HEADERS += \
     inference_compiler.h \
     infcom.h \
     assets.h \
-    tcpconnection.h
+    tcpconnection.h \
+    inference_panel.h
 
 FORMS += \
-    inference_viewer.ui
+    inference_viewer.ui \
+    inference_panel.ui
 
 RESOURCES += \
     resources.qrc

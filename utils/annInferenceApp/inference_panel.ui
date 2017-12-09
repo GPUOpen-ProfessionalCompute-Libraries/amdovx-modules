@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>inference_panel</class>
+ <widget class="QDialog" name="inference_panel">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>300</width>
+    <height>700</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Inference Statistics Panel</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">background-color: rgb(109, 109, 109);</string>
+  </property>
+  <widget class="QLabel" name="header_label">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>110</y>
+     <width>311</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(255, 255, 255);
+font: 16pt &quot;Georgia&quot;;</string>
+   </property>
+   <property name="text">
+    <string>Inference Statistics Panel</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="logo_label">
+   <property name="geometry">
+    <rect>
+     <x>140</x>
+     <y>0</y>
+     <width>111</width>
+     <height>121</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+   <property name="pixmap">
+    <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
+   </property>
+  </widget>
+  <zorder>logo_label</zorder>
+  <zorder>header_label</zorder>
+ </widget>
+ <resources>
+  <include location="resources.qrc"/>
+ </resources>
+ <connections/>
+</ui>
