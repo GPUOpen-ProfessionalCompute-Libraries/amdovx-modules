@@ -252,13 +252,15 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             sendpkt(sock,info)
             print('OK: ' + info[3])
         elif info[1] == INFCOM_CMD_SEND_IMAGES:
-            if sendCount >= len(imageFileList):
+            count = min(info[2], len(imageFileList)-sendCount)
+            if count < 1:
                 sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(-1,),''))
             else:
-                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(1,),''))
-                tag = sendCount
-                sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
-                sendCount = sendCount + 1
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(count,),''))
+                for i in range(count):
+                    tag = sendCount
+                    sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
+                    sendCount = sendCount + 1
         elif info[1] == INFCOM_CMD_INFERENCE_RESULT:
             sendpkt(sock,info)
             count = info[2][0]
