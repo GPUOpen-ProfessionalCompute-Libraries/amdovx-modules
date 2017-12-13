@@ -34,7 +34,7 @@
 #define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
-#define USE_SSE_FORMAT_CONVERSION      1  // enable/disable SSE intrinsics for format conversion
+#define USE_SSE_OPTIMIZATION           1  // enable/disable SSE intrinsics for resize and format conversion
 #define NUM_DECODER_THREADS            0  // number of threads for jpeg decode, scale, and format conversion job
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
@@ -220,6 +220,7 @@ private:
     MessageQueue<std::tuple<int,int>>        outputQ;
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
+    void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int dwidth, unsigned int dheight);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     // OpenVX resources
