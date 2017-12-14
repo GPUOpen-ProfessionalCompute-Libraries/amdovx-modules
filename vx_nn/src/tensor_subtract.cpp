@@ -110,7 +110,8 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_uint32 input_dim_size = input1_dims[0] * input1_dims[1] * input1_dims[2] * input1_dims[3];
 
     opencl_work_dim = 1;
-    opencl_global_work[0] = input_dim_size;
+    opencl_local_work[0] = 128;
+    opencl_global_work[0] = (input_dim_size + (opencl_local_work[0] - 1)) & ~(opencl_local_work[0] - 1);
 
     // Setting variables required by the interface
     opencl_local_buffer_usage_mask = 0;
@@ -119,13 +120,18 @@ static vx_status VX_CALLBACK opencl_codegen(
     if (num_of_dims == 4) {
         char item[8192];
         sprintf(item,
-            "__kernel void tensor_subtract(__global float * in1, uint in1_offset, __global float * in2, uint in2_offset, float policy, __global float * out, uint out_offset) \n"
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global float * in1, uint in1_offset, uint4 in1_stride, __global float * in2, uint in2_offset, uint4 in2_stride, float policy, __global float * out, uint out_offset, uint4 out_stride) \n"   // opencl_kernel_function_name
             "{ \n"
             "     size_t id = get_global_id(0);"
-            "     out[id] = in1[id] - in2[id];"
-            "     "
+            "     in1 += (in1_offset >> 2);\n"
+            "     in2 += (in2_offset >> 2);\n"
+            "     out += (out_offset >> 2);\n"
+            "     if(id < %d) {\n"                      // input_dim_size
+            "           out[id] = in1[id] - in2[id];"
+            "     }\n"
             " }\n"
-        );
+        , (int) opencl_local_work[0], opencl_kernel_function_name, input_dim_size);
 
         opencl_kernel_code = item;
     }

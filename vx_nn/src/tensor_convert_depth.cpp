@@ -94,12 +94,13 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_size num_of_dims;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-    strcpy(opencl_kernel_function_name, "tensor_convert_node");
+    strcpy(opencl_kernel_function_name, "tensor_convert_depth_node");
 
     vx_uint32 input_dim_size = input_dims[0] * input_dims[1] * input_dims[2] * input_dims[3];
 
     opencl_work_dim = 1;
-    opencl_global_work[0] = input_dim_size;
+    opencl_local_work[0] = 128;
+    opencl_global_work[0] = (input_dim_size + (opencl_local_work[0] - 1)) & ~(opencl_local_work[0] - 1);
 
     // Setting variables required by the interface
     opencl_local_buffer_usage_mask = 0;
@@ -108,13 +109,18 @@ static vx_status VX_CALLBACK opencl_codegen(
     if (num_of_dims == 4) {
         char item[8192];
         sprintf(item,
-            "__kernel void tensor_convert_node(__global float * in, uint in_offset, float policy, float norm, float offset, __global float * out, uint out_offset) \n"
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global float * in, uint in_offset, uint4 in_stride, float policy, float norm, float offset, __global float * out, uint out_offset, uint4 out_stride) \n"    // opencl_kernel_function_name
             "{ \n"
             "     size_t id = get_global_id(0);"
-            "     out[id] = in[id] - offset;"
-            "     out[id] = out[id]/norm;"
-            " }\n"
-        );
+            "     in  += (in_offset >> 2);\n"
+            "     out += (out_offset >> 2);\n"
+            "     if(id < %d) {\n"     // input_dim_size
+            "         out[id] = in[id] - offset;"
+            "         out[id] = out[id]/norm;"
+            "     }\n"
+            "}\n"
+            , (int) opencl_local_work[0], opencl_kernel_function_name, input_dim_size);
 
         opencl_kernel_code = item;
     }
