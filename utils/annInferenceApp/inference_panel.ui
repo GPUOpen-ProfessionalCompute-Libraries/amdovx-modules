@@ -55,8 +55,38 @@ font: 16pt &quot;Georgia&quot;;</string>
     <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
    </property>
   </widget>
+  <widget class="QPushButton" name="pushButton">
+   <property name="geometry">
+    <rect>
+     <x>132</x>
+     <y>650</y>
+     <width>111</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">background-color: rgb(255, 0, 0);
+color: rgb(255, 255, 255);
+font: 75 10pt &quot;Georgia&quot;;</string>
+   </property>
+   <property name="text">
+    <string>RESET ALL</string>
+   </property>
+  </widget>
+  <widget class="QLCDNumber" name="lcdNumber">
+   <property name="geometry">
+    <rect>
+     <x>30</x>
+     <y>170</y>
+     <width>64</width>
+     <height>23</height>
+    </rect>
+   </property>
+  </widget>
   <zorder>logo_label</zorder>
   <zorder>header_label</zorder>
+  <zorder>pushButton</zorder>
+  <zorder>lcdNumber</zorder>
  </widget>
  <resources>
   <include location="resources.qrc"/>
