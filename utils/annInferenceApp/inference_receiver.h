@@ -56,6 +56,8 @@ private:
     int labelCount;
     QQueue<int> imageIndex;
     QQueue<int> imageLabel;
+    QQueue<std::vector<int>> imageTopkLabels;
+    QQueue<std::vector<float>> imageTopkConfidence;
     QQueue<QString> imageSummary;
     QElapsedTimer perfTimer;
     int perfImageCount;

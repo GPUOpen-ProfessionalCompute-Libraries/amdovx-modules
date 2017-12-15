@@ -67,6 +67,7 @@
 #define INFCOM_CMD_INFERENCE_INITIALIZATION    301
 #define INFCOM_CMD_SEND_IMAGES                 302
 #define INFCOM_CMD_INFERENCE_RESULT            303
+#define INFCOM_CMD_TOPK_INFERENCE_RESULT       304
 
 // InfComCommand.data[0] for INFCOM_CMD_SEND_MODE
 #define INFCOM_MODE_CONFIGURE                  1

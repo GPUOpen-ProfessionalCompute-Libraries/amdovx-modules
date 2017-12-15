@@ -47,6 +47,8 @@
 //    client: for each image: { <tag:32-bit> <size:32-bit> <byte-stream> <eof-marker:32-bit> }
 //  * server: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
 //    client: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
+//  * server: InfComCommand:INFCOM_CMD_TOPK_INFERENCE_RESULT data={imageCount,top_k,<tag0>,<label0:prob0>,..<labelk:probk>,<tag1><label0:prob0>..<labelk:probk>, ...} upto imageCount
+//    client: InfComCommand:INFCOM_CMD_TOPK_INFERENCE_RESULT data={imageCount,top_k,<tag0>,<label0:prob0>,..<labelk:probk>,<tag1><label0:prob0>..<labelk:probk>, ...} upto imageCount
 //  * server: (repeat of INFCOM_CMD_SEND_IMAGES and INFCOM_CMD_INFERENCE_RESULT messages)
 //    client: (repeat of INFCOM_CMD_SEND_IMAGES and INFCOM_CMD_INFERENCE_RESULT messages)
 //  * server: InfComCommand:INFCOM_CMD_DONE
@@ -67,6 +69,7 @@
 #define INFCOM_CMD_INFERENCE_INITIALIZATION    301
 #define INFCOM_CMD_SEND_IMAGES                 302
 #define INFCOM_CMD_INFERENCE_RESULT            303
+#define INFCOM_CMD_TOPK_INFERENCE_RESULT       304
 
 // InfComCommand.data[0] for INFCOM_CMD_SEND_MODE
 #define INFCOM_MODE_CONFIGURE                  1

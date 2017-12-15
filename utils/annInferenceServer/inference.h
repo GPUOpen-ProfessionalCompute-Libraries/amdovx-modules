@@ -39,6 +39,7 @@
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
+#define NUM_TOP_K_RESULTS               0       // for testing: todo remove
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -202,6 +203,7 @@ private:
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
+    int top_k;
     int reverseInputChannelOrder;
     float preprocessMpy[3];
     float preprocessAdd[3];
@@ -217,7 +219,8 @@ private:
     bool deviceLockSuccess;
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
-    MessageQueue<std::tuple<int,int>>        outputQ;
+    MessageQueue<std::tuple<int,int>>     outputQ;
+    MessageQueue<std::vector<int>>        outputQTopk;      // outputQ for topK vec<tag, top_k labels>
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
 
