@@ -69,6 +69,7 @@ list(APPEND SOURCES
     src/tensor_add.cpp
     src/tensor_subtract.cpp
     src/tensor_multiply.cpp
+    src/tensor_matrix_multiply.cpp
     src/tensor_convert_depth.cpp
     src/argmax_layer.cpp
     src/scale_layer.cpp
