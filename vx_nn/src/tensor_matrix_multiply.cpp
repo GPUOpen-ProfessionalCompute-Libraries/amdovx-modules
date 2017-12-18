@@ -273,6 +273,7 @@ static vx_status VX_CALLBACK initialize(vx_node node, const vx_reference *parame
         ERROR_CHECK_STATUS(clSetKernelArg(data->copy_kernel, 0, sizeof(cl_mem), &input3_mem));
         ERROR_CHECK_STATUS(clSetKernelArg(data->copy_kernel, 1, sizeof(cl_mem), &output_mem));
         ERROR_CHECK_STATUS(clEnqueueNDRangeKernel(data->handle->cmdq, data->copy_kernel, 3, nullptr, data->copy_global, data->copy_local, 0, nullptr, nullptr));
+        ERROR_CHECK_STATUS(clFinish(data->handle->cmdq));
     }
 
     // build and save ID
@@ -289,6 +290,7 @@ static vx_status VX_CALLBACK initialize(vx_node node, const vx_reference *parame
         printf("ERROR: MatrixMultiply: MIOpenGEMM::xgemm<float>() failed\n");
         return VX_FAILURE;
     }
+    ERROR_CHECK_STATUS(clFinish(data->handle->cmdq));
     data->ID = status.ID;
 
     // save local data ptr as node attribute
