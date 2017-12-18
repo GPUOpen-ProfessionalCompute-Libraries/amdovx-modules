@@ -25,6 +25,7 @@
 //   INFERENCE_SERVICE_IDLE_TIME  - inference service idle time (milliseconds) if there is no activity
 #define INFERENCE_SCHEDULER_MODE       LIBRE_INFERENCE_SCHEDULER
 #define INFERENCE_SERVICE_IDLE_TIME    1
+#define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 
 // inference scheduler configuration
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER
@@ -33,7 +34,6 @@
 #define INFERENCE_PIPE_QUEUE_DEPTH     5  // inference pipe queue depth
 #define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
-#define DEVICE_QUEUE_FULL_SLEEP_MSEC   1  // msec to sleep when device queue is full
 #define USE_SSE_OPTIMIZATION           1  // enable/disable SSE intrinsics for resize and format conversion
 #define NUM_DECODER_THREADS            0  // number of threads for jpeg decode, scale, and format conversion job
 #define DONOT_RUN_INFERENCE            0  // for debugging
@@ -247,30 +247,6 @@ private:
     MessageQueue<int>                    * queueDeviceTagQ[MAX_NUM_GPU];
     MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
 #endif
-    MessageQueue<cl_mem>                 * queueDeviceInputMemIdle[MAX_NUM_GPU];
-    MessageQueue<cl_mem>                 * queueDeviceInputMemBusy[MAX_NUM_GPU];
-    MessageQueue<cl_mem>                 * queueDeviceOutputMemIdle[MAX_NUM_GPU];
-    MessageQueue<cl_mem>                 * queueDeviceOutputMemBusy[MAX_NUM_GPU];
-    // scheduler resources
-    cl_context opencl_context[MAX_NUM_GPU];
-    cl_command_queue opencl_cmdq[MAX_NUM_GPU];
-    vx_context openvx_context[MAX_NUM_GPU];
-    vx_graph openvx_graph[MAX_NUM_GPU];
-    vx_tensor openvx_input[MAX_NUM_GPU];
-    vx_tensor openvx_output[MAX_NUM_GPU];
-#elif INFERENCE_SCHEDULER_MODE == ADVANCED_INFERENCE_SCHEDULER
-    // master input queues
-    //   inputQ: input to the scheduler <tag,byteStream,size>
-    MessageQueueAdvanced<std::tuple<int,char *,int>> *inputQ;
-    // master scheduler thread
-    std::thread * threadMasterInputQ;
-    // scheduler thread objects
-    std::thread * threadDeviceInputCopy[MAX_NUM_GPU];
-    std::thread * threadDeviceProcess[MAX_NUM_GPU];
-    std::thread * threadDeviceOutputCopy[MAX_NUM_GPU];
-    // scheduler device queues
-    MessageQueueAdvanced<int>            * queueDeviceTagQ[MAX_NUM_GPU];
-    MessageQueue<std::tuple<char *,int>> * queueDeviceImageQ[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemIdle[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceInputMemBusy[MAX_NUM_GPU];
     MessageQueue<cl_mem>                 * queueDeviceOutputMemIdle[MAX_NUM_GPU];
