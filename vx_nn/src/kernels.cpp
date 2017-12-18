@@ -161,6 +161,7 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishScaleLayer(context));
     ERROR_CHECK_STATUS(publishUpsampleNearest(context));
     ERROR_CHECK_STATUS(publishTensorTableLookup(context));
+    ERROR_CHECK_STATUS(publishTensorMatrixMultiply(context));
 
     // register drama rules
     AgoNodeMergeRule softmax_rule = {
