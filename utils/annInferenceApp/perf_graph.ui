@@ -54,9 +54,9 @@ font: 75 18pt &quot;Times New Roman&quot;;</string>
    <property name="geometry">
     <rect>
      <x>270</x>
-     <y>-10</y>
+     <y>10</y>
      <width>111</width>
-     <height>121</height>
+     <height>91</height>
     </rect>
    </property>
    <property name="text">
