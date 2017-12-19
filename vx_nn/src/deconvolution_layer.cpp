@@ -52,7 +52,7 @@ static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_r
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_NN_DECONV_PARAMS) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_NN_DECONVOLUTION_PARAMS) return VX_ERROR_INVALID_TYPE;
 
     // check tensor dimensions
     vx_size num_dims;
@@ -261,7 +261,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxDeconvolutionLayer(vx_graph graph, vx_tensor 
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONV_PARAMS, deconvolution_params, size_of_deconv_params);
+        vx_scalar deconv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_DECONVOLUTION_PARAMS, deconvolution_params, size_of_deconv_params);
         if(vxGetStatus((vx_reference)deconv_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)inputs,

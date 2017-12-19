@@ -289,7 +289,7 @@ static vx_status VX_CALLBACK tensorTableLookup_host_kernel(vx_node node, const v
 //! \brief The kernel publisher.
 vx_status publishTensorTableLookup(vx_context context) {
 
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.openvx.tensor_table_lookup", VX_KERNEL_TENSOR_TABLELOOKUP, tensorTableLookup_host_kernel, 3, validateTensorTableLookup, nullptr, nullptr);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.openvx.tensor_table_lookup", VX_KERNEL_TENSOR_TABLE_LOOKUP, tensorTableLookup_host_kernel, 3, validateTensorTableLookup, nullptr, nullptr);
     ERROR_CHECK_OBJECT(kernel);
 
     amd_kernel_query_target_support_f query_target_support_f = tensorTableLookup_query_target_support;
@@ -317,6 +317,6 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorTableLookupNode(vx_graph graph, vx_tens
         (vx_reference) lut,
         (vx_reference) output
     };
-    node = createNode(graph, VX_KERNEL_TENSOR_TABLELOOKUP, params, sizeof(params) / sizeof(params[0]));
+    node = createNode(graph, VX_KERNEL_TENSOR_TABLE_LOOKUP, params, sizeof(params) / sizeof(params[0]));
     return node;
 }
