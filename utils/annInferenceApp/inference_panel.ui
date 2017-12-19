@@ -130,7 +130,7 @@ font: 75 14pt &quot;Calibri&quot;;</string>
     <rect>
      <x>100</x>
      <y>220</y>
-     <width>191</width>
+     <width>231</width>
      <height>41</height>
     </rect>
    </property>
@@ -170,7 +170,7 @@ background-color: rgb(255, 255, 255);</string>
     <rect>
      <x>40</x>
      <y>280</y>
-     <width>191</width>
+     <width>241</width>
      <height>41</height>
     </rect>
    </property>
@@ -238,7 +238,7 @@ font: 75 14pt &quot;Calibri&quot;;</string>
     <rect>
      <x>40</x>
      <y>400</y>
-     <width>191</width>
+     <width>251</width>
      <height>41</height>
     </rect>
    </property>
