@@ -157,7 +157,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishTensorAdd(context));
     ERROR_CHECK_STATUS(publishTensorSubtraction(context));
     ERROR_CHECK_STATUS(publishTensorMultiply(context));
-    ERROR_CHECK_STATUS(publishTensorConvertDepth(context));
     ERROR_CHECK_STATUS(publishScaleLayer(context));
     ERROR_CHECK_STATUS(publishUpsampleNearest(context));
     ERROR_CHECK_STATUS(publishTensorTableLookup(context));
