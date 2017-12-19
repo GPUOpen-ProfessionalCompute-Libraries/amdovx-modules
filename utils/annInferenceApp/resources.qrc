@@ -5,5 +5,6 @@
   <file>images/vega_icon_250.png</file>
   <file>images/inference_app_splash.png</file>
   <file>images/display_panel_logo.png</file>
+  <file>images/perf_graph_icon.png</file>
 </qresource>
 </RCC>

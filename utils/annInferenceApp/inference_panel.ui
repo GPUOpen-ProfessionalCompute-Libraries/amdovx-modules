@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
+    <width>413</width>
     <height>700</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>300</width>
+    <width>400</width>
     <height>700</height>
    </size>
   </property>
@@ -25,11 +25,17 @@
   <widget class="QLabel" name="header_label">
    <property name="geometry">
     <rect>
-     <x>40</x>
+     <x>90</x>
      <y>110</y>
-     <width>311</width>
+     <width>251</width>
      <height>41</height>
     </rect>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>251</width>
+     <height>41</height>
+    </size>
    </property>
    <property name="styleSheet">
     <string notr="true">color: rgb(255, 255, 255);
@@ -42,7 +48,7 @@ font: 16pt &quot;Georgia&quot;;</string>
   <widget class="QLabel" name="logo_label">
    <property name="geometry">
     <rect>
-     <x>140</x>
+     <x>160</x>
      <y>0</y>
      <width>111</width>
      <height>121</height>
@@ -55,7 +61,7 @@ font: 16pt &quot;Georgia&quot;;</string>
     <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
    </property>
   </widget>
-  <widget class="QPushButton" name="pushButton">
+  <widget class="QPushButton" name="reset_pushButton">
    <property name="geometry">
     <rect>
      <x>132</x>
@@ -76,17 +82,205 @@ font: 75 10pt &quot;Georgia&quot;;</string>
   <widget class="QLCDNumber" name="lcdNumber">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>170</y>
-     <width>64</width>
-     <height>23</height>
+     <x>300</x>
+     <y>160</y>
+     <width>91</width>
+     <height>41</height>
     </rect>
+   </property>
+   <property name="intValue" stdset="0">
+    <number>0</number>
+   </property>
+  </widget>
+  <widget class="QLabel" name="imagesPerSecLabel">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>160</y>
+     <width>181</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(241, 216, 26);
+font: 75 14pt &quot;Calibri&quot;;</string>
+   </property>
+   <property name="text">
+    <string>Images per second</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="per_icon_label">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>210</y>
+     <width>51</width>
+     <height>61</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+   <property name="pixmap">
+    <pixmap resource="resources.qrc">:/images/perf_graph_icon.png</pixmap>
+   </property>
+  </widget>
+  <widget class="QLabel" name="performace_graph_Label">
+   <property name="geometry">
+    <rect>
+     <x>100</x>
+     <y>220</y>
+     <width>191</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>191</width>
+     <height>41</height>
+    </size>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(241, 216, 26);
+font: 75 14pt &quot;Calibri&quot;;</string>
+   </property>
+   <property name="text">
+    <string>View Performace Graph</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="viewGraph_pushButton">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>230</y>
+     <width>51</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+background-color: rgb(255, 255, 255);</string>
+   </property>
+   <property name="text">
+    <string>View</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="view_classes_Label">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>280</y>
+     <width>191</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(241, 216, 26);
+font: 75 14pt &quot;Calibri&quot;;</string>
+   </property>
+   <property name="text">
+    <string>View Identified Classes</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="viewclass_pushButton">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>290</y>
+     <width>51</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+background-color: rgb(255, 255, 255);</string>
+   </property>
+   <property name="text">
+    <string>View</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="GPUView_pushButton">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>350</y>
+     <width>51</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+background-color: rgb(255, 255, 255);</string>
+   </property>
+   <property name="text">
+    <string>View</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="view_GPU_Label">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>340</y>
+     <width>191</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(241, 216, 26);
+font: 75 14pt &quot;Calibri&quot;;</string>
+   </property>
+   <property name="text">
+    <string>View GPU Usage</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="view_GPU_Label_2">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>400</y>
+     <width>191</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(241, 216, 26);
+font: 75 14pt &quot;Calibri&quot;;</string>
+   </property>
+   <property name="text">
+    <string>View Inference Statistics</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="GPUView_pushButton_2">
+   <property name="geometry">
+    <rect>
+     <x>340</x>
+     <y>410</y>
+     <width>51</width>
+     <height>28</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+background-color: rgb(255, 255, 255);</string>
+   </property>
+   <property name="text">
+    <string>View</string>
    </property>
   </widget>
   <zorder>logo_label</zorder>
   <zorder>header_label</zorder>
-  <zorder>pushButton</zorder>
+  <zorder>reset_pushButton</zorder>
   <zorder>lcdNumber</zorder>
+  <zorder>imagesPerSecLabel</zorder>
+  <zorder>per_icon_label</zorder>
+  <zorder>performace_graph_Label</zorder>
+  <zorder>viewGraph_pushButton</zorder>
+  <zorder>view_classes_Label</zorder>
+  <zorder>viewclass_pushButton</zorder>
+  <zorder>GPUView_pushButton</zorder>
+  <zorder>view_GPU_Label</zorder>
+  <zorder>view_GPU_Label_2</zorder>
+  <zorder>GPUView_pushButton_2</zorder>
  </widget>
  <resources>
   <include location="resources.qrc"/>
