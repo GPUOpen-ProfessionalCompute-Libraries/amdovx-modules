@@ -52,7 +52,7 @@ Below log outlines a simple use-case with inference generator.
 % inference_generator deploy.prototxt 1 3 32 32
 % ls
 CMakeLists.txt   annmodule.txt   cmake              weights
-annmodule.cpp    annunit.cpp     deploy.prototxt    weights.caffemodel
+annmodule.cpp    anntest.cpp     deploy.prototxt    weights.caffemodel
 annmodule.h      bias            net.gdf
 % mkdir build
 % cd build
@@ -61,8 +61,8 @@ annmodule.h      bias            net.gdf
 % cd ..
 % ls build
 CMakeCache.txt  Makefile        cmake_install.cmake
-CMakeFiles      annunit         libannmodule.so
-% ./build/annunit
+CMakeFiles      anntest         libannmodule.so
+% ./build/anntest
 OK: annGetTensorDimensions() => [input 32x32x3x32] [output 1x1x10x32]
 ````
-The `annunit.cpp` is a simple program to initialize and run neural network using the `annmodule` library.
+The `anntest.cpp` is a simple program to initialize and run neural network using the `annmodule` library.

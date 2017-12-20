@@ -24,7 +24,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-synset:<synset.txt>] [-output:<output.csv>] <folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] <folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -33,6 +33,7 @@ imageDirPath = ''
 imageFileList = []
 outputFileName = None
 synsetFileName = None
+uploadParams = ''
 verbose = False
 arg = 1
 while arg < len(sys.argv):
@@ -50,6 +51,9 @@ while arg < len(sys.argv):
         arg = arg + 1
     elif sys.argv[arg][:8] == '-synset:':
         synsetFileName = sys.argv[arg][8:]
+        arg = arg + 1
+    elif sys.argv[arg][:8] == '-upload:':
+        uploadParams = sys.argv[arg][8:]
         arg = arg + 1
     elif sys.argv[arg] == '-v':
         verbose = True
@@ -99,6 +103,13 @@ def sendpkt(sock,pkt):
     data = data + vl
     sock.send(data)
 
+def sendFile(sock,cmd,fileName):
+    fp = open(fileName,'r')
+    buf = fp.read()
+    fp.close()
+    sendpkt(sock,(INFCOM_MAGIC,cmd,(len(buf),),''))
+    sock.send(buf + struct.pack('i',INFCOM_EOF_MARKER))
+
 def sendImageFile(sock,tag,fileName):
     fp = open(fileName,'r')
     buf = fp.read()
@@ -131,6 +142,9 @@ def getConfig(host,port):
             numModels = info[2][0]
             maxGPUs = info[2][1]
             modelCount = 0
+            if numModels == 0:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
+                break
         elif info[1] == INFCOM_CMD_MODEL_INFO:
             sendpkt(sock,info)
             model = [info[3], info[2][:3], info[2][3:6], info[2][6], struct.unpack('f'*6,struct.pack('i'*6,*info[2][7:13]))]
@@ -146,6 +160,64 @@ def getConfig(host,port):
             break
     sock.close()
     return [maxGPUs, modelList]
+
+def uploadModel(host,port,uploadParams):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((host, port))
+    except:
+        print('ERROR: unable to connect to %s:%d' % (host,port))
+        sys.exit(1)
+    par = uploadParams.split(',')
+    if len(par) < 13:
+        print('ERROR: missing upload parameters in -upload:%s' % (uploadParams))
+        sys.exit(1)
+    ow = 0
+    oh = 0
+    oc = 0
+    modelName = ''
+    while True:
+        info = recvpkt(sock)
+        if info[0] != INFCOM_MAGIC:
+            print('RECV',info)
+            print('ERROR: missing INFCOM_MAGIC')
+            break
+        if info[1] == INFCOM_CMD_DONE:
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
+            break
+        elif info[1] == INFCOM_CMD_SEND_MODE:
+            compilerOptions = ''
+            if len(par) >= 13:
+                compilerOptions = ','.join(par[13:])
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_COMPILER,int(par[2]),int(par[3]),int(par[4]),int(par[5]),int(par[6]),struct.unpack('<I',struct.pack('<f',float(par[7])))[0],struct.unpack('<I',struct.pack('<f',float(par[8])))[0],struct.unpack('<I',struct.pack('<f',float(par[9])))[0],struct.unpack('<I',struct.pack('<f',float(par[10])))[0],struct.unpack('<I',struct.pack('<f',float(par[11])))[0],struct.unpack('<I',struct.pack('<f',float(par[12])))[0]),compilerOptions))
+        elif info[1] == INFCOM_CMD_SEND_MODELFILE1:
+            sendFile(sock,INFCOM_CMD_SEND_MODELFILE1,par[0])
+        elif info[1] == INFCOM_CMD_SEND_MODELFILE2:
+            sendFile(sock,INFCOM_CMD_SEND_MODELFILE2,par[1])
+        elif info[1] == INFCOM_CMD_COMPILER_STATUS:
+            sendpkt(sock,info)
+            status = info[2][0]
+            progress = info[2][1]
+            ow = info[2][2]
+            oh = info[2][3]
+            oc = info[2][4]
+            if info[3] != '':
+                print('%3d%% [%d] %s' % (progress, status, info[3]))
+            if status != 0:
+                if status < 0:
+                    print('ERROR: ' + str(info))
+                    sys.exit(1)
+                modelName = info[3]
+                break
+        else:
+            sendpkt(sock,info)
+            print(info)
+            print('ERROR: unsupported command')
+            sys.exit(1)
+            break
+    sock.close()
+    model = [modelName, [int(par[2]),int(par[3]),int(par[4])], [ow,oh,oc], int(par[6]), (float(par[7]),float(par[8]),float(par[9]),float(par[10]),float(par[11]),float(par[12]))]
+    return model
 
 def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,verbose):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -180,13 +252,15 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             sendpkt(sock,info)
             print('OK: ' + info[3])
         elif info[1] == INFCOM_CMD_SEND_IMAGES:
-            if sendCount >= len(imageFileList):
+            count = min(info[2], len(imageFileList)-sendCount)
+            if count < 1:
                 sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(-1,),''))
             else:
-                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(1,),''))
-                tag = sendCount
-                sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
-                sendCount = sendCount + 1
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_IMAGES,(count,),''))
+                for i in range(count):
+                    tag = sendCount
+                    sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
+                    sendCount = sendCount + 1
         elif info[1] == INFCOM_CMD_INFERENCE_RESULT:
             sendpkt(sock,info)
             count = info[2][0]
@@ -216,6 +290,7 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             sendpkt(sock,info)
             print(info)
             print('ERROR: unsupported command')
+            sys.exit(1)
             break
     sock.close()
     if fp:
@@ -229,12 +304,19 @@ if modelName == '':
     print('OK: server has ' + str(GPUs) + ' GPUs')
     for v in config[1]:
         print('OK: server has model ' + str(v))
-    sys.exit(0)
+    if uploadParams == '':
+        sys.exit(0)
+
+# upload and pick the model
 model = []
-for v in config[1]:
-    if v[0] == modelName:
-        model = v
-        break
+if uploadParams != '':
+    model = uploadModel(host,port,uploadParams)
+    modelName = model[0]
+else:
+    for v in config[1]:
+        if v[0] == modelName:
+            model = v
+            break
 if len(model) == 0:
     print(config)
     print('ERROR: unable to find model: ' + modelName)
@@ -243,6 +325,9 @@ print('OK: found model ' + str(model))
 
 # run inference
 if len(imageFileList) > 0:
+    if modelName == '':
+        print('ERROR: no model available to run inference')
+        sys.exit(1)
     runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,verbose)
     if outputFileName:
         print('OK: saved inference results in ' + outputFileName)

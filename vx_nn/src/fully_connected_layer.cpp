@@ -207,7 +207,7 @@ static vx_status VX_CALLBACK uninitializeFullyConnectedLayer(vx_node node, const
 vx_status publishFullyConnectedLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.fully_connected_layer", VX_KERNEL_FULLYCONNECTED_LAYER, processFullyConnectedLayer, 6, validateFullyConnectedLayer, initializeFullyConnectedLayer, uninitializeFullyConnectedLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.fully_connected_layer", VX_KERNEL_FULLY_CONNECTED_LAYER, processFullyConnectedLayer, 6, validateFullyConnectedLayer, initializeFullyConnectedLayer, uninitializeFullyConnectedLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -246,7 +246,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxFullyConnectedLayer(vx_graph graph, vx_tensor
                 (vx_reference)rounding,
                 (vx_reference)outputs
             };
-            node = createNode(graph, VX_KERNEL_FULLYCONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_FULLY_CONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
             vxReleaseScalar(&overflow);
             vxReleaseScalar(&rounding);
         }

@@ -117,10 +117,10 @@ vx_status publishTensorToImageConvert(vx_context context);
 vx_status publishTensorAdd(vx_context context);
 vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);
-vx_status publishTensorConvertDepth(vx_context context);
 vx_status publishScaleLayer(vx_context context);
 vx_status publishUpsampleNearest(vx_context context);
 vx_status publishTensorTableLookup(vx_context context);
+vx_status publishTensorMatrixMultiply(vx_context context);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The module entry point for publishing/unpublishing kernels

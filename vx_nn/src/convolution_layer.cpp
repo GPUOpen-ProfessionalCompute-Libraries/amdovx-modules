@@ -45,7 +45,7 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_NN_CONV_PARAMS) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_NN_CONVOLUTION_PARAMS) return VX_ERROR_INVALID_TYPE;
 
     // check tensor dimensions
     vx_size num_dims;
@@ -256,7 +256,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvolutionLayer(vx_graph graph, vx_tensor in
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar conv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_CONV_PARAMS, convolution_params, size_of_convolution_params);
+        vx_scalar conv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_CONVOLUTION_PARAMS, convolution_params, size_of_convolution_params);
         if(vxGetStatus((vx_reference)conv_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)inputs,

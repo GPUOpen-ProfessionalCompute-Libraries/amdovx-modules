@@ -27,7 +27,7 @@ static vx_status VX_CALLBACK validateROIPoolingLayer(vx_node node, const vx_refe
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_NN_ROIPOOL_PARAMS) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_NN_ROI_POOL_PARAMS) return VX_ERROR_INVALID_TYPE;
 
     // check tensor dimensions
     vx_size num_dims;
@@ -75,7 +75,7 @@ static vx_status VX_CALLBACK uninitializeROIPoolingLayer(vx_node node, const vx_
 vx_status publishROIPoolingLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.roi_pooling_layer", VX_KERNEL_ROIPOOLING_LAYER, processROIPoolingLayer, 4, validateROIPoolingLayer, initializeROIPoolingLayer, uninitializeROIPoolingLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.roi_pooling_layer", VX_KERNEL_ROI_POOLING_LAYER, processROIPoolingLayer, 4, validateROIPoolingLayer, initializeROIPoolingLayer, uninitializeROIPoolingLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // set kernel parameters
@@ -98,7 +98,7 @@ VX_API_ENTRY vx_node vxROIPoolingLayer(vx_graph graph, vx_tensor input_data, vx_
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar roi_params = vxCreateScalarWithSize(context, VX_TYPE_NN_ROIPOOL_PARAMS, roi_pool_params, size_of_roi_params);
+        vx_scalar roi_params = vxCreateScalarWithSize(context, VX_TYPE_NN_ROI_POOL_PARAMS, roi_pool_params, size_of_roi_params);
         if(vxGetStatus((vx_reference)roi_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)input_data,
@@ -106,7 +106,7 @@ VX_API_ENTRY vx_node vxROIPoolingLayer(vx_graph graph, vx_tensor input_data, vx_
                 (vx_reference)roi_params,
                 (vx_reference)output_arr
             };
-            node = createNode(graph, VX_KERNEL_ROIPOOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_ROI_POOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
         }
         vxReleaseScalar(&roi_params);
     }
