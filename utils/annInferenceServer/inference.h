@@ -199,9 +199,11 @@ private:
     Arguments * args;
     std::string modelName;
     std::string options;
+    std::string shadowfolder;
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
+    int receive_filename;
     int reverseInputChannelOrder;
     float preprocessMpy[3];
     float preprocessAdd[3];
