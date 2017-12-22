@@ -1,4 +1,5 @@
 #include "inference_control.h"
+#include "inference_panel.h"
 #include "inference_compiler.h"
 #include "tcpconnection.h"
 #include "assets.h"
@@ -959,10 +960,16 @@ void inference_control::runInference()
     bool sendScaledImages = false;
     if(checkScaledImages && checkScaledImages->checkState())
         sendScaledImages = true;
+
+    inference_panel *display_panel = new inference_panel;
+    display_panel->setWindowIcon(QIcon(":/images/vega_icon_250.png"));
+    display_panel->show();
+
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
                 dataLabels, editImageListFile->text(), editImageFolder->text(),
                 dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages);
+    viewer->setWindowIcon(QIcon(":/images/vega_icon_250.png"));
     viewer->show();
     close();
 }

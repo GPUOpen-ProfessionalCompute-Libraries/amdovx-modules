@@ -1,5 +1,4 @@
 #include "inference_control.h"
-#include "inference_panel.h"
 #include <QApplication>
 #include <QSplashScreen>
 #include <QTime>
@@ -25,10 +24,6 @@ int main(int argc, char *argv[])
     splash.setPixmap(QPixmap(":/images/inference_app_splash.png"));
     splash.show(); splashDelay(5000); splash.hide();
     control.show();
-
-    inference_panel display_panel;
-    display_panel.setWindowIcon(QIcon(":/images/vega_icon_250.png"));
-    display_panel.show();
 
     return a.exec();
 }
