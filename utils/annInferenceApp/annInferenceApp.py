@@ -24,7 +24,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow:<shadow folder>] <folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] <folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -57,10 +57,7 @@ while arg < len(sys.argv):
     elif sys.argv[arg][:8] == '-upload:':
         uploadParams = sys.argv[arg][8:]
         arg = arg + 1
-    elif sys.argv[arg][:8] == '-shadow:':
-        shadowfolder = sys.argv[arg][8:]
-        if shadowfolder[-1] != '/':
-            shadowfolder = shadowfolder + '/'
+    elif sys.argv[arg] == '-shadow':
         sendFileName = 1    
         arg = arg + 1
     elif sys.argv[arg] == '-v':
@@ -119,14 +116,12 @@ def sendFile(sock,cmd,fileName):
     sock.send(buf + struct.pack('i',INFCOM_EOF_MARKER))
 
 def sendImageFile(sock,tag,fileName):
-    print('INFO: ImageFileName: %s' % fileName)
     fp = open(fileName,'r')
     buf = fp.read()
     fp.close()
     sock.send(struct.pack('ii',tag,len(buf)) + buf + struct.pack('i',INFCOM_EOF_MARKER))
 
 def sendImageFileName(sock,tag,fileName):
-    print('INFO: ImageFileName: %s' % fileName)
     buf = bytearray(fileName)
     sock.send(struct.pack('ii',tag,len(buf)) + buf + struct.pack('i',INFCOM_EOF_MARKER))
 
@@ -233,7 +228,7 @@ def uploadModel(host,port,uploadParams):
     model = [modelName, [int(par[2]),int(par[3]),int(par[4])], [ow,oh,oc], int(par[6]), (float(par[7]),float(par[8]),float(par[9]),float(par[10]),float(par[11]),float(par[12]))]
     return model
 
-def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,shadowfolder,sendFileName,verbose):
+def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,verbose):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.connect((host, port))
@@ -276,7 +271,7 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                     if sendFileName == 0:
                     	sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
                     else:
-                    	sendImageFileName(sock,tag,shadowfolder + imageDirPath + imageFileList[tag])
+                    	sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
                     sendCount = sendCount + 1
         elif info[1] == INFCOM_CMD_INFERENCE_RESULT:
             sendpkt(sock,info)
@@ -345,6 +340,6 @@ if len(imageFileList) > 0:
     if modelName == '':
         print('ERROR: no model available to run inference')
         sys.exit(1)
-    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,shadowfolder,sendFileName,verbose)
+    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,verbose)
     if outputFileName:
         print('OK: saved inference results in ' + outputFileName)

@@ -35,6 +35,9 @@ public:
     cl_platform_id getPlatformId() {
         return platform_id;
     }
+    const std::string& getlocalShadowRootDir() {
+        return localShadowRootDir;
+    }
 
     // global mutex
     void lock() {
@@ -98,6 +101,7 @@ protected:
     void loadConfig();
     void saveConfig();
     void getPreConfiguredModels();
+    void setlocalShadowRootDir(const std::string& localShadowDir);
 
 private:
     // loaded configuration
@@ -117,6 +121,7 @@ private:
     cl_platform_id platform_id;
     std::string configurationFile;
     std::string configurationDir;
+    std::string localShadowRootDir;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc

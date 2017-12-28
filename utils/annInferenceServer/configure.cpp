@@ -9,11 +9,11 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
     ///
     InfComCommand reply;
 
-    // send: INFCOM_CMD_CONFIG_INFO { modelCount, numGpus }
+    // send: INFCOM_CMD_CONFIG_INFO { modelCount, numGpus, shadowFolderAvailable }
     int modelCount = args->getNumConfigureddModels();
     InfComCommand config_info = {
         INFCOM_MAGIC, INFCOM_CMD_CONFIG_INFO,
-        { modelCount, args->getNumGPUs() },
+        { modelCount, args->getNumGPUs(), !args->getlocalShadowRootDir().empty() },
         { 0 }
     };
     ERRCHK(sendCommand(sock, config_info, clientName));

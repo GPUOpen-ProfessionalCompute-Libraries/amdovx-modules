@@ -5,8 +5,8 @@
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODE
 //    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_CONFIGURE}
-//  * server: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
-//    client: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
+//  * server: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs,shadowFolderAvailable}
+//    client: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs,shadowFolderAvailable}
 //  * server: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
 //    client: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
 //  * server: (repeat INFCOM_CMD_MODEL_INFO for each of numModels)

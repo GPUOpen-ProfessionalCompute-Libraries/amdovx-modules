@@ -51,8 +51,10 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
-    if (receive_filename)
+    if (!args->getlocalShadowRootDir().empty()){
+        receive_filename = true;
         std::cout << "INFO::inferenceserver receiving file names" << std::endl;
+    }
 
     PROFILER_INITIALIZE();
 
@@ -722,7 +724,7 @@ int InferenceEngine::run()
                     char * byteStream = 0;
                     if (receive_filename)
                     {
-                        std::string fileNameDir = "/";
+                        std::string fileNameDir = args->getlocalShadowRootDir() + "/";
                         char * buff = new char [size];
                         ERRCHK(recvBuffer(sock, buff, size, clientName));
                         fileNameDir.append(std::string(buff, size));

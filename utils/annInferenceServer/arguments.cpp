@@ -104,6 +104,20 @@ void Arguments::setConfigurationDir()
     mkdir(uploadFolder.c_str(), 0700);
 }
 
+void Arguments::setlocalShadowRootDir(const std::string& localShadowDir)
+{
+    // generate configuration directory
+    if(localShadowDir.find("/home") == std::string::npos) {
+        localShadowRootDir = getenv("HOME");
+        localShadowRootDir += "/";
+        localShadowRootDir += localShadowDir;
+    }
+    else {
+        localShadowRootDir = localShadowDir;
+    }
+}
+
+
 void Arguments::loadConfig()
 {
     ////////
@@ -112,12 +126,12 @@ void Arguments::loadConfig()
     FILE * fp = fopen(configurationFile.c_str(), "r");
     if(fp) {
         bool valid = false;
-        char version[256], workFolder_[256];
+        char version[256], workFolder_[256], shadowFolder_[256];
         int modelFileDownloadCounter_;
         int port_, batchSize_, maxPendingBatches_;
         int numGPUs_, gpuIdList_[MAX_NUM_GPU] = { 0 }, maxGpuId_;
         char password_[256] = { 0 };
-        int n = fscanf(fp, "%s%s%d%d%d%d%d", version, workFolder_, &modelFileDownloadCounter_, &port_, &batchSize_, &maxPendingBatches_, &numGPUs_);
+        int n = fscanf(fp, "%s%s%d%d%d%d%d%s", version, workFolder_, &modelFileDownloadCounter_, &port_, &batchSize_, &maxPendingBatches_, &numGPUs_, shadowFolder_);
         if(n == 7 && !strcmp(version, BUILD_VERSION)) {
             if(numGPUs_ > num_devices) {
                 warning("reseting GPUs to default as numGPUs(%d) exceeded num_devices(%d) in %s", numGPUs_, num_devices, configurationFile.c_str());
@@ -154,6 +168,7 @@ void Arguments::loadConfig()
             }
             maxGpuId = maxGpuId_;
             password = password_;
+            setlocalShadowRootDir(localShadowRootDir);
             // set configuration directory
             setConfigurationDir();
         }
@@ -238,7 +253,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
                                      " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>]"
-                                     " [-w <server-work-folder>]";
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -287,6 +302,14 @@ int Arguments::initializeConfig(int argc, char * argv[])
             argv += 2;
             // set configuration directory
             setConfigurationDir();
+        }
+        else if(!strcmp(argv[1], "-s")) {
+         //   localShadowRootDir = argv[2];
+            setlocalShadowRootDir(argv[2]);
+            printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
+            argc -= 2;
+            argv += 2;
+            // set configuration directory
         }
         else
             break;
