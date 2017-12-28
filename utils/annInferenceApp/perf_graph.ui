@@ -16,59 +16,85 @@
   <property name="styleSheet">
    <string notr="true">background-color: rgb(98, 98, 98);</string>
   </property>
-  <widget class="QPushButton" name="pushButton">
+  <widget class="QWidget" name="gridLayoutWidget">
    <property name="geometry">
     <rect>
-     <x>280</x>
-     <y>470</y>
-     <width>93</width>
-     <height>28</height>
+     <x>240</x>
+     <y>430</y>
+     <width>178</width>
+     <height>29</height>
     </rect>
    </property>
-   <property name="styleSheet">
-    <string notr="true">background-color: rgb(170, 0, 0);
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="2" column="1">
+     <widget class="QPushButton" name="pushButton_2">
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(170, 0, 0);
 color: rgb(255, 255, 255);</string>
-   </property>
-   <property name="text">
-    <string>Reset All</string>
-   </property>
+      </property>
+      <property name="text">
+       <string>Close</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="0">
+     <widget class="QPushButton" name="pushButton">
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(170, 0, 0);
+color: rgb(255, 255, 255);</string>
+      </property>
+      <property name="text">
+       <string>Reset All</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
   </widget>
-  <widget class="QLabel" name="label">
+  <widget class="QWidget" name="verticalLayoutWidget">
    <property name="geometry">
     <rect>
-     <x>230</x>
-     <y>100</y>
-     <width>191</width>
-     <height>31</height>
-    </rect>
-   </property>
-   <property name="styleSheet">
-    <string notr="true">color: rgb(255, 255, 255);
-font: 75 18pt &quot;Times New Roman&quot;;</string>
-   </property>
-   <property name="text">
-    <string>Performance Graph</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="logo_label">
-   <property name="geometry">
-    <rect>
-     <x>270</x>
+     <x>9</x>
      <y>10</y>
-     <width>111</width>
-     <height>91</height>
+     <width>631</width>
+     <height>102</height>
     </rect>
    </property>
-   <property name="text">
-    <string/>
-   </property>
-   <property name="pixmap">
-    <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
-   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QLabel" name="logo_label">
+      <property name="text">
+       <string/>
+      </property>
+      <property name="pixmap">
+       <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
+      </property>
+     </widget>
+    </item>
+   </layout>
   </widget>
-  <zorder>pushButton</zorder>
-  <zorder>logo_label</zorder>
-  <zorder>label</zorder>
+  <widget class="QWidget" name="verticalLayoutWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>110</y>
+     <width>631</width>
+     <height>41</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QLabel" name="label">
+      <property name="styleSheet">
+       <string notr="true">color: rgb(255, 255, 255);
+font: 75 18pt &quot;Times New Roman&quot;;</string>
+      </property>
+      <property name="text">
+       <string>Performance Graph</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
  </widget>
  <resources>
   <include location="resources.qrc"/>

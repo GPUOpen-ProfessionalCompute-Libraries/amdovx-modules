@@ -103,7 +103,7 @@ inference_viewer::inference_viewer(
     setMinimumWidth(800);
     setMinimumHeight(800);
     setWindowTitle(tr(WINDOW_TITLE));
-    showMaximized();
+    //showMaximized();
 
     // start timer for update
     timerStopped = false;

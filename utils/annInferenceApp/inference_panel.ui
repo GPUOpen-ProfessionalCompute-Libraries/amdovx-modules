@@ -6,13 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>413</width>
+    <width>430</width>
     <height>700</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>400</width>
+    <width>430</width>
+    <height>700</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>430</width>
     <height>700</height>
    </size>
   </property>
@@ -22,63 +28,6 @@
   <property name="styleSheet">
    <string notr="true">background-color: rgb(109, 109, 109);</string>
   </property>
-  <widget class="QLabel" name="header_label">
-   <property name="geometry">
-    <rect>
-     <x>70</x>
-     <y>110</y>
-     <width>281</width>
-     <height>41</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>251</width>
-     <height>41</height>
-    </size>
-   </property>
-   <property name="styleSheet">
-    <string notr="true">color: rgb(255, 255, 255);
-font: 16pt &quot;Georgia&quot;;</string>
-   </property>
-   <property name="text">
-    <string>Inference Statistics Panel</string>
-   </property>
-  </widget>
-  <widget class="QLabel" name="logo_label">
-   <property name="geometry">
-    <rect>
-     <x>160</x>
-     <y>0</y>
-     <width>111</width>
-     <height>121</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-   <property name="pixmap">
-    <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
-   </property>
-  </widget>
-  <widget class="QPushButton" name="reset_pushButton">
-   <property name="geometry">
-    <rect>
-     <x>132</x>
-     <y>650</y>
-     <width>111</width>
-     <height>28</height>
-    </rect>
-   </property>
-   <property name="styleSheet">
-    <string notr="true">background-color: rgb(255, 0, 0);
-color: rgb(255, 255, 255);
-font: 75 10pt &quot;Georgia&quot;;</string>
-   </property>
-   <property name="text">
-    <string>RESET ALL</string>
-   </property>
-  </widget>
   <widget class="QLCDNumber" name="lcdNumber">
    <property name="geometry">
     <rect>
@@ -267,20 +216,96 @@ background-color: rgb(255, 255, 255);</string>
     <string>View</string>
    </property>
   </widget>
-  <zorder>logo_label</zorder>
-  <zorder>header_label</zorder>
-  <zorder>reset_pushButton</zorder>
-  <zorder>lcdNumber</zorder>
-  <zorder>imagesPerSecLabel</zorder>
-  <zorder>per_icon_label</zorder>
-  <zorder>performace_graph_Label</zorder>
-  <zorder>viewGraph_pushButton</zorder>
-  <zorder>view_classes_Label</zorder>
-  <zorder>viewclass_pushButton</zorder>
-  <zorder>GPUView_pushButton</zorder>
-  <zorder>view_GPU_Label</zorder>
-  <zorder>view_GPU_Label_2</zorder>
-  <zorder>GPUView_pushButton_2</zorder>
+  <widget class="QWidget" name="gridLayoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>10</y>
+     <width>411</width>
+     <height>110</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="panel_gridLayout" rowminimumheight="0">
+    <property name="sizeConstraint">
+     <enum>QLayout::SetNoConstraint</enum>
+    </property>
+    <property name="leftMargin">
+     <number>5</number>
+    </property>
+    <property name="topMargin">
+     <number>5</number>
+    </property>
+    <property name="rightMargin">
+     <number>5</number>
+    </property>
+    <property name="bottomMargin">
+     <number>5</number>
+    </property>
+    <item row="0" column="0" alignment="Qt::AlignHCenter">
+     <widget class="QLabel" name="logo_label">
+      <property name="text">
+       <string/>
+      </property>
+      <property name="pixmap">
+       <pixmap resource="resources.qrc">:/images/display_panel_logo.png</pixmap>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="verticalLayoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>110</y>
+     <width>411</width>
+     <height>43</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QLabel" name="header_label">
+      <property name="minimumSize">
+       <size>
+        <width>251</width>
+        <height>41</height>
+       </size>
+      </property>
+      <property name="styleSheet">
+       <string notr="true">color: rgb(255, 255, 255);
+font: 16pt &quot;Georgia&quot;;</string>
+      </property>
+      <property name="text">
+       <string>Inference Statistics Panel</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="verticalLayoutWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>660</y>
+     <width>411</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QPushButton" name="reset_pushButton">
+      <property name="styleSheet">
+       <string notr="true">background-color: rgb(255, 0, 0);
+color: rgb(255, 255, 255);
+font: 75 10pt &quot;Georgia&quot;;</string>
+      </property>
+      <property name="text">
+       <string>RESET ALL</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
  </widget>
  <resources>
   <include location="resources.qrc"/>
