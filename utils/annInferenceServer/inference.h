@@ -202,7 +202,8 @@ private:
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
-    int receive_filename;
+    bool useShadowFilenames;
+    bool receiveFileNames;
     int reverseInputChannelOrder;
     float preprocessMpy[3];
     float preprocessAdd[3];

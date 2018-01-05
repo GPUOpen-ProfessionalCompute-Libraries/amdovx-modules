@@ -104,17 +104,11 @@ void Arguments::setConfigurationDir()
     mkdir(uploadFolder.c_str(), 0700);
 }
 
-void Arguments::setlocalShadowRootDir(const std::string& localShadowDir)
+void Arguments::setLocalShadowRootDir(const std::string& localShadowDir)
 {
-    // generate configuration directory
-    if(localShadowDir.find("/home") == std::string::npos) {
-        localShadowRootDir = getenv("HOME");
-        localShadowRootDir += "/";
-        localShadowRootDir += localShadowDir;
-    }
-    else {
+    // set localShadowRootDir:: assume the user is supposed to send full absolute path
+    if (!localShadowDir.empty())
         localShadowRootDir = localShadowDir;
-    }
 }
 
 
@@ -168,7 +162,7 @@ void Arguments::loadConfig()
             }
             maxGpuId = maxGpuId_;
             password = password_;
-            setlocalShadowRootDir(localShadowRootDir);
+            setLocalShadowRootDir(localShadowRootDir);
             // set configuration directory
             setConfigurationDir();
         }
@@ -304,12 +298,10 @@ int Arguments::initializeConfig(int argc, char * argv[])
             setConfigurationDir();
         }
         else if(!strcmp(argv[1], "-s")) {
-         //   localShadowRootDir = argv[2];
-            setlocalShadowRootDir(argv[2]);
+            setLocalShadowRootDir(argv[2]);
             printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
             argc -= 2;
             argv += 2;
-            // set configuration directory
         }
         else
             break;

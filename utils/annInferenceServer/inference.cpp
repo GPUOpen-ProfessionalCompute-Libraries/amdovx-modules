@@ -20,10 +20,10 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receive_filename{ cmd->data[8] },
+      receiveFileNames { (bool)cmd->data[8] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
-      device_id{ nullptr }, deviceLockSuccess{ false }
+      device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
@@ -52,8 +52,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
     if (!args->getlocalShadowRootDir().empty()){
-        receive_filename = true;
-        std::cout << "INFO::inferenceserver receiving file names" << std::endl;
+        useShadowFilenames = true;
+        std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
     }
 
     PROFILER_INITIALIZE();
@@ -409,6 +409,14 @@ int InferenceEngine::run()
     }
 
     //////
+    /// check if server and client are in the same mode for data
+    ///
+    if (useShadowFilenames != receiveFileNames)
+    {
+        return error_close(sock, "server and client are not set to the same mode for sending and receiving data");
+    }
+
+    //////
     /// check for model validity
     ///
     bool found = false;
@@ -722,7 +730,7 @@ int InferenceEngine::run()
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
                     char * byteStream = 0;
-                    if (receive_filename)
+                    if (useShadowFilenames)
                     {
                         std::string fileNameDir = args->getlocalShadowRootDir() + "/";
                         char * buff = new char [size];

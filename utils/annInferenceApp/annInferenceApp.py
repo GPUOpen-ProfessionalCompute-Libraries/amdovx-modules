@@ -35,7 +35,6 @@ outputFileName = None
 synsetFileName = None
 uploadParams = ''
 verbose = False
-shadowfolder = ''
 sendFileName = 0
 arg = 1
 while arg < len(sys.argv):

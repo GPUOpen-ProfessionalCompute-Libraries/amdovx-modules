@@ -101,7 +101,7 @@ protected:
     void loadConfig();
     void saveConfig();
     void getPreConfiguredModels();
-    void setlocalShadowRootDir(const std::string& localShadowDir);
+    void setLocalShadowRootDir(const std::string& localShadowDir);
 
 private:
     // loaded configuration
