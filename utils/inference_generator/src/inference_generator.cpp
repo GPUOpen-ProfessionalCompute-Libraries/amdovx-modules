@@ -577,14 +577,15 @@ int calculateTensorDim(
     return 0;
 }
 
-void formatFileName(std::string& str, const std::string& from, const std::string& to)
+std::string getIdentifierName(const std::string name)
 {
-    //Written to avoid conflicts with file creation with filenames that contain "/"
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    size_t N = name.size();
+    const char * s = name.c_str();
+    std::string cname = (N > 0 && std::isdigit(s[0])) ? "_" : "";
+    for(size_t i = 0; i < N; i++) {
+        cname += std::isalnum(s[i]) ? s[i] : '_';
     }
+    return cname;
 }
 
 void writeGDF(
@@ -685,8 +686,7 @@ void writeGDF(
         // create node object
         auto&& type = node[0];
         auto&& params = node[1];
-        std::string layer_name = node[3];
-        formatFileName(layer_name,"/","_");
+        std::string layer_name = getIdentifierName(node[3]);
         if(type == "Convolution") {
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term, group;
@@ -964,8 +964,7 @@ void writeGDF(
                 auto& next_node = *std::next(&node);
                 auto&& next_output = next_node[3];
                 auto&& nn_params = next_node[1];
-                std::string nn_layer_name = next_node[3];
-                formatFileName(nn_layer_name,"/","_");
+                std::string nn_layer_name = getIdentifierName(next_node[3]);
                 weights = next_output + "_W";
                 std::stringstream ss(nn_params);
                 ss >> bias_term;
@@ -1041,7 +1040,7 @@ void writeGDF(
                 }
                 if(op == 1) {
                     ofsGDF << "data " << node[3] <<"_convertPolicy =" << " scalar:VX_TYPE_ENUM," << convertPolicy << std::endl;
-                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << node[i] << " "
+                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << getIdentifierName(node[i]) << " "
                            << node[3] << "_convertPolicy"
                            << " " << out
                            << std::endl;
@@ -1057,8 +1056,7 @@ void writeGDF(
             int bias_term;
             auto&& type = node[0];
             auto&& params = node[1];
-            std::string layer_name = node[3];
-            formatFileName(layer_name,"/","_");
+            std::string layer_name = getIdentifierName(node[3]);
             std::string weights = output + "_W";
             std::stringstream ss(params); ss >> bias_term;
             auto&& dim = tensorMap[weights];
@@ -1151,8 +1149,7 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
 {
     std:: string layer_name;
     if(layer_parameter.has_name()) {
-        layer_name = layer_parameter.name();
-        formatFileName(layer_name,"/","_");
+        layer_name = getIdentifierName(layer_parameter.name());
     }
 
     std::string fileName_weights = outputFolder + "/weights/" + layer_name + ".f32";
@@ -1196,8 +1193,7 @@ void dumpV1LayerData(const caffe::V1LayerParameter& layer_parameter, std::string
 {
     std:: string layer_name;
     if(layer_parameter.has_name()) {
-        layer_name = layer_parameter.name();
-        formatFileName(layer_name,"/","_");
+        layer_name = getIdentifierName(layer_parameter.name());
     }
 
     if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_CONVOLUTION)
@@ -1304,10 +1300,8 @@ void writeVXCode(
         bool isFirstLayer = (&node == &net.front());
         bool isLastLayer = (&node == &net.back());
 
-        std::string layerName = node[3];
-        formatFileName(layerName, "/", "_");
-        std::string inputName = node[4];
-        formatFileName(inputName, "/", "_");
+        std::string layerName = getIdentifierName(node[3]);
+        std::string inputName = getIdentifierName(node[4]);
         if(codeType == "initialize") {
             ofsCodeC << "    // " << layerName <<" Layer" << std::endl;
         }
@@ -1336,8 +1330,7 @@ void writeVXCode(
             auto& next_node = *std::next(&node);
             if (next_node[0] == "Scale") {
                 auto&& next_output = next_node[3];
-                std::string nextOutput = next_node[3];
-                formatFileName(nextOutput,"/","_");
+                std::string nextOutput = getIdentifierName(next_node[3]);
                 auto&& odim = tensorMap[next_output];
                 if(!declare_tensor_check[next_output]) {
                     if(codeType == "initialize") {
@@ -1613,7 +1606,7 @@ void writeVXCode(
                 ofsCodeC << "    " << layerName + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
                 ofsCodeC << "    " << layerName + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
                 ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
-                ofsCodeC << "    " << layerName + "_node = " << " vxDeconvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, " << layerName << ");" << std::endl;
+                ofsCodeC << "    " << layerName + "_node = " << " vxDeconvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, sizeof(" + layerName + "_params), " << layerName << ");" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
             }
@@ -1758,8 +1751,7 @@ void writeVXCode(
                 auto& next_node = *std::next(&node);
                 auto&& next_output = next_node[3];
                 auto&& nn_params = next_node[1];
-                std::string nn_layer_name = next_node[3];
-                formatFileName(nn_layer_name,"/","_");
+                std::string nn_layer_name = getIdentifierName(next_node[3]);
                 weights = nn_layer_name + "_W";
                 std::string dim_weights = next_output + "_W";
                 dim = tensorMap[dim_weights];
@@ -1876,7 +1868,7 @@ void writeVXCode(
                     if(codeType == "initialize") {
                         ofsCodeC << "    vx_enum " << layerName << "_convertPolicy = " << convertPolicy << ";" << std::endl;
                         ofsCodeC << "    vx_node    " << layerName <<"_node;" << std::endl;
-                        ofsCodeC << "    " << layerName + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << layerName + "_convertPolicy, " << out << ");" << std::endl;
+                        ofsCodeC << "    " << layerName + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << getIdentifierName(node[i]) << ", " << layerName + "_convertPolicy, " << out << ");" << std::endl;
                         ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
                         ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
                     }
@@ -1940,8 +1932,7 @@ void writeVXCode(
                 ofsCodeC << layerName;
                 int param_count = 0;
                 for(int i = 4; i < node.size(); i++) {
-                    std::string layerInputs = node[i];
-                    formatFileName(layerInputs, "/", "_");
+                    std::string layerInputs = getIdentifierName(node[i]);
                     ofsCodeC << ", " << layerInputs;
                     param_count++;
                 }
