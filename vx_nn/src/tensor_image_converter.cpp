@@ -29,12 +29,12 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    if (num_dims < 2)
+    if (num_dims != 4)
         return VX_ERROR_INVALID_DIMENSION;
     if (type != VX_TYPE_FLOAT32)
         return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if (input_dims[3] != 1 || (input_dims[2] != 3 && input_dims[2] != 1))
+    if (input_dims[2] != 3 && input_dims[2] != 1)
         return VX_ERROR_INVALID_DIMENSION;
     vx_enum scalar_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
@@ -49,7 +49,7 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
 
     // set output image configuration
     vx_uint32 width = (vx_uint32)input_dims[0];
-    vx_uint32 height = (vx_uint32)input_dims[1];
+    vx_uint32 height = (vx_uint32)(input_dims[1]*input_dims[3]);
     vx_df_image format = (input_dims[2] == 3) ? VX_DF_IMAGE_RGB : VX_DF_IMAGE_U8;
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
@@ -85,11 +85,14 @@ static vx_status VX_CALLBACK opencl_codegen(
     )
 {
     // get configuration
-    vx_uint32 width, height;
     vx_df_image format;
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
+    vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
+    vx_uint32 width = (vx_uint32)input_dims[0];
+    vx_uint32 height = (vx_uint32)input_dims[1];
+    vx_uint32 N = (vx_uint32)input_dims[3];
 
     // compute global work
     vx_uint32 width_div_4 = (width + 3) / 4;
@@ -99,7 +102,7 @@ static vx_status VX_CALLBACK opencl_codegen(
     opencl_local_work[2] = 1;
     opencl_global_work[0] = (width_div_4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
     opencl_global_work[1] = (height + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
-    opencl_global_work[2] = 1;
+    opencl_global_work[2] = N;
 
     // generate OpenCL C code
     strcpy(opencl_kernel_function_name, "tensor_to_image");
@@ -112,8 +115,9 @@ static vx_status VX_CALLBACK opencl_codegen(
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
+            "    uint n = get_global_id(2);\n"
             "    if(x < %d && y < %d) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
             "        float4 r = *(__global float4 *)&i0_buf[reverse_channel_order ? 2 * i0_stride.s2 : 0];\n"
             "        float4 g = *(__global float4 *)&i0_buf[                              i0_stride.s2  ];\n"
             "        float4 b = *(__global float4 *)&i0_buf[reverse_channel_order ? 0 : 2 * i0_stride.s2];\n"
@@ -124,10 +128,10 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        u3.s0 = amd_pack((float4)(r.s0, g.s0, b.s0, r.s1));\n"
             "        u3.s1 = amd_pack((float4)(g.s1, b.s1, r.s2, g.s2));\n"
             "        u3.s2 = amd_pack((float4)(b.s2, r.s3, g.s3, b.s3));\n"
-            "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + y * o0_stride + x * 3]);\n"
+            "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x * 3]);\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
         opencl_kernel_code = item;
     }
     else {
@@ -139,19 +143,20 @@ static vx_status VX_CALLBACK opencl_codegen(
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
+            "    uint n = get_global_id(2);\n"
             "    if(x < %d && y < %d) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
             "        float4 i = *(__global float4 *)i0_buf;\n"
             "        i = i * (float4)ka + (float4)kb;\n"
-            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = amd_pack((float4)(i.s0, i.s1, i.s2, i.s3));\n"
+            "        *(__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x] = amd_pack((float4)(i.s0, i.s1, i.s2, i.s3));\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
         opencl_kernel_code = item;
     }
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "KERNEL tensor_to_image output " << width << "x" << height << " " << std::endl;
+    std::cout << "KERNEL tensor_to_image output " << width << "x" << height << " " << N << std::endl;
 #endif
 
     return VX_SUCCESS;
