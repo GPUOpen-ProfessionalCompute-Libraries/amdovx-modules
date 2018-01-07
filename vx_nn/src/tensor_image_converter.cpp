@@ -34,7 +34,7 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     if (type != VX_TYPE_FLOAT32)
         return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if (input_dims[2] != 3 && input_dims[2] != 1)
+    if ((input_dims[2] != 3 && input_dims[2] != 1) || ((input_dims[0] & 3) != 0))
         return VX_ERROR_INVALID_DIMENSION;
     vx_enum scalar_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
