@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <vector>
 
 #define error(...) printf("ERROR: " __VA_ARGS__), exit(1)
 #define info(...)  printf("OK: " __VA_ARGS__)
@@ -577,14 +578,15 @@ int calculateTensorDim(
     return 0;
 }
 
-void formatFileName(std::string& str, const std::string& from, const std::string& to)
+std::string getIdentifierName(const std::string name)
 {
-    //Written to avoid conflicts with file creation with filenames that contain "/"
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    size_t N = name.size();
+    const char * s = name.c_str();
+    std::string cname = (N > 0 && std::isdigit(s[0])) ? "_" : "";
+    for(size_t i = 0; i < N; i++) {
+        cname += std::isalnum(s[i]) ? s[i] : '_';
     }
+    return cname;
 }
 
 void writeGDF(
@@ -685,8 +687,7 @@ void writeGDF(
         // create node object
         auto&& type = node[0];
         auto&& params = node[1];
-        std::string layer_name = node[3];
-        formatFileName(layer_name,"/","_");
+        std::string layer_name = getIdentifierName(node[3]);
         if(type == "Convolution") {
             std::stringstream ss(params);
             int k, kernel_w, kernel_h, stride_w, stride_h, pad_w, pad_h, dilation_w, dilation_h, bias_term, group;
@@ -964,8 +965,7 @@ void writeGDF(
                 auto& next_node = *std::next(&node);
                 auto&& next_output = next_node[3];
                 auto&& nn_params = next_node[1];
-                std::string nn_layer_name = next_node[3];
-                formatFileName(nn_layer_name,"/","_");
+                std::string nn_layer_name = getIdentifierName(next_node[3]);
                 weights = next_output + "_W";
                 std::stringstream ss(nn_params);
                 ss >> bias_term;
@@ -1041,7 +1041,7 @@ void writeGDF(
                 }
                 if(op == 1) {
                     ofsGDF << "data " << node[3] <<"_convertPolicy =" << " scalar:VX_TYPE_ENUM," << convertPolicy << std::endl;
-                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << node[i] << " "
+                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << getIdentifierName(node[i]) << " "
                            << node[3] << "_convertPolicy"
                            << " " << out
                            << std::endl;
@@ -1057,8 +1057,7 @@ void writeGDF(
             int bias_term;
             auto&& type = node[0];
             auto&& params = node[1];
-            std::string layer_name = node[3];
-            formatFileName(layer_name,"/","_");
+            std::string layer_name = getIdentifierName(node[3]);
             std::string weights = output + "_W";
             std::stringstream ss(params); ss >> bias_term;
             auto&& dim = tensorMap[weights];
@@ -1151,8 +1150,7 @@ void dumpLayerData(const caffe::LayerParameter& layer_parameter, std::string out
 {
     std:: string layer_name;
     if(layer_parameter.has_name()) {
-        layer_name = layer_parameter.name();
-        formatFileName(layer_name,"/","_");
+        layer_name = getIdentifierName(layer_parameter.name());
     }
 
     std::string fileName_weights = outputFolder + "/weights/" + layer_name + ".f32";
@@ -1196,8 +1194,7 @@ void dumpV1LayerData(const caffe::V1LayerParameter& layer_parameter, std::string
 {
     std:: string layer_name;
     if(layer_parameter.has_name()) {
-        layer_name = layer_parameter.name();
-        formatFileName(layer_name,"/","_");
+        layer_name = getIdentifierName(layer_parameter.name());
     }
 
     if(layer_parameter.type() == caffe::V1LayerParameter_LayerType_CONVOLUTION)
@@ -1304,10 +1301,8 @@ void writeVXCode(
         bool isFirstLayer = (&node == &net.front());
         bool isLastLayer = (&node == &net.back());
 
-        std::string layerName = node[3];
-        formatFileName(layerName, "/", "_");
-        std::string inputName = node[4];
-        formatFileName(inputName, "/", "_");
+        std::string layerName = getIdentifierName(node[3]);
+        std::string inputName = getIdentifierName(node[4]);
         if(codeType == "initialize") {
             ofsCodeC << "    // " << layerName <<" Layer" << std::endl;
         }
@@ -1336,8 +1331,7 @@ void writeVXCode(
             auto& next_node = *std::next(&node);
             if (next_node[0] == "Scale") {
                 auto&& next_output = next_node[3];
-                std::string nextOutput = next_node[3];
-                formatFileName(nextOutput,"/","_");
+                std::string nextOutput = getIdentifierName(next_node[3]);
                 auto&& odim = tensorMap[next_output];
                 if(!declare_tensor_check[next_output]) {
                     if(codeType == "initialize") {
@@ -1375,8 +1369,8 @@ void writeVXCode(
         auto&& odim = tensorMap[output];
         if(!declare_tensor_check[output]) {
             if(codeType == "initialize") {
-                ofsCodeC << "    vx_size " << layerName << "_dims[4] = { " << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << " };" << std::endl;
                 if(layerName != outputTensorName) {
+                    ofsCodeC << "    vx_size " << layerName << "_dims[4] = { " << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << " };" << std::endl;
                     ofsCodeC << "    vx_tensor " << layerName << ";" << std::endl;
                     if(isVirtualEnabled){
                         ofsCodeC << "    " << layerName << " = vxCreateVirtualTensor(graph,4, " << layerName + "_dims, VX_TYPE_FLOAT32," << fixedPosition << ");" << std::endl;
@@ -1613,7 +1607,7 @@ void writeVXCode(
                 ofsCodeC << "    " << layerName + "_params.a_x = " << dilation_w - 1 << ";" << std::endl;
                 ofsCodeC << "    " << layerName + "_params.a_y = " << dilation_h - 1 << ";" << std::endl;
                 ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
-                ofsCodeC << "    " << layerName + "_node = " << " vxDeconvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, " << layerName << ");" << std::endl;
+                ofsCodeC << "    " << layerName + "_node = " << " vxDeconvolutionLayer(graph, " << inputName << ", " << weights << ", " << bias << ", &" << layerName + "_params, sizeof(" + layerName + "_params), " << layerName << ");" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
                 ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
             }
@@ -1758,8 +1752,7 @@ void writeVXCode(
                 auto& next_node = *std::next(&node);
                 auto&& next_output = next_node[3];
                 auto&& nn_params = next_node[1];
-                std::string nn_layer_name = next_node[3];
-                formatFileName(nn_layer_name,"/","_");
+                std::string nn_layer_name = getIdentifierName(next_node[3]);
                 weights = nn_layer_name + "_W";
                 std::string dim_weights = next_output + "_W";
                 dim = tensorMap[dim_weights];
@@ -1876,7 +1869,7 @@ void writeVXCode(
                     if(codeType == "initialize") {
                         ofsCodeC << "    vx_enum " << layerName << "_convertPolicy = " << convertPolicy << ";" << std::endl;
                         ofsCodeC << "    vx_node    " << layerName <<"_node;" << std::endl;
-                        ofsCodeC << "    " << layerName + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << node[i] << ", " << layerName + "_convertPolicy, " << out << ");" << std::endl;
+                        ofsCodeC << "    " << layerName + "_node = " << "vxTensorAddNode(graph, " << tmp << ", " << getIdentifierName(node[i]) << ", " << layerName + "_convertPolicy, " << out << ");" << std::endl;
                         ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + layerName + "_node);" << std::endl;
                         ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << layerName + "_node));" << std::endl;
                     }
@@ -1940,8 +1933,7 @@ void writeVXCode(
                 ofsCodeC << layerName;
                 int param_count = 0;
                 for(int i = 4; i < node.size(); i++) {
-                    std::string layerInputs = node[i];
-                    formatFileName(layerInputs, "/", "_");
+                    std::string layerInputs = getIdentifierName(node[i]);
                     ofsCodeC << ", " << layerInputs;
                     param_count++;
                 }
@@ -1992,13 +1984,67 @@ void writeVXCode(
     }
 }
 
+void generateCopyImageCode(std::ostream& ofsCodeC)
+{
+    ofsCodeC << "static vx_status copyImage(vx_image image, std::string fileName, vx_enum usage = VX_WRITE_ONLY)" << std::endl
+             << "{" << std::endl
+             << "    vx_uint32 width = 0, height = 0;" << std::endl
+             << "    vxQueryImage(image, VX_IMAGE_WIDTH, &width, sizeof(vx_uint32));" << std::endl
+             << "    vxQueryImage(image, VX_IMAGE_HEIGHT, &height, sizeof(vx_uint32));" << std::endl
+             << "    vx_rectangle_t rect = { 0, 0, width, height };" << std::endl
+             << "    vx_imagepatch_addressing_t addr;" << std::endl
+             << "    vx_uint8 * ptr = NULL;" << std::endl
+             << "    vx_map_id map_id;" << std::endl
+             << "    vx_status status = vxMapImagePatch(image, &rect, 0, &map_id, &addr, (void **)&ptr, usage, VX_MEMORY_TYPE_HOST, VX_NOGAP_X);" << std::endl
+             << "    if(status) {" << std::endl
+             << "        std::cerr << \"ERROR: vxMapImagePatch() failed for \" << fileName << std::endl;" << std::endl
+             << "        return -1;" << std::endl
+             << "    }" << std::endl
+             << "    vx_uint32 width_in_bytes = (width * addr.stride_x);" << std::endl
+             << "    FILE * fp = fopen(fileName.c_str(), usage == VX_WRITE_ONLY ? \"rb\" : \"wb\");" << std::endl
+             << "    if(!fp) {" << std::endl
+             << "        std::cerr << \"ERROR: unable to open: \" << fileName << std::endl;" << std::endl
+             << "        return -1;" << std::endl
+             << "    }" << std::endl
+             << "    for (vx_uint32 y = 0; y < height; y += addr.step_y) {" << std::endl
+             << "        vx_uint8 * line = (vx_uint8 *)vxFormatImagePatchAddress2d(ptr, 0, y, &addr);" << std::endl
+             << "        if(usage == VX_WRITE_ONLY) {" << std::endl
+             << "            vx_size n = fread(line, sizeof(vx_uint8), width_in_bytes, fp);" << std::endl
+             << "            if(n != width_in_bytes) {" << std::endl
+             << "                std::cerr << \"ERROR: expected char[\" << height*width_in_bytes << \"], but got char[\" << y*width_in_bytes+n << \"] in \" << fileName << std::endl;" << std::endl
+             << "                return -1;" << std::endl
+             << "            }" << std::endl
+             << "        }" << std::endl
+             << "        else {" << std::endl
+             << "            fwrite(line, sizeof(vx_uint8), width_in_bytes, fp);" << std::endl
+             << "        }" << std::endl
+             << "    }" << std::endl
+             << "    fclose(fp);" << std::endl
+             << "    status = vxUnmapImagePatch(image, map_id);" << std::endl
+             << "    if(status) {" << std::endl
+             << "        std::cerr << \"ERROR: vxUnmapImagePatch() failed for \" << fileName << std::endl;" << std::endl
+             << "        return -1;" << std::endl
+             << "    }" << std::endl
+             << "    return 0;" << std::endl
+             << "}" << std::endl << std::endl;
+}
+
 void generateCopyTensorCode(std::ostream& ofsCodeC)
 {
     ofsCodeC << "static vx_status copyTensor(vx_tensor tensor, std::string fileName, vx_enum usage = VX_WRITE_ONLY)" << std::endl
              << "{" << std::endl
+             << "    vx_enum data_type = VX_TYPE_FLOAT32;" << std::endl
              << "    vx_size num_of_dims = 4, dims[4] = { 1, 1, 1, 1 }, stride[4];" << std::endl
+             << "    vxQueryTensor(tensor, VX_TENSOR_DATA_TYPE, &data_type, sizeof(data_type));" << std::endl
              << "    vxQueryTensor(tensor, VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims));" << std::endl
              << "    vxQueryTensor(tensor, VX_TENSOR_DIMS, &dims, sizeof(dims[0])*num_of_dims);" << std::endl
+             << "    vx_size itemsize = sizeof(float);" << std::endl
+             << "    if(data_type == VX_TYPE_UINT8 || data_type == VX_TYPE_INT8) {" << std::endl
+             << "        itemsize = sizeof(vx_uint8);" << std::endl
+             << "    }" << std::endl
+             << "    else if(data_type == VX_TYPE_UINT16 || data_type == VX_TYPE_INT16 || data_type == VX_TYPE_FLOAT16) {" << std::endl
+             << "        itemsize = sizeof(vx_uint16);" << std::endl
+             << "    }" << std::endl
              << "    vx_size count = dims[0] * dims[1] * dims[2] * dims[3];" << std::endl
              << "    vx_map_id map_id;" << std::endl
              << "    float * ptr;" << std::endl
@@ -2013,14 +2059,14 @@ void generateCopyTensorCode(std::ostream& ofsCodeC)
              << "        return -1;" << std::endl
              << "    }" << std::endl
              << "    if(usage == VX_WRITE_ONLY) {" << std::endl
-             << "        vx_size n = fread(ptr, sizeof(float), count, fp);" << std::endl
+             << "        vx_size n = fread(ptr, itemsize, count, fp);" << std::endl
              << "        if(n != count) {" << std::endl
-             << "            std::cerr << \"ERROR: expected float[\" << count << \"], but got float[\" << n << \"] in \" << fileName << std::endl;" << std::endl
+             << "            std::cerr << \"ERROR: expected char[\" << count*itemsize << \"], but got char[\" << n*itemsize << \"] in \" << fileName << std::endl;" << std::endl
              << "            return -1;" << std::endl
              << "        }" << std::endl
              << "    }" << std::endl
              << "    else {" << std::endl
-             << "        fwrite(ptr, sizeof(float), count, fp);" << std::endl
+             << "        fwrite(ptr, itemsize, count, fp);" << std::endl
              << "    }" << std::endl
              << "    fclose(fp);" << std::endl
              << "    status = vxUnmapTensorPatch(tensor, map_id);" << std::endl
@@ -2046,8 +2092,24 @@ void generateCode(
     std::string roundPolicy,
     bool isVirtualEnabled,
     std::string outputFolder,
+    bool bInputIsImage,
+    std::string inputImageType,
+    bool bInputChannelReverse,
+    double fInputConversionA,
+    double fInputConversionB,
+    bool bOutputArgmax,
+    bool bOutputIsImage,
+    std::string argmaxOutputDataType,
+    int argmaxTopK,
+    std::vector<int>& argmaxLut,
+    bool bEnableErrorMessages,
     bool bFuseScaleLayer)
 {
+    std::string annApiName = "annCreateGraph";
+    if(bInputIsImage) annApiName += "WithInputImage";
+    if(bOutputArgmax) annApiName += (bOutputIsImage ? "WithArgmaxImage" : "WithArgmaxTensor");
+    if(argmaxLut.size() > 0) annApiName += "WithLut";
+
     ////
     // generate .h file
     //
@@ -2057,9 +2119,11 @@ void generateCode(
              << "#include <VX/vx.h>" << std::endl
              <<                         std::endl
              << "extern \"C\" {"     << std::endl
-             << "    VX_API_ENTRY void     VX_API_CALL annGetTensorDimensions(vx_size dimInput[4], vx_size dimOutput[4]);" << std::endl
-             << "    VX_API_ENTRY vx_graph VX_API_CALL annCreateGraph(vx_context context, vx_tensor input, vx_tensor output, const char * options);" << std::endl
-             << "};"                 << std::endl
+             << "    VX_API_ENTRY void     VX_API_CALL annGetTensorDimensions(vx_size dimInput[4], vx_size dimOutput[4]);" << std::endl;
+    ofsCodeH << "    VX_API_ENTRY vx_graph VX_API_CALL " << annApiName << "(vx_context context, "
+                                  << (bInputIsImage ? "vx_image" : "vx_tensor") << " input, "
+                                  << (bOutputIsImage ? "vx_image" : " vx_tensor") << " output, const char * options);" << std::endl;
+    ofsCodeH << "};"                 << std::endl
              <<                         std::endl
              << "#endif" <<  std::endl;
 
@@ -2074,8 +2138,8 @@ void generateCode(
     ofsCodeC << "#include <stdio.h>" << std::endl;
     ofsCodeC << "#include <stdlib.h>" << std::endl << std::endl;
 
-    ofsCodeC << "#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS) { vxAddLogEntry(NULL, status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return nullptr; } }" << std::endl;
-    ofsCodeC << "#define ERROR_CHECK_OBJECT(obj) { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS) { vxAddLogEntry((vx_reference)(obj), status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return nullptr; } }" << std::endl << std::endl;
+    ofsCodeC << "#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS) { vxAddLogEntry((vx_reference)context, status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\\n\", status, __LINE__); return nullptr; } }" << std::endl;
+    ofsCodeC << "#define ERROR_CHECK_OBJECT(obj) { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS) { vxAddLogEntry((vx_reference)context, status, \"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\\n\", status, __LINE__); return nullptr; } }" << std::endl << std::endl;
 
     generateCopyTensorCode(ofsCodeC);
 
@@ -2094,8 +2158,20 @@ void generateCode(
              << "    dimOutput[2] = " << odim[1] << ";" << std::endl
              << "    dimOutput[3] = " << odim[0] << ";" << std::endl
              << "}" << std::endl << std::endl;
+    if(bOutputArgmax) {
+        if(argmaxOutputDataType == "VX_TYPE_UINT8" && odim[1] >= 256) {
+            printf("ERROR: output argmax tensor type VX_TYPE_UINT8 can't hold channel numbers upto %d\n", odim[1]);
+            exit(1);
+        }
+        if(argmaxLut.size() > 0 && argmaxLut.size() < odim[1]) {
+            printf("ERROR: argmax LUT requires at least %d entries: got %ld entries\n", odim[1], argmaxLut.size());
+            exit(1);
+        }
+    }
 
-    ofsCodeC << "VX_API_ENTRY vx_graph VX_API_CALL annCreateGraph(vx_context context, vx_tensor " << input << ", vx_tensor " << output << ", const char * dataFolder_)" << std::endl;
+    ofsCodeC << "VX_API_ENTRY vx_graph VX_API_CALL " << annApiName << "(vx_context context, "
+             << (bInputIsImage ? "vx_image" : "vx_tensor") << " " << input << (bInputIsImage ? "__image" : "") << ", "
+             << (bOutputIsImage ? "vx_image" : "vx_tensor") << " " << output << (bOutputArgmax ? "__argmax" : "") << ", const char * dataFolder_)" << std::endl;
     ofsCodeC << "{" << std::endl;
     ofsCodeC << "    // load neural network extension kernels" << std::endl;
     ofsCodeC << "    ERROR_CHECK_STATUS(vxLoadKernels(context,\"vx_nn\"));" << std::endl;
@@ -2109,10 +2185,104 @@ void generateCode(
     ofsCodeC << std::endl;
     ofsCodeC << "    ////" << std::endl;
     ofsCodeC << "    // initialize the graph" << std::endl;
+    if(bInputIsImage) {
+        if(inputImageType == "VX_DF_IMAGE_RGB" && idim[1] != 3) {
+            printf("ERROR: need input channels to be 3 to use input as an RGB/BGR images: got input C = %d\n", idim[1]);
+            exit(1);
+        }
+        else if(inputImageType == "VX_DF_IMAGE_U8" && idim[1] != 1) {
+            printf("ERROR: need input channels to be 1 to use input as an U8 images: got input C = %d\n", idim[1]);
+            exit(1);
+        }
+        ofsCodeC << "    vx_size " << input << "_dims[4] = { " << idim[3] << ", " << idim[2] << ", " << idim[1] << ", " << idim[0] << " };" << std::endl;
+        ofsCodeC << "    vx_tensor " << input << ";" << std::endl;
+        if(isVirtualEnabled) {
+            ofsCodeC << "    " << input << " = vxCreateVirtualTensor(graph, 4, " << input + "_dims,"<< tensorType <<", " << fixedPointPosition << ");" << std::endl;
+        }
+        else {
+            ofsCodeC << "    " << input << " = vxCreateTensor(context, 4, " << input + "_dims,"<< tensorType <<", " << fixedPointPosition << ");" << std::endl;
+        }
+        ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << input << ");" << std::endl;
+        ofsCodeC << "    vx_node " << input << "_image_conversion_node;" << std::endl;
+        ofsCodeC << "    " << input + "_image_conversion_node = " << "vxConvertImageToTensorNode(graph, " << input << "__image, " << input << ", " << fInputConversionA << ", " << fInputConversionB << ", " << (bInputChannelReverse ? "vx_true_e" : "vx_false_e") << ");" << std::endl;
+        ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + input + "_image_conversion_node);" << std::endl;
+        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << input + "_image_conversion_node));" << std::endl;
+    }
+    if(bOutputArgmax) {
+        ofsCodeC << "    vx_size " << output << "_dims[4] = { " << odim[3] << ", " << odim[2] << ", 1, " << odim[0] << " };" << std::endl;
+        ofsCodeC << "    vx_tensor " << output << ";" << std::endl;
+        if(isVirtualEnabled) {
+            ofsCodeC << "    " << output << " = vxCreateVirtualTensor(graph, 4, " << output + "_dims,"<< tensorType <<", " << fixedPointPosition << ");" << std::endl;
+        }
+        else {
+            ofsCodeC << "    " << output << " = vxCreateTensor(context, 4, " << output + "_dims,"<< tensorType <<", " << fixedPointPosition << ");" << std::endl;
+        }
+        ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << output << ");" << std::endl;
+    }
     writeVXCode(ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, bFuseScaleLayer, outputFolder, "initialize");
+    if(bOutputArgmax) {
+        std::string argmaxOutputName = output + "__argmax";
+        if(bOutputIsImage && argmaxOutputDataType == "VX_DF_IMAGE_U8" && argmaxLut.size() >= odim[1]) {
+            ofsCodeC << "    vx_image " << argmaxOutputName << "_labels;" << std::endl;
+            if(isVirtualEnabled) {
+                ofsCodeC << "    " << argmaxOutputName << "_labels = vxCreateVirtualImage(graph, " << odim[3] << ", " << (odim[2]*odim[0]) << ", VX_DF_IMAGE_U8);" << std::endl;
+            }
+            else {
+                ofsCodeC << "    " << argmaxOutputName << "_labels = vxCreateImage(context, " << odim[3] << ", " << (odim[2]*odim[0]) << ", VX_DF_IMAGE_U8);" << std::endl;
+            }
+            ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << argmaxOutputName << "_labels);" << std::endl;
+            ofsCodeC << "    vx_node " << output << "_argmax_node;" << std::endl;
+            ofsCodeC << "    " << output + "_argmax_node = " << "vxArgmaxLayer(graph, " << output << ", (vx_reference)" << argmaxOutputName << "_labels);" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + output + "_argmax_node);" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << output << "_argmax_node));" << std::endl;
+            for(int i = 0; i < 3; i++) {
+                std::string lutName = output + "__lut" + i["RGB"];
+                std::string chanName = output + "__channel" + i["RGB"];
+                ofsCodeC << "    vx_lut " << lutName << " = vxCreateLUT(context, VX_TYPE_UINT8, 256);" << std::endl;
+                ofsCodeC << "    vx_uint8 " << lutName << "_tbl[256] = {";
+                for(int j = 0; j < odim[1]; j++) {
+                    if((j & 15) == 0) {
+                        ofsCodeC << std::endl << "        ";
+                    }
+                    ofsCodeC << ((argmaxLut[j] >> (i * 8)) & 255) << ", ";
+                }
+                ofsCodeC << std::endl;
+                ofsCodeC << "    };" << std::endl;
+                ofsCodeC << "    ERROR_CHECK_STATUS(vxCopyLUT(" << lutName << ", " << lutName << "_tbl, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST));" << std::endl;
+                ofsCodeC << "    vx_image " << chanName << ";" << std::endl;
+                if(isVirtualEnabled) {
+                    ofsCodeC << "    " << chanName << " = vxCreateVirtualImage(graph, " << odim[3] << ", " << (odim[2]*odim[0]) << ", VX_DF_IMAGE_U8);" << std::endl;
+                }
+                else {
+                    ofsCodeC << "    " << chanName << " = vxCreateImage(context, " << odim[3] << ", " << (odim[2]*odim[0]) << ", VX_DF_IMAGE_U8);" << std::endl;
+                }
+                ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << chanName << ");" << std::endl;
+                ofsCodeC << "    vx_node " << chanName << "_node;" << std::endl;
+                ofsCodeC << "    " << chanName + "_node = " << "vxTableLookupNode(graph, " << argmaxOutputName << ", " << lutName << ", " << chanName << ");" << std::endl;
+                ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" + chanName + "_node);" << std::endl;
+                ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << chanName << "_node));" << std::endl;
+            }
+            ofsCodeC << "    vx_node " << output << "_combine_node;" << std::endl;
+            ofsCodeC << "    " << output + "_combine_node = " << "vxChannelCombineNode(graph, " << output << "__channelR, " << output << "__channelG, " << output << "__channelB, NULL, " << argmaxOutputName << ");" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << output << "_combine_node);" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << output << "_combine_node));" << std::endl;
+        }
+        else {
+            ofsCodeC << "    vx_node " << output << "_argmax_node;" << std::endl;
+            ofsCodeC << "    " << output + "_argmax_node = " << "vxArgmaxLayer(graph, " << output << ", (vx_reference)" << argmaxOutputName << ");" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_OBJECT(" << output << "_argmax_node);" << std::endl;
+            ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseNode(&" << output << "_argmax_node));" << std::endl;
+        }
+    }
     ofsCodeC << "    ////" << std::endl;
     ofsCodeC << "    // release intermediate objects" << std::endl;
+    if(bInputIsImage) {
+        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << input << "));" << std::endl;
+    }
     writeVXCode(ofsCodeC, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, bFuseScaleLayer, outputFolder, "release");
+    if(bOutputArgmax) {
+        ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << output << "));" << std::endl;
+    }
     ofsCodeC << std::endl;
     ofsCodeC << "    ////" << std::endl;
     ofsCodeC << "    // verify the built graph" << std::endl;
@@ -2153,6 +2323,19 @@ void generateCode(
     ofsCodeA << std::endl;
     ofsCodeA << "#define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS) { printf(\"ERROR: failed with status = (%d) at \" __FILE__ \"#%d\", status, __LINE__); return -1; } }" << std::endl;
     ofsCodeA << std::endl;
+    if(bEnableErrorMessages) {
+        ofsCodeA << "static void VX_CALLBACK log_callback(vx_context context, vx_reference ref, vx_status status, const vx_char string[])" << std::endl;
+        ofsCodeA << "{" << std::endl;
+        ofsCodeA << "    size_t len = strlen(string);" << std::endl;
+        ofsCodeA << "    if (len > 0) {" << std::endl;
+        ofsCodeA << "        printf(\"%s\", string);" << std::endl;
+        ofsCodeA << "        if (string[len - 1] != '\\n')" << std::endl;
+        ofsCodeA << "            printf(\"\\n\");" << std::endl;
+        ofsCodeA << "        fflush(stdout);" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+        ofsCodeA << "}" << std::endl;
+        ofsCodeA << std::endl;
+    }
     ofsCodeA << "inline int64_t clockCounter()" << std::endl;
     ofsCodeA << "{" << std::endl;
     ofsCodeA << "    return std::chrono::high_resolution_clock::now().time_since_epoch().count();" << std::endl;
@@ -2164,7 +2347,12 @@ void generateCode(
     ofsCodeA << "}" << std::endl;
     ofsCodeA << std::endl;
 
-    generateCopyTensorCode(ofsCodeA);
+    if(bInputIsImage || bOutputIsImage) {
+        generateCopyImageCode(ofsCodeA);
+    }
+    if(!(bInputIsImage && bOutputIsImage)) {
+        generateCopyTensorCode(ofsCodeA);
+    }
 
     ofsCodeA << "int main(int argc , char ** argv)" << std::endl;
     ofsCodeA << "{" << std::endl;
@@ -2174,36 +2362,87 @@ void generateCode(
     ofsCodeA << "    printf(\"OK: annGetTensorDimensions() => [input %ldx%ldx%ldx%ld] [output %ldx%ldx%ldx%ld]\\n\", dimInput[0], dimInput[1], dimInput[2], dimInput[3], dimOutput[0], dimOutput[1], dimOutput[2], dimOutput[3]);" << std::endl;
     ofsCodeA << std::endl;
     ofsCodeA << "    // create context, input, output, and graph" << std::endl;
+    if(bEnableErrorMessages) {
+        ofsCodeA << "    vxRegisterLogCallback(NULL, log_callback, vx_false_e);" << std::endl;
+    }
     ofsCodeA << "    vx_context context = vxCreateContext();" << std::endl;
     ofsCodeA << "    if(vxGetStatus((vx_reference)context)) {" << std::endl;
     ofsCodeA << "        printf(\"ERROR: vxCreateContext() failed\\n\");" << std::endl;
     ofsCodeA << "        return -1;" << std::endl;
     ofsCodeA << "    }" << std::endl;
-    ofsCodeA << "    vx_tensor input = vxCreateTensor(context, 4, dimInput, VX_TYPE_FLOAT32, 0);" << std::endl;
-    ofsCodeA << "    if(vxGetStatus((vx_reference)input)) {" << std::endl;
-    ofsCodeA << "        printf(\"ERROR: vxCreateTensor(input,4,{%ld,%ld,%ld,%ld}) failed\\n\", dimInput[0], dimInput[1], dimInput[2], dimInput[3]);" << std::endl;
-    ofsCodeA << "        return -1;" << std::endl;
-    ofsCodeA << "    }" << std::endl;
-    ofsCodeA << "    vx_tensor output = vxCreateTensor(context, 4, dimOutput, VX_TYPE_FLOAT32, 0);" << std::endl;
-    ofsCodeA << "    if(vxGetStatus((vx_reference)output)) {" << std::endl;
-    ofsCodeA << "        printf(\"ERROR: vxCreateTensor(output,4,{%ld,%ld,%ld,%ld}) failed\\n\", dimOutput[0], dimOutput[1], dimOutput[2], dimOutput[3]);" << std::endl;
-    ofsCodeA << "        return -1;" << std::endl;
-    ofsCodeA << "    }" << std::endl;
+    if(bEnableErrorMessages) {
+        ofsCodeA << "    vxRegisterLogCallback(context, log_callback, vx_false_e);" << std::endl;
+    }
+    if(bInputIsImage) {
+        ofsCodeA << "    vx_image input = vxCreateImage(context, (vx_uint32)dimInput[0], (vx_uint32)(dimInput[1]*dimInput[3]), " << inputImageType << ");" << std::endl;
+        ofsCodeA << "    if(vxGetStatus((vx_reference)input)) {" << std::endl;
+        ofsCodeA << "        printf(\"ERROR: vxCreateImage(input,%ld,%ld," << inputImageType << ") failed\\n\", dimInput[0], dimInput[1]*dimInput[3]);" << std::endl;
+        ofsCodeA << "        return -1;" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
+    else {
+        ofsCodeA << "    vx_tensor input = vxCreateTensor(context, 4, dimInput, VX_TYPE_FLOAT32, 0);" << std::endl;
+        ofsCodeA << "    if(vxGetStatus((vx_reference)input)) {" << std::endl;
+        ofsCodeA << "        printf(\"ERROR: vxCreateTensor(input,4,{%ld,%ld,%ld,%ld}) failed\\n\", dimInput[0], dimInput[1], dimInput[2], dimInput[3]);" << std::endl;
+        ofsCodeA << "        return -1;" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
+    if(bOutputArgmax) {
+        if(bOutputIsImage) {
+            std::string outputImageFormat = argmaxOutputDataType;
+            if(argmaxLut.size() > 0) {
+                outputImageFormat = "VX_DF_IMAGE_RGB";
+            }
+            ofsCodeA << "    vx_image output = vxCreateImage(context, (vx_uint32)dimOutput[0], (vx_uint32)(dimOutput[1]*dimOutput[3]), " << outputImageFormat << ");" << std::endl;
+            ofsCodeA << "    if(vxGetStatus((vx_reference)output)) {" << std::endl;
+            ofsCodeA << "        printf(\"ERROR: vxCreateImage(output,%ld,%ld," << outputImageFormat << ") failed\\n\", dimOutput[0], dimOutput[1]*dimOutput[3]);" << std::endl;
+            ofsCodeA << "        return -1;" << std::endl;
+            ofsCodeA << "    }" << std::endl;
+        }
+        else {
+            ofsCodeA << "    vx_size dimArgmax[4] = { dimOutput[0], dimOutput[1], " << argmaxTopK << ", dimOutput[3] };" << std::endl;
+            ofsCodeA << "    vx_tensor output = vxCreateTensor(context, 4, dimArgmax, " << argmaxOutputDataType << ", 0);" << std::endl;
+            ofsCodeA << "    if(vxGetStatus((vx_reference)output)) {" << std::endl;
+            ofsCodeA << "        printf(\"ERROR: vxCreateTensor(output,4,{%ld,%ld,%ld,%ld}," << argmaxOutputDataType << ",0) failed\\n\", dimArgmax[0], dimArgmax[1], dimArgmax[2], dimArgmax[3]);" << std::endl;
+            ofsCodeA << "        return -1;" << std::endl;
+            ofsCodeA << "    }" << std::endl;
+        }
+    }
+    else {
+        ofsCodeA << "    vx_tensor output = vxCreateTensor(context, 4, dimOutput, VX_TYPE_FLOAT32, 0);" << std::endl;
+        ofsCodeA << "    if(vxGetStatus((vx_reference)output)) {" << std::endl;
+        ofsCodeA << "        printf(\"ERROR: vxCreateTensor(output,4,{%ld,%ld,%ld,%ld},VX_TYPE_FLOAT32,0) failed\\n\", dimOutput[0], dimOutput[1], dimOutput[2], dimOutput[3]);" << std::endl;
+        ofsCodeA << "        return -1;" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
     ofsCodeA << std::endl;
     ofsCodeA << "    // build graph from the module" << std::endl;
     ofsCodeA << "    int64_t freq = clockFrequency(), t0, t1;" << std::endl;
     ofsCodeA << "    t0 = clockCounter();" << std::endl;
-    ofsCodeA << "    vx_graph graph = annCreateGraph(context, input, output, argc > 1 ? argv[1] : nullptr);" << std::endl;
+    ofsCodeA << "    vx_graph graph = " << annApiName << "(context, input, output, argc > 1 ? argv[1] : nullptr);" << std::endl;
     ofsCodeA << "    t1 = clockCounter();" << std::endl;
     ofsCodeA << "    if(vxGetStatus((vx_reference)graph)) {" << std::endl;
-    ofsCodeA << "        printf(\"ERROR: annCreateGraph(...,%s) failed\\n\", argv[1]);" << std::endl;
+    ofsCodeA << "        printf(\"ERROR: " << annApiName << "(...,%s) failed\\n\", argv[1]);" << std::endl;
     ofsCodeA << "        return -1;" << std::endl;
     ofsCodeA << "    }" << std::endl;
-    ofsCodeA << "    printf(\"OK: annCreateGraph() took %.3f msec\\n\", (float)(t1-t0)*1000.0f/(float)freq);" << std::endl;
+    ofsCodeA << "    printf(\"OK: " << annApiName << "() took %.3f msec\\n\", (float)(t1-t0)*1000.0f/(float)freq);" << std::endl;
     ofsCodeA << std::endl;
-    ofsCodeA << "    if(argc > 2 && copyTensor(input, argv[2], VX_WRITE_ONLY) < 0) {" << std::endl;
-    ofsCodeA << "        return -1;" << std::endl;
-    ofsCodeA << "    }" << std::endl;
+    if(bInputIsImage) {
+        ofsCodeA << "    if(argc > 2) {" << std::endl;
+        ofsCodeA << "        if(copyImage(input, argv[2], VX_WRITE_ONLY) < 0) {" << std::endl;
+        ofsCodeA << "            return -1;" << std::endl;
+        ofsCodeA << "        }" << std::endl;
+        ofsCodeA << "        printf(\"OK: read %ldx%ld image from %s\\n\", dimInput[0], dimInput[1], argv[2]);" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
+    else {
+        ofsCodeA << "    if(argc > 2) {" << std::endl;
+        ofsCodeA << "        if(copyTensor(input, argv[2], VX_WRITE_ONLY) < 0) {" << std::endl;
+        ofsCodeA << "            return -1;" << std::endl;
+        ofsCodeA << "        }" << std::endl;
+        ofsCodeA << "        printf(\"OK: read %ldx%ldx%ldx%ld tensor from %s\\n\", dimInput[3], dimInput[2], dimInput[1], dimInput[0], argv[2]);" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
     ofsCodeA << std::endl;
     ofsCodeA << "    t0 = clockCounter();" << std::endl;
     ofsCodeA << "    vx_status status = vxProcessGraph(graph);" << std::endl;
@@ -2214,9 +2453,22 @@ void generateCode(
     ofsCodeA << "    }" << std::endl;
     ofsCodeA << "    printf(\"OK: vxProcessGraph() took %.3f msec (1st iteration)\\n\", (float)(t1-t0)*1000.0f/(float)freq);" << std::endl;
     ofsCodeA << std::endl;
-    ofsCodeA << "    if(argc > 3 && copyTensor(output, argv[3], VX_READ_ONLY) < 0) {" << std::endl;
-    ofsCodeA << "        return -1;" << std::endl;
-    ofsCodeA << "    }" << std::endl;
+    if(bOutputIsImage) {
+        ofsCodeA << "    if(argc > 3) {" << std::endl;
+        ofsCodeA << "        if(copyImage(output, argv[3], VX_READ_ONLY) < 0) {" << std::endl;
+        ofsCodeA << "            return -1;" << std::endl;
+        ofsCodeA << "        }" << std::endl;
+        ofsCodeA << "        printf(\"OK: wrote %ldx%ld image into %s\\n\", dimOutput[0], dimOutput[1]*dimOutput[3], argv[3]);" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
+    else {
+        ofsCodeA << "    if(argc > 3) {" << std::endl;
+        ofsCodeA << "        if(copyTensor(output, argv[3], VX_READ_ONLY) < 0) {" << std::endl;
+        ofsCodeA << "            return -1;" << std::endl;
+        ofsCodeA << "        }" << std::endl;
+        ofsCodeA << "        printf(\"OK: wrote %ldx%ldx%ldx%ld tensor into %s\\n\", dimOutput[3], " << (bOutputArgmax ? "(vx_size)1" : "dimOutput[2]") << ", dimOutput[1], dimOutput[0], argv[3]);" << std::endl;
+        ofsCodeA << "    }" << std::endl;
+    }
     ofsCodeA << "    t0 = clockCounter();" << std::endl;
     ofsCodeA << "    int N = 100;" << std::endl;
     ofsCodeA << "    for(int i = 0; i < N; i++) {" << std::endl;
@@ -2229,8 +2481,18 @@ void generateCode(
     ofsCodeA << std::endl;
     ofsCodeA << "    // release resources" << std::endl;
     ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseGraph(&graph));" << std::endl;
-    ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseTensor(&input));" << std::endl;
-    ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseTensor(&output));" << std::endl;
+    if(bInputIsImage) {
+        ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseImage(&input));" << std::endl;
+    }
+    else {
+        ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseTensor(&input));" << std::endl;
+    }
+    if(bOutputIsImage) {
+        ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseImage(&output));" << std::endl;
+    }
+    else {
+        ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseTensor(&output));" << std::endl;
+    }
     ofsCodeA << "    ERROR_CHECK_STATUS(vxReleaseContext(&context));" << std::endl;
     ofsCodeA << "    printf(\"OK: successful\\n\");" << std::endl;
     ofsCodeA << std::endl;
@@ -2520,22 +2782,45 @@ int main(int argc, char* argv[])
             "Usage:\n"
             "  % inference_generator [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
             "    options:\n"
+            "      --[no-]error-messages     - do/don't enable error messages (default: ON)\n"
             "      --[no-]virtual-buffers    - do/don't use virtual buffers (default: ON)\n"
             "      --[no-]generate-gdf       - do/don't generate RunVX GDF with weight/bias initialization (default: ON)\n"
             "      --[no-]generate-vx-code   - do/don't generate OpenVX C Code with weight/bias initialization (default: ON)\n"
             "      --output-dir <folder>     - specify output folder for weights/biases, GDF, and OpenVX C Code (default: current)\n"
+            "      --input-rgb <a> <b> <rev> - convert input from RGB image into tensor using (a*x+b) conversion: rev=(BGR?1:0)\n"
+            "      --input-u8  <a> <b>       - convert input from U8 image into tensor using (a*x+b) conversion\n"
+            "      --argmax-tensor u8|u16 k  - return argmax output with specified tensor type and top_k\n"
+            "      --argmax-image u8|u16     - return argmax output with specified image type\n"
+            "      --argmax-lut <rgbLut.txt> - argmax color table: one R G B entry per label\n"
             "      --flags <int>             - specify custom flags (default: 0)\n"
             ;
 
     // get options
+    bool bEnableErrorMessages = true;
     bool isVirtualEnabled = true;
     bool generateGDF = true;
     bool generateVXC = true;
     bool bFuseScaleWithBatchNorm = true;
+    bool bInputIsImage = false;
+    bool bInputChannelReverse = false;
+    double fInputConversionA = 0;
+    double fInputConversionB = 255;
+    std::string inputImageType;
+    bool bOutputArgmax = false;
+    bool bOutputIsImage = false;
+    std::string argmaxOutputDataType;
+    int argmaxTopK = 1;
+    std::vector<int> argmaxLut;
     std::string outputFolder = ".";
     int flags = 0;
     for(; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
-        if(!strcmp(argv[1], "--virtual-buffers")) {
+        if(!strcmp(argv[1], "--error-messages")) {
+            bEnableErrorMessages = true;
+        }
+        else if(!strcmp(argv[1], "--no-error-messages")) {
+            bEnableErrorMessages = false;
+        }
+        else if(!strcmp(argv[1], "--virtual-buffers")) {
             isVirtualEnabled = true;
         }
         else if(!strcmp(argv[1], "--no-virtual-buffers")) {
@@ -2563,6 +2848,75 @@ int main(int argc, char* argv[])
             flags = atoi(argv[2]);
             argc--;
             argv++;
+        }
+        else if(!strcmp(argv[1], "--input-rgb") && argc > 4) {
+            bInputIsImage = true;
+            inputImageType = "VX_DF_IMAGE_RGB";
+            fInputConversionA = atof(argv[2]);
+            fInputConversionB = atof(argv[3]);
+            if(!strcmp(argv[4], "0")) bInputChannelReverse = false;
+            else if(!strcmp(argv[4], "1")) bInputChannelReverse = true;
+            else {
+                printf("ERROR: invalid input RGB channel <rev> option: %s (most be 0 or 1)\n", argv[4]);
+                return -1;
+            }
+            argc -= 3;
+            argv += 3;
+        }
+        else if(!strcmp(argv[1], "--input-u8") && argc > 3) {
+            bInputIsImage = true;
+            inputImageType = "VX_DF_IMAGE_U8";
+            fInputConversionA = atof(argv[2]);
+            fInputConversionB = atof(argv[3]);
+            bInputChannelReverse = false;
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "--argmax-tensor") && argc > 3) {
+            bOutputArgmax = true;
+            bOutputIsImage = false;
+            if(!strcmp(argv[2], "u8")) argmaxOutputDataType = "VX_TYPE_UINT8";
+            else if(!strcmp(argv[2], "u16")) argmaxOutputDataType = "VX_TYPE_UINT16";
+            else {
+                printf("ERROR: invalid argmax output tensor type: %s (must be u8 or u16)\n", argv[2]);
+                return -1;
+            }
+            argmaxTopK = atoi(argv[3]);
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "--argmax-image") && argc > 2) {
+            bOutputArgmax = true;
+            bOutputIsImage = true;
+            if(!strcmp(argv[2], "u8")) argmaxOutputDataType = "VX_DF_IMAGE_U8";
+            else if(!strcmp(argv[2], "u16")) argmaxOutputDataType = "VX_DF_IMAGE_U16";
+            else {
+                printf("ERROR: invalid argmax output image type: %s (must be u8 or u16)\n", argv[2]);
+                return -1;
+            }
+            argmaxTopK = 1;
+            argc -= 1;
+            argv += 1;
+        }
+        else if(!strcmp(argv[1], "--argmax-lut") && argc > 2) {
+            if(!bOutputArgmax || !bOutputIsImage || argmaxOutputDataType != "VX_DF_IMAGE_U8") {
+                printf("ERROR: '--argmax-image u8' is required prior to '--argmax-lut' option\n");
+                return -1;
+            }
+            FILE * fp = fopen(argv[2], "r");
+            if(!fp) {
+                printf("ERROR: unable to open: %s\n", argv[2]);
+                return -1;
+            }
+            argmaxLut.clear();
+            for(int r, g, b; fscanf(fp, "%d%d%d", &r, &g, &b) == 3;) {
+                int v = ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+                argmaxLut.push_back(v);
+            }
+            fclose(fp);
+            printf("OK: loaded LUT with %ld entries from %s\n", argmaxLut.size(), argv[2]);
+            argc -= 1;
+            argv += 1;
         }
         else {
             printf("ERROR: invalid option: %s\n", argv[1]);
@@ -2636,7 +2990,13 @@ int main(int argc, char* argv[])
         std::string dir = outputFolder + "/cmake";
         mkdir(dir.c_str(), 0777);
         std::ofstream ofsCodeD(dir + "/FindOpenCL.cmake", std::ios::binary);
-        generateCode(ofsCodeH, ofsCodeC, ofsCodeM, ofsCodeA, ofsCodeD, net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy, isVirtualEnabled, outputFolder, bFuseScaleWithBatchNorm);
+        generateCode(ofsCodeH, ofsCodeC, ofsCodeM, ofsCodeA, ofsCodeD,
+            net, tensorMap, tensorType, fixedPointPosition, convertPolicy, roundPolicy,
+            isVirtualEnabled, outputFolder,
+            bInputIsImage, inputImageType, bInputChannelReverse, fInputConversionA, fInputConversionB,
+            bOutputArgmax, bOutputIsImage, argmaxOutputDataType, argmaxTopK, argmaxLut,
+            bEnableErrorMessages,
+            bFuseScaleWithBatchNorm);
     }
 
     return 0;
