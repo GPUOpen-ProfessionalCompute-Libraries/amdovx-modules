@@ -20,9 +20,37 @@ vx_graph annCreateGraph(
         vx_tensor output,       // output tensor
         const char * dataFolder // folder with weights and biases
     );
+or
+vx_graph annCreateGraphWithInputImage(
+        vx_context context,     // OpenVX context
+        vx_image input,         // input image (RGB or U8)
+        vx_tensor output,       // output tensor
+        const char * dataFolder // folder with weights and biases
+    );
+or
+vx_graph annCreateGraphWithInputImageWithArgmaxTensor(
+        vx_context context,     // OpenVX context
+        vx_image input,         // input image (RGB or U8)
+        vx_tensor output,       // output tensor
+        const char * dataFolder // folder with weights and biases
+    );
+or
+vx_graph annCreateGraphWithInputImageWithArgmaxImage(
+        vx_context context,     // OpenVX context
+        vx_image input,         // input image (RGB or U8)
+        vx_image output,        // output image (U8)
+        const char * dataFolder // folder with weights and biases
+    );
+or
+vx_graph annCreateGraphWithInputImageWithArgmaxImageWithLut(
+        vx_context context,     // OpenVX context
+        vx_image input,         // input image (RGB or U8)
+        vx_image output,        // output image (RGB)
+        const char * dataFolder // folder with weights and biases
+    );
 ````
 * `annGetTensorDimensions`: allows an application to query dimensions of input and output tensors
-* `annCreateGraph`: creates and initializes a graph with trained neural network for inference
+* `annCreateGraph` (or another variant above): creates and initializes a graph with trained neural network for inference
 
 ## Command-line Usage
 ````
@@ -33,11 +61,17 @@ vx_graph annCreateGraph(
 ````
 option|description
 ------|-----------
---[no-]virtual-buffers  | do/don't use virtual buffers (default: ON)
---[no-]generate-gdf     | do/don't generate RunVX GDF with weight/bias initialization (default: ON)
---[no-]generate-vx-code | do/don't generate OpenVX C Code with weight/bias initialization (default: ON)
---output-dir <folder>   | specify output folder for weights/biases, GDF, and OpenVX C Code (default: current)
---flags <int>           | specify custom flags (default: 0)
+--[no-]error-messages     | do/don't enable error messages (default: ON)
+--[no-]virtual-buffers    | do/don't use virtual buffers (default: ON)
+--[no-]generate-gdf       | do/don't generate RunVX GDF with weight/bias initialization (default: ON)
+--[no-]generate-vx-code   | do/don't generate OpenVX C Code with weight/bias initialization (default: ON)
+--output-dir <folder>     | specify output folder for weights/biases, GDF, and OpenVX C Code (default: current)
+--input-rgb <a> <b> <rev> | convert input from RGB image into tensor using (a*x+b) conversion: rev=(BGR?1:0)
+--input-u8  <a> <b>       | convert input from U8 image into tensor using (a*x+b) conversion
+--argmax-tensor u8|u16 k  | return argmax output with specified tensor type and top_k
+--argmax-image u8|u16     | return argmax output with specified image type
+--argmax-lut <rgbLut.txt> | argmax color table: one R G B entry per label
+--flags <int>             | specify custom flags (default: 0)
 
 ## Example
 Make sure that all executables and libraries are in `PATH` and `LD_LIBRARY_PATH` environment variables.
