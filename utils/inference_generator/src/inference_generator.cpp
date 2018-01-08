@@ -2316,6 +2316,7 @@ void generateCode(
     ofsCodeA << "#include <vx_ext_amd.h>" << std::endl;
     ofsCodeA << "#include <iostream>" << std::endl;
     ofsCodeA << "#include <stdio.h>" << std::endl;
+    ofsCodeA << "#include <string.h>" << std::endl;
     ofsCodeA << "#include <string>" << std::endl;
     ofsCodeA << "#include <inttypes.h>" << std::endl;
     ofsCodeA << "#include <chrono>" << std::endl;
