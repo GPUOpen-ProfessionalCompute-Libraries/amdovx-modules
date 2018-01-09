@@ -733,7 +733,7 @@ void writeGDF(
                     }
                 }
 
-                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
                 tensorCheck[output + "_W"] = true;
                 if(bias_term) tensorCheck[output + "_B"] = true;
 
@@ -799,7 +799,7 @@ void writeGDF(
                     tensorCheck[bias] = true;
                 }
 
-                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
                 ofsGDF << "node org.khronos.nn_extension.convolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
                        << node[3] <<"_params"
                        << " " << node[3]
@@ -832,7 +832,7 @@ void writeGDF(
                 tensorCheck[bias] = true;
             }
 
-            ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_DECONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << "," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+            ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_DECONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << "," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
             ofsGDF << "node org.khronos.nn_extension.deconvolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
                    << node[3] <<"_params"
                    << " " << node[3]
