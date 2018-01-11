@@ -156,9 +156,9 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
 {
     int length = width*height;
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
-    unsigned char *data_resize = nullptr;
 
 #if USE_SSE_OPTIMIZATION
+    unsigned char *data_resize = nullptr;
     unsigned char * img;
     if ((width == matOrig.cols) && (height == matOrig.rows))
     {
@@ -215,6 +215,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
         R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
     }
+    if (data_resize != nullptr) delete[] data_resize;
 #else
     cv::Mat matScaled;
     cv::resize(matOrig, matScaled, cv::Size(width, height));
@@ -228,7 +229,6 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     }
     matScaled.release();
 #endif
-    if (data_resize != nullptr) delete[] data_resize;
     matOrig.release();
     return VX_SUCCESS;
 }
