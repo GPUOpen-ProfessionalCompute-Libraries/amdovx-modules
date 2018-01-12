@@ -39,7 +39,6 @@
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
-#define NUM_TOP_K_RESULTS               0       // for testing: todo remove
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -203,7 +202,7 @@ private:
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
-    int top_k;
+    int topK;
     int reverseInputChannelOrder;
     float preprocessMpy[3];
     float preprocessAdd[3];

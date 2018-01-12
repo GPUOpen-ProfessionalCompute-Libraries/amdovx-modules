@@ -179,24 +179,24 @@ void inference_receiver::run()
                 if(top_k > 0 && count > 0 && count < (int)((sizeof(cmd)-16)/(sizeof(int)*item_size))) {
                     std::lock_guard<std::mutex> guard(mutex);
                     std::vector<int> labels;
-                    std::vector<float> prob_vec;
+                    std::vector<float> probVec;
                     for(int i = 0; i < count; i++) {
                         int tag = cmd.data[2 + item_size*i + 0];
                         imageIndex.push_back(tag);
                         for (int j=1; j<=top_k; j++){
-                            int label = cmd.data[2 + i*item_size + j];
+                            int label = cmd.data[2 + i*item_size + j];      // label has both label and prob
                             float prob =  (label>>16)*(1.0f/(float)32767.0f);
                             prob = Saturate(prob, 1.0f);
                             labels.push_back(label & 0xFFFF);
-                            prob_vec.push_back(prob);
+                            probVec.push_back(prob);
                         }
                         imageTopkLabels.push_back(labels);
-                        imageTopkConfidence.push_back(prob_vec);
+                        imageTopkConfidence.push_back(probVec);
                         // get the top label
-                        int top_label = labels[0];
-                        imageLabel.push_back(top_label);
-                        if(dataLabels && top_label >= 0 && top_label < dataLabels->size()) {
-                            imageSummary.push_back((*dataLabels)[top_label]);
+                        int topLabel = labels[0];
+                        imageLabel.push_back(topLabel);
+                        if(dataLabels && topLabel >= 0 && topLabel < dataLabels->size()) {
+                            imageSummary.push_back((*dataLabels)[topLabel]);
                         }
                         else {
                             imageSummary.push_back("Unknown");
@@ -204,7 +204,7 @@ void inference_receiver::run()
                         perfImageCount++;
                         progress->images_received++;
                         labels.clear();
-                        prob_vec.clear();
+                        probVec.clear();
                     }
                     if(!progress->repeat_images && progress->completed_load &&
                         progress->images_loaded == progress->images_received)

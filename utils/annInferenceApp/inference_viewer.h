@@ -63,7 +63,6 @@ public:
     QString modelName;
     int maxImageDataSize;
     bool sendScaledImages;
-    int top_k;
 };
 
 class inference_viewer : public QWidget

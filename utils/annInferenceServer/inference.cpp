@@ -39,6 +39,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
+      topK { cmd->data[8] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }
@@ -69,10 +70,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
-    top_k = 0;
-#if (NUM_TOP_K_RESULTS > 1)
-    top_k = NUM_TOP_K_RESULTS;
-#endif
+    if (topK > 5) topK = 5;         // support upto 5 topK confidance
+
     PROFILER_INITIALIZE();
 
 }
@@ -695,7 +694,7 @@ int InferenceEngine::run()
         if(resultCountAvailable > 0) {
             didSomething = true;
             while(resultCountAvailable > 0) {
-                if (top_k <= 1){
+                if (topK <= 1){
                     int resultCount = std::min(resultCountAvailable, INFCOM_MAX_IMAGES_PER_PACKET);
                     InfComCommand cmd = {
                         INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
@@ -724,11 +723,11 @@ int InferenceEngine::run()
                     }
                 }else
                 {
-                    // send top_k labels
-                    int max_res = (INFCOM_MAX_IMAGES_PER_PACKET*2)/(top_k+1);
-                    int resultCount = std::min(resultCountAvailable, max_res);
+                    // send topK labels
+                    int maxResults = (INFCOM_MAX_IMAGES_PER_PACKET*2)/(topK+1);
+                    int resultCount = std::min(resultCountAvailable, maxResults);
                     InfComCommand cmd = {
-                        INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, top_k }, { 0 }
+                        INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
                     };
                     for(int i = 0; i < resultCount; i++) {
                         std::vector<int> labels;
@@ -739,9 +738,9 @@ int InferenceEngine::run()
                             resultCount = i;
                             break;
                         }
-                        cmd.data[2 + i * (top_k+1) + 0] = tag; // tag
-                        for (int j=1; j<=top_k; j++){
-                            cmd.data[2 + i * (top_k+1) + j] = labels[j]; // label[j]
+                        cmd.data[2 + i * (topK+1) + 0] = tag; // tag
+                        for (int j=1; j<=topK; j++){
+                            cmd.data[2 + i * (topK+1) + j] = labels[j]; // label[j]
                             float prob = (labels[j]>>16)*(1.0f/(float)32767.0f);
                             prob = Saturate(prob, 1.0f);
                             //cout << "top_"<<j<< " label and prob for image "<< tag <<": "<< (labels[j]&0xFFFF) <<" "<< prob <<endl;
@@ -1185,7 +1184,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
-            if (top_k <= 1){
+            if (topK <= 1){
                 int label = 0;
                 float max_prob = buf[0];
                 for(int c = 1; c < dimOutput[2]; c++) {
@@ -1208,7 +1207,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
                     //cout<<"tag: "<< tag << "top_" << j << "label and prob: " << i << " " << prob_vec[i] << endl;
                     int label = (i&0xFFFF)|(((unsigned int)(prob_vec[i]*0x7FFF))<<16);   // convert prob to 16bit float and store in MSBs
                     labels.push_back(label);
-                    if (++j >= top_k) break;
+                    if (++j >= topK) break;
                 }
                 outputQTopk.enqueue(labels);
             }

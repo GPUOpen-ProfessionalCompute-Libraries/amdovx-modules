@@ -41,7 +41,7 @@
 // Inference Run Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_MODE_INFERENCE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc} message="modelName [options]"
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc, top_k} message="modelName [options]"
 //  * server: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={maxCount}
 //    client: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={count} -- count:0..maxCount
 //    client: for each image: { <tag:32-bit> <size:32-bit> <byte-stream> <eof-marker:32-bit> }
