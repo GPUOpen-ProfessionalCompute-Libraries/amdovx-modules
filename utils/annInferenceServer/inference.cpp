@@ -411,9 +411,9 @@ int InferenceEngine::run()
     //////
     /// check if server and client are in the same mode for data
     ///
-    if (useShadowFilenames != receiveFileNames)
+    if (receiveFileNames && !useShadowFilenames)
     {
-        return error_close(sock, "server and client are not set to the same mode for sending and receiving data");
+        return error_close(sock, "client is sending filenames but server is not configured with shadow folder\n");
     }
 
     //////
@@ -730,7 +730,7 @@ int InferenceEngine::run()
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
                     char * byteStream = 0;
-                    if (useShadowFilenames)
+                    if (receiveFileNames)
                     {
                         std::string fileNameDir = args->getlocalShadowRootDir() + "/";
                         char * buff = new char [size];
