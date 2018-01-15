@@ -2781,7 +2781,7 @@ int main(int argc, char* argv[])
 {
     const char * usage =
             "Usage:\n"
-            "  % inference_generator [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
+            "  % caffe2openvx [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
             "    options:\n"
             "      --[no-]error-messages     - do/don't enable error messages (default: ON)\n"
             "      --[no-]virtual-buffers    - do/don't use virtual buffers (default: ON)\n"
