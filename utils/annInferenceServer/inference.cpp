@@ -20,9 +20,10 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
+      receiveFileNames { (bool)cmd->data[8] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
-      device_id{ nullptr }, deviceLockSuccess{ false }
+      device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
@@ -50,6 +51,11 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
+    if (!args->getlocalShadowRootDir().empty()){
+        useShadowFilenames = true;
+        std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
+    }
+
     PROFILER_INITIALIZE();
 
 }
@@ -430,6 +436,14 @@ int InferenceEngine::run()
     }
 
     //////
+    /// check if server and client are in the same mode for data
+    ///
+    if (receiveFileNames && !useShadowFilenames)
+    {
+        return error_close(sock, "client is sending filenames but server is not configured with shadow folder\n");
+    }
+
+    //////
     /// check for model validity
     ///
     bool found = false;
@@ -742,9 +756,32 @@ int InferenceEngine::run()
                     if(tag < 0 || size <= 0 || size > 50000000) {
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
-                    // allocate and receive the image and EOF market
-                    char * byteStream = new char [size];
-                    ERRCHK(recvBuffer(sock, byteStream, size, clientName));
+                    char * byteStream = 0;
+                    if (receiveFileNames)
+                    {
+                        std::string fileNameDir = args->getlocalShadowRootDir() + "/";
+                        char * buff = new char [size];
+                        ERRCHK(recvBuffer(sock, buff, size, clientName));
+                        fileNameDir.append(std::string(buff, size));
+                        FILE * fp = fopen(fileNameDir.c_str(), "rb");
+                        if(!fp) {
+                            return error_close(sock, "filename %s (incorrect)", fileNameDir.c_str());
+                        }
+                        fseek(fp,0,SEEK_END);
+                        int fsize = ftell(fp);
+                        fseek(fp,0,SEEK_SET);
+                        byteStream = new char [fsize];
+                        fread(byteStream, 1, fsize, fp);
+                        fclose(fp);
+                        delete[] buff;
+                        size = fsize;       // actual size of the file
+                    }
+                    else
+                    {
+                        // allocate and receive the image and EOF market
+                        byteStream = new char [size];
+                        ERRCHK(recvBuffer(sock, byteStream, size, clientName));
+                    }
                     int eofMarker = 0;
                     ERRCHK(recvBuffer(sock, &eofMarker, sizeof(eofMarker), clientName));
                     if(eofMarker != INFCOM_EOF_MARKER) {

@@ -238,7 +238,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
                                      " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>]"
-                                     " [-w <server-work-folder>]";
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -287,6 +287,17 @@ int Arguments::initializeConfig(int argc, char * argv[])
             argv += 2;
             // set configuration directory
             setConfigurationDir();
+        }
+        else if(!strcmp(argv[1], "-s")) {
+            if (!strcmp(argv[2],"")) {
+                error("invalid shadow folder name %s", argv[2]);
+                return -1;
+            }else {
+                setLocalShadowRootDir(argv[2]);
+                printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
+            }
+            argc -= 2;
+            argv += 2;
         }
         else
             break;
