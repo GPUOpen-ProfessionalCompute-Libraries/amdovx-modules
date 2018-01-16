@@ -91,6 +91,11 @@ public:
     bool checkPassword(std::string code) {
         return (password == code) ? true : false;
     }
+    // set localShadowRootDir (full absolute path)
+    void setLocalShadowRootDir(const std::string& localShadowDir)
+    {
+        localShadowRootDir = localShadowDir;
+    }
 
     // device resources
     int lockGpuDevices(int GPUs, cl_device_id * device_id_);
@@ -101,7 +106,6 @@ protected:
     void loadConfig();
     void saveConfig();
     void getPreConfiguredModels();
-    void setLocalShadowRootDir(const std::string& localShadowDir);
 
 private:
     // loaded configuration
