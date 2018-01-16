@@ -289,13 +289,12 @@ int Arguments::initializeConfig(int argc, char * argv[])
             setConfigurationDir();
         }
         else if(!strcmp(argv[1], "-s")) {
-            if (argv[2] != "") {
-                setLocalShadowRootDir(argv[2]);
-                printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
-            }else
-            {
+            if (!strcmp(argv[2],"")) {
                 error("invalid shadow folder name %s", argv[2]);
                 return -1;
+            }else {
+                setLocalShadowRootDir(argv[2]);
+                printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
             }
             argc -= 2;
             argv += 2;
