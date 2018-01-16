@@ -1197,6 +1197,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
                 outputQ.enqueue(std::tuple<int,int>(tag,label));
             }else
             {
+           //     printf("Enqueueing top_K:%d results\n", topK);
                 std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
                 std::vector<int>    labels;
                 sort_indexes(prob_vec);
