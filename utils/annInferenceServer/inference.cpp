@@ -164,9 +164,19 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
 
 #if USE_SSE_OPTIMIZATION
-    unsigned int aligned_size = ((length+width) * 3 + 128)&~127;
-    unsigned char *data_resize = new unsigned char[aligned_size];
-    RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, width, height);
+    unsigned char *data_resize = nullptr;
+    unsigned char * img;
+    if ((width == matOrig.cols) && (height == matOrig.rows))
+    {
+        // no resize required
+        img = matOrig.data;
+    }else
+    {
+        unsigned int aligned_size = ((length+width) * 3 + 128)&~127;
+        data_resize = new unsigned char[aligned_size];
+        RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, width, height);
+        img = data_resize;
+    }
 
     __m128i mask_B, mask_G, mask_R;
     if (reverseInputChannelOrder)
@@ -181,8 +191,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
         mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
     }
-    unsigned char * img = data_resize;
-    int alignedLength = length& ~3;
+    int alignedLength = (length-2)& ~3;
     float * B_buf = buf;
     float * G_buf = B_buf + length;
     float * R_buf = G_buf + length;
@@ -212,6 +221,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
         R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
     }
+    if (data_resize != nullptr) delete[] data_resize;
 #else
     cv::Mat matScaled;
     cv::resize(matOrig, matScaled, cv::Size(width, height));
@@ -236,7 +246,6 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
 {
     float xscale = (float)((double)swidth / (double)dwidth);
     float yscale = (float)((double)sheight / (double)dheight);
-    // generate xmap
     int alignW = (dwidth + 15)&~15;
     unsigned int *Xmap = new unsigned int[alignW*2];
     unsigned short *Xf = (unsigned short *)(Xmap + alignW);
@@ -245,10 +254,15 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
     int xpos = (int)(FP_MUL * (xscale*0.5 - 0.5));
     int xinc = (int)(FP_MUL * xscale);
     int yinc = (int)(FP_MUL * yscale);		// to convert to fixed point
+    unsigned int aligned_width = dwidth;
+    // generate xmap
     for (unsigned int x = 0; x < dwidth; x++, xpos += xinc)
     {
         int xf;
         int xmap = (xpos >> FP_BITS);
+        if (xmap >= (int)(swidth - 4)){
+            aligned_width = x;
+        }
         if (xmap >= (int)(swidth - 1)){
             Xmap[x] = (swidth - 1)*3;
         }
@@ -258,11 +272,12 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         Xf[x] = xf;
         Xf1[x] = (0x100 - xf);
     }
+    aligned_width &= ~3;
     int stride = swidth * 3;
     int dstride = dwidth * 3;
-    unsigned int aligned_width = dwidth & ~3;	// nearest multiple of 4
-    int ypos = (int)(FP_MUL * (yscale*0.5 - 0.5));
+    unsigned char *pSrcBorder = Rgb_in + (sheight*stride) - 3;    // points to the last pixel
 
+    int ypos = (int)(FP_MUL * (yscale*0.5 - 0.5));
     for (int y = 0; y < (int)dheight; y++, ypos += yinc)
     {
         int ym, fy, fy1;
@@ -288,10 +303,10 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         for (; x < aligned_width; x += 4)
         {
             // load 2 pixels each
-            p01 = _mm_loadu_si128((const __m128i*) &pSrc1[Xmap[x]]);
-            p23 = _mm_loadu_si128((const __m128i*) &pSrc1[Xmap[x+1]]);
-            ps01 = _mm_loadu_si128((const __m128i*) &pSrc2[Xmap[x]]);
-            ps23 = _mm_loadu_si128((const __m128i*) &pSrc2[Xmap[x + 1]]);
+            p01 = _mm_loadl_epi64((const __m128i*) &pSrc1[Xmap[x]]);
+            p23 = _mm_loadl_epi64((const __m128i*) &pSrc1[Xmap[x+1]]);
+            ps01 = _mm_loadl_epi64((const __m128i*) &pSrc2[Xmap[x]]);
+            ps23 = _mm_loadl_epi64((const __m128i*) &pSrc2[Xmap[x + 1]]);
             // unpcklo for p01 and ps01
             p01 = _mm_unpacklo_epi8(p01, ps01);
             p23 = _mm_unpacklo_epi8(p23, ps23);
@@ -370,14 +385,26 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
             _mm_storeu_si128((__m128i *)pdst, _mm_unpacklo_epi64(pRG1, p01));
             pdst += 12;
         }
+
         for (; x < dwidth; x++) {
+            int result;
             const unsigned char *p0 = pSrc1 + Xmap[x];
+            const unsigned char *p01 = p0 + 3;
             const unsigned char *p1 = pSrc2 + Xmap[x];
-            *pdst++ = ((Xf1[x] * fy1*p0[0]) + (Xf[x] * fy1*p0[3]) + (Xf1[x] * fy*p1[0]) + (Xf[x] * fy*p1[3]) + 0x8000) >> 16;
-            *pdst++ = ((Xf1[x] * fy1*p0[1]) + (Xf[x] * fy1*p0[4]) + (Xf1[x] * fy*p1[1]) + (Xf[x] * fy*p1[4]) + 0x8000) >> 16;
-            *pdst++ = ((Xf1[x] * fy1*p0[2]) + (Xf[x] * fy1*p0[5]) + (Xf1[x] * fy*p1[2]) + (Xf[x] * fy*p1[5]) + 0x8000) >> 16;
+            const unsigned char *p11 = p1 + 3;
+            if (p0 > pSrcBorder) p0 = pSrcBorder;
+            if (p1 > pSrcBorder) p1 = pSrcBorder;
+            if (p01 > pSrcBorder) p01 = pSrcBorder;
+            if (p11 > pSrcBorder) p11 = pSrcBorder;
+            result = ((Xf1[x] * fy1*p0[0]) + (Xf[x] * fy1*p01[0]) + (Xf1[x] * fy*p1[0]) + (Xf[x] * fy*p11[0]) + 0x8000) >> 16;
+            *pdst++ = (unsigned char) std::max(0, std::min(result, 255));
+            result = ((Xf1[x] * fy1*p0[1]) + (Xf[x] * fy1*p01[1]) + (Xf1[x] * fy*p1[1]) + (Xf[x] * fy*p11[1]) + 0x8000) >> 16;
+            *pdst++ = (unsigned char)std::max(0, std::min(result, 255));
+            result = ((Xf1[x] * fy1*p0[2]) + (Xf[x] * fy1*p01[2]) + (Xf1[x] * fy*p1[2]) + (Xf[x] * fy*p11[2]) + 0x8000) >> 16;
+            *pdst++ = (unsigned char)std::max(0, std::min(result, 255));
         }
     }
+    if (Xmap) delete[] Xmap;
 }
 
 
