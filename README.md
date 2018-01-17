@@ -8,16 +8,18 @@ The OpenVX framework provides a mechanism to add new vision functions to OpenVX 
 * [loom_shell](utils/loom_shell/README.md): an interpreter to prototype 360 degree video stitching applications using a script
 * [vx_opencv](vx_opencv/README.md): OpenVX module that implemented a mechanism to access OpenCV functionality as OpenVX kernels
 
+If you're interested in Neural Network Inference, start with the sample inference application.
+
 Inference Application Development Workflow |  Sample Inference Application
 :-------------------------:|:-------------------------:
-![Block-Diagram-Inference-Workflow](doc/images/block_diagram_inference_workflow.png)  |  ![Block-Diagram-Inference-Sample](doc/images/block_diagram_inference_sample.png)
+[![Block-Diagram-Inference-Workflow](doc/images/block_diagram_inference_workflow.png)](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/wiki#neural-network-inference-workflow-for-caffe-users)  |  [![Block-Diagram-Inference-Sample](doc/images/block_diagram_inference_sample.png)](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/wiki#getting-started-with-neural-network-inference-sample)
 
 Refer to [Wiki](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules/wiki) page for further details.
 
 ## Pre-requisites
 * CPU: SSE4.1 or above CPU, 64-bit
 * GPU: Radeon Instinct or Vega Family of Products (16GB recommended)
-  * Linux: install [ROCm](https://rocm.github.io/ROCmInstall.html)
+  * Linux: install [ROCm](https://rocm.github.io/ROCmInstall.html) with OpenCL development kit
   * Windows: install the latest drivers and OpenCL SDK [download](https://github.com/GPUOpen-LibrariesAndSDKs/OCL-SDK/releases)
 * CMake 2.8 or newer [download](http://cmake.org/download/)
 * Qt Creator for [annInferenceApp](utils/annInferenceApp/README.md)
@@ -32,7 +34,7 @@ Refer to [Wiki](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-
 * git clone, build and install other ROCm projects (using `cmake` and `% make install`) in the below order for vx_nn.
   * [rocm-cmake](https://github.com/RadeonOpenCompute/rocm-cmake)
   * [MIOpenGEMM](https://github.com/ROCmSoftwarePlatform/MIOpenGEMM)
-  * [MIOpen](https://github.com/ROCmSoftwarePlatform/MIOpen)
+  * [MIOpen](https://github.com/ROCmSoftwarePlatform/MIOpen) -- make sure to use `-DMIOPEN_BACKEND=OpenCL` option with cmake
 * git clone this project using `--recursive` option so that correct branch of the [amdovx-core](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core) project is cloned automatically in the deps folder.
 * build and install (using `cmake` and `% make install`)
   * executables will be placed in `bin` folder

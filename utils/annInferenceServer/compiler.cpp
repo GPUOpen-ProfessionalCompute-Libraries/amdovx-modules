@@ -176,35 +176,35 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     sprintf(cmdUpdate.message, "inference_generator started ...");
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
-    // step-1.1: inference_generator on caffemodel for weights
-    command = "inference_generator weights.caffemodel";
+    // step-1.1: caffe2openvx on caffemodel for weights
+    command = "caffe2openvx weights.caffemodel";
     command += " " + std::to_string(args->getBatchSize())
             +  " " + std::to_string(dimInput[2])
             +  " " + std::to_string(dimInput[1])
             +  " " + std::to_string(dimInput[0])
-            +  " >inference_generator.log";
+            +  " >caffe2openvx.log";
     info("executing: %% %s", command.c_str());
     status = system(command.c_str());
     cmdUpdate.data[0] = (status != 0) ? -2 : 0;
     cmdUpdate.data[1] = 25;
-    sprintf(cmdUpdate.message, "inference_generator weights.caffemodel completed (%d)", status);
+    sprintf(cmdUpdate.message, "caffe2openvx weights.caffemodel completed (%d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
         return error_close(sock, "command-failed(%d): %s", status, command.c_str());
     }
-    // step-1.2: inference_generator on prototxt for network structure
-    command = "inference_generator deploy.prototxt";
+    // step-1.2: caffe2openvx on prototxt for network structure
+    command = "caffe2openvx deploy.prototxt";
     command += " " + std::to_string(args->getBatchSize())
             +  " " + std::to_string(dimInput[2])
             +  " " + std::to_string(dimInput[1])
             +  " " + std::to_string(dimInput[0])
-            +  " >>inference_generator.log";
+            +  " >>caffe2openvx.log";
     info("executing: %% %s", command.c_str());
     status = system(command.c_str());
     cmdUpdate.data[0] = (status != 0) ? -3 : 0;
     cmdUpdate.data[1] = 50;
-    sprintf(cmdUpdate.message, "inference_generator deploy.prototxt completed (%d)", status);
+    sprintf(cmdUpdate.message, "caffe2openvx deploy.prototxt completed (%d)", status);
     ERRCHK(sendCommand(sock, cmdUpdate, clientName));
     ERRCHK(recvCommand(sock, cmdUpdate, clientName, INFCOM_CMD_COMPILER_STATUS));
     if(status) {
@@ -212,9 +212,9 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
     }
     // step-2: get output dimensions
     int dimOutput[3] = { 0 };
-    FILE * fp = fopen("inference_generator.log", "r");
+    FILE * fp = fopen("caffe2openvx.log", "r");
     if(!fp) {
-        return error_close(sock, "unable to open: inference_generator.log");
+        return error_close(sock, "unable to open: caffe2openvx.log");
     }
     char line[1024];
     while(fgets(line, sizeof(line), fp) == line) {

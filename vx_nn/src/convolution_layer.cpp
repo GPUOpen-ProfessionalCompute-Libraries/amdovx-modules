@@ -45,7 +45,7 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_NN_CONV_PARAMS) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_NN_CONVOLUTION_PARAMS) return VX_ERROR_INVALID_TYPE;
 
     // check tensor dimensions
     vx_size num_dims;
@@ -63,11 +63,11 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
+        if(num_dims != 1 && num_dims != 2) return VX_ERROR_INVALID_DIMENSION;
         if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-        vx_size bias_dims[1];
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+        vx_size bias_dims[2] = { 0, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims*sizeof(bias_dims[0])));
+        if(bias_dims[0] != weights_dims[3] || bias_dims[1] != 1) return VX_ERROR_INVALID_DIMENSION;
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -130,12 +130,14 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     dilation_w = params.dilation_x + 1;
     miopenConvolutionMode_t mode = miopenConvolution;
 
-    vx_size input_dims[4], weights_dims[4], output_dims[4],bias_dims[1];;
+    vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     if(parameters[2]) {
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+        vx_size num_dims;
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
     }
 
     vx_size stride_h, stride_w;
@@ -256,7 +258,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvolutionLayer(vx_graph graph, vx_tensor in
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if(vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar conv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_CONV_PARAMS, convolution_params, size_of_convolution_params);
+        vx_scalar conv_params = vxCreateScalarWithSize(context, VX_TYPE_NN_CONVOLUTION_PARAMS, convolution_params, size_of_convolution_params);
         if(vxGetStatus((vx_reference)conv_params) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)inputs,
