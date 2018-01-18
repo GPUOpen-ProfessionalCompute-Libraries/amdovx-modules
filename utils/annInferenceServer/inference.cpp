@@ -24,11 +24,6 @@ void sort_indexes(const vector<T> &v, vector<size_t> &idx) {
        [&v](size_t i1, size_t i2) {return v[i1] > v[i2];});
 }
 
-static inline float Saturate(float val, float max)
-{
-    return 0.5f * (fabsf(val+max) - fabsf(val-max));
-}
-
 InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clientName_, InfComCommand * cmd)
     : sock{ sock_ }, args{ args_ }, clientName{ clientName_ },
       GPUs{ cmd->data[1] },
@@ -748,8 +743,6 @@ int InferenceEngine::run()
                         cmd.data[2 + i * (topK+1) + 0] = tag; // tag
                         for (int j=0; j<topK; j++){
                             cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
-                            float prob = (labels[j]>>16)*(1.0f/(float)32767.0f);
-                            prob = Saturate(prob, 1.0f);
                         }
                         labels.clear();
                     }
