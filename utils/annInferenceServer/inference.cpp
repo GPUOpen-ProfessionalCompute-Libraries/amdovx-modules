@@ -17,18 +17,13 @@
 
 using namespace std;
 template <typename T>
-vector<size_t> sort_indexes(const vector<T> &v) {
-
-  // initialize original index locations
-  vector<size_t> idx(v.size());
-  iota(idx.begin(), idx.end(), 0);
+void sort_indexes(const vector<T> &v, vector<size_t> &idx) {
 
   // sort indexes based on comparing values in v
   sort(idx.begin(), idx.end(),
        [&v](size_t i1, size_t i2) {return v[i1] > v[i2];});
-
-  return idx;
 }
+
 static inline float Saturate(float val, float max)
 {
     return 0.5f * (fabsf(val+max) - fabsf(val-max));
@@ -39,10 +34,10 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      topK { cmd->data[8] },
+      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
-      device_id{ nullptr }, deviceLockSuccess{ false }
+      device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
 #elif INFERENCE_SCHEDULER_MODE == LIBRE_INFERENCE_SCHEDULER
@@ -70,10 +65,13 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
+    if (!args->getlocalShadowRootDir().empty()){
+        useShadowFilenames = true;
+        std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
+    }
     if (topK > 5) topK = 5;         // support upto 5 topK confidance
 
     PROFILER_INITIALIZE();
-
 }
 
 InferenceEngine::~InferenceEngine()
@@ -452,6 +450,14 @@ int InferenceEngine::run()
     }
 
     //////
+    /// check if server and client are in the same mode for data
+    ///
+    if (receiveFileNames && !useShadowFilenames)
+    {
+        return error_close(sock, "client is sending filenames but server is not configured with shadow folder\n");
+    }
+
+    //////
     /// check for model validity
     ///
     bool found = false;
@@ -721,8 +727,7 @@ int InferenceEngine::run()
                     if(endOfSequence) {
                         break;
                     }
-                }else
-                {
+                }else {
                     // send topK labels
                     int maxResults = (INFCOM_MAX_IMAGES_PER_PACKET*2)/(topK+1);
                     int resultCount = std::min(resultCountAvailable, maxResults);
@@ -730,20 +735,21 @@ int InferenceEngine::run()
                         INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
                     };
                     for(int i = 0; i < resultCount; i++) {
+                        std::tuple<int,int> result;
                         std::vector<int> labels;
-                        outputQTopk.dequeue(labels);
-                        int tag = labels[0];
+                        outputQ.dequeue(result);
+                        int tag = std::get<0>(result);
                         if(tag < 0) {
                             endOfSequence = true;
                             resultCount = i;
                             break;
                         }
+                        outputQTopk.dequeue(labels);
                         cmd.data[2 + i * (topK+1) + 0] = tag; // tag
-                        for (int j=1; j<=topK; j++){
-                            cmd.data[2 + i * (topK+1) + j] = labels[j]; // label[j]
+                        for (int j=0; j<topK; j++){
+                            cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
                             float prob = (labels[j]>>16)*(1.0f/(float)32767.0f);
                             prob = Saturate(prob, 1.0f);
-                            //cout << "top_"<<j<< " label and prob for image "<< tag <<": "<< (labels[j]&0xFFFF) <<" "<< prob <<endl;
                         }
                         labels.clear();
                     }
@@ -801,9 +807,32 @@ int InferenceEngine::run()
                     if(tag < 0 || size <= 0 || size > 50000000) {
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
-                    // allocate and receive the image and EOF market
-                    char * byteStream = new char [size];
-                    ERRCHK(recvBuffer(sock, byteStream, size, clientName));
+                    char * byteStream = 0;
+                    if (receiveFileNames)
+                    {
+                        std::string fileNameDir = args->getlocalShadowRootDir() + "/";
+                        char * buff = new char [size];
+                        ERRCHK(recvBuffer(sock, buff, size, clientName));
+                        fileNameDir.append(std::string(buff, size));
+                        FILE * fp = fopen(fileNameDir.c_str(), "rb");
+                        if(!fp) {
+                            return error_close(sock, "filename %s (incorrect)", fileNameDir.c_str());
+                        }
+                        fseek(fp,0,SEEK_END);
+                        int fsize = ftell(fp);
+                        fseek(fp,0,SEEK_SET);
+                        byteStream = new char [fsize];
+                        fread(byteStream, 1, fsize, fp);
+                        fclose(fp);
+                        delete[] buff;
+                        size = fsize;       // actual size of the file
+                    }
+                    else
+                    {
+                        // allocate and receive the image and EOF market
+                        byteStream = new char [size];
+                        ERRCHK(recvBuffer(sock, byteStream, size, clientName));
+                    }
                     int eofMarker = 0;
                     ERRCHK(recvBuffer(sock, &eofMarker, sizeof(eofMarker), clientName));
                     if(eofMarker != INFCOM_EOF_MARKER) {
@@ -1195,15 +1224,16 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
                     }
                 }
                 outputQ.enqueue(std::tuple<int,int>(tag,label));
-            }else
-            {
-           //     printf("Enqueueing top_K:%d results\n", topK);
+            }else {
                 std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                std::vector<size_t> idx(prob_vec.size());
+                iota(idx.begin(), idx.end(), 0);
+                sort_indexes(prob_vec, idx);            // sort indeces based on prob
                 std::vector<int>    labels;
-                sort_indexes(prob_vec);
-                labels.push_back(tag);
+                //labels.push_back(tag);
+                outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
                 int j=0;
-                for (auto i: sort_indexes(prob_vec)) {
+                for (auto i: idx) {
                   // make label which is index and prob
                     //cout<<"tag: "<< tag << "top_" << j << "label and prob: " << i << " " << prob_vec[i] << endl;
                     int label = (i&0xFFFF)|(((unsigned int)(prob_vec[i]*0x7FFF))<<16);   // convert prob to 16bit float and store in MSBs
@@ -1240,7 +1270,6 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
     // send end of sequence marker to next stage
     outputQ.enqueue(std::tuple<int,int>(-1,-1));
-
     args->lock();
     info("workDeviceOutputCopy: GPU#%d terminated for %s [processed %d batches, %d images]", gpu, clientName.c_str(), totalBatchCounter, totalImageCounter);
     args->unlock();
