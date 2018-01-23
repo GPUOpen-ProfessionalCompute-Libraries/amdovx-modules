@@ -38,6 +38,9 @@ public:
     const std::string& getlocalShadowRootDir() {
         return localShadowRootDir;
     }
+    int getNumDecoderThreads() {
+        return numDecoderThreads;
+    }
 
     // global mutex
     void lock() {
@@ -130,6 +133,7 @@ private:
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc
     std::mutex mutex;
+    int numDecoderThreads;
 };
 
 #endif

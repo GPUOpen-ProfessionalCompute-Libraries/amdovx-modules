@@ -55,9 +55,11 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
         useShadowFilenames = true;
         std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
     }
+    numDecoderThreads = args->getNumDecoderThreads();
+    numDecoderThreads = std::min(numDecoderThreads, batchSize);  // numDecoderThreads can't exceed the number of images to process in a batch
+    // std::cout << "INFO::inferenceserver is running with batchSize: "<< batchSize << "NumThreads: " << numDecoderThreads << std::endl;
 
     PROFILER_INITIALIZE();
-
 }
 
 InferenceEngine::~InferenceEngine()
@@ -408,19 +410,21 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
 }
 
 
-void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf)
+void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int img_size, float *tens_buf)
 {
-    for (int i = start; i <= end; i++)
+   // printf("DecodeScaleAndConvertToTensorBatch: tens_buff: %p start:%d end:%d\n", tens_buf, start, end);
+    for (int i = start; i < end; i++)
     {
         std::tuple<char*, int> image = batch_Q[i];
+        float * buf = tens_buf + img_size * i;
         char * byteStream = std::get<0>(image);
         int size = std::get<1>(image);
         if (byteStream == nullptr || size == 0) {
             break;
         }
         // decode, scale, and format convert into the OpenCL buffer
-        float * buf = tens_buf + dim[0] * dim[1] * dim[2] * i;
-        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf);
+
+        DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
         delete[] byteStream;
     }
 }
@@ -938,12 +942,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
     if(err) {
         fatal("workDeviceInputCopy: clCreateCommandQueue(device_id[%d]) failed (%d)", gpu, err);
     }
-#if (NUM_DECODER_THREADS > 1)
-    int num_dec_threads = NUM_DECODER_THREADS;
-    std::vector<std::tuple<char*, int>> batch_q;
-    int sub_batch_size = batchSize/num_dec_threads;
-    std::vector<std::thread> dec_threads(num_dec_threads);
-#endif
+
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
         PROFILER_START(AnnInferenceServer, workDeviceInputCopyBatch);
@@ -962,66 +961,67 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         // get next batch of inputs and convert them into tensor and release input byteStream
         // TODO: replace with an efficient implementation
         int inputCount = 0;
-#if (NUM_DECODER_THREADS > 1)
-        //queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
-        // dequeue batch
-        for (; inputCount<batchSize; inputCount++)
-        {
-            std::tuple<char*, int> image;
-            queueDeviceImageQ[gpu]->dequeue(image);
-            char * byteStream = std::get<0>(image);
-            int size = std::get<1>(image);
-            if(byteStream == nullptr || size == 0) {
-                endOfSequenceReached = true;
-                break;
+
+        if (numDecoderThreads > 1) {
+            // dequeue batch
+            std::vector<std::tuple<char*, int>> batch_q;
+            std::vector<std::thread> dec_threads(numDecoderThreads-1);
+            int img_size = dimInput[0] * dimInput[1] * dimInput[2];
+            for (; inputCount<batchSize; inputCount++)
+            {
+                std::tuple<char*, int> image;
+                queueDeviceImageQ[gpu]->dequeue(image);
+                char * byteStream = std::get<0>(image);
+                int size = std::get<1>(image);
+                if(byteStream == nullptr || size == 0) {
+                    endOfSequenceReached = true;
+                    break;
+                }
+                batch_q.push_back(image);
             }
-            batch_q.push_back(image);
-        }
-        if (inputCount){
+            if (inputCount){
+                PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
+                int subBatchSize = inputCount/numDecoderThreads;
+                int remSize = inputCount % numDecoderThreads;
+                int start = 0; int numImages;
+                for (unsigned int t = 0; t < (numDecoderThreads-1); t++)
+                {
+                    numImages = subBatchSize + ((remSize > 0) ? 1 : 0);
+                    dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, (start+numImages), img_size, mapped_ptr);
+                    start += numImages;
+                    remSize--;
+                }
+               // numImages = subBatchSize + ((remSize > 0)? 1 : 0);
+                // do some work in this thread
+                DecodeScaleAndConvertToTensorBatch(batch_q, start, inputCount, img_size, mapped_ptr);
+                for (unsigned int t = 0; t < (numDecoderThreads-1); t++)
+                {
+                    dec_threads[t].join();
+                }
+                batch_q.clear();
+                dec_threads.clear();
+                PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
+            }
+        } else {
             PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-            if (inputCount < batchSize)
-            {
-                sub_batch_size = (inputCount+num_dec_threads-1)/num_dec_threads;
+            for(; inputCount < batchSize; inputCount++) {
+                // get next item from the input queue and check for end of input
+                std::tuple<char*,int> image;
+                queueDeviceImageQ[gpu]->dequeue(image);
+                char * byteStream = std::get<0>(image);
+                int size = std::get<1>(image);
+                if(byteStream == nullptr || size == 0) {
+                    endOfSequenceReached = true;
+                    break;
+                }
+                // decode, scale, and format convert into the OpenCL buffer
+                float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
+                DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
+                // release byteStream
+                delete[] byteStream;
             }
-            int start = 0; int end = sub_batch_size-1;
-            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
-            {
-                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr);
-                start += sub_batch_size;
-                end += sub_batch_size;
-            }
-            start = std::min(start, (inputCount - 1));
-            end = std::min(end, (inputCount-1));
-            // do some work in this thread
-            DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, mapped_ptr);
-            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
-            {
-                dec_threads[t].join();
-            }
-            dec_threads.clear();
-            batch_q.clear();
             PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
         }
-#else
-        PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-        for(; inputCount < batchSize; inputCount++) {
-            // get next item from the input queue and check for end of input
-            std::tuple<char*,int> image;
-            queueDeviceImageQ[gpu]->dequeue(image);
-            char * byteStream = std::get<0>(image);
-            int size = std::get<1>(image);
-            if(byteStream == nullptr || size == 0) {
-                endOfSequenceReached = true;
-                break;
-            }
-            // decode, scale, and format convert into the OpenCL buffer
-            float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
-            // release byteStream
-            delete[] byteStream;
-        }
-        PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-#endif
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -1045,6 +1045,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         }
         PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyBatch);
     }
+
     // release OpenCL command queue
     clReleaseCommandQueue(cmdq);
 

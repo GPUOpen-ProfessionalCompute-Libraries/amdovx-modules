@@ -217,11 +217,12 @@ private:
     int inputSizeInBytes;
     int outputSizeInBytes;
     bool deviceLockSuccess;
+    int numDecoderThreads;
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>        outputQ;
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
-    void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
+    void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int img_size, float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int dwidth, unsigned int dheight);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE

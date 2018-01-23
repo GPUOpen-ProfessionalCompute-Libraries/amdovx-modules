@@ -10,7 +10,7 @@ Arguments::Arguments()
         : workFolder{ "~" }, modelFileDownloadCounter{ 0 },
           password{ "radeon" },
           port{ 28282 }, batchSize{ 32 }, maxPendingBatches{ 4 }, numGPUs{ 1 }, gpuIdList{ 0 },
-          maxGpuId{ 0 }, platform_id{ NULL }, num_devices{ 0 }, device_id{ NULL }, deviceUseCount{ 0 }
+          maxGpuId{ 0 }, platform_id{ NULL }, num_devices{ 0 }, device_id{ NULL }, deviceUseCount{ 0 }, numDecoderThreads{ 0}
 {
     ////////
     /// \brief set default configuration file
@@ -238,7 +238,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
                                      " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>]"
-                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>]";
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>] [-t <num_decoder_threads>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -295,6 +295,15 @@ int Arguments::initializeConfig(int argc, char * argv[])
             }else {
                 setLocalShadowRootDir(argv[2]);
                 printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
+            }
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "-t")) {
+            numDecoderThreads = atoi(argv[2]);
+            if (numDecoderThreads > 8) {
+                error("more than 8 decoder threads is not supported\n");
+                return -1;
             }
             argc -= 2;
             argv += 2;
