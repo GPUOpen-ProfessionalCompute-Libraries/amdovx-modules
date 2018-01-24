@@ -3,11 +3,6 @@
 #include <iostream>
 #include <QThread>
 
-static inline float Saturate(float val, float max)
-{
-    return 0.5f * (fabsf(val+max) - fabsf(val-max));
-}
-
 bool inference_receiver::abortRequsted = false;
 
 void inference_receiver::abort()
@@ -186,7 +181,7 @@ void inference_receiver::run()
                         for (int j=1; j<=top_k; j++){
                             int label = cmd.data[2 + i*item_size + j];      // label has both label and prob
                             float prob =  (label>>16)*(1.0f/(float)32767.0f);
-                            prob = Saturate(prob, 1.0f);
+                            prob = std::min(prob, 1.0f);
                             labels.push_back(label & 0xFFFF);
                             probVec.push_back(prob);
                         }

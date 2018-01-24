@@ -66,6 +66,9 @@ while arg < len(sys.argv):
         arg = arg + 1
     elif sys.argv[arg][:6] == '-topK:':
         topkValue = int(sys.argv[arg][6:])
+        if topkValue > 5:
+        	print('ERROR: topK value more than 5 not supported')
+	        sys.exit(1)
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])

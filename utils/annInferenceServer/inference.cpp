@@ -64,7 +64,6 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
         useShadowFilenames = true;
         std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
     }
-    if (topK > 5) topK = 5;         // support upto 5 topK confidance
 
     PROFILER_INITIALIZE();
 }
@@ -450,6 +449,14 @@ int InferenceEngine::run()
     if (receiveFileNames && !useShadowFilenames)
     {
         return error_close(sock, "client is sending filenames but server is not configured with shadow folder\n");
+    }
+
+    //////
+    /// check if client is requesting topK which is not supported
+    ///
+    if (topK > 5)
+    {
+        return error_close(sock, "Number of topK confidances: %d not supported\n", topK);
     }
 
     //////
