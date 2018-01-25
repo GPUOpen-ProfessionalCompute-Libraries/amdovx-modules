@@ -57,7 +57,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     }
     numDecoderThreads = args->getNumDecoderThreads();
     numDecoderThreads = std::min(numDecoderThreads, batchSize);  // numDecoderThreads can't exceed the number of images to process in a batch
-    // std::cout << "INFO::inferenceserver is running with batchSize: "<< batchSize << "NumThreads: " << numDecoderThreads << std::endl;
+    //std::cout << "INFO::inferenceserver is running with batchSize: "<< batchSize << "NumThreads: " << numDecoderThreads << std::endl;
 
     PROFILER_INITIALIZE();
 }
@@ -219,9 +219,9 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         img += 12;
     }
     for (; i < length; i++, img += 3) {
-        B_buf[i] = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-        G_buf[i] = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-        R_buf[i] = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+        *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+        *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+        *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
     }
     if (data_resize != nullptr) delete[] data_resize;
 #else
