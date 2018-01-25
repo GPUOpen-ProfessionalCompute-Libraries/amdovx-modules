@@ -5,8 +5,8 @@
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_CMD_SEND_MODE
 //    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_CONFIGURE}
-//  * server: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
-//    client: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs}
+//  * server: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs,shadowFolderAvailable}
+//    client: InfComCommand:INFCOM_CMD_CONFIG_INFO with data={numModels,maxGPUs,shadowFolderAvailable}
 //  * server: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
 //    client: InfComCommand:INFCOM_CMD_MODEL_INFO with data={iw,ih,ic,ow,oh,oc,order,m0,m1,m2,a0,a1,a2} message=modelName
 //  * server: (repeat INFCOM_CMD_MODEL_INFO for each of numModels)
@@ -41,10 +41,11 @@
 // Inference Run Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_MODE_INFERENCE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc} message="modelName [options]"
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc,rf} message="modelName [options]", where rf==1 indicates clients is sending filenames
 //  * server: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={maxCount}
 //    client: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={count} -- count:0..maxCount
 //    client: for each image: { <tag:32-bit> <size:32-bit> <byte-stream> <eof-marker:32-bit> }
+//            or {<tag:32-bit> <size:32-bit> bytearray(filename)> <eof-marker:32-bit> } if rf == 1
 //  * server: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
 //    client: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
 //  * server: (repeat of INFCOM_CMD_SEND_IMAGES and INFCOM_CMD_INFERENCE_RESULT messages)

@@ -1,7 +1,7 @@
 # annInferenceServer
 
 This Sample Inference Server supports:
-* convert and maintain a database of pre-trained CAFFE models using [inference_generator](../inference_generator/README.md)
+* convert and maintain a database of pre-trained CAFFE models using [caffe2openvx](../inference_generator/README.md)
 * allow multiple TCP/IP client connections for inference work submissions
 * multi-GPU high-throughput live streaming batch scheduler
 

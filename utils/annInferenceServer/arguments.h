@@ -35,6 +35,9 @@ public:
     cl_platform_id getPlatformId() {
         return platform_id;
     }
+    const std::string& getlocalShadowRootDir() {
+        return localShadowRootDir;
+    }
 
     // global mutex
     void lock() {
@@ -88,6 +91,11 @@ public:
     bool checkPassword(std::string code) {
         return (password == code) ? true : false;
     }
+    // set localShadowRootDir (full absolute path)
+    void setLocalShadowRootDir(const std::string& localShadowDir)
+    {
+        localShadowRootDir = localShadowDir;
+    }
 
     // device resources
     int lockGpuDevices(int GPUs, cl_device_id * device_id_);
@@ -117,6 +125,7 @@ private:
     cl_platform_id platform_id;
     std::string configurationFile;
     std::string configurationDir;
+    std::string localShadowRootDir;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc

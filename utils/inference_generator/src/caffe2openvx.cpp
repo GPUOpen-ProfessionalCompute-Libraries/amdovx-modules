@@ -733,7 +733,7 @@ void writeGDF(
                     }
                 }
 
-                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
                 tensorCheck[output + "_W"] = true;
                 if(bias_term) tensorCheck[output + "_B"] = true;
 
@@ -799,7 +799,7 @@ void writeGDF(
                     tensorCheck[bias] = true;
                 }
 
-                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+                ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_CONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << ",VX_NN_DS_SIZE_ROUNDING_FLOOR," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
                 ofsGDF << "node org.khronos.nn_extension.convolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
                        << node[3] <<"_params"
                        << " " << node[3]
@@ -832,7 +832,7 @@ void writeGDF(
                 tensorCheck[bias] = true;
             }
 
-            ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_DECONV_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << "," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
+            ofsGDF << "data " << node[3] << "_params = " << " scalar:VX_TYPE_NN_DECONVOLUTION_PARAMS,{" << pad_w << "," << pad_h << "," << convertPolicy << "," << roundPolicy << "," << dilation_w-1 << "," << dilation_h-1 << "}" << std::endl;
             ofsGDF << "node org.khronos.nn_extension.deconvolution_layer " << node[4] << " " << node[3] << "_W" << " " << bias << " "
                    << node[3] <<"_params"
                    << " " << node[3]
@@ -2316,6 +2316,7 @@ void generateCode(
     ofsCodeA << "#include <vx_ext_amd.h>" << std::endl;
     ofsCodeA << "#include <iostream>" << std::endl;
     ofsCodeA << "#include <stdio.h>" << std::endl;
+    ofsCodeA << "#include <string.h>" << std::endl;
     ofsCodeA << "#include <string>" << std::endl;
     ofsCodeA << "#include <inttypes.h>" << std::endl;
     ofsCodeA << "#include <chrono>" << std::endl;
@@ -2780,7 +2781,7 @@ int main(int argc, char* argv[])
 {
     const char * usage =
             "Usage:\n"
-            "  % inference_generator [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
+            "  % caffe2openvx [options] <net.prototxt|net.caffemodel> [n c H W [type fixed-point-position [convert-policy round-policy]]]\n"
             "    options:\n"
             "      --[no-]error-messages     - do/don't enable error messages (default: ON)\n"
             "      --[no-]virtual-buffers    - do/don't use virtual buffers (default: ON)\n"

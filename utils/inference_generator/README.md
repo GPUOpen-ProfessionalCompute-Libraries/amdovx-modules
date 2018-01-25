@@ -1,5 +1,5 @@
 # Inference Generator
-Convert a pre-trained CAFFE model into a C library for use by applications.
+caffe2openvx: Convert a pre-trained CAFFE model into a C library for use by applications.
 * Extract neural network model from `deploy.prototxt`
   * generate C code that instantiates OpenVX kernels from [vx_nn](../../vx_nn/README.md) module
   * generate build scripts that package C code into a library
@@ -54,7 +54,7 @@ vx_graph annCreateGraphWithInputImageWithArgmaxImageWithLut(
 
 ## Command-line Usage
 ````
-  % inference_generator
+  % caffe2openvx
         [options]
         <net.prototxt|net.caffemodel>
         [n c H W [type fixed-point-position [convert-policy round-policy]]]
@@ -82,8 +82,8 @@ Make sure that all executables and libraries are in `PATH` and `LD_LIBRARY_PATH`
 
 Below log outlines a simple use-case with inference generator.
 ````
-% inference_generator weights.caffemodel 1 3 32 32
-% inference_generator deploy.prototxt 1 3 32 32
+% caffe2openvx weights.caffemodel 1 3 32 32
+% caffe2openvx deploy.prototxt 1 3 32 32
 % ls
 CMakeLists.txt   annmodule.txt   cmake              weights
 annmodule.cpp    anntest.cpp     deploy.prototxt    weights.caffemodel

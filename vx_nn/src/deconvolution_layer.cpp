@@ -70,11 +70,11 @@ static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_r
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
+        if(num_dims != 1 && num_dims != 2) return VX_ERROR_INVALID_DIMENSION;
         if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-        vx_size bias_dims[1];
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+        vx_size bias_dims[2] = { 0, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims*sizeof(bias_dims[0])));
+        if(bias_dims[0] != weights_dims[3] || bias_dims[1] != 1) return VX_ERROR_INVALID_DIMENSION;
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -135,12 +135,14 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     dilation_w = params.a_x + 1;
     miopenConvolutionMode_t mode = miopenTranspose;
 
-    vx_size input_dims[4], weights_dims[4], output_dims[4],bias_dims[1];;
+    vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     if(parameters[2]) {
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+        vx_size num_dims;
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
     }
 
     vx_size stride_h, stride_w;
