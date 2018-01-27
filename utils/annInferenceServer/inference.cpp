@@ -161,7 +161,7 @@ InferenceEngine::~InferenceEngine()
 vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
 {
     int length = width*height;
-    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
+    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_COLOR);
 
 #if USE_SSE_OPTIMIZATION
     unsigned char *data_resize = nullptr;
@@ -174,7 +174,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     {
         unsigned int aligned_size = ((length+width) * 3 + 128)&~127;
         data_resize = new unsigned char[aligned_size];
-        RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, width, height);
+        RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, matOrig.step, width, height);
         img = data_resize;
     }
 
@@ -242,7 +242,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
 #define FP_BITS     16
 #define FP_MUL      (1<<FP_BITS)
 
-void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int dwidth, unsigned int dheight)
+void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight,  unsigned int sstride, unsigned int dwidth, unsigned int dheight)
 {
     float xscale = (float)((double)swidth / (double)dwidth);
     float yscale = (float)((double)sheight / (double)dheight);
@@ -260,7 +260,7 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
     {
         int xf;
         int xmap = (xpos >> FP_BITS);
-        if (xmap >= (int)(swidth - 4)){
+        if (xmap >= (int)(swidth - 8)){
             aligned_width = x;
         }
         if (xmap >= (int)(swidth - 1)){
@@ -273,9 +273,8 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         Xf1[x] = (0x100 - xf);
     }
     aligned_width &= ~3;
-    int stride = swidth * 3;
     int dstride = dwidth * 3;
-    unsigned char *pSrcBorder = Rgb_in + (sheight*stride) - 3;    // points to the last pixel
+    unsigned char *pSrcBorder = Rgb_in + (sheight*sstride) - 3;    // points to the last pixel
 
     int ypos = (int)(FP_MUL * (yscale*0.5 - 0.5));
     for (int y = 0; y < (int)dheight; y++, ypos += yinc)
@@ -288,12 +287,12 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         fy = ((ypos & 0xffff) + 0x80) >> 8;
         fy1 = (0x100 - fy);
         if (ym >= (int)(sheight - 1)){
-            pSrc1 = pSrc2 = Rgb_in + (sheight - 1)*stride;
+            pSrc1 = pSrc2 = Rgb_in + (sheight - 1)*sstride;
         }
         else
         {
-            pSrc1 = (ym<0)? Rgb_in : (Rgb_in + ym*stride);
-            pSrc2 = pSrc1 + stride;
+            pSrc1 = (ym<0)? Rgb_in : (Rgb_in + ym*sstride);
+            pSrc2 = pSrc1 + sstride;
         }
         __m128i w_y = _mm_setr_epi32(fy1, fy, fy1, fy);
         const __m128i mm_zeros = _mm_setzero_si128();
