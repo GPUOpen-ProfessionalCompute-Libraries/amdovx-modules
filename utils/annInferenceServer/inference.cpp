@@ -28,7 +28,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] },
+      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] == 0 ? 1: cmd->data[9]},
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
@@ -701,7 +701,7 @@ int InferenceEngine::run()
         if(resultCountAvailable > 0) {
             didSomething = true;
             while(resultCountAvailable > 0) {
-                if (topK <= 1){
+                if (topK < 1){
                     int resultCount = std::min(resultCountAvailable, INFCOM_MAX_IMAGES_PER_PACKET);
                     InfComCommand cmd = {
                         INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
@@ -730,14 +730,14 @@ int InferenceEngine::run()
                     }
                 }else {
                     // send topK labels
-                    int maxResults = (INFCOM_MAX_IMAGES_PER_PACKET*2)/(topK+1);
+                    int maxResults = INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/(topK+1);
                     int resultCount = std::min(resultCountAvailable, maxResults);
                     InfComCommand cmd = {
                         INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
                     };
                     for(int i = 0; i < resultCount; i++) {
                         std::tuple<int,int> result;
-                        std::vector<int> labels;
+                        std::vector<unsigned int> labels;
                         outputQ.dequeue(result);
                         int tag = std::get<0>(result);
                         if(tag < 0) {
@@ -1212,7 +1212,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
-            if (topK <= 1){
+            if (topK < 1){
                 int label = 0;
                 float max_prob = buf[0];
                 for(int c = 1; c < dimOutput[2]; c++) {
@@ -1228,15 +1228,13 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
                 std::vector<size_t> idx(prob_vec.size());
                 iota(idx.begin(), idx.end(), 0);
                 sort_indexes(prob_vec, idx);            // sort indeces based on prob
-                std::vector<int>    labels;
-                //labels.push_back(tag);
+                std::vector<unsigned int>    labels;
                 outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
                 int j=0;
                 for (auto i: idx) {
-                  // make label which is index and prob
-                    //cout<<"tag: "<< tag << "top_" << j << "label and prob: " << i << " " << prob_vec[i] << endl;
-                    int label = (i&0xFFFF)|(((unsigned int)(prob_vec[i]*0x7FFF))<<16);   // convert prob to 16bit float and store in MSBs
-                    labels.push_back(label);
+                    // make label which is index and prob
+                    int packed_label_prob = (i&0xFFFF)|(((unsigned int)((prob_vec[i]*0x7FFF)+0.5))<<16);   // convert prob to 16bit float and store in MSBs
+                    labels.push_back(packed_label_prob);
                     if (++j >= topK) break;
                 }
                 outputQTopk.enqueue(labels);

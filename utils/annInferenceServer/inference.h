@@ -221,7 +221,7 @@ private:
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>     outputQ;
-    MessageQueue<std::vector<int>>        outputQTopk;      // outputQ for topK vec<tag, top_k labels>
+    MessageQueue<std::vector<unsigned int>>        outputQTopk;      // outputQ for topK vec<tag, top_k labels>
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int dwidth, unsigned int dheight);

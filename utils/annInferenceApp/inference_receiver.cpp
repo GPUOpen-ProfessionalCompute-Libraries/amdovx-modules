@@ -180,7 +180,7 @@ void inference_receiver::run()
                         imageIndex.push_back(tag);
                         for (int j=1; j<=top_k; j++){
                             int label = cmd.data[2 + i*item_size + j];      // label has both label and prob
-                            float prob =  (label>>16)*(1.0f/(float)32767.0f);
+                            float prob =  (label>>16)*(1.0f/(float)32768.0f);
                             prob = std::min(prob, 1.0f);
                             labels.push_back(label & 0xFFFF);
                             probVec.push_back(prob);

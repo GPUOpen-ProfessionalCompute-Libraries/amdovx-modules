@@ -67,8 +67,8 @@ while arg < len(sys.argv):
     elif sys.argv[arg][:6] == '-topK:':
         topkValue = int(sys.argv[arg][6:])
         if topkValue > 5:
-        	print('ERROR: topK value more than 5 not supported')
-	        sys.exit(1)
+            print('ERROR: topK value more than 5 not supported')
+            sys.exit(1)
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])
@@ -276,9 +276,9 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                 for i in range(count):
                     tag = sendCount
                     if sendFileName == 0:
-                    	sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
+                        sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
                     else:
-                    	sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
+                        sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
                     sendCount = sendCount + 1
         elif info[1] == INFCOM_CMD_INFERENCE_RESULT:
             sendpkt(sock,info)
@@ -320,13 +320,13 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                     line = '%s' % (imageFileList[tag])
                     resultCount = resultCount + 1
                     for j in range(top_k):
-						label = info[2][3 + i * itemSize + j]
-						topLabel = label&0xFFFF
-						line = line + ',%d' %(topLabel)
-						if synsetFileName:
-							line = line + ',%s(%f)' %(synsetList[topLabel], (label>>16)*(1.0/32767.0))
-						if j==0:
-							resultList[tag] = topLabel
+                        label = info[2][3 + i * itemSize + j]
+                        topLabel = label&0xFFFF
+                        line = line + ',%d' %(topLabel)
+                        if synsetFileName:
+                            line = line + ',%s(%f)' %(synsetList[topLabel], (label>>16)*(1.0/32767.0))
+                        if j==0:
+                            resultList[tag] = topLabel
                     if fp:
                         fp.write(line + '\n')
                     if verbose or not fp:

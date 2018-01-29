@@ -79,6 +79,7 @@
 
 // Max images per packet
 #define INFCOM_MAX_IMAGES_PER_PACKET           6
+#define INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET  12   //(14-2)
 
 // Max packet size
 #define INFCOM_MAX_PACKET_SIZE                 8192
