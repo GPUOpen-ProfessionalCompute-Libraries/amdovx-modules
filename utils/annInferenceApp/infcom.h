@@ -48,7 +48,7 @@
 //            or {<tag:32-bit> <size:32-bit> bytearray(filename)> <eof-marker:32-bit> } if rf == 1
 //  * server: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
 //    client: InfComCommand:INFCOM_CMD_INFERENCE_RESULT data={imageCount,0,<tag1>,<label1>,<tag2>,<label2>,...} upto 14 tags
-//              For <label0:prob0> in below command is specified as <label+prob*65536>" where label is UINT16 and prob is UQ15 fixed-point representation.
+//              For <label0:prob0> in below command is specified as <label+prob*65536>" where label is UINT16 and prob is UQ1.15 fixed-point representation.
 //  * server: InfComCommand:INFCOM_CMD_TOPK_INFERENCE_RESULT data={imageCount,top_k,<tag0>,<label0:prob0>,..<labelk:probk>,<tag1><label0:prob0>..<labelk:probk>, ...} upto imageCount where ((imageCount*topk)+2) <= 14.
 //    client: InfComCommand:INFCOM_CMD_TOPK_INFERENCE_RESULT data={imageCount,top_k,<tag0>,<label0:prob0>,..<labelk:probk>,<tag1><label0:prob0>..<labelk:probk>, ...} upto imageCount where ((imageCount*topk)+2) <= 14
 //  * server: (repeat of INFCOM_CMD_SEND_IMAGES and INFCOM_CMD_INFERENCE_RESULT messages)
@@ -82,7 +82,6 @@
 #define INFCOM_EOF_MARKER                      0x12344321
 
 // Max images per packet
-#define INFCOM_MAX_IMAGES_PER_PACKET           6
 #define INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET  12  // (14-2)
 
 // Max packet size
