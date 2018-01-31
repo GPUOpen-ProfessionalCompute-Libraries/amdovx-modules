@@ -62,8 +62,7 @@ inference_state::inference_state()
     maxImageDataSize = 0;
 }
 
-inference_viewer::inference_viewer(
-        QString serverHost, int serverPort, QString modelName,
+inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
         QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
         bool repeat_images, bool sendScaledImages,
