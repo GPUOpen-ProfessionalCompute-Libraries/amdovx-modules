@@ -821,10 +821,12 @@ int InferenceEngine::run()
                         int fsize = ftell(fp);
                         fseek(fp,0,SEEK_SET);
                         byteStream = new char [fsize];
-                        fread(byteStream, 1, fsize, fp);
+                        size = (int)fread(byteStream, 1, fsize, fp);
                         fclose(fp);
                         delete[] buff;
-                        size = fsize;       // actual size of the file
+                        if (size != fsize) {
+                            return error_close(sock, "error reading %d bytes from file:%s", fsize, fileNameDir.c_str());
+                        }
                     }
                     else
                     {
