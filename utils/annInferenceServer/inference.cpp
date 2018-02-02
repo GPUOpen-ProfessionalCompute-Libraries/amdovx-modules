@@ -15,12 +15,20 @@
 #endif
 #endif
 
+
+// sort indexes based on comparing values in v
+template <typename T>
+void sort_indexes(const std::vector<T> &v, std::vector<size_t> &idx) {
+  sort(idx.begin(), idx.end(),
+       [&v](size_t i1, size_t i2) {return v[i1] > v[i2];});
+}
+
 InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clientName_, InfComCommand * cmd)
     : sock{ sock_ }, args{ args_ }, clientName{ clientName_ },
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receiveFileNames { (bool)cmd->data[8] },
+      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
@@ -57,7 +65,6 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     }
 
     PROFILER_INITIALIZE();
-
 }
 
 InferenceEngine::~InferenceEngine()
@@ -444,6 +451,14 @@ int InferenceEngine::run()
     }
 
     //////
+    /// check if client is requesting topK which is not supported
+    ///
+    if (topK > 5)
+    {
+        return error_close(sock, "Number of topK confidances: %d not supported\n", topK);
+    }
+
+    //////
     /// check for model validity
     ///
     bool found = false;
@@ -686,31 +701,66 @@ int InferenceEngine::run()
         if(resultCountAvailable > 0) {
             didSomething = true;
             while(resultCountAvailable > 0) {
-                int resultCount = std::min(resultCountAvailable, INFCOM_MAX_IMAGES_PER_PACKET);
-                InfComCommand cmd = {
-                    INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
-                };
-                for(int i = 0; i < resultCount; i++) {
-                    std::tuple<int,int> result;
-                    outputQ.dequeue(result);
-                    int tag = std::get<0>(result);
-                    int label = std::get<1>(result);
-                    if(tag < 0) {
-                        endOfSequence = true;
-                        resultCount = i;
+                if (topK < 1){
+                    int resultCount = std::min(resultCountAvailable, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
+                    InfComCommand cmd = {
+                        INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
+                    };
+                    for(int i = 0; i < resultCount; i++) {
+                        std::tuple<int,int> result;
+                        outputQ.dequeue(result);
+                        int tag = std::get<0>(result);
+                        int label = std::get<1>(result);
+                        if(tag < 0) {
+                            endOfSequence = true;
+                            resultCount = i;
+                            break;
+                        }
+                        cmd.data[2 + i * 2 + 0] = tag; // tag
+                        cmd.data[2 + i * 2 + 1] = label; // label
+                    }
+                    if(resultCount > 0) {
+                        cmd.data[0] = resultCount;
+                        ERRCHK(sendCommand(sock, cmd, clientName));
+                        resultCountAvailable -= resultCount;
+                        ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
+                    }
+                    if(endOfSequence) {
                         break;
                     }
-                    cmd.data[2 + i * 2 + 0] = tag; // tag
-                    cmd.data[2 + i * 2 + 1] = label; // label
-                }
-                if(resultCount > 0) {
-                    cmd.data[0] = resultCount;
-                    ERRCHK(sendCommand(sock, cmd, clientName));
-                    resultCountAvailable -= resultCount;
-                    ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
-                }
-                if(endOfSequence) {
-                    break;
+                }else {
+                    // send topK labels
+                    int maxResults = INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/(topK+1);
+                    int resultCount = std::min(resultCountAvailable, maxResults);
+                    InfComCommand cmd = {
+                        INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
+                    };
+                    for(int i = 0; i < resultCount; i++) {
+                        std::tuple<int,int> result;
+                        std::vector<unsigned int> labels;
+                        outputQ.dequeue(result);
+                        int tag = std::get<0>(result);
+                        if(tag < 0) {
+                            endOfSequence = true;
+                            resultCount = i;
+                            break;
+                        }
+                        outputQTopk.dequeue(labels);
+                        cmd.data[2 + i * (topK+1) + 0] = tag; // tag
+                        for (int j=0; j<topK; j++){
+                            cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
+                        }
+                        labels.clear();
+                    }
+                    if(resultCount > 0) {
+                        cmd.data[0] = resultCount;
+                        ERRCHK(sendCommand(sock, cmd, clientName));
+                        resultCountAvailable -= resultCount;
+                        ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_TOPK_INFERENCE_RESULT));
+                    }
+                    if(endOfSequence) {
+                        break;
+                    }
                 }
             }
         }
@@ -727,7 +777,7 @@ int InferenceEngine::run()
             if(imageCountRequested > 0) {
                 didSomething = true;
                 // send request for upto INFCOM_MAX_IMAGES_PER_PACKET images
-                imageCountRequested = std::min(imageCountRequested, INFCOM_MAX_IMAGES_PER_PACKET);
+                imageCountRequested = std::min(imageCountRequested, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
                 InfComCommand cmd = {
                     INFCOM_MAGIC, INFCOM_CMD_SEND_IMAGES, { imageCountRequested }, { 0 }
                 };
@@ -771,10 +821,12 @@ int InferenceEngine::run()
                         int fsize = ftell(fp);
                         fseek(fp,0,SEEK_SET);
                         byteStream = new char [fsize];
-                        fread(byteStream, 1, fsize, fp);
+                        size = (int)fread(byteStream, 1, fsize, fp);
                         fclose(fp);
                         delete[] buff;
-                        size = fsize;       // actual size of the file
+                        if (size != fsize) {
+                            return error_close(sock, "error reading %d bytes from file:%s", fsize, fileNameDir.c_str());
+                        }
                     }
                     else
                     {
@@ -1162,16 +1214,33 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
-            int label = 0;
-            float max_prob = buf[0];
-            for(int c = 1; c < dimOutput[2]; c++) {
-                float prob = buf[c];
-                if(prob > max_prob) {
-                    label = c;
-                    max_prob = prob;
+            if (topK < 1){
+                int label = 0;
+                float max_prob = buf[0];
+                for(int c = 1; c < dimOutput[2]; c++) {
+                    float prob = buf[c];
+                    if(prob > max_prob) {
+                        label = c;
+                        max_prob = prob;
+                    }
                 }
+                outputQ.enqueue(std::tuple<int,int>(tag,label));
+            }else {
+                std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                std::vector<size_t> idx(prob_vec.size());
+                iota(idx.begin(), idx.end(), 0);
+                sort_indexes(prob_vec, idx);            // sort indeces based on prob
+                std::vector<unsigned int>    labels;
+                outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
+                int j=0;
+                for (auto i: idx) {
+                    // make label which is index and prob
+                    int packed_label_prob = (i&0xFFFF)|(((unsigned int)((prob_vec[i]*0x7FFF)+0.5))<<16);   // convert prob to 16bit float and store in MSBs
+                    labels.push_back(packed_label_prob);
+                    if (++j >= topK) break;
+                }
+                outputQTopk.enqueue(labels);
             }
-            outputQ.enqueue(std::tuple<int,int>(tag,label));
         }
 
         // unlock the OpenCL buffer to perform the writing
@@ -1200,7 +1269,6 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
     // send end of sequence marker to next stage
     outputQ.enqueue(std::tuple<int,int>(-1,-1));
-
     args->lock();
     info("workDeviceOutputCopy: GPU#%d terminated for %s [processed %d batches, %d images]", gpu, clientName.c_str(), totalBatchCounter, totalImageCounter);
     args->unlock();

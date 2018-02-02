@@ -15,6 +15,7 @@ INFCOM_CMD_COMPILER_STATUS           = 203
 INFCOM_CMD_INFERENCE_INITIALIZATION  = 301
 INFCOM_CMD_SEND_IMAGES               = 302
 INFCOM_CMD_INFERENCE_RESULT          = 303
+INFCOM_CMD_TOPK_INFERENCE_RESULT     = 304
 INFCOM_MODE_CONFIGURE                = 1
 INFCOM_MODE_COMPILER                 = 2
 INFCOM_MODE_INFERENCE                = 3
@@ -24,7 +25,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] <folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] <folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -36,6 +37,7 @@ synsetFileName = None
 uploadParams = ''
 verbose = False
 sendFileName = 0
+topkValue = 0
 arg = 1
 while arg < len(sys.argv):
     if sys.argv[arg][:6] == '-host:':
@@ -61,6 +63,12 @@ while arg < len(sys.argv):
         arg = arg + 1
     elif sys.argv[arg] == '-v':
         verbose = True
+        arg = arg + 1
+    elif sys.argv[arg][:6] == '-topK:':
+        topkValue = int(sys.argv[arg][6:])
+        if topkValue > 5:
+            print('ERROR: topK value more than 5 not supported')
+            sys.exit(1)
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])
@@ -227,7 +235,7 @@ def uploadModel(host,port,uploadParams):
     model = [modelName, [int(par[2]),int(par[3]),int(par[4])], [ow,oh,oc], int(par[6]), (float(par[7]),float(par[8]),float(par[9]),float(par[10]),float(par[11]),float(par[12]))]
     return model
 
-def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,verbose):
+def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,verbose):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.connect((host, port))
@@ -255,7 +263,7 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
             break
         elif info[1] == INFCOM_CMD_SEND_MODE:
-            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_INFERENCE,GPUs,model[1][0],model[1][1],model[1][2],model[2][0],model[2][1],model[2][2],sendFileName),model[0]))
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_INFERENCE,GPUs,model[1][0],model[1][1],model[1][2],model[2][0],model[2][1],model[2][2],sendFileName,topkValue),model[0]))
         elif info[1] == INFCOM_CMD_INFERENCE_INITIALIZATION:
             sendpkt(sock,info)
             print('OK: ' + info[3])
@@ -268,9 +276,9 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                 for i in range(count):
                     tag = sendCount
                     if sendFileName == 0:
-                    	sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
+                        sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
                     else:
-                    	sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
+                        sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
                     sendCount = sendCount + 1
         elif info[1] == INFCOM_CMD_INFERENCE_RESULT:
             sendpkt(sock,info)
@@ -294,6 +302,37 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                         print(line)
                 else:
                     print('RECEIVED INCORRECT RESULT: ', tag, label)
+            if resultCount >= len(imageFileList):
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
+                break
+        elif info[1] == INFCOM_CMD_TOPK_INFERENCE_RESULT:
+            sendpkt(sock,info)
+            count = info[2][0]
+            top_k = info[2][1]
+            itemSize = top_k+1
+            #print('INFO:' + str(info))
+            if top_k <= 0:
+                print('ERROR: INFERENCE ' + str(info))
+                break
+            for i in range(count):
+                tag = info[2][2 + i * itemSize + 0]
+                if tag >= 0:
+                    line = '%s' % (imageFileList[tag])
+                    resultCount = resultCount + 1
+                    for j in range(top_k):
+                        label = info[2][3 + i * itemSize + j]
+                        topLabel = label&0xFFFF
+                        line = line + ',%d' %(topLabel)
+                        if synsetFileName:
+                            line = line + ',%s(%f)' %(synsetList[topLabel], (label>>16)*(1.0/32767.0))
+                        if j==0:
+                            resultList[tag] = topLabel
+                    if fp:
+                        fp.write(line + '\n')
+                    if verbose or not fp:
+                        print(line)
+                else:
+                    print('RECEIVED INCORRECT RESULT: ', tag, topLabel)
             if resultCount >= len(imageFileList):
                 sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
                 break
@@ -339,6 +378,6 @@ if len(imageFileList) > 0:
     if modelName == '':
         print('ERROR: no model available to run inference')
         sys.exit(1)
-    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,verbose)
+    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,verbose)
     if outputFileName:
         print('OK: saved inference results in ' + outputFileName)

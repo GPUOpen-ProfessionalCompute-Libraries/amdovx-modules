@@ -1,5 +1,6 @@
 #include "inference_receiver.h"
 #include "tcpconnection.h"
+#include <iostream>
 #include <QThread>
 
 bool inference_receiver::abortRequsted = false;
@@ -48,6 +49,11 @@ void inference_receiver::getReceivedList(QVector<int>& indexQ, QVector<int>& lab
         imageIndex.pop_front();
         imageLabel.pop_front();
         imageSummary.pop_front();
+    }
+    while (imageTopkLabels.length() > 0)
+    {
+        imageTopkLabels.pop_front();
+        imageTopkConfidence.pop_front();
     }
 }
 
@@ -152,6 +158,48 @@ void inference_receiver::run()
                         }
                         perfImageCount++;
                         progress->images_received++;
+                    }
+                    if(!progress->repeat_images && progress->completed_load &&
+                        progress->images_loaded == progress->images_received)
+                    {
+                        abort();
+                    }
+                }
+            }
+            else if(cmd.command == INFCOM_CMD_TOPK_INFERENCE_RESULT) {
+                connection->sendCmd(cmd);
+                int count = cmd.data[0];
+                int top_k = cmd.data[1];
+                int item_size = top_k+1;
+                if(top_k > 0 && count > 0 && count < (int)((sizeof(cmd)-16)/(sizeof(int)*item_size))) {
+                    std::lock_guard<std::mutex> guard(mutex);
+                    std::vector<int> labels;
+                    std::vector<float> probVec;
+                    for(int i = 0; i < count; i++) {
+                        int tag = cmd.data[2 + item_size*i + 0];
+                        imageIndex.push_back(tag);
+                        for (int j=1; j<=top_k; j++){
+                            int label = cmd.data[2 + i*item_size + j];      // label has both label and prob
+                            float prob =  (label>>16)*(1.0f/(float)32768.0f);
+                            prob = std::min(prob, 1.0f);
+                            labels.push_back(label & 0xFFFF);
+                            probVec.push_back(prob);
+                        }
+                        imageTopkLabels.push_back(labels);
+                        imageTopkConfidence.push_back(probVec);
+                        // get the top label
+                        int topLabel = labels[0];
+                        imageLabel.push_back(topLabel);
+                        if(dataLabels && topLabel >= 0 && topLabel < dataLabels->size()) {
+                            imageSummary.push_back((*dataLabels)[topLabel]);
+                        }
+                        else {
+                            imageSummary.push_back("Unknown");
+                        }
+                        perfImageCount++;
+                        progress->images_received++;
+                        labels.clear();
+                        probVec.clear();
                     }
                     if(!progress->repeat_images && progress->completed_load &&
                         progress->images_loaded == progress->images_received)
