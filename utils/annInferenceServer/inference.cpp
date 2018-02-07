@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
+#include <numeric>
 
 #if USE_SSE_OPTIMIZATION
 #if _WIN32
@@ -1227,7 +1228,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             }else {
                 std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
                 std::vector<size_t> idx(prob_vec.size());
-                iota(idx.begin(), idx.end(), 0);
+                std::iota(idx.begin(), idx.end(), 0);
                 sort_indexes(prob_vec, idx);            // sort indeces based on prob
                 std::vector<unsigned int>    labels;
                 outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
