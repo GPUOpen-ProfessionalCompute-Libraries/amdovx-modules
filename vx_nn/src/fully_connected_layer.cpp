@@ -51,7 +51,7 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
 
     // check tensor dimensions
     vx_size num_dims;
-    vx_size input_dims[4], weights_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
+    vx_size input_dims[4] = { 1, 1, 1, 1 }, weights_dims[4] = { 1, 1, 0, 0 }, output_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
@@ -73,19 +73,17 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
+    if(num_dims != 2 && num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
     if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
     if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
     if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
     if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
-    num_dims = 4;
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
     return VX_SUCCESS;
 }
 
