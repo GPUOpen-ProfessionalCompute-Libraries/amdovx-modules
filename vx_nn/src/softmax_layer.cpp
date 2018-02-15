@@ -84,7 +84,7 @@ static vx_status VX_CALLBACK initializeSoftmaxLayer(vx_node node, const vx_refer
 
     //Parameters input and output.
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 }, output_dims[4] = { 1, 1, 1, 1 };
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, &input_dims[4-num_dims], num_dims * sizeof(vx_size)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
