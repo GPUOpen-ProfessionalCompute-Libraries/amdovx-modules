@@ -170,7 +170,7 @@ static vx_status VX_CALLBACK uninitializeScaleLayer(vx_node node, const vx_refer
 vx_status publishScaleLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-	vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.scale_layer", VX_KERNEL_SCALE_LAYER_AMD, processScaleLayer, 4, validateScaleLayer, initializeScaleLayer, uninitializeScaleLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.scale_layer", VX_KERNEL_SCALE_LAYER_AMD, processScaleLayer, 4, validateScaleLayer, initializeScaleLayer, uninitializeScaleLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -201,7 +201,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxScaleLayer(vx_graph graph, vx_tensor inputs, 
             (vx_reference)bias,
             (vx_reference)output
         };
-		node = createNode(graph, VX_KERNEL_SCALE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_SCALE_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
