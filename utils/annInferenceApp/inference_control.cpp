@@ -268,6 +268,15 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     labelRuntime->setStyleSheet("font-weight: bold; color: red; font-size: 18pt;");
     controlLayout->addWidget(labelRuntime, row, 0, 1, 5);
     row++;
+    checkTopKResult = new QCheckBox("Top K Results");
+    checkTopKResult->setChecked(false);
+    checkTopKResult->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    controlLayout->addWidget(checkTopKResult, row, 0, 1, 1);
+    comboTopKResult = new QComboBox();
+    comboTopKResult->addItems({ "1", "2", "3", "4", "5" });
+    comboTopKResult->setEnabled(false);
+    controlLayout->addWidget(comboTopKResult, row, 1, 1, 1);
+    row++;
     QLabel * labelGPUs = new QLabel("GPUs:");
     editGPUs = new QLineEdit("1");
     labelMaxGPUs = new QLabel("");

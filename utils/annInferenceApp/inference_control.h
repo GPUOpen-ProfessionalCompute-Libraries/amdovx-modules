@@ -101,6 +101,8 @@ private:
     QLineEdit * editMaxDataSize;
     QCheckBox * checkRepeatImages;
     QCheckBox * checkScaledImages;
+    QCheckBox * checkTopKResult;
+    QComboBox * comboTopKResult;
     inference_compiler_status compiler_status;
     bool operationMode;
     bool connectionSuccessful;
