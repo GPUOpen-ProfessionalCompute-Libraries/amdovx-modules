@@ -6,7 +6,7 @@ inference_panel::inference_panel(QWidget *parent) :
     ui(new Ui::inference_panel)
 {
     ui->setupUi(this);
-    display_panel.setWindowIcon(QIcon(":/images/vega_icon_250.png"));
+    display_panel.setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     connect(ui->viewGraph_pushButton, &QAbstractButton::clicked, this, &inference_panel::viewPerformanceGraph);
 }
 

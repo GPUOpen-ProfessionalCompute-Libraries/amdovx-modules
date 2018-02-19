@@ -21,8 +21,8 @@ int main(int argc, char *argv[])
     inference_control control(enable_repeat_images);
     QSplashScreen splash;
     splash.setPixmap(QPixmap(":/images/inference_app_splash.png"));
-    splash.show(); splashDelay(5000); splash.hide();
-    control.setWindowIcon(QIcon(":/images/vega_icon_250.png"));
+    splash.show(); splashDelay(2000); splash.hide();
+    control.setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     control.show();
 
     return a.exec();
