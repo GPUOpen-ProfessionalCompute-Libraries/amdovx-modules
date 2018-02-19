@@ -32,6 +32,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     setMinimumWidth(800);
 
     maxGPUs = 1;
+    EnableSF = 0;
     compiler_status.completed = false;
     compiler_status.dimOutput[0] = 0;
     compiler_status.dimOutput[1] = 0;
@@ -238,7 +239,6 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     row++;
     checkShadowFolder = new QCheckBox("Enable Shadow Folder");
     checkShadowFolder->setChecked(false);
-    checkShadowFolder->setEnabled(false);
     checkShadowFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
     controlLayout->addWidget(checkShadowFolder, row, 0, 1, 1);
     editShadowFolderAddr = new QLineEdit("Enter FOLDER-NAME");
@@ -829,10 +829,12 @@ void inference_control::runConnection()
             connection->sendCmd(cmd);
             pendingModelCount = cmd.data[0];
             maxGPUs = cmd.data[1];
+            EnableSF = cmd.data[2];
             QString text;
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));
             labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
+            if(!EnableSF) {checkShadowFolder->setEnabled(false);}
             while(comboModelSelect->count() > 1)
                 comboModelSelect->removeItem(1);
             modelList.clear();

@@ -188,7 +188,7 @@ void inference_viewer::saveResults()
                                      state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
                     }
                     else {
-                        text.sprintf("%s,%d,-1,-1,\"%s\",-1\n", state->imageDataFilenames[i].toStdString().c_str(), label,
+                        text.sprintf("%s,%d,-1,-1,\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(), label,
                                      state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown");
                     }
                 }
