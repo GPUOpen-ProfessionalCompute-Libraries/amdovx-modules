@@ -29,23 +29,18 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    if (num_dims != 4)
-        return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: tensor2img: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
     if ((input_dims[2] != 3 && input_dims[2] != 1) || ((input_dims[0] & 3) != 0))
-        return VX_ERROR_INVALID_DIMENSION;
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: tensor2img: input_dims[%ldx%ldx%ldx%ld]\n", input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
     vx_enum scalar_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #2 type=%d (must be float)\n", scalar_type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #3 type=%d (must be float)\n", scalar_type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_BOOL)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_BOOL) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #4 type=%d (must be bool)\n", scalar_type);
 
     // set output image configuration
     vx_uint32 width = (vx_uint32)input_dims[0];
