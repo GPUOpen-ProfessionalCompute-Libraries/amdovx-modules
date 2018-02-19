@@ -236,6 +236,15 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editModelName, row, 3, 1, 1);
     controlLayout->addWidget(editServerPassword, row, 4, 1, 1);
     row++;
+    checkShadowFolder = new QCheckBox("Enable Shadow Folder");
+    checkShadowFolder->setChecked(false);
+    checkShadowFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    controlLayout->addWidget(checkShadowFolder, row, 0, 1, 1);
+    editShadowFolderAddr = new QLineEdit("Enter FOLDER-NAME");
+    editShadowFolderAddr->setVisible(false);
+    controlLayout->addWidget(editShadowFolderAddr, row, 1, 1, 1);
+    connect(checkShadowFolder, SIGNAL(clicked(bool)), this, SLOT(shadowFolderEnable(bool)));
+    row++;
     connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
     connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
     connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
@@ -1004,5 +1013,16 @@ void inference_control::topKResultsEnable(bool topKEnable)
     {
         comboTopKResult->setEnabled(false);
         comboTopKResult->setCurrentIndex(0);
+    }
+}
+
+void inference_control::shadowFolderEnable(bool shadowEnable)
+{
+    if(shadowEnable){
+        editShadowFolderAddr->setVisible(true);
+    }
+    else
+    {
+        editShadowFolderAddr->setVisible(false);
     }
 }

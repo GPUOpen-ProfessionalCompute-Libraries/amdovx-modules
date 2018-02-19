@@ -44,6 +44,7 @@ public slots:
     void onLogo1Click();
     void onLogo2Click();
     void topKResultsEnable(bool topKEnable);
+    void shadowFolderEnable(bool shadowEnable);
 
 protected:
     void browseDataLabels();
@@ -81,6 +82,7 @@ private:
     QLineEdit * editModelFile2;
     QComboBox * comboInvertInputChannels;
     QComboBox * comboPublishOptions;
+    QComboBox * comboTopKResult;
     QLineEdit * editModelName;
     QPushButton * buttonModelFile1;
     QPushButton * buttonModelFile2;
@@ -103,7 +105,8 @@ private:
     QCheckBox * checkRepeatImages;
     QCheckBox * checkScaledImages;
     QCheckBox * checkTopKResult;
-    QComboBox * comboTopKResult;
+    QCheckBox * checkShadowFolder;
+    QLineEdit * editShadowFolderAddr;
     inference_compiler_status compiler_status;
     bool operationMode;
     bool connectionSuccessful;
