@@ -43,6 +43,7 @@ public slots:
     void onChangeModelName(const QString &);
     void onLogo1Click();
     void onLogo2Click();
+    void topKResultsEnable(bool topKEnable);
 
 protected:
     void browseDataLabels();

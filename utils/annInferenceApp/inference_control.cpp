@@ -276,6 +276,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     comboTopKResult->addItems({ "1", "2", "3", "4", "5" });
     comboTopKResult->setEnabled(false);
     controlLayout->addWidget(comboTopKResult, row, 1, 1, 1);
+    connect(checkTopKResult, SIGNAL(clicked(bool)), this, SLOT(topKResultsEnable(bool)));
     row++;
     QLabel * labelGPUs = new QLabel("GPUs:");
     editGPUs = new QLineEdit("1");
@@ -991,4 +992,17 @@ void inference_control::onLogo1Click()
 void inference_control::onLogo2Click()
 {
     QDesktopServices::openUrl(QUrl("https://instinct.radeon.com/en/"));
+}
+
+void inference_control::topKResultsEnable(bool topKEnable)
+{
+    if(topKEnable){
+        comboTopKResult->setEnabled(true);
+        comboTopKResult->setCurrentIndex(0);
+    }
+    else
+    {
+        comboTopKResult->setEnabled(false);
+        comboTopKResult->setCurrentIndex(0);
+    }
 }
