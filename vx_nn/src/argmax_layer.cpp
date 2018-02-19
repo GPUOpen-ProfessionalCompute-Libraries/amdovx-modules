@@ -30,10 +30,8 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if ((num_dims != 4 && num_dims != 3) || ((input_dims[0] & 3) != 0))
-        return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if ((num_dims != 4 && num_dims != 3) || ((input_dims[0] & 3) != 0)) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validation: argmax: #0 num_dims=%ld input_dims[0]=%ld (must be multiple of 4)\n", num_dims, input_dims[0]);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validation: argmax: #0 type=%d (not float)\n", type);
 
     // check output object type and set configuration
     ERROR_CHECK_STATUS(vxQueryReference(parameters[1], VX_REFERENCE_TYPE, &type, sizeof(type)));
@@ -41,7 +39,7 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
         vx_df_image format;
         ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
         if(format == VX_DF_IMAGE_U8 && input_dims[2] > 255)
-            return VX_ERROR_INVALID_FORMAT;
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 img U008 with input_dims[2](=%ld) > 255\n", input_dims[2]);
         if(format == VX_DF_IMAGE_VIRT)
             format = (input_dims[2] < 256) ? VX_DF_IMAGE_U8 : VX_DF_IMAGE_U16;
         vx_uint32 width = (vx_uint32)input_dims[0];
@@ -56,17 +54,17 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
         if (output_dims[2] != 1 && output_dims[2] != 2) // top_k must be 1 or 2
-            return VX_ERROR_INVALID_DIMENSION;
+            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validation: argmax: #1 top_k=%ld (must be 1 or 2)\n", output_dims[2]);
         if(type == VX_TYPE_UINT8 && input_dims[2] > 255)
-            return VX_ERROR_INVALID_FORMAT;
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 tensor U8 with input_dims[2](=%ld) > 255\n", input_dims[2]);
         if(type != VX_TYPE_UINT8 && type != VX_TYPE_UINT16 && type != VX_TYPE_INT16)
-            return VX_ERROR_INVALID_FORMAT;
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 tensor output type=%d (must be U8/U16/I16)\n", type);
         ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
         ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
     }
     else
-        return VX_ERROR_INVALID_PARAMETERS;
+        return ERRMSG(VX_ERROR_INVALID_PARAMETERS, "validate: argmax: output object type=%d must be image or tensor\n", type);
 
     return VX_SUCCESS;
 }
