@@ -146,8 +146,8 @@ static vx_status VX_CALLBACK validateConcatLayer(vx_node node, const vx_referenc
         if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: concat: #%d type=%d (must be float)\n", i, type);
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DIMS, inputn_dims, sizeof(inputn_dims)));
         if (input1_dims[3] != inputn_dims[3] || input1_dims[1] != inputn_dims[1] || input1_dims[0] != inputn_dims[0])
-            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #%d dims input%d[%ld,%ld,%ld,%ld] != dims_input%d[%ld,%ld,%ld,%ld]\n", i,
-                    input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3],
+            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #%d dims input1[%ld,%ld,%ld,%ld] != dims_input%d[%ld,%ld,%ld,%ld]\n", i,
+                    input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3], i,
                     inputn_dims[0], inputn_dims[1], inputn_dims[2], inputn_dims[3]);
         num_channels += inputn_dims[2];
 
