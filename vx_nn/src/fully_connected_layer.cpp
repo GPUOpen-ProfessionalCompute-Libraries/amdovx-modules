@@ -76,7 +76,7 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
     if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #5 num_dims=%ld (must be 2 or 4)\n", num_dims);
     if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #5 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
-    if(output_dims[3] != input_dims[3] || input_dims[2] != weights_dims[2] || output_dims[2] != weights_dims[3])
+    if(output_dims[3] != input_dims[3] || input_dims[2]*input_dims[1]*input_dims[0] != weights_dims[2]*weights_dims[1]*weights_dims[0] || output_dims[2] != weights_dims[3])
         return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: input[%ldx%ldx%ldx%ld] weights[%ldx%ldx%ldx%ld] output[%ldx%ldx%ldx%ld]\n",
             input_dims[3], input_dims[2], input_dims[1], input_dims[0],
             weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0],
@@ -129,6 +129,11 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
     }
+
+    // adjust weights to match input
+    input_dims[2] = weights_dims[2];
+    input_dims[1] = weights_dims[1];
+    input_dims[0] = weights_dims[0];
 
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
