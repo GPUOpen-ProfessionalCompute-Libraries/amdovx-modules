@@ -966,10 +966,6 @@ void inference_viewer::paintEvent(QPaintEvent *)
             truthSummary = state->dataLabels ? (*state->dataLabels)[truthLabel] : "Unknown";
         }
         int resultLabel = state->inferenceResultTop[index];
-        float resultProb = -1;
-        if(state->topKValue > 0){
-            resultProb = state->resultImageProbTopK[index][0];
-        }
         QString resultSummary = state->inferenceResultSummary[index];
         int w = 4 + ICON_SIZE * 2 + 600;
         int h = 4 + ICON_SIZE * 2 + 4 + fontMetrics.height() + 4;
@@ -1036,10 +1032,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
         font.setItalic(false);
         setFont(font);
         painter.setPen(Qt::blue);
-        if(state->topKValue > 0)
-            text.sprintf("classified as [label=%d Prob=%f] ", resultLabel, resultProb);
-        else
-            text.sprintf("classified as [label=%d] ", resultLabel);
+        text.sprintf("classified as [label=%d] ", resultLabel);
         text += resultSummary;
         painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 8, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         if(truthLabel >= 0) {
