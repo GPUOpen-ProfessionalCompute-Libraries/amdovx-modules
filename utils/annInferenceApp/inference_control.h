@@ -113,7 +113,9 @@ private:
     int modelType;
     int numModelTypes;
     int maxGPUs;
-    int EnableSF;
+    int enableSF;
+    int enableTopK;
+    int topKValue;
     QVector<QString> * dataLabels;
     QVector<QString> typeModelFile1Label;
     QVector<QString> typeModelFile1Desc;

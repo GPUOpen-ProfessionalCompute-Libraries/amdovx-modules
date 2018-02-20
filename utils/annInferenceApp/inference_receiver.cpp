@@ -14,7 +14,7 @@ inference_receiver::inference_receiver(
         QString serverHost_, int serverPort_, QString modelName_,
         int GPUs_, int * inputDim_, int * outputDim_, const char * runtimeOptions_,
         QVector<QByteArray> * imageBuffer_,
-        runtime_receiver_status * progress_,
+        runtime_receiver_status * progress_, int enableSF_, int topKValue_,
         QObject *parent) : QObject(parent)
 {
     perfRate = 0;
@@ -32,6 +32,8 @@ inference_receiver::inference_receiver(
     outputDim = outputDim_;
     runtimeOptions = runtimeOptions_;
     progress = progress_;
+    enableSF = enableSF_;
+    topKValue = topKValue_;
 }
 
 inference_receiver::~inference_receiver()
@@ -39,7 +41,8 @@ inference_receiver::~inference_receiver()
 
 }
 
-void inference_receiver::getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ)
+void inference_receiver::getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ,
+                                         QVector<QVector<int> >& labelTopK, QVector<QVector<float> >& probTopK)
 {
     std::lock_guard<std::mutex> guard(mutex);
     while(imageIndex.length() > 0) {
@@ -52,6 +55,8 @@ void inference_receiver::getReceivedList(QVector<int>& indexQ, QVector<int>& lab
     }
     while (imageTopkLabels.length() > 0)
     {
+        labelTopK.push_back(imageTopkLabels.front());
+        probTopK.push_back(imageTopkConfidence.front());
         imageTopkLabels.pop_front();
         imageTopkConfidence.pop_front();
     }
@@ -94,7 +99,7 @@ void inference_receiver::run()
                 InfComCommand reply = {
                     INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
                     { INFCOM_MODE_INFERENCE, GPUs,
-                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2] },
+                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2], enableSF, topKValue },
                     { 0 }
                 };
                 QString text = modelName;
@@ -170,11 +175,11 @@ void inference_receiver::run()
                 connection->sendCmd(cmd);
                 int count = cmd.data[0];
                 int top_k = cmd.data[1];
-                int item_size = top_k+1;
+                int item_size = top_k + 1;
                 if(top_k > 0 && count > 0 && count < (int)((sizeof(cmd)-16)/(sizeof(int)*item_size))) {
                     std::lock_guard<std::mutex> guard(mutex);
-                    std::vector<int> labels;
-                    std::vector<float> probVec;
+                    QVector<int> labelVec;
+                    QVector<float> probVec;
                     for(int i = 0; i < count; i++) {
                         int tag = cmd.data[2 + item_size*i + 0];
                         imageIndex.push_back(tag);
@@ -182,13 +187,13 @@ void inference_receiver::run()
                             int label = cmd.data[2 + i*item_size + j];      // label has both label and prob
                             float prob =  (label>>16)*(1.0f/(float)32768.0f);
                             prob = std::min(prob, 1.0f);
-                            labels.push_back(label & 0xFFFF);
+                            labelVec.push_back(label & 0xFFFF);
                             probVec.push_back(prob);
                         }
-                        imageTopkLabels.push_back(labels);
+                        imageTopkLabels.push_back(labelVec);
                         imageTopkConfidence.push_back(probVec);
                         // get the top label
-                        int topLabel = labels[0];
+                        int topLabel = labelVec[0];
                         imageLabel.push_back(topLabel);
                         if(dataLabels && topLabel >= 0 && topLabel < dataLabels->size()) {
                             imageSummary.push_back((*dataLabels)[topLabel]);
@@ -198,7 +203,7 @@ void inference_receiver::run()
                         }
                         perfImageCount++;
                         progress->images_received++;
-                        labels.clear();
+                        labelVec.clear();
                         probVec.clear();
                     }
                     if(!progress->repeat_images && progress->completed_load &&

@@ -36,6 +36,8 @@ public:
     QVector<int> resultImageIndex;
     QVector<int> resultImageLabel;
     QVector<QString> resultImageSummary;
+    QVector<QVector<int>> resultImageLabelTopK;
+    QVector<QVector<float>> resultImageProbTopK;
     // mouse events
     bool abortLoadingRequested;
     bool exitButtonPressed;
@@ -63,6 +65,8 @@ public:
     QString modelName;
     int maxImageDataSize;
     bool sendScaledImages;
+    int enableSF;
+    int topKValue;
 };
 
 class inference_viewer : public QWidget
@@ -73,7 +77,7 @@ public:
     explicit inference_viewer(QString serverHost, int serverPort, QString modelName,
             QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
             int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-            bool repeat_images, bool sendScaledImages,
+            bool repeat_images, bool sendScaledImages, int enableSF, int topKValue,
             QWidget *parent = 0);
     ~inference_viewer();
 

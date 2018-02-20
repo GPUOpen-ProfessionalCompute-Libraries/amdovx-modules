@@ -32,7 +32,9 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     setMinimumWidth(800);
 
     maxGPUs = 1;
-    EnableSF = 0;
+    enableSF = 0;
+    enableTopK = 0;
+    topKValue = 0;
     compiler_status.completed = false;
     compiler_status.dimOutput[0] = 0;
     compiler_status.dimOutput[1] = 0;
@@ -829,12 +831,12 @@ void inference_control::runConnection()
             connection->sendCmd(cmd);
             pendingModelCount = cmd.data[0];
             maxGPUs = cmd.data[1];
-            EnableSF = cmd.data[2];
+            enableSF = cmd.data[2];
             QString text;
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));
             labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
-            if(!EnableSF) {checkShadowFolder->setEnabled(false);}
+            if(!enableSF) {checkShadowFolder->setEnabled(false);}
             while(comboModelSelect->count() > 1)
                 comboModelSelect->removeItem(1);
             modelList.clear();
@@ -982,6 +984,8 @@ void inference_control::runInference()
     bool sendScaledImages = false;
     if(checkScaledImages && checkScaledImages->checkState())
         sendScaledImages = true;
+    if(enableTopK)
+        topKValue = ( comboTopKResult->currentIndex() + 1 );
 
     inference_panel *display_panel = new inference_panel;
     display_panel->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
@@ -990,7 +994,7 @@ void inference_control::runInference()
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
                 dataLabels, editImageListFile->text(), editImageFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages);
+                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, enableSF, topKValue);
     viewer->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     viewer->show();
     close();
@@ -1011,11 +1015,13 @@ void inference_control::topKResultsEnable(bool topKEnable)
     if(topKEnable){
         comboTopKResult->setEnabled(true);
         comboTopKResult->setCurrentIndex(0);
+        enableTopK = 1;
     }
     else
     {
         comboTopKResult->setEnabled(false);
         comboTopKResult->setCurrentIndex(0);
+        enableTopK = 0;
     }
 }
 

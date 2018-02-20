@@ -65,7 +65,7 @@ inference_state::inference_state()
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
         QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-        bool repeat_images, bool sendScaledImages,
+        bool repeat_images, bool sendScaledImages, int enableSF, int topKValue,
         QWidget *parent) :
     QWidget(parent),
     ui(new Ui::inference_viewer),
@@ -87,6 +87,8 @@ inference_viewer::inference_viewer(QString serverHost, int serverPort, QString m
     state->serverPort = serverPort;
     state->modelName = modelName;
     state->sendScaledImages = sendScaledImages;
+    state->enableSF = enableSF;
+    state->topKValue = topKValue;
     progress.completed = false;
     progress.errorCode = 0;
     progress.repeat_images = repeat_images;
@@ -130,7 +132,7 @@ void inference_viewer::startReceiver()
     state->receiver_worker = new inference_receiver(
                 state->serverHost, state->serverPort, state->modelName,
                 state->GPUs, state->inputDim, state->outputDim, INFCOM_RUNTIME_OPTIONS,
-                &state->imageBuffer, &progress);
+                &state->imageBuffer, &progress, state->enableSF, state->topKValue);
     state->receiver_worker->moveToThread(state->receiver_thread);
     connect(state->receiver_worker, SIGNAL (error(QString)), this, SLOT (errorString(QString)));
     connect(state->receiver_thread, SIGNAL (started()), state->receiver_worker, SLOT (run()));
@@ -161,19 +163,63 @@ void inference_viewer::saveResults()
             bool csvFile =
                     QString::compare(QFileInfo(fileName).suffix(), "csv", Qt::CaseInsensitive) ? false : true;
             if(csvFile) {
-                if(state->imageLabel[0] >= 0) {
-                    fileObj.write("#FileName,outputLabel,groundTruthLabel,Matched?,outputLabelText,groundTruthLabelText\n");
+                if(state->topKValue == 0) {
+                    if(state->imageLabel[0] >= 0) {
+                        fileObj.write("#FileName,outputLabel,groundTruthLabel,Matched?,outputLabelText,groundTruthLabelText\n");
+                    }
+                    else {
+                        fileObj.write("#FileName,outputLabel,outputLabelText\n");
+                    }
                 }
                 else {
-                    fileObj.write("#FileName,outputLabel,outputLabelText\n");
+                    if(state->imageLabel[0] >= 0) {
+                        if(state->topKValue == 1)
+                            fileObj.write("#FileName,outputLabel-1,groundTruthLabel,Matched?,outputLabelText-1,groundTruthLabelText\n");
+                        else if(state->topKValue == 2)
+                            fileObj.write("#FileName,outputLabel-1,outputLabel-2,groundTruthLabel,Matched?,outputLabelText-1,outputLabelText-2,groundTruthLabelText\n");
+                        else if(state->topKValue == 3)
+                            fileObj.write("#FileName,outputLabel-1,outputLabel-2,outputLabel-3,groundTruthLabel,Matched?,"
+                                          "outputLabelText-1,outputLabelText-2,outputLabelText-3,groundTruthLabelText\n");
+                        else if(state->topKValue == 4)
+                            fileObj.write("#FileName,outputLabel-1,outputLabel-2,outputLabel-3,outputLabel-4,groundTruthLabel,Matched?,"
+                                          "outputLabelText-1,outputLabelText-2,outputLabelText-3,outputLabelText-4,groundTruthLabelText\n");
+                        else if(state->topKValue == 5)
+                            fileObj.write("#FileName,outputLabel-1,outputLabel-2,outputLabel-3,outputLabel-4,outputLabel-5,groundTruthLabel,Matched?,"
+                                          "outputLabelText-1,outputLabelText-2,outputLabelText-3,outputLabelText-4,outputLabelText-5,groundTruthLabelText\n");
+                    }
+                    else {
+                        fileObj.write("#FileName,outputLabel,outputLabelText\n");
+                    }
                 }
             }
             else {
-                if(state->imageLabel[0] >= 0) {
-                    fileObj.write("#FileName outputLabel groundTruthLabel Matched? #outputLabelText #groundTruthLabelText\n");
+                if(state->topKValue == 0) {
+                    if(state->imageLabel[0] >= 0) {
+                        fileObj.write("#FileName outputLabel groundTruthLabel Matched? #outputLabelText #groundTruthLabelText\n");
+                    }
+                    else {
+                        fileObj.write("#FileName outputLabel #outputLabelText\n");
+                    }
                 }
                 else {
-                    fileObj.write("#FileName outputLabel #outputLabelText\n");
+                    if(state->imageLabel[0] >= 0) {
+                        if(state->topKValue == 1)
+                            fileObj.write("#FileName outputLabel-1 groundTruthLabel Matched? outputLabelText-1 groundTruthLabelText\n");
+                        else if(state->topKValue == 2)
+                            fileObj.write("#FileName,outputLabel-1 outputLabel-2 groundTruthLabel Matched? outputLabelText-1 outputLabelText-2 groundTruthLabelText\n");
+                        else if(state->topKValue == 3)
+                            fileObj.write("#FileName outputLabel-1 outputLabel-2 outputLabel-3 groundTruthLabel Matched?,"
+                                          "outputLabelText-1 outputLabelText-2 outputLabelText-3 groundTruthLabelText\n");
+                        else if(state->topKValue == 4)
+                            fileObj.write("#FileName outputLabel-1 outputLabel-2 outputLabel-3 outputLabel-4 groundTruthLabel Matched?,"
+                                          "outputLabelText-1 outputLabelText-2 outputLabelText-3 outputLabelText-4 groundTruthLabelText\n");
+                        else if(state->topKValue == 5)
+                            fileObj.write("#FileName outputLabel-1 outputLabel-2 outputLabel-3 outputLabel-4 outputLabel-5 groundTruthLabel Matched?,"
+                                          "outputLabelText-1 outputLabelText-2 outputLabelText-3 outputLabelText-4 outputLabelText-5 groundTruthLabelText\n");
+                    }
+                    else {
+                        fileObj.write("#FileName outputLabel outputLabelText\n");
+                    }
                 }
             }
             for(int i = 0; i < state->imageDataSize; i++) {
@@ -181,23 +227,219 @@ void inference_viewer::saveResults()
                 int truth = state->imageLabel[i];
                 QString text;
                 if(csvFile) {
-                    if(truth >= 0) {
-                        text.sprintf("%s,%d,%d,%s,\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
-                                     label, truth, label == truth ? "1" : "0",
-                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
-                                     state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                    if(state->topKValue == 0){
+                        if(truth >= 0) {
+                            text.sprintf("%s,%d,%d,%s,\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label, truth, label == truth ? "1" : "0",
+                                         state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
+                        else {
+                            text.sprintf("%s,%d,-1,-1,\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(), label,
+                                         state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown");
+                        }
                     }
-                    else {
-                        text.sprintf("%s,%d,-1,-1,\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(), label,
-                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown");
+                    else{
+                        if(truth >= 0) {
+                            int match = 0;
+                            if(state->topKValue == 1){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                if(truth == label_1) match = 1;
+                                text.sprintf("%s,%d,%d,%d,\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, truth, match,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 2){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                if(truth == label_1) match = 1;
+                                else if(truth == label_2) match = 2;
+                                text.sprintf("%s,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, truth, match,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 3){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                if(truth == label_1) match = 1;
+                                else if(truth == label_2) match = 2;
+                                else if(truth == label_3) match = 3;
+                                text.sprintf("%s,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3, truth, match,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 4){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                int label_4 = state->resultImageLabelTopK[i][3];
+                                if(truth == label_1) match = 1;
+                                else if(truth == label_2) match = 2;
+                                else if(truth == label_3) match = 3;
+                                else if(truth == label_4) match = 4;
+                                text.sprintf("%s,%d,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3, label_4, truth, match,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 5){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                int label_4 = state->resultImageLabelTopK[i][3];
+                                int label_5 = state->resultImageLabelTopK[i][3];
+                                if(truth == label_1) match = 1;
+                                else if(truth == label_2) match = 2;
+                                else if(truth == label_3) match = 3;
+                                else if(truth == label_4) match = 4;
+                                else if(truth == label_5) match = 5;
+                                text.sprintf("%s,%d,%d,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3, label_4, label_5, truth, match,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                            }
+                        }
+                        else {
+                            if(state->topKValue == 1){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                text.sprintf("%s,%d,-1,-1,\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 2){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                text.sprintf("%s,%d,%d,-1,-1,\"%s\",\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 3){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                text.sprintf("%s,%d,%d,%d,-1,-1,\"%s\",\"%s\",\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 4){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                int label_4 = state->resultImageLabelTopK[i][3];
+                                text.sprintf("%s,%d,%d,%d,%d,-1,-1,\"%s\",\"%s\",\"%s\",\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3, label_4,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown");
+                            }
+                            else if(state->topKValue == 5){
+                                int label_1 = state->resultImageLabelTopK[i][0];
+                                int label_2 = state->resultImageLabelTopK[i][1];
+                                int label_3 = state->resultImageLabelTopK[i][2];
+                                int label_4 = state->resultImageLabelTopK[i][3];
+                                int label_5 = state->resultImageLabelTopK[i][3];
+                                text.sprintf("%s,%d,%d,%d,%d,%d,-1,-1,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",Unknown\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                             label_1, label_2, label_3, label_4, label_5,
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
+                                             state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
+                            }
+                        }
                     }
                 }
                 else {
                     if(truth >= 0) {
-                        text.sprintf("%s %d %d %s #%s #%s\n", state->imageDataFilenames[i].toStdString().c_str(),
-                                     label, truth, label == truth ? "Yes" : "No",
-                                     state->dataLabels ? (*state->dataLabels)[label].toStdString().c_str() : "Unknown",
-                                     state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        int match = 0;
+                        if(state->topKValue == 1){
+                            int label_1 = state->resultImageLabelTopK[i][0];
+                            if(truth == label_1) match = 1;
+                            text.sprintf("%s %d %d %d \"%s\" \"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label_1, truth, match,
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
+                        else if(state->topKValue == 2){
+                            int label_1 = state->resultImageLabelTopK[i][0];
+                            int label_2 = state->resultImageLabelTopK[i][1];
+                            if(truth == label_1) match = 1;
+                            else if(truth == label_2) match = 2;
+                            text.sprintf("%s %d %d %d %d \"%s\" \"%s\" \"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label_1, label_2, truth, match,
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
+                        else if(state->topKValue == 3){
+                            int label_1 = state->resultImageLabelTopK[i][0];
+                            int label_2 = state->resultImageLabelTopK[i][1];
+                            int label_3 = state->resultImageLabelTopK[i][2];
+                            if(truth == label_1) match = 1;
+                            else if(truth == label_2) match = 2;
+                            else if(truth == label_3) match = 3;
+                            text.sprintf("%s %d %d %d %d %d \"%s\" \"%s\" \"%s\" \"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label_1, label_2, label_3, truth, match,
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
+                        else if(state->topKValue == 4){
+                            int label_1 = state->resultImageLabelTopK[i][0];
+                            int label_2 = state->resultImageLabelTopK[i][1];
+                            int label_3 = state->resultImageLabelTopK[i][2];
+                            int label_4 = state->resultImageLabelTopK[i][3];
+                            if(truth == label_1) match = 1;
+                            else if(truth == label_2) match = 2;
+                            else if(truth == label_3) match = 3;
+                            else if(truth == label_4) match = 4;
+                            text.sprintf("%s %d %d %d %d %d %d \"%s\" \"%s\" \"%s\" \"%s\" \"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label_1, label_2, label_3, label_4, truth, match,
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
+                        else if(state->topKValue == 5){
+                            int label_1 = state->resultImageLabelTopK[i][0];
+                            int label_2 = state->resultImageLabelTopK[i][1];
+                            int label_3 = state->resultImageLabelTopK[i][2];
+                            int label_4 = state->resultImageLabelTopK[i][3];
+                            int label_5 = state->resultImageLabelTopK[i][3];
+                            if(truth == label_1) match = 1;
+                            else if(truth == label_2) match = 2;
+                            else if(truth == label_3) match = 3;
+                            else if(truth == label_4) match = 4;
+                            else if(truth == label_5) match = 5;
+                            text.sprintf("%s %d %d %d %d %d %d %d \"%s\" \"%s\" \"%s\" \"%s\" \"%s\" \"%s\"\n", state->imageDataFilenames[i].toStdString().c_str(),
+                                         label_1, label_2, label_3, label_4, label_5, truth, match,
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown",
+                                         state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                        }
                     }
                     else {
                         text.sprintf("%s %d #%s\n", state->imageDataFilenames[i].toStdString().c_str(), label,
@@ -559,8 +801,8 @@ void inference_viewer::paintEvent(QPaintEvent *)
 
     // get image render list from receiver
     if(state->receiver_worker) {
-        state->receiver_worker->getReceivedList(state->resultImageIndex, state->resultImageLabel,
-                                                state->resultImageSummary);
+        state->receiver_worker->getReceivedList(state->resultImageIndex, state->resultImageLabel, state->resultImageSummary,
+                                                state->resultImageLabelTopK, state->resultImageProbTopK);
     }
 
     // trim the render list to viewable area
@@ -574,6 +816,8 @@ void inference_viewer::paintEvent(QPaintEvent *)
             state->resultImageIndex.erase(state->resultImageIndex.begin(), state->resultImageIndex.begin() + 4 * numCols);
             state->resultImageLabel.erase(state->resultImageLabel.begin(), state->resultImageLabel.begin() + 4 * numCols);
             state->resultImageSummary.erase(state->resultImageSummary.begin(), state->resultImageSummary.begin() + 4 * numCols);
+            state->resultImageLabelTopK.erase(state->resultImageLabelTopK.begin(), state->resultImageLabelTopK.begin() + 4 * numCols);
+            state->resultImageProbTopK.erase(state->resultImageProbTopK.begin(), state->resultImageProbTopK.begin() + 4 * numCols);
             imageCount = state->resultImageIndex.size();
             imageRows = imageCount / numCols;
             imageCols = imageCount % numCols;
@@ -722,6 +966,10 @@ void inference_viewer::paintEvent(QPaintEvent *)
             truthSummary = state->dataLabels ? (*state->dataLabels)[truthLabel] : "Unknown";
         }
         int resultLabel = state->inferenceResultTop[index];
+        float resultProb = -1;
+        if(state->topKValue > 0){
+            resultProb = state->resultImageProbTopK[index][0];
+        }
         QString resultSummary = state->inferenceResultSummary[index];
         int w = 4 + ICON_SIZE * 2 + 600;
         int h = 4 + ICON_SIZE * 2 + 4 + fontMetrics.height() + 4;
@@ -788,7 +1036,10 @@ void inference_viewer::paintEvent(QPaintEvent *)
         font.setItalic(false);
         setFont(font);
         painter.setPen(Qt::blue);
-        text.sprintf("classified as [label=%d] ", resultLabel);
+        if(state->topKValue > 0)
+            text.sprintf("classified as [label=%d Prob=%f] ", resultLabel, resultProb);
+        else
+            text.sprintf("classified as [label=%d] ", resultLabel);
         text += resultSummary;
         painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 8, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
         if(truthLabel >= 0) {
