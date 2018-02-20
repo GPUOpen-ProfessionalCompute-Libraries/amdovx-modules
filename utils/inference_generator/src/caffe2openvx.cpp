@@ -1334,7 +1334,7 @@ void writeVXCode(
                 std::string nextOutput = getIdentifierName(next_node[3]);
                 auto&& odim = tensorMap[next_output];
                 if(!declare_tensor_check[next_output]) {
-                    if(codeType == "initialize") {
+                    if((codeType == "initialize") && nextOutput != outputTensorName) {
                         ofsCodeC << "    vx_size " << nextOutput << "_dims[4] = { " << odim[3] << ", " << odim[2] << ", " << odim[1] << ", " << odim[0] << " };" << std::endl;
                         ofsCodeC << "    vx_tensor " << nextOutput << ";" << std::endl;
                         if(isVirtualEnabled){
@@ -1345,7 +1345,7 @@ void writeVXCode(
                         }
                         ofsCodeC << "    " << "ERROR_CHECK_OBJECT("  << nextOutput << ");" << std::endl;
                     }
-                    else if(codeType == "release") {
+                    else if((codeType == "release") && nextOutput != outputTensorName) {
                         ofsCodeC << "    " << "ERROR_CHECK_STATUS(vxReleaseTensor(&" << nextOutput << "));" << std::endl;
                     }
                     declare_tensor_check[output] = true;
