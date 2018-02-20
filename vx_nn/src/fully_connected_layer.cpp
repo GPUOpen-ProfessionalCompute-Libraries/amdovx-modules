@@ -45,40 +45,42 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #3 type=%d (must be ENUM)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #4 type=%d (must be ENUM)\n", type);
 
     // check tensor dimensions
     vx_size num_dims;
     vx_size input_dims[4] = { 1, 1, 1, 1 }, weights_dims[4] = { 1, 1, 0, 0 }, output_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 2 && num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #1 num_dims=%ld (must be 2 or 4)\n", num_dims);
+    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &weights_dims[4 - num_dims], num_dims * sizeof(vx_size)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 1 && num_dims != 2) return VX_ERROR_INVALID_DIMENSION;
-        if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        if(num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
+        if  (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #2 type=%d (must be float)\n", type);
         vx_size bias_dims[2] = { 0, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
-        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+        if(bias_dims[0] != weights_dims[3] || bias_dims[1] != 1) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: bias[%ldx%ld] weights[%ldx%ldx%ldx%ld]\n", bias_dims[1], bias_dims[0], weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]);
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 2 && num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #5 num_dims=%ld (must be 2 or 4)\n", num_dims);
+    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #5 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
-    if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-    if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if(output_dims[3] != input_dims[3] || input_dims[2]*input_dims[1]*input_dims[0] != weights_dims[2]*weights_dims[1]*weights_dims[0] || output_dims[2] != weights_dims[3])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: input[%ldx%ldx%ldx%ld] weights[%ldx%ldx%ldx%ld] output[%ldx%ldx%ldx%ld]\n",
+            input_dims[3], input_dims[2], input_dims[1], input_dims[0],
+            weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0],
+            output_dims[3], output_dims[2], output_dims[1], output_dims[0]);
 
     // output tensor configuration
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -127,6 +129,11 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
     }
+
+    // adjust weights to match input
+    input_dims[2] = weights_dims[2];
+    input_dims[1] = weights_dims[1];
+    input_dims[0] = weights_dims[0];
 
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));

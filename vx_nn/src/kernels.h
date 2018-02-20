@@ -51,6 +51,8 @@ THE SOFTWARE.
 #define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS){ vxAddLogEntry(NULL, status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
 //! \brief The macro for error checking from OpenVX object.
 #define ERROR_CHECK_OBJECT(obj)  { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS){ vxAddLogEntry((vx_reference)(obj), status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
+//! \brief The macro for error message and return error code
+#define ERRMSG(status, format, ...) printf("ERROR: " format, __VA_ARGS__), status
 
 #ifndef ERROR_CHECK_MIOPEN_STATUS
 #define ERROR_CHECK_MIOPEN_STATUS(call) if(call) { \

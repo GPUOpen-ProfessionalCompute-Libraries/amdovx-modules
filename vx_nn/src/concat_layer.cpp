@@ -122,27 +122,33 @@ static vx_status VX_CALLBACK validateConcatLayer(vx_node node, const vx_referenc
     vx_size input1_dims[4], input2_dims[4], output_dims[4], num_channels = 0;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #1 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: concat: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
     num_channels = input1_dims[2];
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #2 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: concat: #2 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, input2_dims, sizeof(input2_dims)));
-    if((input1_dims[0] != input2_dims[0]) || (input1_dims[1] != input2_dims[1]) || (input1_dims[3] != input2_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    if (input1_dims[3] != input2_dims[3] || input1_dims[1] != input2_dims[1] || input1_dims[0] != input2_dims[0])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #2 dims input1[%ld,%ld,%ld,%ld] != dims_input2[%ld,%ld,%ld,%ld]\n",
+                    input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3],
+                    input2_dims[0], input2_dims[1], input2_dims[2], input2_dims[3]);
     num_channels += input2_dims[2];
     int i = 3;
     while(parameters[i] && (i < 9)) {
         vx_size inputn_dims[4];
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-        if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #%d num_dims=%ld (must be 4)\n", i, num_dims);
+        if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: concat: #%d type=%d (must be float)\n", i, type);
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DIMS, inputn_dims, sizeof(inputn_dims)));
-        if((input1_dims[0] != inputn_dims[0]) || (input1_dims[1] != inputn_dims[1]) || (input1_dims[3] != inputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+        if (input1_dims[3] != inputn_dims[3] || input1_dims[1] != inputn_dims[1] || input1_dims[0] != inputn_dims[0])
+            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #%d dims input1[%ld,%ld,%ld,%ld] != dims_input%d[%ld,%ld,%ld,%ld]\n", i,
+                    input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3], i,
+                    inputn_dims[0], inputn_dims[1], inputn_dims[2], inputn_dims[3]);
         num_channels += inputn_dims[2];
 
         i++;
@@ -151,10 +157,13 @@ static vx_status VX_CALLBACK validateConcatLayer(vx_node node, const vx_referenc
     // Check tensor dims and type for output
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: concat: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if((input1_dims[0] != output_dims[0]) || (input1_dims[1] != output_dims[1]) || (num_channels != output_dims[2]) || (input1_dims[3] != output_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    if((input1_dims[0] != output_dims[0]) || (input1_dims[1] != output_dims[1]) || (num_channels != output_dims[2]) || (input1_dims[3] != output_dims[3]))
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: concat: #all dims total input[%ld,%ld,%ld,%ld] != dims_output[%ld,%ld,%ld,%ld]\n",
+                    input1_dims[0], input1_dims[1], num_channels, input1_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
 
     //output tensor configuration.
     type = VX_TYPE_FLOAT32;
