@@ -65,7 +65,7 @@ static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #2 num_dims=%ld (must be 2 or 4)\n", num_dims);
+        if(num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
         if  (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #2 type=%d (must be float)\n", type);
         vx_size bias_dims[2] = { 0, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
