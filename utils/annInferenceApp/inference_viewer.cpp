@@ -816,8 +816,6 @@ void inference_viewer::paintEvent(QPaintEvent *)
             state->resultImageIndex.erase(state->resultImageIndex.begin(), state->resultImageIndex.begin() + 4 * numCols);
             state->resultImageLabel.erase(state->resultImageLabel.begin(), state->resultImageLabel.begin() + 4 * numCols);
             state->resultImageSummary.erase(state->resultImageSummary.begin(), state->resultImageSummary.begin() + 4 * numCols);
-            state->resultImageLabelTopK.erase(state->resultImageLabelTopK.begin(), state->resultImageLabelTopK.begin() + 4 * numCols);
-            state->resultImageProbTopK.erase(state->resultImageProbTopK.begin(), state->resultImageProbTopK.begin() + 4 * numCols);
             imageCount = state->resultImageIndex.size();
             imageRows = imageCount / numCols;
             imageCols = imageCount % numCols;
