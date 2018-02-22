@@ -67,6 +67,11 @@ public:
     bool sendScaledImages;
     int enableSF;
     int topKValue;
+    //test summary
+    int top1Count,top2Count,top3Count,top4Count,top5Count;
+    float top1TotProb,top2TotProb, top3TotProb, top4TotProb, top5TotProb;
+    int totalMismatch, totalNoGroundTruth;
+    float totalPassProb, totalFailProb;
 };
 
 class inference_viewer : public QWidget
@@ -93,6 +98,7 @@ protected:
 private:
     void startReceiver();
     void saveResults();
+    void saveSummary(QString fileName);
     void terminate();
 
 private:
