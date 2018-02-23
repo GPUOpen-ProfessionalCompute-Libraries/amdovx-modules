@@ -1041,7 +1041,7 @@ void writeGDF(
                 }
                 if(op == 1) {
                     ofsGDF << "data " << node[3] <<"_convertPolicy =" << " scalar:VX_TYPE_ENUM," << convertPolicy << std::endl;
-                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << getIdentifierName(node[i]) << " "
+                    ofsGDF << "node org.khronos.openvx.tensor_add " << tmp << " " << node[i] << " "
                            << node[3] << "_convertPolicy"
                            << " " << out
                            << std::endl;
