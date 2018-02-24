@@ -225,9 +225,9 @@ void inference_viewer::saveResults()
                     }
                 }
             }
-            int top1 = 0, top2 = 0, top3 = 0, top4 = 0, top5 = 0;
-            float failProb = 0, top1Prob = 0, top2Prob = 0, top3Prob = 0, top4Prob = 0, top5Prob = 0;
-            int mismatchAll = 0, noTruthTable = 0;
+            state->top1Count = state->top2Count = state->top3Count = state->top4Count = state->top5Count = 0;
+            state->totalNoGroundTruth = state->totalMismatch = 0;
+            state->top1TotProb = state->top2TotProb = state->top3TotProb = state->top4TotProb = state->top5TotProb = state->totalFailProb = 0;
             for(int i = 0; i < state->imageDataSize; i++) {
                 int label = state->inferenceResultTop[i];
                 int truth = state->imageLabel[i];
@@ -251,8 +251,8 @@ void inference_viewer::saveResults()
                             if(state->topKValue == 1){
                                 int label_1 = state->resultImageLabelTopK[i][0];
                                 float prob_1 = state->resultImageProbTopK[i][0];
-                                if(truth == label_1) { match = 1; top1++; top1Prob += prob_1; }
-                                else { mismatchAll++; failProb += prob_1; }
+                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
+                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,\"%s\",\"%s\",%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -264,9 +264,9 @@ void inference_viewer::saveResults()
                                 int label_2 = state->resultImageLabelTopK[i][1];
                                 float prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
-                                if(truth == label_1) { match = 1; top1++; top1Prob += prob_1; }
-                                else if(truth == label_2) { match = 2; top2++; top2Prob += prob_2;  }
-                                else { mismatchAll++; failProb += prob_1; }
+                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
+                                else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2;  }
+                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",%.4f,%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, label_2, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -281,10 +281,10 @@ void inference_viewer::saveResults()
                                 float prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 float prob_3 = state->resultImageProbTopK[i][2];
-                                if(truth == label_1) { match = 1; top1++; top1Prob += prob_1; }
-                                else if(truth == label_2) { match = 2; top2++; top2Prob += prob_2; }
-                                else if(truth == label_3) { match = 3; top3++; top3Prob += prob_3; }
-                                else { mismatchAll++; failProb += prob_1; }
+                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
+                                else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2; }
+                                else if(truth == label_3) { match = 3; state->top3Count++; state->top3TotProb += prob_3; }
+                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",%.4f,%.4f,%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, label_2, label_3, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -302,11 +302,11 @@ void inference_viewer::saveResults()
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 float prob_3 = state->resultImageProbTopK[i][2];
                                 float prob_4 = state->resultImageProbTopK[i][3];
-                                if(truth == label_1) { match = 1; top1++; top1Prob += prob_1; }
-                                else if(truth == label_2) { match = 2; top2++; top2Prob += prob_2; }
-                                else if(truth == label_3) { match = 3; top3++; top3Prob += prob_3; }
-                                else if(truth == label_4) { match = 4; top4++; top4Prob += prob_4; }
-                                else { mismatchAll++; failProb += prob_1; }
+                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
+                                else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2; }
+                                else if(truth == label_3) { match = 3; state->top3Count++; state->top3TotProb += prob_3; }
+                                else if(truth == label_4) { match = 4; state->top4Count++; state->top4TotProb += prob_4; }
+                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%.4f,%.4f,%.4f,%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, label_2, label_3, label_4, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -327,12 +327,12 @@ void inference_viewer::saveResults()
                                 float prob_3 = state->resultImageProbTopK[i][2];
                                 float prob_4 = state->resultImageProbTopK[i][3];
                                 float prob_5 = state->resultImageProbTopK[i][4];
-                                if(truth == label_1) { match = 1; top1++; top1Prob += prob_1; }
-                                else if(truth == label_2) { match = 2; top2++; top2Prob += prob_2; }
-                                else if(truth == label_3) { match = 3; top3++; top3Prob += prob_3; }
-                                else if(truth == label_4) { match = 4; top4++; top4Prob += prob_4; }
-                                else if(truth == label_5) { match = 5; top5++; top5Prob += prob_5; }
-                                else { mismatchAll++; failProb += prob_1; }
+                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
+                                else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2; }
+                                else if(truth == label_3) { match = 3; state->top3Count++; state->top3TotProb += prob_3; }
+                                else if(truth == label_4) { match = 4; state->top4Count++; state->top4TotProb += prob_4; }
+                                else if(truth == label_5) { match = 5; state->top5Count++; state->top5TotProb += prob_5; }
+                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%.4f,%.4f,%.4f,%.4f,%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, label_2, label_3, label_4, label_5, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -415,7 +415,7 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown",
                                              prob_1,prob_2,prob_3,prob_4,prob_5);
                             }
-                            noTruthTable++;
+                            state->totalNoGroundTruth++;
                         }
                     }
                 }
@@ -502,17 +502,6 @@ void inference_viewer::saveResults()
             }
             fileObj.close();
             if(state->topKValue > 0 && csvFile){
-                //top count
-                state->top1Count = top1; state->top2Count = top2; state->top3Count = top3;
-                state->top4Count = top4; state->top5Count = top5;
-                //top prob
-                state->top1TotProb = top1Prob; state->top2TotProb = top2Prob; state->top3TotProb = top3Prob;
-                state->top4TotProb = top4Prob; state->top5TotProb = top5Prob;
-                // total count
-                state->totalMismatch = mismatchAll;
-                state->totalNoGroundTruth = noTruthTable;
-                // total prob
-                state->totalFailProb = failProb;
                 saveSummary(fileName);
             }
             QDesktopServices::openUrl(QUrl("file://" + fileName));
