@@ -15,6 +15,7 @@
 #include <QFileDialog>
 #include <QDesktopServices>
 #include <QBuffer>
+#include <sstream>
 
 #define WINDOW_TITLE             "Inference Viewer"
 #define ICON_SIZE                64
@@ -25,6 +26,7 @@ inference_state::inference_state()
 {
     // initialize
     dataLabels = nullptr;
+    dataHierarchy = nullptr;
     labelLoadDone = false;
     imageLoadDone = false;
     imageLoadCount = 0;
@@ -63,7 +65,7 @@ inference_state::inference_state()
 }
 
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
-        QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
+        QVector<QString> * dataLabels, QVector<QString> * dataHierarchy, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
         bool repeat_images, bool sendScaledImages, int enableSF, int topKValue,
         QWidget *parent) :
@@ -73,6 +75,7 @@ inference_viewer::inference_viewer(QString serverHost, int serverPort, QString m
 {
     state = new inference_state();
     state->dataLabels = dataLabels;
+    state->dataHierarchy = dataHierarchy;
     state->dataFolder = dataFolder;
     state->dataFilename = dataFilename;
     state->maxImageDataSize = maxImageDataSize;
@@ -1134,6 +1137,11 @@ void inference_viewer::paintEvent(QPaintEvent *)
         float resultProb = -1;
         if(state->topKValue) resultProb = state->resultImageProbTopK[index][0];
         QString resultSummary = state->inferenceResultSummary[index];
+        QString resultHierarchy, truthHierarchy;
+        if(state->dataHierarchy->size()){
+            if(truthLabel != -1) truthHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[truthLabel] : "Unknown";
+            resultHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[resultLabel] : "Unknown";
+        }
         int w = 4 + ICON_SIZE * 2 + 600;
         int h = 4 + ICON_SIZE * 2 + 4 + fontMetrics.height() + 4;
         int x = width()/2 - w/2;
@@ -1161,6 +1169,21 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 painter.setPen(Qt::darkGreen);
                 painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "MATCHED");
                 painter.setPen(Qt::darkGreen);
+                if(state->dataHierarchy->size()){
+                    QString textHierarchy, textHierarchyLabel;
+                    std::string input = resultHierarchy.toStdString().c_str();
+                    std::istringstream ss(input);
+                    std::string token;
+                    textHierarchy = "Label Hierarchy:";
+                    while(std::getline(ss, token, ',')) {
+                        textHierarchyLabel = "";
+                        if(token.size())
+                            textHierarchyLabel.sprintf("-> %s", token.c_str());
+
+                        textHierarchy += textHierarchyLabel;
+                    }
+                    painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 24, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, textHierarchy);
+                }
             }
             else {
                 painter.setPen(Qt::red);
@@ -1184,6 +1207,25 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 painter.setPen(Qt::darkRed);
                 painter.drawText(QRect(cx, cy - 6 - fontMetrics.height() / 2, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, "MISMATCHED");
                 painter.setPen(Qt::red);
+                if(state->dataHierarchy->size()){
+                    QString textHierarchy, textHierarchyLabel;
+                    std::string input_result = resultHierarchy.toStdString().c_str();
+                    std::string input_truth = truthHierarchy.toStdString().c_str();
+                    std::istringstream ss_result(input_result);
+                    std::istringstream ss_truth(input_truth);
+                    std::string token_result, token_truth;
+                    textHierarchy = "Label Hierarchy:";
+                    while(std::getline(ss_result, token_result, ',') && std::getline(ss_truth, token_truth, ',')) {
+                        textHierarchyLabel = "";
+                        if(token_truth.size() && (token_truth == token_result))
+                            textHierarchyLabel.sprintf("->%s", token_result.c_str());
+
+                        textHierarchy += textHierarchyLabel;
+                    }
+                    if(textHierarchy == "Label Hierarchy:"){ textHierarchy += "NO MATCH"; painter.setPen(Qt::red);}
+                    else { painter.setPen(Qt::darkGreen); }
+                    painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 24, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, textHierarchy);
+                }
             }
             painter.setBrush(Qt::NoBrush);
             painter.drawRect(x + 4, y + 4, ICON_SIZE * 2, ICON_SIZE * 2);
@@ -1204,7 +1246,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
         else
             text.sprintf("classified as [label=%d] ", resultLabel);
         text += resultSummary;
-        painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 8, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);
+        painter.drawText(QRect(x + 4 + ICON_SIZE * 2 + 4, y + 4 + fontMetrics.height() + 8, w - 8, fontMetrics.height()), Qt::AlignLeft | Qt::AlignTop, text);       
         if(truthLabel >= 0) {
             font.setItalic(true);
             setFont(font);

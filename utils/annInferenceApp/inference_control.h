@@ -48,6 +48,7 @@ public slots:
 
 protected:
     void browseDataLabels();
+    void browseDataHierarchy();
     void browseDataFilename();
     void browseDataFolder();
     bool isConfigValid(QPushButton * button, QString& err);
@@ -99,6 +100,7 @@ private:
     QLabel * labelMaxGPUs;
     QPushButton * buttonInference;
     QLineEdit * editImageLabelsFile;
+    QLineEdit * editImageHierarchyFile;
     QLineEdit * editImageFolder;
     QLineEdit * editImageListFile;
     QLineEdit * editMaxDataSize;
@@ -117,6 +119,7 @@ private:
     int enableTopK;
     int topKValue;
     QVector<QString> * dataLabels;
+    QVector<QString> * dataHierarchy;
     QVector<QString> typeModelFile1Label;
     QVector<QString> typeModelFile1Desc;
     QVector<QString> typeModelFile2Label;

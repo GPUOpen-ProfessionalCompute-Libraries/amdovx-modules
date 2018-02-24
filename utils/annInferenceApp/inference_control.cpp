@@ -25,7 +25,7 @@
 #define BUILD_VERSION "alpha2"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
-    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr },
+    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr }, dataHierarchy{ nullptr },
       lastPreprocessMpy{ "1", "1", "1" }, lastPreprocessAdd{ "0", "0", "0" }
 {
     setWindowTitle("annInferenceApp");
@@ -42,6 +42,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     compiler_status.errorCode = 0;
     operationMode = operationMode_;
     dataLabels = new QVector<QString>();
+    dataHierarchy = new QVector<QString>();
 
     // default configuration
     QGridLayout * controlLayout = new QGridLayout;
@@ -314,6 +315,16 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editImageLabelsFile, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonDataLabels, row, 1 + editSpan, 1, 1);
     row++;
+    QLabel * labelImagehierarchyFile = new QLabel("Label Hierarchy:");
+    labelImagehierarchyFile->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    labelImagehierarchyFile->setAlignment(Qt::AlignLeft);
+    editImageHierarchyFile = new QLineEdit("");
+    QPushButton * buttonDataHierarchy = new QPushButton(tr("Browse..."), this);
+    connect(buttonDataHierarchy, &QAbstractButton::clicked, this, &inference_control::browseDataHierarchy);
+    controlLayout->addWidget(labelImagehierarchyFile, row, 0, 1, 1);
+    controlLayout->addWidget(editImageHierarchyFile, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonDataHierarchy, row, 1 + editSpan, 1, 1);
+    row++;
     QLabel * labelImageFolder = new QLabel("Image Folder:");
     editImageFolder = new QLineEdit("");
     QPushButton * buttonDataFolder = new QPushButton(tr("Browse..."), this);
@@ -394,6 +405,7 @@ void inference_control::saveConfig()
         fileOutput << lastModelName << endl;
         fileOutput << editGPUs->text() << endl;
         fileOutput << editImageLabelsFile->text() << endl;
+        fileOutput << editImageHierarchyFile->text() << endl;
         fileOutput << editImageFolder->text() << endl;
         fileOutput << editImageListFile->text() << endl;
         QString text;
@@ -424,6 +436,7 @@ void inference_control::loadConfig()
             editModelName->setText(fileInput.readLine());
             editGPUs->setText(fileInput.readLine());
             editImageLabelsFile->setText(fileInput.readLine());
+            editImageHierarchyFile->setText(fileInput.readLine());
             editImageFolder->setText(fileInput.readLine());
             editImageListFile->setText(fileInput.readLine());
             editMaxDataSize->setText(fileInput.readLine());
@@ -771,6 +784,13 @@ void inference_control::browseDataLabels()
         editImageLabelsFile->setText(fileName);
 }
 
+void inference_control::browseDataHierarchy()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Label Hierarchy File"), nullptr, tr("Label Hierarchy Text (*.csv)"));
+    if(fileName.size() > 0)
+        editImageHierarchyFile->setText(fileName);
+}
+
 void inference_control::browseDataFolder()
 {
     QString dir = QFileDialog::getExistingDirectory(this, tr("Select Image Folder"), nullptr,
@@ -954,6 +974,26 @@ void inference_control::runInference()
                 err = "Labels: unable to open: " + editImageLabelsFile->text();
             }
         }
+        if(!editImageHierarchyFile->text().isEmpty()){
+            QFile fileObj(editImageHierarchyFile->text());
+            if(fileObj.open(QIODevice::ReadOnly)) {
+                QTextStream fileInput(&fileObj);
+                dataHierarchy->clear();
+                while (!fileInput.atEnd()) {
+                    QString line = fileInput.readLine();
+                    line = line.trimmed();
+                    if(line.size() > 0)
+                        dataHierarchy->push_back(line);
+                }
+                if(dataHierarchy->size() != editOutDimC->text().toInt()) {
+                    err.sprintf("Labels Hierarchy: need %d label Hierarchy in %s: found %d", editOutDimC->text().toInt(),
+                                editImageHierarchyFile->text().toStdString().c_str(), dataHierarchy->size());
+                }
+            }
+            else {
+                err = "Label Hierarchy: unable to open: " + editImageHierarchyFile->text();
+            }
+        }
     }
     if(err.length() > 0) {
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
@@ -993,7 +1033,7 @@ void inference_control::runInference()
 
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
-                dataLabels, editImageListFile->text(), editImageFolder->text(),
+                dataLabels, dataHierarchy, editImageListFile->text(), editImageFolder->text(),
                 dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, enableSF, topKValue);
     viewer->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     viewer->show();
