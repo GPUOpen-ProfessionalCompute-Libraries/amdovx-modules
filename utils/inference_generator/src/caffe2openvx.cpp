@@ -152,6 +152,11 @@ void getLayerParams(
                 + " " + std::to_string(dilation_h)
                 + " " + std::to_string(bias_term);
     }
+    else if(layer.type() == "ReLU") {
+        const caffe::ReLUParameter& relu = layer.relu_param();
+        float neg_slope = relu.has_negative_slope()? relu.negative_slope():0.0f;
+        params = std::to_string(neg_slope);
+    }
 }
 
 void getV1LayerParams(
@@ -247,6 +252,11 @@ void getV1LayerParams(
                 + " " + std::to_string(dilation_w)
                 + " " + std::to_string(dilation_h)
                 + " " + std::to_string(bias_term);
+    }
+    else if(layer.type() == caffe::V1LayerParameter_LayerType_RELU) {
+        const caffe::ReLUParameter& relu = layer.relu_param();
+        float neg_slope = relu.has_negative_slope()? relu.negative_slope():0.0f;
+        params = std::to_string(neg_slope);
     }
 }
 
@@ -899,8 +909,18 @@ void writeGDF(
 #endif
         }
         else if(type == "ReLU") {
-            ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_ACTIVATION_RELU" << std::endl;
-            ofsGDF << "data " << node[3] << "_param_a =" << " scalar:VX_TYPE_FLOAT32,0" << std::endl;
+            std::stringstream ss(params);
+            float neg_slope;
+            ss >> neg_slope;
+            if (!neg_slope)
+            {
+                ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_ACTIVATION_RELU" << std::endl;
+                ofsGDF << "data " << node[3] << "_param_a =" << " scalar:VX_TYPE_FLOAT32,0" << std::endl;
+            }else
+            {
+                ofsGDF << "data " << node[3] << "_mode = " << " scalar:VX_TYPE_ENUM,VX_NN_ACTIVATION_LEAKY_RELU" << std::endl;
+                ofsGDF << "data " << node[3] << "_param_a =" << " scalar:VX_TYPE_FLOAT32," << neg_slope << std::endl;
+            }
             ofsGDF << "data " << node[3] << "_param_b =" << " scalar:VX_TYPE_FLOAT32,0" << std::endl;
             ofsGDF << "node org.khronos.nn_extension.activation_layer " << node[4] << " "
                    << node[3] << "_mode "
@@ -1674,9 +1694,18 @@ void writeVXCode(
             }
         }
         else if(type == "ReLU") {
+            std::stringstream ss(params);
+            float neg_slope;
+            ss >> neg_slope;
             if(codeType == "initialize") {
-                ofsCodeC << "    vx_enum " << layerName << "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
-                ofsCodeC << "    vx_float32 " << layerName << "_param_a = 0;" << std::endl;
+                if (!neg_slope) {
+                    ofsCodeC << "    vx_enum " << layerName << "_mode = " << "VX_NN_ACTIVATION_RELU ; " << std::endl;
+                    ofsCodeC << "    vx_float32 " << layerName << "_param_a = 0;" << std::endl;
+                } else
+                {
+                    ofsCodeC << "    vx_enum " << layerName << "_mode = " << "VX_NN_ACTIVATION_LEAKY_RELU ; " << std::endl;
+                    ofsCodeC << "    vx_float32 " << layerName << "_param_a = " << neg_slope << ";" << std::endl;
+                }
                 ofsCodeC << "    vx_float32 " << layerName << "_param_b = 0;" << std::endl;
                 ofsCodeC << "    vx_node " << layerName << "_node;" << std::endl;
                 ofsCodeC << "    " << layerName + "_node = " << "vxActivationLayer(graph, " << inputName << ", " << layerName + "_mode, " << layerName + "_param_a, " << layerName + "_param_b, " << layerName << ");" << std::endl;

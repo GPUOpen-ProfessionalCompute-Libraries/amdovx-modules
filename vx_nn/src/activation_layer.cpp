@@ -109,6 +109,11 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     //activation Function Type
     vx_nn_activation_function_e activationMode;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[1], &activationMode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+
+    data->activAlpha = 1.0f;
+    data->activPower = 1.0f;
+    vx_float32 neg_slope = 0.0f;
+
     if (activationMode == VX_NN_ACTIVATION_RELU) {
         data->mode = miopenActivationRELU;
     }
@@ -124,9 +129,11 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     else if (activationMode == VX_NN_ACTIVATION_SOFTRELU) {
         data->mode = miopenActivationSOFTRELU;
     }
-    data->activAlpha = 1.0;
-    data->activBeta = 0.0;
-    data->activPower = 1.0;
+    else if (activationMode == VX_NN_ACTIVATION_LEAKY_RELU) {
+        data->mode = miopenActivationRELU;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &neg_slope, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->activBeta = neg_slope;
 
     //activation Descriptor.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateActivationDescriptor(&data->activationDesc)));
@@ -135,6 +142,7 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "activation param active_alpha: " << data->activAlpha << "active_beta: " << data->activBeta << "activationmode: " << activationMode << std::endl;
     std::cout << "activation input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
