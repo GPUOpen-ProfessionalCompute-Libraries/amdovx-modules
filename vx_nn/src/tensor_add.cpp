@@ -25,9 +25,9 @@ THE SOFTWARE.
 struct TensorAddLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenTensorOp_t operation;
-    double alpha1;
-    double alpha2;
-    double beta;
+    float alpha1;
+    float alpha2;
+    float beta;
     miopenTensorDescriptor_t input1;
     cl_mem input1_mem;
     miopenTensorDescriptor_t input2;
@@ -116,7 +116,7 @@ static vx_status VX_CALLBACK initializeTensorAddition(vx_node node, const vx_ref
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, miopenFloat, input1_dims[3], input1_dims[2], input1_dims[1], input1_dims[0]));
     if(input2_dims[0] == 1 && input2_dims[1] == 1) {
-        int dims[2] = { (int)input2_dims[3], (int)input2_dims[2] };
+        int dims[2] = { (int)input2_dims[2], (int)input2_dims[3] };
         int strides[2] = { 1, dims[1] };
         ERROR_CHECK_MIOPEN_STATUS(miopenSetTensorDescriptor(data->input2, miopenFloat, 2, dims, strides));
     }
