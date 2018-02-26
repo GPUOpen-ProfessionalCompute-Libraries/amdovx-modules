@@ -225,13 +225,19 @@ void inference_viewer::saveResults()
                     }
                 }
             }
-            state->top1Count = state->top2Count = state->top3Count = state->top4Count = state->top5Count = 0;
-            state->totalNoGroundTruth = state->totalMismatch = 0;
-            state->top1TotProb = state->top2TotProb = state->top3TotProb = state->top4TotProb = state->top5TotProb = state->totalFailProb = 0;
-            for(int j = 0; j < 100; j++){state->topKPassFail[j][0] = state->topKPassFail[j][1] = 0;}
+            if(state->topKValue > 0){
+                state->top1Count = state->top2Count = state->top3Count = state->top4Count = state->top5Count = 0;
+                state->totalNoGroundTruth = state->totalMismatch = 0;
+                state->top1TotProb = state->top2TotProb = state->top3TotProb = state->top4TotProb = state->top5TotProb = state->totalFailProb = 0;
+                for(int j = 0; j < 100; j++){
+                    state->topKPassFail[j][0] = state->topKPassFail[j][1] = 0;
+                    for(int k = 0; k < 12; k++) state->topKHierarchyPassFail[j][k] = 0;
+                }
+            }
             for(int i = 0; i < state->imageDataSize; i++) {
                 int label = state->inferenceResultTop[i];
                 int truth = state->imageLabel[i];
+                float prob_1 = 0;
                 QString text;
                 if(csvFile) {
                     if(state->topKValue == 0){
@@ -251,7 +257,7 @@ void inference_viewer::saveResults()
                             int match = 0;
                             if(state->topKValue == 1){
                                 int label_1 = state->resultImageLabelTopK[i][0];
-                                float prob_1 = state->resultImageProbTopK[i][0];
+                                prob_1 = state->resultImageProbTopK[i][0];
                                 if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
                                 else { state->totalMismatch++; state->totalFailProb += prob_1; }
                                 text.sprintf("%s,%d,%d,%d,\"%s\",\"%s\",%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
@@ -259,25 +265,11 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
                                              state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown",
                                              prob_1);
-                                if(truth == label_1) {
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][0]++;
-                                        count++;
-                                    }
-                                }
-                                else{
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][1]++;
-                                        count++;
-                                    }
-                                }
                             }
                             else if(state->topKValue == 2){
                                 int label_1 = state->resultImageLabelTopK[i][0];
                                 int label_2 = state->resultImageLabelTopK[i][1];
-                                float prob_1 = state->resultImageProbTopK[i][0];
+                                prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
                                 else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2;  }
@@ -288,26 +280,12 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown",
                                              state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown",
                                              prob_1,prob_2);
-                                if(truth == label_1) {
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][0]++;
-                                        count++;
-                                    }
-                                }
-                                else{
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][1]++;
-                                        count++;
-                                    }
-                                }
                             }
                             else if(state->topKValue == 3){
                                 int label_1 = state->resultImageLabelTopK[i][0];
                                 int label_2 = state->resultImageLabelTopK[i][1];
                                 int label_3 = state->resultImageLabelTopK[i][2];
-                                float prob_1 = state->resultImageProbTopK[i][0];
+                                prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 float prob_3 = state->resultImageProbTopK[i][2];
                                 if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
@@ -321,27 +299,13 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown",
                                              state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown",
                                              prob_1,prob_2,prob_3);
-                                if(truth == label_1) {
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][0]++;
-                                        count++;
-                                    }
-                                }
-                                else{
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][1]++;
-                                        count++;
-                                    }
-                                }
                             }
                             else if(state->topKValue == 4){
                                 int label_1 = state->resultImageLabelTopK[i][0];
                                 int label_2 = state->resultImageLabelTopK[i][1];
                                 int label_3 = state->resultImageLabelTopK[i][2];
                                 int label_4 = state->resultImageLabelTopK[i][3];
-                                float prob_1 = state->resultImageProbTopK[i][0];
+                                prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 float prob_3 = state->resultImageProbTopK[i][2];
                                 float prob_4 = state->resultImageProbTopK[i][3];
@@ -358,20 +322,6 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown",
                                              state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown",
                                              prob_1,prob_2,prob_3,prob_4);
-                                if(truth == label_1) {
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][0]++;
-                                        count++;
-                                    }
-                                }
-                                else{
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][1]++;
-                                        count++;
-                                    }
-                                }
                             }
                             else if(state->topKValue == 5){
                                 int label_1 = state->resultImageLabelTopK[i][0];
@@ -379,7 +329,7 @@ void inference_viewer::saveResults()
                                 int label_3 = state->resultImageLabelTopK[i][2];
                                 int label_4 = state->resultImageLabelTopK[i][3];
                                 int label_5 = state->resultImageLabelTopK[i][4];
-                                float prob_1 = state->resultImageProbTopK[i][0];
+                                prob_1 = state->resultImageProbTopK[i][0];
                                 float prob_2 = state->resultImageProbTopK[i][1];
                                 float prob_3 = state->resultImageProbTopK[i][2];
                                 float prob_4 = state->resultImageProbTopK[i][3];
@@ -400,19 +350,50 @@ void inference_viewer::saveResults()
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown",
                                              state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown",
                                              prob_1,prob_2,prob_3,prob_4,prob_5);
-                                if(truth == label_1) {
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][0]++;
-                                        count++;
+                            }
+
+                            if(truth == label) {
+                                int count = 0;
+                                for(float f = 0;f < 1; f=f+0.01){
+                                    if((prob_1 < (f + 0.01)) && prob_1 > f){
+                                        state->topKPassFail[count][0]++;
+                                        if(state->dataHierarchy->size()){
+                                            state->topKHierarchyPassFail[count][0]++;
+                                            state->topKHierarchyPassFail[count][2]++;
+                                            state->topKHierarchyPassFail[count][4]++;
+                                            state->topKHierarchyPassFail[count][6]++;
+                                            state->topKHierarchyPassFail[count][8]++;
+                                            state->topKHierarchyPassFail[count][10]++;
+                                        }
                                     }
+                                    count++;
                                 }
-                                else{
-                                    int count = 0;
-                                    for(float f = 0;f < 1; f=f+0.01){
-                                        if((prob_1 < (f + 0.01)) && prob_1 > f) state->topKPassFail[count][1]++;
-                                        count++;
+                            }
+                            else{
+                                int count = 0;
+                                for(float f = 0;f < 1; f=f+0.01){
+                                    if((prob_1 < (f + 0.01)) && prob_1 > f){
+                                        state->topKPassFail[count][1]++;
+                                        if(state->dataHierarchy->size()){
+                                            int catCount = 0;
+                                            QString truthHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[truth] : "Unknown";
+                                            QString resultHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[label] : "Unknown";
+                                            std::string input_result = resultHierarchy.toStdString().c_str();
+                                            std::string input_truth = truthHierarchy.toStdString().c_str();
+                                            std::istringstream ss_result(input_result);
+                                            std::istringstream ss_truth(input_truth);
+                                            std::string token_result, token_truth;
+                                            while(std::getline(ss_result, token_result, ',') && std::getline(ss_truth, token_truth, ',')) {
+                                                if(token_truth.size() && (token_truth == token_result))
+                                                    state->topKHierarchyPassFail[count][catCount*2]++;
+                                                else if(token_truth.size())
+                                                    state->topKHierarchyPassFail[count][catCount*2 + 1]++;
+
+                                                catCount++;
+                                            }
+                                        }
                                     }
+                                    count++;
                                 }
                             }
                         }
@@ -685,9 +666,16 @@ void inference_viewer::saveSummary(QString fileName)
             }
             float f=0.99;
             fileObj.write("\n********Pass/Fail in Probability Range********\n");
-            fileObj.write("\nProbability,Pass,Fail\n");
+            fileObj.write("\nProbability,Pass,Fail,,cat-1 pass,cat-1 fail,,cat-2 pass, cat-2 fail,,cat-3 pass,cat-3 fail,,cat-4 pass,cat-4 fail,,cat-5 pass,cat-5 fail,,cat-6 pass,cat-6 fail\n");
             for(int i = 99; i >= 0; i--){
-                text.sprintf("%.2f,%d,%d\n",f,state->topKPassFail[i][0],state->topKPassFail[i][1]);
+                text.sprintf("%.2f,%d,%d,,%d,%d,,%d,%d,,%d,%d,,%d,%d,,%d,%d,,%d,%d\n",f,state->topKPassFail[i][0],state->topKPassFail[i][1],
+                        state->topKHierarchyPassFail[i][0],state->topKHierarchyPassFail[i][1],
+                        state->topKHierarchyPassFail[i][2],state->topKHierarchyPassFail[i][3],
+                        state->topKHierarchyPassFail[i][4],state->topKHierarchyPassFail[i][5],
+                        state->topKHierarchyPassFail[i][6],state->topKHierarchyPassFail[i][7],
+                        state->topKHierarchyPassFail[i][8],state->topKHierarchyPassFail[i][9],
+                        state->topKHierarchyPassFail[i][10],state->topKHierarchyPassFail[i][11]
+                        );
                 fileObj.write(text.toStdString().c_str());
                 f=f-0.01;
                }
