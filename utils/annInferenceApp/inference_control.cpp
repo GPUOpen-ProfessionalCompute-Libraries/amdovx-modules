@@ -243,11 +243,17 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     checkShadowFolder = new QCheckBox("Enable Shadow Folder");
     checkShadowFolder->setChecked(false);
     checkShadowFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
-    controlLayout->addWidget(checkShadowFolder, row, 0, 1, 1);
-    editShadowFolderAddr = new QLineEdit("Enter FOLDER-NAME");
+    editShadowFolderAddr = new QLineEdit("");
     editShadowFolderAddr->setVisible(false);
-    controlLayout->addWidget(editShadowFolderAddr, row, 1, 1, 1);
-    connect(checkShadowFolder, SIGNAL(clicked(bool)), this, SLOT(shadowFolderEnable(bool)));
+    buttonShadowFolder = new QPushButton(tr("Browse..."), this);
+    buttonShadowFolder->setVisible(false);
+    controlLayout->addWidget(checkShadowFolder, row, 0, 1, 1);
+    controlLayout->addWidget(editShadowFolderAddr, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonShadowFolder, row, 1 + editSpan, 1, 1);
+    connect(checkShadowFolder, SIGNAL(clicked(bool)), this, SLOT(shadowFolderEnable(bool)));   
+    connect(buttonShadowFolder, &QAbstractButton::clicked, this, &inference_control::browseShadowFolder);
+
+
     row++;
     connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
     connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
@@ -777,6 +783,15 @@ void inference_control::browseModelFile2()
     }
 }
 
+void inference_control::browseShadowFolder()
+{
+
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select Shadow Folder Root on Client"), nullptr,
+                        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if(dir.size() > 0)
+        editShadowFolderAddr->setText(dir);
+}
+
 void inference_control::browseDataLabels()
 {
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open Labels File"), nullptr, tr("Labels Text (*.txt)"));
@@ -856,7 +871,7 @@ void inference_control::runConnection()
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));
             labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
-            if(!enableSF) {checkShadowFolder->setEnabled(false);}
+            if(!enableSF) {checkShadowFolder->setEnabled(false); editShadowFolderAddr->setEnabled(false); buttonShadowFolder->setEnabled(false);}
             while(comboModelSelect->count() > 1)
                 comboModelSelect->removeItem(1);
             modelList.clear();
@@ -1069,9 +1084,11 @@ void inference_control::shadowFolderEnable(bool shadowEnable)
 {
     if(shadowEnable){
         editShadowFolderAddr->setVisible(true);
+        buttonShadowFolder->setVisible(true);
     }
     else
     {
         editShadowFolderAddr->setVisible(false);
+        buttonShadowFolder->setVisible(false);
     }
 }

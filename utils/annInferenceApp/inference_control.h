@@ -47,6 +47,7 @@ public slots:
     void shadowFolderEnable(bool shadowEnable);
 
 protected:
+    void browseShadowFolder();
     void browseDataLabels();
     void browseDataHierarchy();
     void browseDataFilename();
@@ -109,6 +110,7 @@ private:
     QCheckBox * checkTopKResult;
     QCheckBox * checkShadowFolder;
     QLineEdit * editShadowFolderAddr;
+    QPushButton * buttonShadowFolder;
     inference_compiler_status compiler_status;
     bool operationMode;
     bool connectionSuccessful;
