@@ -383,12 +383,19 @@ void inference_viewer::saveResults()
                                             std::istringstream ss_result(input_result);
                                             std::istringstream ss_truth(input_truth);
                                             std::string token_result, token_truth;
+                                            int previousTruth = 0;
                                             while(std::getline(ss_result, token_result, ',') && std::getline(ss_truth, token_truth, ',')) {
-                                                if(token_truth.size() && (token_truth == token_result))
+                                                if(token_truth.size() && (token_truth == token_result)){
                                                     state->topKHierarchyPassFail[count][catCount*2]++;
-                                                else if(token_truth.size())
+                                                    previousTruth = 1;
+                                                }
+                                                else if( previousTruth == 1 && (!token_result.size() && !token_truth.size())){
+                                                    state->topKHierarchyPassFail[count][catCount*2]++;
+                                                }
+                                                else{
                                                     state->topKHierarchyPassFail[count][catCount*2 + 1]++;
-
+                                                    previousTruth = 0;
+                                                }
                                                 catCount++;
                                             }
                                         }
