@@ -107,7 +107,7 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->outputDescriptor, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
 
     //activation Function Type
-    vx_nn_activation_function_e activationMode;
+    vx_int32 activationMode;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[1], &activationMode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
     data->activAlpha = 1.0f;
