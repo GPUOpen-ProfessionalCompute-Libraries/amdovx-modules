@@ -72,6 +72,7 @@ public:
     int top1Count,top2Count,top3Count,top4Count,top5Count;
     int topKPassFail[100][2];
     int topKHierarchyPassFail[100][12];
+    int topLabelMatch[1000][6];
     float top1TotProb,top2TotProb, top3TotProb, top4TotProb, top5TotProb;
     int totalMismatch, totalNoGroundTruth;
     float totalPassProb, totalFailProb;

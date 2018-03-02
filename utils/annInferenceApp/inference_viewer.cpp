@@ -233,6 +233,9 @@ void inference_viewer::saveResults()
                     state->topKPassFail[j][0] = state->topKPassFail[j][1] = 0;
                     for(int k = 0; k < 12; k++) state->topKHierarchyPassFail[j][k] = 0;
                 }
+                for(int j = 0; j < 1000; j++){
+                    for(int k = 0; k < 6; k++) state->topLabelMatch[j][k] = 0;
+                }
             }
             for(int i = 0; i < state->imageDataSize; i++) {
                 int label = state->inferenceResultTop[i];
@@ -335,12 +338,30 @@ void inference_viewer::saveResults()
                                 float prob_4 = state->resultImageProbTopK[i][3];
                                 float prob_5 = state->resultImageProbTopK[i][4];
 
-                                if(truth == label_1) { match = 1; state->top1Count++; state->top1TotProb += prob_1; }
-                                else if(truth == label_2) { match = 2; state->top2Count++; state->top2TotProb += prob_2; }
-                                else if(truth == label_3) { match = 3; state->top3Count++; state->top3TotProb += prob_3; }
-                                else if(truth == label_4) { match = 4; state->top4Count++; state->top4TotProb += prob_4; }
-                                else if(truth == label_5) { match = 5; state->top5Count++; state->top5TotProb += prob_5; }
-                                else { state->totalMismatch++; state->totalFailProb += prob_1; }
+                                if(truth == label_1) {
+                                    match = 1; state->top1Count++; state->top1TotProb += prob_1;
+                                    state->topLabelMatch[truth][0]++; state->topLabelMatch[truth][1]++;
+                                }
+                                else if(truth == label_2) {
+                                    match = 2; state->top2Count++; state->top2TotProb += prob_2;
+                                    state->topLabelMatch[truth][0]++; state->topLabelMatch[truth][2]++;
+                                }
+                                else if(truth == label_3) {
+                                    match = 3; state->top3Count++; state->top3TotProb += prob_3;
+                                    state->topLabelMatch[truth][0]++; state->topLabelMatch[truth][3]++;
+                                }
+                                else if(truth == label_4) {
+                                    match = 4; state->top4Count++; state->top4TotProb += prob_4;
+                                    state->topLabelMatch[truth][0]++; state->topLabelMatch[truth][4]++;
+                                }
+                                else if(truth == label_5) {
+                                    match = 5; state->top5Count++; state->top5TotProb += prob_5;
+                                    state->topLabelMatch[truth][0]++; state->topLabelMatch[truth][5]++;
+                                }
+                                else {
+                                    state->totalMismatch++; state->totalFailProb += prob_1;
+                                    state->topLabelMatch[truth][0]++;
+                                }
                                 text.sprintf("%s,%d,%d,%d,%d,%d,%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%.4f,%.4f,%.4f,%.4f,%.4f\n", state->imageDataFilenames[i].toStdString().c_str(),
                                              label_1, label_2, label_3, label_4, label_5, truth, match,
                                              state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown",
@@ -693,6 +714,21 @@ void inference_viewer::saveSummary(QString fileName)
                 fileObj.write(text.toStdString().c_str());
                 f=f-0.01;
                }
+            if(state->topKValue > 4){
+            fileObj.write("\n******** Labels Count ********\n");
+            fileObj.write("\nLabel,Images in DataBase, Matched with Top1, Matched with Top2, Matched with Top3, Matched with Top4, Matched with Top5,Label Description\n");
+            for(int i = 0; i < 1000; i++){
+                text.sprintf("%d,%d,%d,%d,%d,%d,%d,\"%s\"\n",i, state->topLabelMatch[i][0],
+                        state->topLabelMatch[i][1],
+                        state->topLabelMatch[i][2],
+                        state->topLabelMatch[i][3],
+                        state->topLabelMatch[i][4],
+                        state->topLabelMatch[i][5],
+                        state->dataLabels ? (*state->dataLabels)[i].toStdString().c_str() : "Unknown"
+                        );
+                fileObj.write(text.toStdString().c_str());
+               }
+            }
             fileObj.close();
         }
     }
@@ -709,13 +745,32 @@ void inference_viewer::saveHTML(QString fileName)
             fileObj.write("\n\t<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\n");
             fileObj.write("\t<title>Top K Result Summary</title>\n");
             fileObj.write("\n\t<style type=\"text/css\">\n");
+            fileObj.write("\t\n");
             fileObj.write("\tbody,div,table,thead,tbody,tfoot,tr,th,td,p { font-family:\"Liberation Sans\"; font-size:x-small }\n");
             fileObj.write("\ta.comment-indicator:hover + comment { background:#ffd; position:absolute; display:block; border:1px solid black; padding:0.5em;  }\n");
             fileObj.write("\ta.comment-indicator { background:red; display:inline-block; border:1px solid black; width:0.5em; height:0.5em;  }\n");
             fileObj.write("\tcomment { display:none;  } tr:nth-of-type(odd) { background-color:LightYellow;}\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t#myImg { border-radius: 5px; cursor: pointer; transition: 0.3s; }\n");
+            fileObj.write("\t#myImg:hover { opacity: 0.7; }\n");
+            fileObj.write("\t.modal{ display: none; position: fixed; z-index: 1; padding-top: 100px; left: 0; top: 0;width: 100%;\n");
+            fileObj.write("\t		height: 100%; overflow: auto; background-color: rgb(0,0,0); background-color: rgba(0,0,0,0.9); }\n");
+            fileObj.write("\t.modal-content { margin: auto; display: block; width: 80%; max-width: 700px; }\n");
+            fileObj.write("\t#caption { margin: auto; display: block; width: 80%; max-width: 700px; text-align: center; color: #ccc; padding: 10px 0; height: 150px;}\n");
+            fileObj.write("\t.modal-content, #caption {  -webkit-animation-name: zoom;  -webkit-animation-duration: 0.6s;\n");
+            fileObj.write("\t							animation-name: zoom; animation-duration: 0.6s; }\n");
+            fileObj.write("\t@-webkit-keyframes zoom {  from { -webkit-transform:scale(0) }  to { -webkit-transform:scale(1) }}\n");
+            fileObj.write("\t@keyframes zoom {    from {transform:scale(0)}     to {transform:scale(1) }}\n");
+            fileObj.write("\t.close { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; transition: 0.3s; }\n");
+            fileObj.write("\t.close:hover,.close:focus { color: #bbb; text-decoration: none; cursor: pointer; }\n");
+            fileObj.write("\t@media only screen and (max-width: 400px){ .modal-content {     width: 100%; } }\n");
+            fileObj.write("\t\n");
             fileObj.write("\t</style>\n");
             fileObj.write("\n</head>\n");
             fileObj.write("\n\n<body>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<div id=\"myModal\" class=\"modal\"> <span class=\"close\">&times;</span>  <img class=\"modal-content\" id=\"img01\">  <div id=\"caption\"></div> </div>\n");
+            fileObj.write("\t\n");
             fileObj.write("<hr>\n");
             fileObj.write("\t<p><center>\n");
             fileObj.write("\t\t<img src=\"https://s-media-cache-ak0.pinimg.com/originals/02/b0/51/02b0511658999d3c02322d6bd3a8b2e9.jpg\" alt=\"Radeon\"/>\n");
@@ -740,13 +795,14 @@ void inference_viewer::saveHTML(QString fileName)
             fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
             fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
             fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\"><b>#Image</b></font></td>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\"><b>#FileName</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-1</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-2</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-3</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-4</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-5</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>groundTruthLabel</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>TOP-1</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>TOP-2</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>TOP-3</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>TOP-4</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>TOP-5</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>groundTruth</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Matched?</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-1</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-2</b></font></td>\n");
@@ -794,6 +850,9 @@ void inference_viewer::saveHTML(QString fileName)
                     else if(truth == label_5) { match = 5; }
                     truthLabel = state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown";
                     truthLabel = truthLabel.replace(QRegExp("n[0-9]{8}"),"");
+                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
+                                 state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
                                  state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
@@ -844,6 +903,9 @@ void inference_viewer::saveHTML(QString fileName)
                     fileObj.write(text.toStdString().c_str());
                 }
                 else {
+                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
+                                 state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
                                  state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
@@ -876,7 +938,7 @@ void inference_viewer::saveHTML(QString fileName)
                     //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_5.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\"><b>Unknown</b></td>\n");
+                    text.sprintf("\t\t<td align=\"left\"><b>Unknown</b></td>\n");
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_1);
                     fileObj.write(text.toStdString().c_str());
@@ -890,6 +952,18 @@ void inference_viewer::saveHTML(QString fileName)
                     fileObj.write(text.toStdString().c_str());
                 }
                 fileObj.write("\t\t</tr>\n");
+                fileObj.write("\t\t\n");
+                fileObj.write("\t\t<script>\n");
+                fileObj.write("\t\tvar modal = document.getElementById('myModal');\n");
+                text.sprintf("\t\tvar img1 = document.getElementById('myImg%d');\n",i);
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t\tvar modalImg = document.getElementById(\"img01\");\n");
+                fileObj.write("\t\tvar captionText = document.getElementById(\"caption\");\n");
+                fileObj.write("\t\timg1.onclick = function(){ modal.style.display = \"block\"; modalImg.src = this.src; captionText.innerHTML = this.alt; }\n");
+                fileObj.write("\t\tvar span = document.getElementsByClassName(\"close\")[0];\n");
+                fileObj.write("\t\tspan.onclick = function() { modal.style.display = \"none\"; }\n");
+                fileObj.write("\t\t</script>\n");
+                fileObj.write("\t\t\n");
             }
             fileObj.write("</table>\n");
             fileObj.write("<A NAME=\"table1\"><h1><font color=\"Maroon\">2: <em>Inference Summary</em></font></h1></A>\n");
@@ -909,7 +983,7 @@ void inference_viewer::saveHTML(QString fileName)
             text.sprintf("\n<h3>&emsp;&emsp;Total Top K match: %d</h3>\n",passCount);
             fileObj.write(text.toStdString().c_str());
             float accuracyPer = ((float)passCount / netSummaryImages);
-            text.sprintf("<h3>&emsp;&emsp;Inference Accuracy on Top K: %.2f %</h3>\n",(accuracyPer*100));
+            text.sprintf("<h3>&emsp;&emsp;Inference Accuracy on Top K: %.2f Percent</h3>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             text.sprintf("<h3>&emsp;&emsp;Average Pass Probability for Top K: %.2f</h3><br>\n\n",avgPassProb);
             fileObj.write(text.toStdString().c_str());
@@ -917,7 +991,7 @@ void inference_viewer::saveHTML(QString fileName)
             text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Total mismatch:</font> %d\n",state->totalMismatch);
             fileObj.write(text.toStdString().c_str());
             accuracyPer = ((float)state->totalMismatch/netSummaryImages);
-            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Inference mismatch Percentage:</font> %.2f %</h3>\n",(accuracyPer*100));
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Inference mismatch Percentage:</font> %.2f Percent</h3>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Average mismatch Probability for Top 1:</font> %.4f</h3><br>\n",state->totalFailProb/state->totalMismatch);
             fileObj.write(text.toStdString().c_str());
