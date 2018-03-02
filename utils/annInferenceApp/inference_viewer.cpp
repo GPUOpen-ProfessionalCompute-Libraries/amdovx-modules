@@ -563,6 +563,13 @@ void inference_viewer::saveResults()
             fileObj.close();
             if(state->topKValue > 0 && csvFile){
                 saveSummary(fileName);
+                // experimental HTML output
+                if(state->topKValue == 5){
+                    QString htmlFileName = fileName;
+                    htmlFileName.replace(".csv",".html");
+                    saveHTML(htmlFileName);
+                    QDesktopServices::openUrl(QUrl("file://" + htmlFileName));
+                }
             }
             QDesktopServices::openUrl(QUrl("file://" + fileName));
         }
@@ -688,6 +695,325 @@ void inference_viewer::saveSummary(QString fileName)
                }
             fileObj.close();
         }
+    }
+}
+
+void inference_viewer::saveHTML(QString fileName)
+{
+    if(fileName.size() > 0) {
+        QFile fileObj(fileName);
+        if(fileObj.open(QIODevice::WriteOnly)) {
+            fileObj.write("<!DOCTYPE HTML PUBLIC \" -//W3C//DTD HTML 4.0 Transitional//EN\">\n");
+            fileObj.write("\n<html>\n");
+            fileObj.write("<head>\n");
+            fileObj.write("\n\t<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\n");
+            fileObj.write("\t<title>Top K Result Summary</title>\n");
+            fileObj.write("\n\t<style type=\"text/css\">\n");
+            fileObj.write("\tbody,div,table,thead,tbody,tfoot,tr,th,td,p { font-family:\"Liberation Sans\"; font-size:x-small }\n");
+            fileObj.write("\ta.comment-indicator:hover + comment { background:#ffd; position:absolute; display:block; border:1px solid black; padding:0.5em;  }\n");
+            fileObj.write("\ta.comment-indicator { background:red; display:inline-block; border:1px solid black; width:0.5em; height:0.5em;  }\n");
+            fileObj.write("\tcomment { display:none;  } tr:nth-of-type(odd) { background-color:LightYellow;}\n");
+            fileObj.write("\t</style>\n");
+            fileObj.write("\n</head>\n");
+            fileObj.write("\n\n<body>\n");
+            fileObj.write("<hr>\n");
+            fileObj.write("\t<p><center>\n");
+            fileObj.write("\t\t<img src=\"https://s-media-cache-ak0.pinimg.com/originals/02/b0/51/02b0511658999d3c02322d6bd3a8b2e9.jpg\" alt=\"Radeon\"/>\n");
+            fileObj.write("\t\t<h1><font size=\"12\">Top K Result Summary</font></h1>\n");
+            fileObj.write("\t\t<A HREF=\"#table0\"><font size=\"5\">1. Results</font></A><br>\n");
+            fileObj.write("\t\t<A HREF=\"#table1\"><font size=\"5\">2. Result Summary</font></A><br>\n");
+            fileObj.write("\t\t<A HREF=\"#table2\"><font size=\"5\">3. Hierarchy Summary</font></A><br>\n");
+            fileObj.write("\t</center></p>\n");
+            fileObj.write("<hr>\n");
+            fileObj.write("<A NAME=\"table0\"><h1><font color=\"Maroon\">1: <em>Inference Results</em></font></h1></A>\n");
+            fileObj.write("<table cellspacing=\"0\" border=\"0\">\n");
+            fileObj.write("\t<colgroup width=\"351\"></colgroup>\n");
+            fileObj.write("\t<colgroup span=\"5\" width=\"92\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"114\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup span=\"6\" width=\"811\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\"><b>#FileName</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-1</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-2</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-3</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-4</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabel-5</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>groundTruthLabel</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Matched?</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-1</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-2</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-3</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-4</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>outputLabelText-5</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>groundTruthLabelText</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-1</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-2</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-3</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-4</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-5</b></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            for(int i = 0; i < state->imageDataSize; i++) {
+                fileObj.write("\t\t<tr>\n");
+                int truth = state->imageLabel[i];
+                QString text,labelTxt_1 ,labelTxt_2, labelTxt_3, labelTxt_4, labelTxt_5, truthLabel;
+                int match = 0;
+                int label_1 = state->resultImageLabelTopK[i][0];
+                int label_2 = state->resultImageLabelTopK[i][1];
+                int label_3 = state->resultImageLabelTopK[i][2];
+                int label_4 = state->resultImageLabelTopK[i][3];
+                int label_5 = state->resultImageLabelTopK[i][4];
+                float prob_1 = state->resultImageProbTopK[i][0];
+                float prob_2 = state->resultImageProbTopK[i][1];
+                float prob_3 = state->resultImageProbTopK[i][2];
+                float prob_4 = state->resultImageProbTopK[i][3];
+                float prob_5 = state->resultImageProbTopK[i][4];
+                labelTxt_1 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]] : "Unknown";
+                labelTxt_1 = labelTxt_1.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_2 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]] : "Unknown";
+                labelTxt_2 = labelTxt_2.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_3 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]] : "Unknown";
+                labelTxt_3 = labelTxt_3.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_4 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]] : "Unknown";
+                labelTxt_4 = labelTxt_4.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_5 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]] : "Unknown";
+                labelTxt_5 = labelTxt_5.replace(QRegExp("n[0-9]{8}"),"");
+                if(truth >= 0)
+                {
+                    if(truth == label_1) { match = 1; }
+                    else if(truth == label_2) { match = 2; }
+                    else if(truth == label_3) { match = 3; }
+                    else if(truth == label_4) { match = 4; }
+                    else if(truth == label_5) { match = 5; }
+                    truthLabel = state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown";
+                    truthLabel = truthLabel.replace(QRegExp("n[0-9]{8}"),"");
+                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
+                                 state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_1);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_2);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_3);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_4);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_5);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",truth);
+                    fileObj.write(text.toStdString().c_str());
+                    if(match)
+                        text.sprintf("\t\t<td align=\"center\"><font color=\"green\"><b>%d</b></font></td>\n",match);
+                    else
+                        text.sprintf("\t\t<td align=\"center\"><font color=\"red\"><b>%d</b></font></td>\n",match);
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_1.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_2.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_3.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_4.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_5.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",truthLabel.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</b></td>\n",prob_1);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_2);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_3);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_4);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_5);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else {
+                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
+                                 state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_1);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_2);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_3);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_4);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_5);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">-1</td>\n");
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"blue\"><b>-1</b></font></td>\n");
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_1.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_2.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_3.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_4.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_5.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>Unknown</b></td>\n");
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_1);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_2);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_3);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_4);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_5);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fileObj.write("\t\t</tr>\n");
+            }
+            fileObj.write("</table>\n");
+            fileObj.write("<A NAME=\"table1\"><h1><font color=\"Maroon\">2: <em>Inference Summary</em></font></h1></A>\n");
+            QString text;
+            int netSummaryImages =  state->imageDataSize - state->totalNoGroundTruth;
+            float passProb = (state->top1TotProb+state->top2TotProb+state->top3TotProb+state->top4TotProb+state->top5TotProb);
+            int passCount = (state->top1Count+state->top2Count+state->top3Count+state->top4Count+state->top5Count);
+            float avgPassProb = passProb/passCount;
+
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Images without ground Truth:</font> %d</h3>\n",state->totalNoGroundTruth);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Images with ground Truth:</font> %d</h3>\n",netSummaryImages);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Total image set for inference:</font> %d</h3><br>\n",state->imageDataSize);
+            fileObj.write(text.toStdString().c_str());
+
+            text.sprintf("\n<h3>&emsp;&emsp;Total Top K match: %d</h3>\n",passCount);
+            fileObj.write(text.toStdString().c_str());
+            float accuracyPer = ((float)passCount / netSummaryImages);
+            text.sprintf("<h3>&emsp;&emsp;Inference Accuracy on Top K: %.2f %</h3>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("<h3>&emsp;&emsp;Average Pass Probability for Top K: %.2f</h3><br>\n\n",avgPassProb);
+            fileObj.write(text.toStdString().c_str());
+
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Total mismatch:</font> %d\n",state->totalMismatch);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->totalMismatch/netSummaryImages);
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Inference mismatch Percentage:</font> %.2f %</h3>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("<h3>&emsp;&emsp;<font color=\"blue\">Average mismatch Probability for Top 1:</font> %.4f</h3><br>\n",state->totalFailProb/state->totalMismatch);
+            fileObj.write(text.toStdString().c_str());
+
+
+            fileObj.write("<table cellspacing=\"4\" border=\"1\" style=\"margin-left: 2cm;\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 1 Match</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 1 Match %</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 2 Match</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 2 Match %</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 3 Match</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 3 Match %</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 4 Match</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 4 Match %</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 5 Match</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Top 5 Match %</b></td>\n");
+            fileObj.write("\t\t</tr>\n");
+
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top1Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top2Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top3Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top4Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top5Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+
+
+            fileObj.write("</table>\n");
+            fileObj.write("<A NAME=\"table2\"><h1><font color=\"Maroon\">3: <em>Hierarchy Summary</em></font></h1></A>\n");
+            fileObj.write("<table cellspacing=\"0\" border=\"0\">\n");
+            fileObj.write("\t<colgroup width=\"351\"></colgroup>\n");
+            fileObj.write("\t<colgroup span=\"5\" width=\"92\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"114\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup span=\"6\" width=\"811\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
+            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td height=\"17\" align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t</tr>\n");
+
+            //Dump values here in a loop
+            fileObj.write("\t\t<tr>\n");
+            fileObj.write("\t\t</tr>\n");
+
+            fileObj.write("</table>\n");
+
+            fileObj.write("\n</body>\n");
+            fileObj.write("\n</html>\n");
+
+        }
+        fileObj.close();
     }
 }
 

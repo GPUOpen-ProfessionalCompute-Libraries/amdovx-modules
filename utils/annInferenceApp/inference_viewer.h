@@ -103,6 +103,7 @@ private:
     void startReceiver();
     void saveResults();
     void saveSummary(QString fileName);
+    void saveHTML(QString fileName);
     void terminate();
 
 private:
