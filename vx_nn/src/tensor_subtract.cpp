@@ -45,7 +45,7 @@ static vx_status VX_CALLBACK validateTensorSub(vx_node node, const vx_reference 
 
     // check tensor dimensions
     vx_size num_dims;
-    vx_size input1_dims[4],input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
+    vx_size input1_dims[4],input2_dims[4] = { 0, 0, 1, 1 }, output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: sub: #0 num_dims=%ld (must be 4)\n", num_dims);
@@ -66,13 +66,15 @@ static vx_status VX_CALLBACK validateTensorSub(vx_node node, const vx_reference 
 
     if (output_dims[3] != input1_dims[3] || output_dims[2] != input1_dims[2] ||
         output_dims[1] != input1_dims[1] || output_dims[0] != input1_dims[0] ||
-        output_dims[3] != input2_dims[3] || output_dims[2] != input2_dims[2] ||
-        (output_dims[1] != input2_dims[1] && 1 != input2_dims[1]) ||
-        (output_dims[0] != input2_dims[0] && 1 != input2_dims[0]))
-        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: sub: dims input1[%ld,%ld,%ld,%ld] input2[%ld,%ld,%ld,%ld] != output[%ld,%ld,%ld,%ld]\n",
+        output_dims[1] != input2_dims[1] || output_dims[0] != input2_dims[0] ||
+        !((output_dims[3] == input2_dims[3] && output_dims[2] == input2_dims[2]) ||
+          (             1 == input2_dims[3] &&              1 == input2_dims[2])))
+    {
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: sub: dims input1[%ld,%ld,%ld,%ld] input2[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
                     input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3],
                     input2_dims[0], input2_dims[1], input2_dims[2], input2_dims[3],
                     output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
+    }
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -106,7 +108,7 @@ static vx_status VX_CALLBACK initializeTensorSub(vx_node node, const vx_referenc
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
     //initialize input and output tensor descriptors.
-    vx_size input1_dims[4], num_dims, input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
+    vx_size input1_dims[4], num_dims, input2_dims[4] = { 0, 0, 1, 1 }, output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &input2_dims[4-num_dims], num_dims * sizeof(vx_size)));
@@ -115,14 +117,7 @@ static vx_status VX_CALLBACK initializeTensorSub(vx_node node, const vx_referenc
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input2));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, miopenFloat, input1_dims[3], input1_dims[2], input1_dims[1], input1_dims[0]));
-    if(input2_dims[0] == 1 && input2_dims[1] == 1) {
-        int dims[2] = { (int)input2_dims[2], (int)input2_dims[3] };
-        int strides[2] = { 1, dims[1] };
-        ERROR_CHECK_MIOPEN_STATUS(miopenSetTensorDescriptor(data->input2, miopenFloat, 2, dims, strides));
-    }
-    else {
-        ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, miopenFloat, input2_dims[3], input2_dims[2], input2_dims[1], input2_dims[0]));
-    }
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, miopenFloat, input2_dims[3], input2_dims[2], input2_dims[1], input2_dims[0]));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
 
     //scaling parameters.
