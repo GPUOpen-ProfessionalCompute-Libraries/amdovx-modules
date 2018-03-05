@@ -49,7 +49,7 @@ static vx_status VX_CALLBACK validateTensorMultiply(vx_node node, const vx_refer
 
     // check tensor dimensions
     vx_size num_dims;
-    vx_size input1_dims[4], input2_dims[4] = { 0, 0, 1, 1 }, output_dims[4];
+    vx_size input1_dims[4], input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: #0 num_dims=%ld (must be 4)\n", num_dims);
@@ -70,9 +70,8 @@ static vx_status VX_CALLBACK validateTensorMultiply(vx_node node, const vx_refer
 
     if (output_dims[3] != input1_dims[3] || output_dims[2] != input1_dims[2] ||
         output_dims[1] != input1_dims[1] || output_dims[0] != input1_dims[0] ||
-        output_dims[1] != input2_dims[1] || output_dims[0] != input2_dims[0] ||
-        !((output_dims[3] == input2_dims[3] && output_dims[2] == input2_dims[2]) ||
-          (             1 == input2_dims[3] &&              1 == input2_dims[2])))
+        output_dims[3] != input2_dims[3] || output_dims[2] != input2_dims[2] ||
+                     1 != input2_dims[1] ||              1 != input2_dims[0])
     {
         return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: dims input1[%ld,%ld,%ld,%ld] input2[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
                     input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3],
@@ -112,7 +111,7 @@ static vx_status VX_CALLBACK initializeTensorMultiply(vx_node node, const vx_ref
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
     //initialize input and output tensor descriptors.
-    vx_size input1_dims[4], num_dims, input2_dims[4] = { 0, 0, 1, 1 }, output_dims[4];
+    vx_size input1_dims[4], num_dims, input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
     vx_enum input1_type, input2_type, output_type;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
