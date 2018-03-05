@@ -70,7 +70,7 @@ static vx_status VX_CALLBACK validateTensorMultiply(vx_node node, const vx_refer
 
     if (output_dims[3] != input1_dims[3] || output_dims[2] != input1_dims[2] ||
         output_dims[1] != input1_dims[1] || output_dims[0] != input1_dims[0] ||
-        output_dims[3] != input2_dims[3] || output_dims[2] != input2_dims[2] ||
+                     1 != input2_dims[3] || output_dims[2] != input2_dims[2] ||
                      1 != input2_dims[1] ||              1 != input2_dims[0])
     {
         return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: dims input1[%ld,%ld,%ld,%ld] input2[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
