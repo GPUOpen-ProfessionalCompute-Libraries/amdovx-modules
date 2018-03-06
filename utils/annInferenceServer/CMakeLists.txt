@@ -39,6 +39,7 @@ list(APPEND SOURCES
 	server.cpp
 	main.cpp
         profiler.cpp
+        yoloregion.cpp
 )
 
 add_executable(annInferenceServer ${SOURCES})
