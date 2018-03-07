@@ -329,21 +329,42 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
 """)
         for node in graph.nodes:
             if node.type == 'conv':
+                pads = node.attr.get('pads')
+                dilations = node.attr.get('dilations')
                 f.write( \
 """
     { vx_nn_convolution_params_t conv_params = { 0 };
-      conv_params.padding_x = 2;
-      conv_params.padding_y = 2;
-      conv_params.dilation_x = 0;
-      conv_params.dilation_y = 0;
+      conv_params.padding_x = %d;
+      conv_params.padding_y = %d;
       conv_params.overflow_policy = VX_CONVERT_POLICY_SATURATE;
       conv_params.rounding_policy = VX_ROUND_POLICY_TO_NEAREST_EVEN;
       conv_params.down_scale_size_rounding = VX_NN_DS_SIZE_ROUNDING_FLOOR;
+      conv_params.dilation_x = %d;
+      conv_params.dilation_y = %d;
       vx_node node = vxConvolutionLayer(graph, %s, %s, %s, &conv_params, sizeof(conv_params), %s);
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
-""" % (node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
+""" % (pads[0], pads[1], dilations[0], dilations[1], \
+      node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
+            elif node.type == 'conv_transpose':
+                pads = node.attr.get('pads')
+                output_pads = node.attr.get('output_pads')
+                f.write( \
+"""
+    { vx_nn_deconvolution_params_t conv_params = { 0 };
+      conv_params.padding_x = %d;
+      conv_params.padding_y = %d;
+      conv_params.overflow_policy = VX_CONVERT_POLICY_SATURATE;
+      conv_params.rounding_policy = VX_ROUND_POLICY_TO_NEAREST_EVEN;
+      conv_params.a_x = %d;
+      conv_params.a_y = %d;
+      vx_node node = vxDeconvolutionLayer(graph, %s, %s, %s, &conv_params, sizeof(conv_params), %s);
+      ERROR_CHECK_OBJECT(node);
+      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""" % (pads[0], pads[1], output_pads[0], output_pads[1], \
+      node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
             elif node.type == 'gemm':
                 alpha = node.attr.get('alpha')
                 beta = node.attr.get('beta')
