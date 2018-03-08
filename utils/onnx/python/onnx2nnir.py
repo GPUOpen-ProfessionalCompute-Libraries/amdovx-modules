@@ -46,6 +46,7 @@ onnx2ir_attr = {
 
 onnx2ir_op_type = {
     'Conv'               : 'conv',
+    'ConvTranspose'      : 'conv_transpose',
     'BatchNormalization' : 'batch_norm',
     'AveragePool'        : 'avg_pool',
     'MaxPool'            : 'max_pool',
