@@ -659,7 +659,7 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
                     return -1;
                 }
                 for(vx_size y = 0; y < dims[1]; y++) {
-                    unsigned char * src = img.data + y*dims[0];
+                    unsigned char * src = img.data + y*dims[0]*3;
                     float * dstR = ptr + ((n * stride[3] + y * stride[1]) >> 2);
                     float * dstG = dstR + (stride[2] >> 2);
                     float * dstB = dstG + (stride[2] >> 2);
@@ -679,12 +679,19 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
                 std::cerr << "ERROR: unable to open: " << fileName << std::endl;
                 return -1;
             }
-            vx_size n = fread(ptr, sizeof(float), count, fp);
-            fclose(fp);
-            if(n != count) {
-                std::cerr << "ERROR: expected char[" << count*sizeof(float) << "], but got char[" << n*sizeof(float) << "] in " << fileName << std::endl;
-                return -1;
+            for(size_t n = 0; n < dims[3]; n++) {
+                for(size_t c = 0; c < dims[2]; c++) {
+                    for(size_t y = 0; y < dims[1]; y++) {
+                        float * ptrY = ptr + ((n * stride[3] + c * stride[2] + y * stride[1]) >> 2);
+                        vx_size n = fread(ptrY, sizeof(float), dims[0], fp);
+                        if(n != dims[0]) {
+                            std::cerr << "ERROR: expected char[" << count*sizeof(float) << "], but got less in " << fileName << std::endl;
+                            return -1;
+                        }
+                    }
+                }
             }
+            fclose(fp);
         }
     }
     else {""")
