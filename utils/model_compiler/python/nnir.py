@@ -65,6 +65,7 @@ class IrAttr:
             , 'pooled_shape' : [1, 1]   # [x,y] ROI pool
             , 'spatial_scale' : 1.0     # spatial_scale - ROI pool
             , 'split' : []              # length of each output for split
+            , 'output_pads' : [0, 0]    # output padding for conv_transpose
         }
         self.dict_set = []
 
@@ -115,6 +116,7 @@ class IrNode:
         self.attr = IrAttr()
         self.dict_types = {
             'conv' : 1,
+            'conv_transpose' : 1,
             'batch_norm' : 1,
             'avg_pool' : 1,
             'max_pool' : 1,
@@ -256,6 +258,23 @@ class IrGraph:
                     output_shape = [input_shape[0], k, \
                         (pads[0] + input_shape[2] + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1, \
                         (pads[1] + input_shape[3] + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1]
+                    local = IrTensor()
+                    local.setName(output)
+                    local.setInfo(input.type, output_shape)
+                    self.addLocal(local)
+                elif node.type in ['conv_transpose']:
+                    input = self.tensor_dict[node.inputs[0]]
+                    pads = node.attr.get('pads')
+                    output_pads = node.attr.get('output_pads')
+                    strides = node.attr.get('strides')
+                    dilations = node.attr.get('dilations')
+                    kernel_shape = node.attr.get('kernel_shape')
+                    input_shape = input.shape
+                    k = self.tensor_shapes[node.inputs[1]][0]
+                    window = [1 + (kernel_shape[0] - 1) * dilations[0], 1 + (kernel_shape[1] - 1) * dilations[1]]
+                    output_shape = [input_shape[0], k, \
+                        (input_shape[2]-1)*strides[0] + output_pads[0] + window[0] - pads[0] - pads[2], \
+                        (input_shape[3]-1)*strides[1] + output_pads[1] + window[1] - pads[1] - pads[3]]
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, output_shape)
