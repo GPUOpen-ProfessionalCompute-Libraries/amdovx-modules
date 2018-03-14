@@ -10,6 +10,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 # With C++11 support
 CONFIG += c++11
+LIBS += -lstdc++fs
 
 TARGET = annInferenceApp
 TEMPLATE = app

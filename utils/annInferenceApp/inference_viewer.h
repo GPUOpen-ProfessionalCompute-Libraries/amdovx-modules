@@ -6,6 +6,8 @@
 #include <QFont>
 #include <QThread>
 #include <QVector>
+#include <sys/stat.h>
+#include <experimental/filesystem>
 
 namespace Ui {
 class inference_viewer;
@@ -104,7 +106,7 @@ private:
     void startReceiver();
     void saveResults();
     void saveSummary(QString fileName);
-    void saveHTML(QString fileName);
+    void saveHTML(QString fileName, bool exportTool);
     void terminate();
 
 private:

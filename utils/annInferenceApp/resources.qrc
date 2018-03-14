@@ -6,5 +6,6 @@
   <file>images/inference_app_splash.png</file>
   <file>images/display_panel_logo.png</file>
   <file>images/perf_graph_icon.png</file>
+  <file>images/AIToolKit_400x90.png</file>
 </qresource>
 </RCC>

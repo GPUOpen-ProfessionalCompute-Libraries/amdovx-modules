@@ -588,8 +588,8 @@ void inference_viewer::saveResults()
                 if(state->topKValue == 5){
                     QString htmlFileName = fileName;
                     htmlFileName.replace(".csv",".html");
-                    saveHTML(htmlFileName);
-                    QDesktopServices::openUrl(QUrl("file://" + htmlFileName));
+                    saveHTML(htmlFileName, true);
+                    //QDesktopServices::openUrl(QUrl("file://" + htmlFileName));
                 }
             }
             QDesktopServices::openUrl(QUrl("file://" + fileName));
@@ -734,8 +734,22 @@ void inference_viewer::saveSummary(QString fileName)
     }
 }
 
-void inference_viewer::saveHTML(QString fileName)
+void inference_viewer::saveHTML(QString fileName, bool exportTool)
 {
+    if(exportTool){
+        QString FolderName = fileName;
+        FolderName.replace(".html","-ToolKit");
+        struct stat st = {};
+        if (stat(FolderName.toStdString().c_str(), &st) == -1) {
+            mkdir(FolderName.toStdString().c_str(), 0700);
+            QString ImageFolderName = FolderName; ImageFolderName +="/images";
+            QString IconFolderName = FolderName; IconFolderName +="/icons";
+            std::experimental::filesystem::copy(state->dataFolder.toStdString().c_str(), ImageFolderName.toStdString().c_str(), std::experimental::filesystem::copy_options::recursive);
+            std::experimental::filesystem::copy("./../annInferenceApp/images", IconFolderName.toStdString().c_str(), std::experimental::filesystem::copy_options::recursive);
+        }
+        FolderName += "/index.html";
+        fileName = FolderName;
+    }
     if(fileName.size() > 0) {
         QFile fileObj(fileName);
         if(fileObj.open(QIODevice::WriteOnly)) {
@@ -743,13 +757,16 @@ void inference_viewer::saveHTML(QString fileName)
             fileObj.write("\n<html>\n");
             fileObj.write("<head>\n");
             fileObj.write("\n\t<meta http-equiv=\"content-type\" content=\"text/html; charset=utf-8\"/>\n");
-            fileObj.write("\t<title>Top K Result Summary</title>\n");
+            fileObj.write("\t<title>AMD Inference ToolKit</title>\n");
+            if(exportTool){
+                fileObj.write("\t<link rel=\"icon\" href=\"icons/vega_icon_150.png\"/>\n");
+            }
             fileObj.write("\n\t<style type=\"text/css\">\n");
             fileObj.write("\t\n");
             fileObj.write("\tbody,div,table,thead,tbody,tfoot,tr,th,td,p { font-family:\"Liberation Sans\"; font-size:x-small }\n");
             fileObj.write("\ta.comment-indicator:hover + comment { background:#ffd; position:absolute; display:block; border:1px solid black; padding:0.5em;  }\n");
             fileObj.write("\ta.comment-indicator { background:red; display:inline-block; border:1px solid black; width:0.5em; height:0.5em;  }\n");
-            fileObj.write("\tcomment { display:none;  } tr:nth-of-type(odd) { background-color:LightYellow;}\n");
+            fileObj.write("\tcomment { display:none;  } tr:nth-of-type(odd) { background-color:#f2f2f2;}\n");
             fileObj.write("\t\n");
             fileObj.write("\t#myImg { border-radius: 5px; cursor: pointer; transition: 0.3s; }\n");
             fileObj.write("\t#myImg:hover { opacity: 0.7; }\n");
@@ -765,22 +782,62 @@ void inference_viewer::saveHTML(QString fileName)
             fileObj.write("\t.close:hover,.close:focus { color: #bbb; text-decoration: none; cursor: pointer; }\n");
             fileObj.write("\t@media only screen and (max-width: 400px){ .modal-content {     width: 100%; } }\n");
             fileObj.write("\t\n");
+            fileObj.write("\tbody { font-family: \"Lato\", sans-serif;}\n");
+            fileObj.write("\t.sidenav { height: 100%; width: 0; position: fixed; z-index: 1; top: 0; left: 0; background-color: #111;\n");
+            fileObj.write("\t\t overflow-x: hidden;    transition: 0.5s; padding-top: 60px;}\n");
+            fileObj.write("\t.sidenav a { padding: 8px 8px 8px 32px; text-decoration: none; font-size: 25px; color: #818181; display: block; transition: 0.3s;}\n");
+            fileObj.write("\t.sidenav a:hover { color: #f1f1f1;}\n");
+            fileObj.write("\t.sidenav .closebtn {  position: absolute; top: 0; right: 25px; font-size: 36px; margin-left: 50px;}\n");
+            fileObj.write("\t#main {  transition: margin-left .5s;  padding: 16px; }\n");
+            fileObj.write("\t@media screen and (max-height: 450px) { .sidenav {padding-top: 15px;} .sidenav a {font-size: 18px;} }\n");
+            fileObj.write("\t\n");
+            fileObj.write("\tbody {margin:0;}\n");
+            fileObj.write("\t.navbar {  overflow: hidden;  background-color: #333;  position: fixed;  top: 0;  width: 100%;}\n");
+            fileObj.write("\t.navbar a {  float: left;  display: block;  color: #f2f2f2;  text-align: center;  padding: 14px 16px;  text-decoration: none;  font-size: 17px; }\n");
+            fileObj.write("\t.navbar a:hover {  background: #ddd;  color: black;}\n");
+            fileObj.write("\t.main {  padding: 16px;  margin-top: 30px; }\n");
+            fileObj.write("\t\n");
             fileObj.write("\t</style>\n");
             fileObj.write("\n</head>\n");
             fileObj.write("\n\n<body>\n");
             fileObj.write("\t\n");
             fileObj.write("\t<div id=\"myModal\" class=\"modal\"> <span class=\"close\">&times;</span>  <img class=\"modal-content\" id=\"img01\">  <div id=\"caption\"></div> </div>\n");
             fileObj.write("\t\n");
-            fileObj.write("<hr>\n");
-            fileObj.write("\t<p><center>\n");
-            fileObj.write("\t\t<img src=\"https://s-media-cache-ak0.pinimg.com/originals/02/b0/51/02b0511658999d3c02322d6bd3a8b2e9.jpg\" alt=\"Radeon\"/>\n");
-            fileObj.write("\t\t<h1><font size=\"12\">Top K Result Summary</font></h1>\n");
-            fileObj.write("\t\t<A HREF=\"#table0\"><font size=\"5\">1. Results</font></A><br>\n");
-            fileObj.write("\t\t<A HREF=\"#table1\"><font size=\"5\">2. Result Summary</font></A><br>\n");
-            fileObj.write("\t\t<A HREF=\"#table2\"><font size=\"5\">3. Hierarchy Summary</font></A><br>\n");
-            fileObj.write("\t</center></p>\n");
-            fileObj.write("<hr>\n");
-            fileObj.write("<A NAME=\"table0\"><h1><font color=\"Maroon\">1: <em>Inference Results</em></font></h1></A>\n");
+            fileObj.write("\t<div id=\"mySidenav\" class=\"sidenav\">\n");
+            fileObj.write("\t<a href=\"javascript:void(0)\" class=\"closebtn\" onclick=\"closeNav()\">&times;</a>\n");
+            fileObj.write("\t<A HREF=\"#table1\"><font size=\"5\">Summary</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table0\"><font size=\"5\">Results</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table2\"><font size=\"5\">Hierarchy</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Graphs</font></A><br>\n");
+            fileObj.write("\t</div>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction openNav() {\n");
+            fileObj.write("\t\t\tdocument.getElementById(\"mySidenav\").style.width = \"250px\";\n");
+            fileObj.write("\t\t\tdocument.getElementById(\"main\").style.marginLeft = \"250px\";}\n");
+            fileObj.write("\t\tfunction closeNav() {\n");
+            fileObj.write("\t\t\tdocument.getElementById(\"mySidenav\").style.width = \"0\";\n");
+            fileObj.write("\t\t\tdocument.getElementById(\"main\").style.marginLeft= \"0\";}\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<div class=\"navbar\">\n");
+            fileObj.write("\t<a href=\"#\">\n");
+            fileObj.write("\t<div id=\"main\">\n");
+            fileObj.write("\t<span style=\"font-size:30px;cursor:pointer\" onclick=\"openNav()\">&#9776; Views</span>\n");
+            fileObj.write("\t</div></a>\n");
+            fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
+            fileObj.write("\t<img \" src=\"https://assets-cdn.github.com/images/modules/logos_page/GitHub-Mark.png\" alt=\"AMD Inference ToolKit\" width=\"60\" height=\"61\" />\n");
+            fileObj.write("\t</a>\n");
+            fileObj.write("\t<center>\n");
+            fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\" /> \n");
+            fileObj.write("\t</center>\n");
+            fileObj.write("\t</div>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("<A NAME=\"table0\"><h1><font color=\"Maroon\"><br><br><br><br><br><em>Inference Results</em></font></h1></A>\n");
             fileObj.write("<table cellspacing=\"0\" border=\"0\">\n");
             fileObj.write("\t<colgroup width=\"351\"></colgroup>\n");
             fileObj.write("\t<colgroup span=\"5\" width=\"92\"></colgroup>\n");
@@ -850,12 +907,22 @@ void inference_viewer::saveHTML(QString fileName)
                     else if(truth == label_5) { match = 5; }
                     truthLabel = state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown";
                     truthLabel = truthLabel.replace(QRegExp("n[0-9]{8}"),"");
+                    if(!exportTool){
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
                                  state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
                                  state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
+                    }
+                    else{
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,
+                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"images/%s\" target=\"_blank\">%s</a></td>\n",
+                                     state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
+                    }
                     text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_1);
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_2);
@@ -903,12 +970,21 @@ void inference_viewer::saveHTML(QString fileName)
                     fileObj.write(text.toStdString().c_str());
                 }
                 else {
-                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
-                                 state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
-                    fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
-                                 state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
-                    fileObj.write(text.toStdString().c_str());
+                    if(!exportTool){
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
+                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
+                                     state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
+                    }
+                    else{
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,
+                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"images/%s\" target=\"_blank\">%s</a></td>\n",
+                                     state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
+                    }
                     text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_1);
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_2);
