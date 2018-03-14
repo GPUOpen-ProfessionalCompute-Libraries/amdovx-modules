@@ -772,8 +772,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t#myImg:hover { opacity: 0.7; }\n");
             fileObj.write("\t.modal{ display: none; position: fixed; z-index: 1; padding-top: 100px; left: 0; top: 0;width: 100%;\n");
             fileObj.write("\t		height: 100%; overflow: auto; background-color: rgb(0,0,0); background-color: rgba(0,0,0,0.9); }\n");
-            fileObj.write("\t.modal-content { margin: auto; display: block; width: 80%; max-width: 700px; }\n");
-            fileObj.write("\t#caption { margin: auto; display: block; width: 80%; max-width: 700px; text-align: center; color: #ccc; padding: 10px 0; height: 150px;}\n");
+            fileObj.write("\t.modal-content { margin: auto; display: block; width: 80%; max-width: 500px; }\n");
+            fileObj.write("\t#caption { margin: auto; display: block; width: 80%; max-width: 700px; text-align: center; color: white;font-size: 18px; padding: 10px 0; height: 150px;}\n");
             fileObj.write("\t.modal-content, #caption {  -webkit-animation-name: zoom;  -webkit-animation-duration: 0.6s;\n");
             fileObj.write("\t							animation-name: zoom; animation-duration: 0.6s; }\n");
             fileObj.write("\t@-webkit-keyframes zoom {  from { -webkit-transform:scale(0) }  to { -webkit-transform:scale(1) }}\n");
@@ -954,16 +954,18 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                     truthLabel = state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown";
                     truthLabel = truthLabel.replace(QRegExp("n[0-9]{8}"),"");
                     if(!exportTool){
-                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
-                                 state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                    text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"<b>GROUND TRUTH:</b> %s<br><b>CLASSIFIED AS:</b> %s\"width=\"30\" height=\"30\"></td>\n",
+                                 i,state->dataFolder.toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str(),
+                                 truthLabel.toStdString().c_str(),labelTxt_1.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
                                  state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
                     }
                     else{
-                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,
-                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"<b>GROUND TRUTH:</b> %s<br><b>CLASSIFIED AS:</b> %s\"width=\"30\" height=\"30\"></td>\n",
+                                     i, state->imageDataFilenames[i].toStdString().c_str(),
+                                     truthLabel.toStdString().c_str(),labelTxt_1.toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                         text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"images/%s\" target=\"_blank\">%s</a></td>\n",
                                      state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
@@ -1017,15 +1019,15 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 }
                 else {
                     if(!exportTool){
-                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
-                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"<b>CLASSIFIED AS:</b> %s\"width=\"30\" height=\"30\"></td>\n",i,state->dataFolder.toStdString().c_str(),
+                                     state->imageDataFilenames[i].toStdString().c_str(),labelTxt_1.toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                         text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"file://%s/%s\" target=\"_blank\">%s</a></td>\n",state->dataFolder.toStdString().c_str(),
                                      state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                     }
                     else{
-                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"%s\"width=\"30\" height=\"30\"></td>\n",i,
-                                     state->imageDataFilenames[i].toStdString().c_str(),truthLabel.toStdString().c_str());
+                        text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"images/%s\"alt=\"<b><b>CLASSIFIED AS:</b> %s\"width=\"30\" height=\"30\"></td>\n",i,
+                                     state->imageDataFilenames[i].toStdString().c_str(),labelTxt_1.toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                         text.sprintf("\t\t<td height=\"17\" align=\"center\"><a href=\"images/%s\" target=\"_blank\">%s</a></td>\n",
                                      state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
