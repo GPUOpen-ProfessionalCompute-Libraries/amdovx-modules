@@ -16,16 +16,21 @@ INFCOM_CMD_INFERENCE_INITIALIZATION  = 301
 INFCOM_CMD_SEND_IMAGES               = 302
 INFCOM_CMD_INFERENCE_RESULT          = 303
 INFCOM_CMD_TOPK_INFERENCE_RESULT     = 304
+INFCOM_CMD_SHADOW_SEND_FOLDERNAMES   = 401
+INFCOM_CMD_SHADOW_CREATE_FOLDER      = 402
+INFCOM_CMD_SHADOW_SEND_FILES         = 403
+INFCOM_CMD_SHADOW_RESULT             = 404
 INFCOM_MODE_CONFIGURE                = 1
 INFCOM_MODE_COMPILER                 = 2
 INFCOM_MODE_INFERENCE                = 3
+INFCOM_MODE_SHADOW                   = 4
 INFCOM_EOF_MARKER                    = 0x12344321
 INFCOM_MAX_IMAGES_PER_PACKET         = 6
 INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] <folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] [-shadowSetup:<checkFolderList>,<CreateFolderList>,<files>]<folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -35,6 +40,7 @@ imageFileList = []
 outputFileName = None
 synsetFileName = None
 uploadParams = ''
+shadowParams = ''
 verbose = False
 sendFileName = 0
 topkValue = 0
@@ -69,6 +75,9 @@ while arg < len(sys.argv):
         if topkValue > 5:
             print('ERROR: topK value more than 5 not supported')
             sys.exit(1)
+        arg = arg + 1
+    elif sys.argv[arg][:13] == '-shadowSetup:':
+        shadowParams = sys.argv[arg][13:]    
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])
@@ -131,6 +140,13 @@ def sendImageFile(sock,tag,fileName):
 def sendImageFileName(sock,tag,fileName):
     buf = bytearray(fileName)
     sock.send(struct.pack('ii',tag,len(buf)) + buf + struct.pack('i',INFCOM_EOF_MARKER))
+
+def sendFileNameAndFile(sock,tag,imageDirPath,fileName):
+    fp = open(imageDirPath+fileName,'r')
+    buf = bytearray(fileName) + fp.read()
+    fp.close()
+    hdr = (len(fileName)<<16)| (len(buf)-len(fileName))
+    sock.send(struct.pack('ii',tag,hdr) + buf + struct.pack('i',INFCOM_EOF_MARKER))
 
 def getConfig(host,port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -347,9 +363,98 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
         fp.close()
     return resultList
 
+def RunShadow(host,port,imageDirPath,shadowParams):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((host, port))
+    except:
+        print('ERROR: unable to connect to %s:%d' % (host,port))
+        sys.exit(1)
+    checkFolderCount = 0
+    createFolderCount = 0
+    sendFilesCount = 0     
+    checkFolder,CreateFolder,Sendfiles = shadowParams.split(',')
+    if checkFolder != '':
+        fp = open(checkFolder, 'r')
+        checkFolderList = fp.readlines()
+        fp.close()
+    if CreateFolder != '':
+        fp = open(CreateFolder, 'r')
+        CreateFolderList = fp.readlines()
+        fp.close()
+    if Sendfiles != '':
+        fp = open(Sendfiles, 'r')
+        SendfilesList = fp.readlines()
+        fp.close()
+
+    while True:
+        info = recvpkt(sock)
+        if info[0] != INFCOM_MAGIC:
+            print('RECV',info)
+            print('ERROR: missing INFCOM_MAGIC')
+            break
+        if info[1] == INFCOM_CMD_DONE:
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
+            break
+        elif info[1] == INFCOM_CMD_SEND_MODE:
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_SHADOW,),''))            
+        elif info[1] == INFCOM_CMD_SHADOW_RESULT:
+            sendpkt(sock,info)
+            count = info[2][0]
+            mode = info[2][1]
+            if not INFCOM_CMD_SHADOW_SEND_FOLDERNAMES <= mode <= INFCOM_CMD_SHADOW_SEND_FILES:
+                print('ERROR: Shadow:RESULT invalid mode')
+                break
+            for i in range(count):
+                tag = info[2][2 + i * 2 + 0]
+                status = info[2][2 + i * 2 + 1]
+                if tag >= 0:
+                    if status < 0:
+                        print('Shadow Check failed for mode %d and tag %d' % (mode, tag))
+                else:
+                    print('ERROR:SHADOW RECEIVED INCORRECT RESULT tag:%d index: %d' % (tag, i))
+
+        elif info[1] == INFCOM_CMD_SHADOW_SEND_FOLDERNAMES:
+            count = min(info[2][0], len(checkFolderList)-checkFolderCount)
+            first = True
+            if count < 1 and first:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_SEND_FOLDERNAMES,(-1,),''))
+                first = False
+            else:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_SEND_FOLDERNAMES,(count,),''))
+                for i in range(count):
+                    tag = checkFolderCount
+                    sendImageFileName(sock,tag,checkFolderList[tag][:-1])
+                    checkFolderCount = checkFolderCount + 1
+        elif info[1] == INFCOM_CMD_SHADOW_CREATE_FOLDER:
+            count = min(info[2][0], len(CreateFolderList)-createFolderCount)
+            if count < 1:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_CREATE_FOLDER,(-1,),''))
+            else:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_CREATE_FOLDER,(count,),''))
+                for i in range(count):
+                    tag = createFolderCount
+                    sendImageFileName(sock,tag,CreateFolderList[tag][:-1])
+                    createFolderCount = createFolderCount + 1
+        elif info[1] == INFCOM_CMD_SHADOW_SEND_FILES:
+            count = min(info[2][0], len(SendfilesList)-sendFilesCount)
+            if count < 1:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_SEND_FILES,(-1,),''))
+            else:
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_SEND_FILES,(count,),''))
+                for i in range(count):
+                    tag = sendFilesCount
+                    sendFileNameAndFile(sock,tag,imageDirPath,SendfilesList[tag][:-1])
+                    sendFilesCount = sendFilesCount + 1
+
 # get configuration from server
 config = getConfig(host,port)
 GPUs = config[0]
+# run shadow
+if shadowParams != '':
+    RunShadow(host,port,imageDirPath,shadowParams)
+    print('OK: shadow configured')
+
 if modelName == '':
     print('OK: server has ' + str(GPUs) + ' GPUs')
     for v in config[1]:

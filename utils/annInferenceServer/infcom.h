@@ -56,6 +56,26 @@
 //    client: InfComCommand:INFCOM_CMD_DONE
 //    client: (disconnect)
 
+// shadow protocol
+//    client: (connect)
+//  * server: InfComCommand:INFCOM_CMD_SEND_MODE
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_SHADOW,0} [message=options]
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_SEND_FOLDERNAMES with data={count}
+//    client: for each folder: {<tag:32-bit> <size:32-bit> <folderame> <eof-marker:32-bit>}
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_RESULT with data={count, INFCOM_CMD_SHADOW_SEND_FOLDERNAMES, ,<folder_tag0>,<present>,<folder_tag1>,<present>,...}}
+//  * Repeat above commands
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_CREATE_FOLDER with data={count}
+//    client: for each folder: {<tag:32-bit> <size:32-bit> <foldername> <eof-marker:32-bit>}
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_RESULT with data={count, INFCOM_CMD_SHADOW_CREATE_FOLDER, <tag0>,<created/failed>,<tag1>,<created/failed>,...}}
+//  * Repeat above commands
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_SEND_FILES with data={count}
+//    client: for each folder: {<tag:32-bit> <size:32-bit> <foldername> <eof-marker:32-bit>}
+//  * server: InfComCommand:INFCOM_CMD_SHADOW_RESULT with data={count, INFCOM_CMD_SHADOW_SEND_FILES, <tag0>,<copied/failed>,<tag1>,<copied/failed>,...}}
+//  * Repeat above commands
+//  * server: InfComCommand:INFCOM_CMD_DONE
+//    client: InfComCommand:INFCOM_CMD_DONE
+//    client: (disconnect)
+
 // InfComCommand.magic
 #define INFCOM_MAGIC                           0x02388e50
 
@@ -64,6 +84,7 @@
 #define INFCOM_CMD_SEND_MODE                   1
 #define INFCOM_CMD_CONFIG_INFO                 101
 #define INFCOM_CMD_MODEL_INFO                  102
+#define INFCOM_CMD_SHADOWFOLDER_INFO           103
 #define INFCOM_CMD_SEND_MODELFILE1             201
 #define INFCOM_CMD_SEND_MODELFILE2             202
 #define INFCOM_CMD_COMPILER_STATUS             203
@@ -71,11 +92,18 @@
 #define INFCOM_CMD_SEND_IMAGES                 302
 #define INFCOM_CMD_INFERENCE_RESULT            303
 #define INFCOM_CMD_TOPK_INFERENCE_RESULT       304
+#define INFCOM_CMD_SHADOW_SEND_FOLDERNAMES     401
+#define INFCOM_CMD_SHADOW_CREATE_FOLDER        402
+#define INFCOM_CMD_SHADOW_SEND_FILES           403
+#define INFCOM_CMD_SHADOW_RESULT               404
+
 
 // InfComCommand.data[0] for INFCOM_CMD_SEND_MODE
 #define INFCOM_MODE_CONFIGURE                  1
 #define INFCOM_MODE_COMPILER                   2
 #define INFCOM_MODE_INFERENCE                  3
+#define INFCOM_MODE_SHADOW                     4
+
 
 // EOF marker
 #define INFCOM_EOF_MARKER                      0x12344321
