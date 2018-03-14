@@ -46,7 +46,9 @@ endif(OpenCL_FOUND)
 
 if(OpenCL_FOUND AND miopengemm_FOUND AND miopen_FOUND)
     add_subdirectory (vx_nn)
-    add_subdirectory (utils/annInferenceServer)
+    if(OpenCV_FOUND)
+        add_subdirectory (utils/annInferenceServer)
+    endif()
 endif()
 
 if(OpenCV_FOUND)
