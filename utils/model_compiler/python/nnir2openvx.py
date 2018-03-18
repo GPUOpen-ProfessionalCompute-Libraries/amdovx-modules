@@ -484,7 +484,7 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
 """ % (node.inputs[0], node.inputs[3], node.inputs[4], node.inputs[1], node.inputs[2], node.attr.get('epsilon'), node.outputs[0]))
-            elif node.type == 'lrn':
+            elif node.type == 'lrn' and (node.attr.get('bias') == 1):
                 f.write( \
 """
     { vx_node node = vxNormalizationLayer(graph, %s, VX_NN_NORMALIZATION_SAME_MAP, %d, %ef, %ef, %s);
@@ -492,6 +492,14 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
 """ % (node.inputs[0], node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0]))
+            elif node.type == 'lrn' and (node.attr.get('bias') != 1):
+                f.write( \
+"""
+    { vx_node node = vxNormalizationLayer(graph, %s, VX_NN_NORMALIZATION_SAME_MAP, %d, %ef, %ef, %s, %s);
+      ERROR_CHECK_OBJECT(node);
+      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""" % (node.inputs[0], node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0], node.attr.get('bias')))
             elif node.type == 'slice':
                 f.write( \
 """
