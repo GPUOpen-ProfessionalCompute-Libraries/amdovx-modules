@@ -345,7 +345,7 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
-""" % (pads[0], pads[1], dilations[0], dilations[1], \
+""" % (pads[0], pads[1], dilations[0] - 1, dilations[1] - 1, \
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
             elif node.type == 'conv_transpose':
                 pads = node.attr.get('pads')
@@ -363,7 +363,7 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
-""" % (pads[0], pads[1], output_pads[0], output_pads[1], \
+""" % (pads[0], pads[1], output_pads[0] - 1, output_pads[1] - 1, \
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
             elif node.type == 'gemm':
                 alpha = node.attr.get('alpha')
@@ -488,10 +488,19 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
                 f.write( \
 """
     { vx_node node = vxNormalizationLayer(graph, %s, VX_NN_NORMALIZATION_SAME_MAP, %d, %ef, %ef, %s);
-      ERROR_CHECK_OBJECT(node);
+""" % (node.inputs[0], node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0]))
+                if (node.attr.get('bias') != 1.0):
+                    f.write( \
+"""   vx_float32 bias = %s;
+      vx_scalar s_bias = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &bias, sizeof(bias));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 6, (vx_reference) s_bias));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_bias));
+""" % (node.attr.get('bias')))
+                f.write( \
+"""   ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
-""" % (node.inputs[0], node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0]))
+""")                        
             elif node.type == 'slice':
                 f.write( \
 """
