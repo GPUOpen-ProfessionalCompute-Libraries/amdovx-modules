@@ -881,14 +881,16 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t</tr>\n");
             fileObj.write("\t</table>\n<br><br><br>\n");
             fileObj.write("\t<table align=\"center\">\n \t<col width=\"285\">\n \t<col width=\"60\">\n \t<col width=\"320\">\n \t<col width=\"60\">\n<tr>\n");
-            fileObj.write("\t<td><font color=\"black\" size=\"4\">Total <b>Top K Match</b></font></td>\n");
+            text.sprintf("\t<td><font color=\"black\" size=\"4\">Total <b>Top %d Match</b></font></td>\n\n",state->topKValue);
+            fileObj.write(text.toStdString().c_str());
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",passCount);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Total <b>Mismatch</b></font></td>\n");
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",state->totalMismatch);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n<tr>\n");
-            fileObj.write("\t<td><font color=\"black\" size=\"4\">Inference <b>Accuracy on Top K</b></font></td>\n");
+            text.sprintf("\t<td><font color=\"black\" size=\"4\">Inference <b>Accuracy on Top %d</b></font></td>\n",state->topKValue);
+            fileObj.write(text.toStdString().c_str());
             float accuracyPer = ((float)passCount / netSummaryImages);
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f</b></font></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
@@ -897,7 +899,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f</b></font></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n<tr>\n");
-            fileObj.write("\t<td><font color=\"black\" size=\"4\">Average Pass Probability for Top K</font></td>\n");
+            text.sprintf("\t<td><font color=\"black\" size=\"4\">Average Pass Probability for Top %d</font></td>\n",state->topKValue);
+            fileObj.write(text.toStdString().c_str());
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.4f</b></font></td>\n",avgPassProb);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Average mismatch Probability for Top 1</font></td>\n");
