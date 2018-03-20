@@ -493,7 +493,8 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
                     f.write( \
 """   vx_float32 bias = %s;
       vx_scalar s_bias = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &bias, sizeof(bias));
-      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 6, (vx_reference) s_bias)); 
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 6, (vx_reference) s_bias));
+      ERROR_CHECK_STATUS(vxReleaseScalar(s_bias));
 """ % (node.attr.get('bias')))
                 f.write( \
 """   ERROR_CHECK_OBJECT(node);
