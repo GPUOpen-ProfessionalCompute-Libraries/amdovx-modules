@@ -843,12 +843,13 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<div id=\"main\">\n");
             fileObj.write("\t<span style=\"font-size:30px;cursor:pointer\" onclick=\"openNav()\">&#9776; Views</span>\n");
             fileObj.write("\t</div></a>\n");
+            fileObj.write("\t<a href=\"https://www.amd.com/en\" target=\"_blank\">\n");
+            fileObj.write("\t<img \" src=\"icons/AMD_logo_white.png\" alt=\"AMD\" height=\"61\" /></a>\n");
+            fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
+            fileObj.write("\t<img \" src=\"icons/vega_icon_150.png\" alt=\"GPUopen\" height=\"61\" /></a>\n");
             fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
-            fileObj.write("\t<img \" src=\"https://assets-cdn.github.com/images/modules/logos_page/GitHub-Mark.png\" alt=\"AMD Inference ToolKit\" width=\"60\" height=\"61\" />\n");
-            fileObj.write("\t</a>\n");
-            fileObj.write("\t<center>\n");
-            fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\" /> \n");
-            fileObj.write("\t</center>\n");
+            fileObj.write("\t<img \" src=\"icons/GitHub_logo_white.png\" alt=\"AMD GitHub\" height=\"61\" /></a>\n");
+            fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\"/> \n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
 
