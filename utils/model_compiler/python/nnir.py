@@ -373,7 +373,7 @@ class IrGraph:
                     variance = np.frombuffer(self.binaries[node.inputs[4]], dtype=np.float32)
                     epsilon = node.attr.get('epsilon')
                     scale = scale / np.sqrt(variance + epsilon)
-                    offset = offset - mean / np.sqrt(variance + epsilon)
+                    offset = offset - mean * scale
                     node.type = 'muladd'
                     self.addBinary(node.inputs[1], np.getbuffer(scale))
                     self.addBinary(node.inputs[2], np.getbuffer(offset))
