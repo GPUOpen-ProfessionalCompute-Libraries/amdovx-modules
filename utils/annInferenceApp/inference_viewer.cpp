@@ -1188,47 +1188,69 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("</table>\n");
 
             // hierarchy
-            fileObj.write("<A NAME=\"table2\"><h1><font color=\"DodgerBlue\" size=\"6\"><em>Hierarchy Summary</em></font></h1></A>\n");
-            fileObj.write("<table cellspacing=\"0\" border=\"0\">\n");
-            fileObj.write("\t<colgroup width=\"351\"></colgroup>\n");
-            fileObj.write("\t<colgroup span=\"5\" width=\"92\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"114\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
-            fileObj.write("\t<colgroup span=\"6\" width=\"811\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"51\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"74\"></colgroup>\n");
-            fileObj.write("\t<colgroup width=\"63\"></colgroup>\n");
+            fileObj.write("<A NAME=\"table2\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Hierarchy Summary</em></font></h1></A>\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 90%\">\n");
             fileObj.write("\t<tr>\n");
-            fileObj.write("\t\t<td height=\"17\" align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Probability</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 1 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 1 Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 2 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 2 Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 3 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 3 Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 4 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 4 Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 5 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 5 Fail</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 6 Pass</b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b>Category 6 Fail</b></td>\n");
             fileObj.write("\t\t</tr>\n");
 
             //Dump values here in a loop
-            fileObj.write("\t\t<tr>\n");
-            fileObj.write("\t\t</tr>\n");
 
+
+            float f=0.99;
+            for(int i = 99; i >= 0; i--){
+                fileObj.write("\t\t<tr>\n");
+                text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",f);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKPassFail[i][0]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKPassFail[i][1]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][0]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][1]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][2]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][3]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][4]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][5]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][6]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][7]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][8]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][9]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][10]);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topKHierarchyPassFail[i][11]);
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t\t</tr>\n");
+                f=f-0.01;
+               }
             fileObj.write("</table>\n");
+
+            // hierarchy
+            fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><em>Graph</em></font></h1></A>\n");
 
             fileObj.write("\n</body>\n");
             fileObj.write("\n</html>\n");
