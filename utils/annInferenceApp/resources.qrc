@@ -1,11 +1,10 @@
-<!DOCTYPE RCC><RCC version="1.0">
-<qresource>
-  <file>images/vega_icon_150.png</file>
-  <file>images/vega_icon_200.png</file>
-  <file>images/vega_icon_250.png</file>
-  <file>images/inference_app_splash.png</file>
-  <file>images/display_panel_logo.png</file>
-  <file>images/perf_graph_icon.png</file>
-  <file>images/AIToolKit_400x90.png</file>
-</qresource>
+<RCC>
+    <qresource prefix="/">
+        <file>images/vega_icon_150.png</file>
+        <file>images/vega_icon_200.png</file>
+        <file>images/vega_icon_250.png</file>
+        <file>images/inference_app_splash.png</file>
+        <file>images/display_panel_logo.png</file>
+        <file>images/AIToolKit_400x90.png</file>
+    </qresource>
 </RCC>

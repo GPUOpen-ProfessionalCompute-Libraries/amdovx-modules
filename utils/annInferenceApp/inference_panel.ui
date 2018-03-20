@@ -58,26 +58,10 @@ font: 75 14pt &quot;Calibri&quot;;</string>
     <string>Images per second</string>
    </property>
   </widget>
-  <widget class="QLabel" name="per_icon_label">
-   <property name="geometry">
-    <rect>
-     <x>40</x>
-     <y>210</y>
-     <width>51</width>
-     <height>61</height>
-    </rect>
-   </property>
-   <property name="text">
-    <string/>
-   </property>
-   <property name="pixmap">
-    <pixmap resource="resources.qrc">:/images/perf_graph_icon.png</pixmap>
-   </property>
-  </widget>
   <widget class="QLabel" name="performace_graph_Label">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>40</x>
      <y>220</y>
      <width>231</width>
      <height>41</height>
