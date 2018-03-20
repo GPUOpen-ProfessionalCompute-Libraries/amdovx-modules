@@ -39,6 +39,7 @@ list(APPEND SOURCES
 	server.cpp
 	main.cpp
         profiler.cpp
+        shadow.cpp
 )
 
 add_executable(annInferenceServer ${SOURCES})
