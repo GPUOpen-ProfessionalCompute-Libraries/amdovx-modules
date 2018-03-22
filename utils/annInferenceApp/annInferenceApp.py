@@ -267,7 +267,6 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
     resultCount = 0
     resultList = [-1] * len(imageFileList)
     boundingBoxlList = [[] for i in  range(len(imageFileList))]
-    print('INFO: number of input files: ', len(imageFileList))
     if synsetFileName:
         fp = open(synsetFileName, 'r')
         synsetList = fp.readlines()

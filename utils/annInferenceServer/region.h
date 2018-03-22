@@ -54,7 +54,6 @@ private:
     void SoftmaxRegion(float *input, int classes, float *output);
     int argmax(float *a, int n);
     float box_iou(box a, box b);              // intersection over union
-
 };
 
 #endif // YOLOREGION_H

@@ -42,7 +42,6 @@
 #endif
 
 // Bounding box region:: todo add this as parameters to app and pass it to server
-#define BOUNDING_BOX_DETECTIONS             1
 #define BOUNDING_BOX_CONFIDENCE_THRESHHOLD  0.2
 #define BOUNDING_BOX_NMS_THRESHHOLD         0.4
 #define BOUNDING_BOX_NUMBER_OF_CLASSES      20
