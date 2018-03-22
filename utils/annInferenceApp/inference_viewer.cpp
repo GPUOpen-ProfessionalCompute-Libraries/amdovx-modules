@@ -750,6 +750,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
         FolderName += "/index.html";
         fileName = FolderName;
     }
+
     if(fileName.size() > 0) {
         QFile fileObj(fileName);
         if(fileObj.open(QIODevice::WriteOnly)) {
@@ -822,19 +823,19 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t\tdocument.getElementById(\"main\").style.marginLeft= \"0\";}\n");
             fileObj.write("\t\tfunction myreload() { location.reload();}\n");
             fileObj.write("\t\n");
-            fileObj.write("\t function sortTable(coloum,descending) {\n");
-            fileObj.write("\t      var table, rows, switching, i, x, y, shouldSwitch;\n");
-            fileObj.write("\t      table = document.getElementById(id=\"resultsTable\"); switching = true;\n");
-            fileObj.write("\t       while (switching) {	switching = false; rows = table.getElementsByTagName(\"TR\");\n");
-            fileObj.write("\t         for (i = 1; i < (rows.length - 1); i++) { shouldSwitch = false;\n");
-            fileObj.write("\t            x = rows[i].getElementsByTagName(\"TD\")[coloum];\n");
-            fileObj.write("\t            y = rows[i + 1].getElementsByTagName(\"TD\")[coloum];\n");
-            fileObj.write("\t            if(descending){if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {\n");
-            fileObj.write("\t                   shouldSwitch= true;	break;}}\n");
-            fileObj.write("\t            else{if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {\n");
-            fileObj.write("\t                    shouldSwitch= true;	break;}}}\n");
-            fileObj.write("\t            if (shouldSwitch) {	rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);\n");
-            fileObj.write("\t                    switching = true;}}}\n");
+            fileObj.write("\t\tfunction sortTable(coloum,descending) {\n");
+            fileObj.write("\t\tvar table, rows, switching, i, x, y, shouldSwitch;\n");
+            fileObj.write("\t\ttable = document.getElementById(id=\"resultsTable\"); switching = true;\n");
+            fileObj.write("\t\twhile (switching) {	switching = false; rows = table.getElementsByTagName(\"TR\");\n");
+            fileObj.write("\t\t\tfor (i = 1; i < (rows.length - 1); i++) { shouldSwitch = false;\n");
+            fileObj.write("\t\t\t\tx = rows[i].getElementsByTagName(\"TD\")[coloum];\n");
+            fileObj.write("\t\t\t\ty = rows[i + 1].getElementsByTagName(\"TD\")[coloum];\n");
+            fileObj.write("\t\t\t\tif(descending){if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {\n");
+            fileObj.write("\t\t\t\t\tshouldSwitch= true;	break;}}\n");
+            fileObj.write("\t\t\t\telse{if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {\n");
+            fileObj.write("\t\t\t\t\tshouldSwitch= true;	break;}}}\n");
+            fileObj.write("\t\t\t\tif (shouldSwitch) {	rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);\n");
+            fileObj.write("\t\t\t\t\tswitching = true;}}}\n");
             fileObj.write("\t\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\t\n");
