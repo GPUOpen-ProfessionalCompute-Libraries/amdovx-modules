@@ -16,14 +16,11 @@ INFCOM_CMD_INFERENCE_INITIALIZATION  = 301
 INFCOM_CMD_SEND_IMAGES               = 302
 INFCOM_CMD_INFERENCE_RESULT          = 303
 INFCOM_CMD_TOPK_INFERENCE_RESULT     = 304
-<<<<<<< HEAD
 INFCOM_CMD_BB_INFERENCE_RESULT       = 305
-=======
 INFCOM_CMD_SHADOW_SEND_FOLDERNAMES   = 401
 INFCOM_CMD_SHADOW_CREATE_FOLDER      = 402
 INFCOM_CMD_SHADOW_SEND_FILES         = 403
 INFCOM_CMD_SHADOW_RESULT             = 404
->>>>>>> 8a07fcaa9b67bf6231236233e71238ddcfaf7eda
 INFCOM_MODE_CONFIGURE                = 1
 INFCOM_MODE_COMPILER                 = 2
 INFCOM_MODE_INFERENCE                = 3
@@ -34,11 +31,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-<<<<<<< HEAD
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] [-detect] <folder>|<file(s)>')
-=======
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] [-shadowSetup:<checkFolderList>,<CreateFolderList>,<files>]<folder>|<file(s)>')
->>>>>>> 8a07fcaa9b67bf6231236233e71238ddcfaf7eda
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-detect] [-topK:top_k] [-shadowSetup:<checkFolderList>,<CreateFolderList>,<files>]<folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -85,13 +78,11 @@ while arg < len(sys.argv):
             print('ERROR: topK value more than 5 not supported')
             sys.exit(1)
         arg = arg + 1
-<<<<<<< HEAD
     elif sys.argv[arg] == '-detect':
         detectBB = 1
-=======
+        arg = arg + 1
     elif sys.argv[arg][:13] == '-shadowSetup:':
         shadowParams = sys.argv[arg][13:]    
->>>>>>> 8a07fcaa9b67bf6231236233e71238ddcfaf7eda
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])
