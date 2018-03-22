@@ -19,13 +19,12 @@ struct rect
     float left, top, right, bottom;
 };
 
-struct YoloDetectedObject
+typedef struct _ObjectBB
 {
-    int left, top, right, bottom;
-    float   confidence;
-    int     objType;
-    std::string objClassName;
-};
+    float x, y, w, h;
+    float confidence;
+    int   label;
+} ObjectBB;
 
 
 class CYoloRegion
@@ -35,14 +34,15 @@ public:
     ~CYoloRegion();
 
     void Initialize(int c, int h, int w, int size);
-    int GetObjectDetections(float* in_data, std::vector<std::pair<float, float>>& biases, int c, int h, int w,
+    int GetObjectDetections(float* in_data, const float *biases, int c, int h, int w,
                                int classes, int imgw, int imgh,
                                float thresh, float nms_thresh,
                                int blockwd,
-                               std::vector<YoloDetectedObject> &objects);
+                               std::vector<ObjectBB> &objects);
 private:
     int Nb;              // number of bounding boxes
     bool initialized;
+    int  frameNum;
     unsigned int outputSize;
     int totalObjectsPerClass;
     float *output;

@@ -16,6 +16,7 @@ INFCOM_CMD_INFERENCE_INITIALIZATION  = 301
 INFCOM_CMD_SEND_IMAGES               = 302
 INFCOM_CMD_INFERENCE_RESULT          = 303
 INFCOM_CMD_TOPK_INFERENCE_RESULT     = 304
+INFCOM_CMD_BB_INFERENCE_RESULT       = 305
 INFCOM_MODE_CONFIGURE                = 1
 INFCOM_MODE_COMPILER                 = 2
 INFCOM_MODE_INFERENCE                = 3
@@ -25,7 +26,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] <folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-topK:top_k] [-detect] <folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -38,6 +39,7 @@ uploadParams = ''
 verbose = False
 sendFileName = 0
 topkValue = 0
+detectBB = 0
 arg = 1
 while arg < len(sys.argv):
     if sys.argv[arg][:6] == '-host:':
@@ -69,6 +71,9 @@ while arg < len(sys.argv):
         if topkValue > 5:
             print('ERROR: topK value more than 5 not supported')
             sys.exit(1)
+        arg = arg + 1
+    elif sys.argv[arg] == '-detect':
+        detectBB = 1
         arg = arg + 1
     elif sys.argv[arg][:1] == '-':
         print('ERROR: invalid option: ' + sys.argv[arg])
@@ -235,7 +240,7 @@ def uploadModel(host,port,uploadParams):
     model = [modelName, [int(par[2]),int(par[3]),int(par[4])], [ow,oh,oc], int(par[6]), (float(par[7]),float(par[8]),float(par[9]),float(par[10]),float(par[11]),float(par[12]))]
     return model
 
-def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,verbose):
+def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,detectBB,verbose):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         sock.connect((host, port))
@@ -245,6 +250,8 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
     sendCount = 0
     resultCount = 0
     resultList = [-1] * len(imageFileList)
+    boundingBoxlList = [[] for i in  range(len(imageFileList))]
+    print('INFO: number of input files: ', len(imageFileList))
     if synsetFileName:
         fp = open(synsetFileName, 'r')
         synsetList = fp.readlines()
@@ -263,7 +270,7 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
             break
         elif info[1] == INFCOM_CMD_SEND_MODE:
-            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_INFERENCE,GPUs,model[1][0],model[1][1],model[1][2],model[2][0],model[2][1],model[2][2],sendFileName,topkValue),model[0]))
+            sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SEND_MODE,(INFCOM_MODE_INFERENCE,GPUs,model[1][0],model[1][1],model[1][2],model[2][0],model[2][1],model[2][2],sendFileName,topkValue,detectBB),model[0]))
         elif info[1] == INFCOM_CMD_INFERENCE_INITIALIZATION:
             sendpkt(sock,info)
             print('OK: ' + info[3])
@@ -336,6 +343,31 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
             if resultCount >= len(imageFileList):
                 sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
                 break
+        elif info[1] == INFCOM_CMD_BB_INFERENCE_RESULT:
+            sendpkt(sock,info)
+            tag   = info[2][0]
+            count = (info[2][1] & 0xFFFF)
+            totalcount = (info[2][1]>>16)
+            #print('INFO:' + str(info))
+            if count < 0 or tag < 0 or totalcount < 0:
+                print('ERROR: INFCOM_CMD_BB_INFERENCE_RESULT ' + str(info))
+                break
+            for i in range(count):
+                box = [info[2][4*i+2], info[2][4*i+3], info[2][4*i+4], info[2][4*i+5]]
+                boundingBoxlList[tag].append(box)
+            if (len(boundingBoxlList[tag]) >= totalcount):
+                resultCount = resultCount + 1
+                line = '%s' % (imageFileList[tag])
+                for i in range(totalcount):
+                    box = boundingBoxlList[tag][i]
+                    line = line + ' Box: %d (%f %f %f %f ),%s(%f)' %(i, (box[0]&0xFFFF)*(1.0/32767.0), (box[0]>>16)*(1.0/32767.0), (box[1]&0xFFFF)*(1.0/32767.0), (box[1]>>16)*(1.0/32767.0), synsetList[box[3]], box[2]*(1.0/0x3FFFFFFF))
+                if fp:
+                    fp.write(line + '\n')
+                if verbose or not fp:
+                    print(line)
+            if resultCount >= len(imageFileList):
+                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_DONE,(0,),''))
+                break
         else:
             sendpkt(sock,info)
             print(info)
@@ -378,6 +410,6 @@ if len(imageFileList) > 0:
     if modelName == '':
         print('ERROR: no model available to run inference')
         sys.exit(1)
-    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,verbose)
+    runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,outputFileName,sendFileName,topkValue,detectBB,verbose)
     if outputFileName:
         print('OK: saved inference results in ' + outputFileName)

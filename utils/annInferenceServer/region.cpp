@@ -1,8 +1,7 @@
-#include "yoloregion.h"
+#include "region.h"
 #include "common.h"
 
 // biases for Nb=5
-//const float biases[10]             = {1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52};
 const std::string classNames20[]    = { "aeroplane","bicycle","bird","boat","bottle","bus","car","cat","chair","cow","diningtable","dog","horse","motorbike","person","pottedplant","sheep","sofa","train","tvmonitor"};
 
 // helper functions
@@ -93,6 +92,7 @@ CYoloRegion::CYoloRegion()
 {
     initialized = false;
     outputSize = 0;
+    frameNum = 0;
 }
 
 CYoloRegion::~CYoloRegion()
@@ -116,16 +116,16 @@ void CYoloRegion::Initialize(int c, int h, int w, int classes)
 }
 
 // Same as doing inference for this layer
-int CYoloRegion::GetObjectDetections(float* in_data, std::vector<std::pair<float, float>>& biases, int c, int h, int w,
+int CYoloRegion::GetObjectDetections(float* in_data, const float *biases, int c, int h, int w,
                            int classes, int imgw, int imgh,
                            float thresh, float nms_thresh,
                            int blockwd,
-                           std::vector<YoloDetectedObject> &objects)
+                           std::vector<ObjectBB> &objects)
 {
     objects.clear();
 
     int size = 4 + classes + 1;
-    Nb = biases.size();
+    Nb = 5;//biases.size();
     if(!initialized)
     {
         Initialize(c, h, w, classes);
@@ -152,8 +152,8 @@ int CYoloRegion::GetObjectDetections(float* in_data, std::vector<std::pair<float
 
         boxes[i].x = (col + Sigmoid(output[index + 0])) / blockwd;      // box x location
         boxes[i].y = (row + Sigmoid(output[index + 1])) / blockwd;      //  box y location
-        boxes[i].w = exp(output[index + 2]) * biases[n].first/ blockwd; //w;
-        boxes[i].h = exp(output[index + 3]) * biases[n].second / blockwd; //h;
+        boxes[i].w = exp(output[index + 2]) * biases[n*2]/ blockwd; //w;
+        boxes[i].h = exp(output[index + 3]) * biases[n*2+1] / blockwd; //h;
 
         //Scale
         output[index + 4] = Sigmoid(output[index + 4]);
@@ -204,30 +204,30 @@ int CYoloRegion::GetObjectDetections(float* in_data, std::vector<std::pair<float
         {
             box b = boxes[i];
 
+#if 0
+            // boundingbox to actual coordinates
             printf("%f %f %f %f\n", b.x, b.y, b.w, b.h);
-
             int left  = (b.x-b.w/2.)*imgw;
             int right = (b.x+b.w/2.)*imgw;
             int top   = (b.y-b.h/2.)*imgh;
             int bot   = (b.y+b.h/2.)*imgh;
-
             if(left < 0) left = 0;
             if(right > imgw-1) right = imgw-1;
             if(top < 0) top = 0;
             if(bot > imgh-1) bot = imgh-1;
-
-
-            YoloDetectedObject obj;
-            obj.left = left;
-            obj.top = top;
-            obj.right = right;
-            obj.bottom = bot;
+#endif
+            ObjectBB obj;
+            obj.x = b.x;
+            obj.y = b.y;
+            obj.w = b.w;
+            obj.h = b.h;
             obj.confidence = prob;
-            obj.objType = iclass;
-            obj.objClassName = classNames20[iclass];
+            obj.label = iclass;
+            //std::cout << "BoundingBox(xywh): "<< i << "for frame: "<< frameNum << " (" << b.x << " " << b.y << " "<< b.w << " "<< b.h << ") " << "confidence: " << prob << " lablel: " << iclass << std::endl;
             objects.push_back(obj);
         }
     }
+    frameNum++;
 
     return 0;
 }
