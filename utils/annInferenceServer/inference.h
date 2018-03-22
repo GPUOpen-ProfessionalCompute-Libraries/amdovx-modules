@@ -4,6 +4,7 @@
 #include "arguments.h"
 #include "infcom.h"
 #include "profiler.h"
+#include "region.h"
 #include <string>
 #include <tuple>
 #include <queue>
@@ -39,6 +40,12 @@
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
+
+// Bounding box region:: todo add this as parameters to app and pass it to server
+#define BOUNDING_BOX_CONFIDENCE_THRESHHOLD  0.2
+#define BOUNDING_BOX_NMS_THRESHHOLD         0.4
+#define BOUNDING_BOX_NUMBER_OF_CLASSES      20
+
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -218,10 +225,14 @@ private:
     int inputSizeInBytes;
     int outputSizeInBytes;
     bool deviceLockSuccess;
+    int detectBoundingBoxes;
+    CYoloRegion *region;
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
     MessageQueue<std::tuple<int,int>>     outputQ;
     MessageQueue<std::vector<unsigned int>>        outputQTopk;      // outputQ for topK vec<tag, top_k labels>
+    MessageQueue<std::vector<ObjectBB>> OutputQBB;
+
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int sstride, unsigned int dwidth, unsigned int dheight);

@@ -16,6 +16,7 @@
 #endif
 #endif
 
+const float BB_biases[10]             = {1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52};     // bounding box biases
 
 // sort indexes based on comparing values in v
 template <typename T>
@@ -29,7 +30,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] },
+      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
@@ -42,7 +43,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
-      queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
+      queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr },
+      region { nullptr }
 #if  USE_ADVANCED_MESSAGE_Q
     , inputQ(MAX_INPUT_QUEUE_DEPTH)
 #endif
@@ -57,6 +59,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     batchSize = args->getBatchSize();
     inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
     outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    if (detectBoundingBoxes)
+        region = new CYoloRegion();
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
@@ -163,6 +167,7 @@ InferenceEngine::~InferenceEngine()
     if(moduleHandle) {
         dlclose(moduleHandle);
     }
+    if (region) delete region;
     PROFILER_SHUTDOWN();
 }
 
@@ -701,66 +706,132 @@ int InferenceEngine::run()
         if(resultCountAvailable > 0) {
             didSomething = true;
             while(resultCountAvailable > 0) {
-                if (topK < 1){
-                    int resultCount = std::min(resultCountAvailable, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
-                    InfComCommand cmd = {
-                        INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
-                    };
-                    for(int i = 0; i < resultCount; i++) {
-                        std::tuple<int,int> result;
-                        outputQ.dequeue(result);
-                        int tag = std::get<0>(result);
-                        int label = std::get<1>(result);
-                        if(tag < 0) {
-                            endOfSequence = true;
-                            resultCount = i;
+                if (!detectBoundingBoxes){
+                    if (topK < 1){
+                        int resultCount = std::min(resultCountAvailable, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
+                        InfComCommand cmd = {
+                            INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
+                        };
+                        for(int i = 0; i < resultCount; i++) {
+                            std::tuple<int,int> result;
+                            outputQ.dequeue(result);
+                            int tag = std::get<0>(result);
+                            int label = std::get<1>(result);
+                            if(tag < 0) {
+                                endOfSequence = true;
+                                resultCount = i;
+                                break;
+                            }
+                            cmd.data[2 + i * 2 + 0] = tag; // tag
+                            cmd.data[2 + i * 2 + 1] = label; // label
+                        }
+                        if(resultCount > 0) {
+                            cmd.data[0] = resultCount;
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            resultCountAvailable -= resultCount;
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
+                        }
+                        if(endOfSequence) {
                             break;
                         }
-                        cmd.data[2 + i * 2 + 0] = tag; // tag
-                        cmd.data[2 + i * 2 + 1] = label; // label
-                    }
-                    if(resultCount > 0) {
-                        cmd.data[0] = resultCount;
-                        ERRCHK(sendCommand(sock, cmd, clientName));
-                        resultCountAvailable -= resultCount;
-                        ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
-                    }
-                    if(endOfSequence) {
-                        break;
-                    }
-                }else {
-                    // send topK labels
-                    int maxResults = INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/(topK+1);
-                    int resultCount = std::min(resultCountAvailable, maxResults);
-                    InfComCommand cmd = {
-                        INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
-                    };
-                    for(int i = 0; i < resultCount; i++) {
-                        std::tuple<int,int> result;
-                        std::vector<unsigned int> labels;
-                        outputQ.dequeue(result);
-                        int tag = std::get<0>(result);
-                        if(tag < 0) {
-                            endOfSequence = true;
-                            resultCount = i;
+                    }else {
+                        // send topK labels
+                        int maxResults = INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/(topK+1);
+                        int resultCount = std::min(resultCountAvailable, maxResults);
+                        InfComCommand cmd = {
+                            INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
+                        };
+                        for(int i = 0; i < resultCount; i++) {
+                            std::tuple<int,int> result;
+                            std::vector<unsigned int> labels;
+                            outputQ.dequeue(result);
+                            int tag = std::get<0>(result);
+                            if(tag < 0) {
+                                endOfSequence = true;
+                                resultCount = i;
+                                break;
+                            }
+                            outputQTopk.dequeue(labels);
+                            cmd.data[2 + i * (topK+1) + 0] = tag; // tag
+                            for (int j=0; j<topK; j++){
+                                cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
+                            }
+                            labels.clear();
+                        }
+                        if(resultCount > 0) {
+                            cmd.data[0] = resultCount;
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            resultCountAvailable -= resultCount;
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_TOPK_INFERENCE_RESULT));
+                        }
+                        if(endOfSequence) {
                             break;
                         }
-                        outputQTopk.dequeue(labels);
-                        cmd.data[2 + i * (topK+1) + 0] = tag; // tag
-                        for (int j=0; j<topK; j++){
-                            cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
-                        }
-                        labels.clear();
                     }
-                    if(resultCount > 0) {
-                        cmd.data[0] = resultCount;
-                        ERRCHK(sendCommand(sock, cmd, clientName));
-                        resultCountAvailable -= resultCount;
-                        ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_TOPK_INFERENCE_RESULT));
-                    }
-                    if(endOfSequence) {
+                }else
+                {
+                    // Dequeue the bounding box
+                    std::tuple<int,int> result;
+                    std::vector<ObjectBB> bounding_boxes;
+                    outputQ.dequeue(result);
+                    int tag = std::get<0>(result);
+                    int label = std::get<1>(result);        // label of first bounding box
+                    if(tag < 0) {
+                        endOfSequence = true;
+                        resultCountAvailable--;
                         break;
+                    }else
+                    {
+                        int numBB = 0;
+                        int numMessages = 0;
+                        if (label >= 0) {
+                            OutputQBB.dequeue(bounding_boxes);
+                            numBB = bounding_boxes.size();
+                            if (numBB) numMessages = numBB/3;   // max 3 bb per mesasge
+                            if (numBB % 3) numMessages++;
+                        }
+                        if (!numBB) {
+                            InfComCommand cmd = {
+                                INFCOM_MAGIC, INFCOM_CMD_BB_INFERENCE_RESULT, { tag, 0 }, { 0 }        // no bb detected
+                            };
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_BB_INFERENCE_RESULT));
+                        } else
+                        {
+                            ObjectBB *pObj= &bounding_boxes[0];
+                            for (int i=0, j=0; i < numMessages, j < numBB; i++) {
+                                int numBB_per_message = std::min((numBB-j), 3);
+                                int bb_info = (numBB_per_message & 0xFFFF) | (numBB << 16);
+                                InfComCommand cmd = {
+                                    INFCOM_MAGIC, INFCOM_CMD_BB_INFERENCE_RESULT, { tag, bb_info }, { 0 }        // 3 bounding boxes in one message
+                                };
+                                cmd.data[2] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                cmd.data[3] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                cmd.data[4] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1
+                                cmd.data[5] = pObj->label;
+                                pObj++;
+                                if (numBB_per_message > 1) {
+                                    cmd.data[6] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                    cmd.data[7] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                    cmd.data[8] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1
+                                    cmd.data[9] = pObj->label;
+                                    pObj++;
+                                }
+                                if (numBB_per_message > 2) {
+                                    cmd.data[10] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                    cmd.data[11] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                    cmd.data[12] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1;
+                                    cmd.data[13] = pObj->label;
+                                    pObj++;
+                                }
+                                ERRCHK(sendCommand(sock, cmd, clientName));
+                                ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_BB_INFERENCE_RESULT));
+                                j += numBB_per_message;
+                            }
+                        }
+                        resultCountAvailable--;
                     }
+                    bounding_boxes.clear();
                 }
             }
         }
@@ -1214,32 +1285,49 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
-            if (topK < 1){
-                int label = 0;
-                float max_prob = buf[0];
-                for(int c = 1; c < dimOutput[2]; c++) {
-                    float prob = buf[c];
-                    if(prob > max_prob) {
-                        label = c;
-                        max_prob = prob;
+            if (!detectBoundingBoxes)
+            {
+                if (topK < 1){
+                    int label = 0;
+                    float max_prob = buf[0];
+                    for(int c = 1; c < dimOutput[2]; c++) {
+                        float prob = buf[c];
+                        if(prob > max_prob) {
+                            label = c;
+                            max_prob = prob;
+                        }
                     }
+                    outputQ.enqueue(std::tuple<int,int>(tag,label));
+                }else {
+                    std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                    std::vector<size_t> idx(prob_vec.size());
+                    std::iota(idx.begin(), idx.end(), 0);
+                    sort_indexes(prob_vec, idx);            // sort indeces based on prob
+                    std::vector<unsigned int>    labels;
+                    outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
+                    int j=0;
+                    for (auto i: idx) {
+                        // make label which is index and prob
+                        int packed_label_prob = (i&0xFFFF)|(((unsigned int)((prob_vec[i]*0x7FFF)+0.5))<<16);   // convert prob to 16bit float and store in MSBs
+                        labels.push_back(packed_label_prob);
+                        if (++j >= topK) break;
+                    }
+                    outputQTopk.enqueue(labels);
                 }
-                outputQ.enqueue(std::tuple<int,int>(tag,label));
-            }else {
-                std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
-                std::vector<size_t> idx(prob_vec.size());
-                std::iota(idx.begin(), idx.end(), 0);
-                sort_indexes(prob_vec, idx);            // sort indeces based on prob
-                std::vector<unsigned int>    labels;
-                outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
-                int j=0;
-                for (auto i: idx) {
-                    // make label which is index and prob
-                    int packed_label_prob = (i&0xFFFF)|(((unsigned int)((prob_vec[i]*0x7FFF)+0.5))<<16);   // convert prob to 16bit float and store in MSBs
-                    labels.push_back(packed_label_prob);
-                    if (++j >= topK) break;
+            }else
+            {
+                std::vector<ObjectBB> detected_objects;
+                region->GetObjectDetections(buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
+                if (detected_objects.size() > 0) {
+                    // add it to outputQ
+                    outputQ.enqueue(std::tuple<int,int>(tag,detected_objects[0].label));
+                    // add detected objects with BB into BoundingBox Q
+                    OutputQBB.enqueue(detected_objects);
+                } else
+                {
+                    // add it to outputQ
+                    outputQ.enqueue(std::tuple<int,int>(tag,-1));
                 }
-                outputQTopk.enqueue(labels);
             }
         }
 
