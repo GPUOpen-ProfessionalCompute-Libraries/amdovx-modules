@@ -808,10 +808,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t<div id=\"mySidenav\" class=\"sidenav\">\n");
             fileObj.write("\t<a href=\"javascript:void(0)\" class=\"closebtn\" onclick=\"closeNav()\">&times;</a>\n");
-            fileObj.write("\t<A HREF=\"#table1\"><font size=\"5\">Summary</font></A><br>\n");
-            fileObj.write("\t<A HREF=\"#table0\"><font size=\"5\">Results</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table0\"><font size=\"5\">Summary</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table1\"><font size=\"5\">Results</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table2\"><font size=\"5\">Hierarchy</font></A><br>\n");
-            fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Graphs</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Labels</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table4\"><font size=\"5\">Graphs</font></A><br>\n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
             fileObj.write("\t<script>\n");
@@ -844,6 +845,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<div id=\"main\">\n");
             fileObj.write("\t<span style=\"font-size:30px;cursor:pointer\" onclick=\"openNav()\">&#9776; Views</span>\n");
             fileObj.write("\t</div></a>\n");
+            if(exportTool){
             fileObj.write("\t<a href=\"https://www.amd.com/en\" target=\"_blank\">\n");
             fileObj.write("\t<img \" src=\"icons/AMD_logo_white.png\" alt=\"AMD\" height=\"61\" /></a>\n");
             fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
@@ -851,6 +853,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
             fileObj.write("\t<img \" src=\"icons/GitHub_logo_white.png\" alt=\"AMD GitHub\" height=\"61\" /></a>\n");
             fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\"/> \n");
+            }
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
 
@@ -861,7 +864,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             int passCount = (state->top1Count+state->top2Count+state->top3Count+state->top4Count+state->top5Count);
             float avgPassProb = passProb/passCount;
 
-            fileObj.write("<A NAME=\"table1\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Inference Summary</em></font></h1></A>\n");
+            fileObj.write("<A NAME=\"table0\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Inference Summary</em></font></h1></A>\n");
             fileObj.write("\t<table align=\"center\">\n");
             fileObj.write("\t<col width=\"265\">\n");
             fileObj.write("\t<col width=\"50\">\n");
@@ -951,8 +954,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t</tr>\n");
             fileObj.write("</table>\n");
 
-            // result
-            fileObj.write("<A NAME=\"table0\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><em>Inference Results</em></font></h1></A>\n");
+            // Image result
+            fileObj.write("<A NAME=\"table1\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><em>Inference Results</em></font></h1></A>\n");
             fileObj.write("<table id=\"resultsTable\" cellspacing=\"0\" border=\"0\">\n");
             fileObj.write("\t<colgroup width=\"351\"></colgroup>\n");
             fileObj.write("\t<colgroup span=\"5\" width=\"92\"></colgroup>\n");
@@ -1209,9 +1212,6 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td align=\"center\"><b>Category 6 Fail</b></td>\n");
             fileObj.write("\t\t</tr>\n");
 
-            //Dump values here in a loop
-
-
             float f=0.99;
             for(int i = 99; i >= 0; i--){
                 fileObj.write("\t\t<tr>\n");
@@ -1250,8 +1250,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                }
             fileObj.write("</table>\n");
 
-            // hierarchy
-            fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><em>Graph</em></font></h1></A>\n");
+            // label
+            fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary</em></font></h1></A>\n");
+
+            // Graph
+            fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Graphs</em></font></h1></A>\n");
 
             fileObj.write("\n</body>\n");
             fileObj.write("\n</html>\n");
