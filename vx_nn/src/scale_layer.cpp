@@ -59,19 +59,19 @@ static vx_status VX_CALLBACK validateScaleLayer(vx_node node, const vx_reference
     if (parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 1) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: #2 num_dims=%ld (must be 1)\n", num_dims);
+        if(num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
         if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: scale: #2 type=%d (must be float)\n", type);
-        vx_size bias_dims[1];
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+        vx_size bias_dims[2] = { 0, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, &bias_dims[2-num_dims], num_dims * sizeof(vx_size)));
         if (bias_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: bias[%ld] input_dims[%ldx%ldx%ldx%ld]\n", bias_dims[0], input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
     }
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 1) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: #1 num_dims=%ld (must be 1)\n", num_dims);
+    if(num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: #1 num_dims=%ld (must be 1 or 2)\n", num_dims);
     if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: scale: #1 type=%d (must be float)\n", type);
-    vx_size scale_dims[1];
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, scale_dims, sizeof(scale_dims)));
+    vx_size scale_dims[2] = { 0, 1 };
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &scale_dims[2-num_dims], num_dims*sizeof(vx_size)));
     if (scale_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: scale: scale[%ld] input_dims[%ldx%ldx%ldx%ld]\n", scale_dims[0], input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
 
     //output tensor configuration.
