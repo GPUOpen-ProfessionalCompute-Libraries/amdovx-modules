@@ -1253,6 +1253,55 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             // label
             fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary</em></font></h1></A>\n");
 
+            if(state->topKValue > 4){
+                fileObj.write("\t<table align=\"center\">\n");
+                fileObj.write("\t<col width=\"70\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"170\">\n");
+                fileObj.write("\t<col width=\"200\">\n");
+                fileObj.write("\t<tr>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Label ID</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Images in DataBase</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Matched with Top1</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Matched with Top2</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Matched with Top3</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Matched with Top4</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Matched with Top5</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Top Result Count</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Label Description</b></font></td>\n");
+                fileObj.write("\t\t</tr>\n");
+                for(int i = 0; i < 1000; i++){
+                    QString labelTxt = state->dataLabels ? (*state->dataLabels)[i] : "Unknown";
+                    labelTxt = labelTxt.replace(QRegExp("n[0-9]{8}"),"");
+                    fileObj.write("\t<tr>\n");
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",i);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][0]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][1]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][2]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][3]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][4]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->topLabelMatch[i][5]);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",-1);
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"left\"><b>%s</b></td>\n",labelTxt.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    fileObj.write("\t\t</tr>\n");
+                }
+                fileObj.write("</table>\n");
+            }
+
             // Graph
             fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Graphs</em></font></h1></A>\n");
 
