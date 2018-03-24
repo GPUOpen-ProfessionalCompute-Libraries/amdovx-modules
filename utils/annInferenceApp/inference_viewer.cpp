@@ -858,20 +858,20 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t\t\t\tswitching = true;}}}\n");
             fileObj.write("\t\n");
             fileObj.write("\t</script>\n");
-            fileObj.write("\t\n");
+            fileObj.write("\t<script src=\"https://www.kryogenix.org/code/browser/sorttable/sorttable.js\"></script>\n");
             fileObj.write("\t<div class=\"navbar\">\n");
             fileObj.write("\t<a href=\"#\">\n");
             fileObj.write("\t<div id=\"main\">\n");
             fileObj.write("\t<span style=\"font-size:30px;cursor:pointer\" onclick=\"openNav()\">&#9776; Views</span>\n");
             fileObj.write("\t</div></a>\n");
             if(exportTool){
-            fileObj.write("\t<a href=\"https://www.amd.com/en\" target=\"_blank\">\n");
-            fileObj.write("\t<img \" src=\"icons/AMD_logo_white.png\" alt=\"AMD\" height=\"61\" /></a>\n");
-            fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
-            fileObj.write("\t<img \" src=\"icons/vega_icon_150.png\" alt=\"GPUopen\" height=\"61\" /></a>\n");
-            fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
-            fileObj.write("\t<img \" src=\"icons/GitHub_logo_white.png\" alt=\"AMD GitHub\" height=\"61\" /></a>\n");
-            fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\"/> \n");
+                fileObj.write("\t<a href=\"https://www.amd.com/en\" target=\"_blank\">\n");
+                fileObj.write("\t<img \" src=\"icons/AMD_logo_white.png\" alt=\"AMD\" height=\"61\" /></a>\n");
+                fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
+                fileObj.write("\t<img \" src=\"icons/vega_icon_150.png\" alt=\"GPUopen\" height=\"61\" /></a>\n");
+                fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
+                fileObj.write("\t<img \" src=\"icons/GitHub_logo_white.png\" alt=\"AMD GitHub\" height=\"61\" /></a>\n");
+                fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\"/> \n");
             }
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
@@ -943,7 +943,6 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 5 Match</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 5 Match %</b></font></td>\n");
             fileObj.write("\t\t</tr>\n");
-
             fileObj.write("\t<tr>\n");
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top1Count);
             fileObj.write(text.toStdString().c_str());
@@ -1273,8 +1272,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary</em></font></h1></A>\n");
 
             if(state->topKValue > 4){
-                fileObj.write("\t<table id=\"labelsTable\" cellspacing=\"0\" border=\"0\" align=\"center\">\n");
-                fileObj.write("\t<col width=\"70\">\n");
+                fileObj.write("\t<table class=\"sortable\" id=\"labelsTable\" cellspacing=\"0\" border=\"0\" align=\"center\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
                 fileObj.write("\t<col width=\"170\">\n");
                 fileObj.write("\t<col width=\"170\">\n");
                 fileObj.write("\t<col width=\"170\">\n");
@@ -1285,25 +1284,13 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<col width=\"200\">\n");
                 fileObj.write("\t<tr>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label ID</b></font></td>\n");
-                fileObj.write("\t\t<td align=\"center\"><select>\n");
-                fileObj.write("\t\t<option onclick=\"myreload()\"><font color=\"Maroon\" size=\"3\">Images in DataBase</font></option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(1,0)\" >Images in DataBase&#9650;</option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(1,1)\" >Images in DataBase&#9660;</option>\n");
-                fileObj.write("\t\t</select></font></td>\n");
-                fileObj.write("\t\t<td align=\"center\"><select>\n");
-                fileObj.write("\t\t<option onclick=\"myreload()\"><font color=\"Maroon\" size=\"3\">Matched with Top1</font></option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(2,0)\" >Matched with Top1&#9650;</option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(2,1)\" >Matched with Top1&#9660;</option>\n");
-                fileObj.write("\t\t</select></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Images in DataBase</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top1</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top2</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top3</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top4</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top5</b></font></td>\n");
-                fileObj.write("\t\t<td align=\"center\"><select>\n");
-                fileObj.write("\t\t<option onclick=\"myreload()\"><font color=\"Maroon\" size=\"3\">Top1 Label Match</font></option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(7,0)\" >Top1 Label Match&#9650;</option>\n");
-                fileObj.write("\t\t<option onclick=\"sortLabelsTable(7,1)\" >Top1 Label Match&#9660;</option>\n");
-                fileObj.write("\t\t</select></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Top1 Label Match</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label Description</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
                 for(int i = 0; i < 1000; i++){
