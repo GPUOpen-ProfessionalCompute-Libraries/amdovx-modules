@@ -870,6 +870,51 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\t<script src=\"https://www.kryogenix.org/code/browser/sorttable/sorttable.js\"></script>\n");
+
+            // graph script
+            QString text;
+            int netSummaryImages =  state->imageDataSize - state->totalNoGroundTruth;
+            int passCount = (state->top1Count+state->top2Count+state->top3Count+state->top4Count+state->top5Count);
+            fileObj.write("\t<script type=\"text/javascript\" src=\"https://www.gstatic.com/charts/loader.js\"></script>\n");
+            fileObj.write("\t<script type=\"text/javascript\">\n");
+            fileObj.write("\t\n");
+            fileObj.write("\tgoogle.charts.load('current', {'packages':['bar']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(drawChart);\n");
+            fileObj.write("\tfunction drawChart(){\n");
+            fileObj.write("\tvar data = google.visualization.arrayToDataTable([\n");
+            fileObj.write("\t['  '     ,  'Match'  , 'Mismatch', 'No Label' ],\n");
+            text.sprintf("\t['Summary',   %d     , %d        , %d         ]\n",passCount,state->totalMismatch,state->totalNoGroundTruth);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = { title: 'Overall Result Summary', vAxis: { title: 'Images' }, width: 800, height: 500 };\n");
+            fileObj.write("\tvar chart = new google.charts.Bar(document.getElementById('Model_Stats'));\n");
+            fileObj.write("\tchart.draw(data, google.charts.Bar.convertOptions(options));}\n");
+            fileObj.write("\tgoogle.charts.load('current', {'packages':['corechart']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(drawResultChart);\n");
+            fileObj.write("\tfunction drawResultChart() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('string', 'Top K');\n");
+            fileObj.write("\tdata.addColumn('number', 'Matchs');\n");
+            fileObj.write("\tdata.addRows([\n");
+            text.sprintf("\t[ 'Matched 1st Choice', %d  ],\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'Matched 2nd Choice', %d  ],\n",state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'Matched 3rd Choice', %d  ],\n",state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'Matched 4th Choice', %d  ],\n",state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'Matched 5th Choice', %d  ],\n",state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'MisMatched', %d  ]]);\n",state->totalMismatch);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\tvar options = { title:'Inference Highlights', width:600, height:600 };\n");
+            fileObj.write("\tvar chart = new google.visualization.PieChart(document.getElementById('result_chart_div'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t</script>\n");
+
+            // side view
             fileObj.write("\t<div class=\"navbar\">\n");
             fileObj.write("\t<a href=\"#\">\n");
             fileObj.write("\t<div id=\"main\">\n");
@@ -888,10 +933,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
 
             // Overall Summary
-            QString text;
-            int netSummaryImages =  state->imageDataSize - state->totalNoGroundTruth;
             float passProb = (state->top1TotProb+state->top2TotProb+state->top3TotProb+state->top4TotProb+state->top5TotProb);
-            int passCount = (state->top1Count+state->top2Count+state->top3Count+state->top4Count+state->top5Count);
             float avgPassProb = passProb/passCount;
 
             fileObj.write("<A NAME=\"table0\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Overall Summary</em></font></h1></A>\n");
@@ -1305,7 +1347,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
 
             // Graph
             fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Graphs</em></font></h1></A>\n");
-
+            fileObj.write("\t<center><div id=\"Model_Stats\" style=\"border: 1px solid #ccc\"></div></center>\n");
+            fileObj.write("\t<center><div id=\"result_chart_div\" style=\"border: 1px solid #ccc\"></div></center>\n");
             fileObj.write("\n</body>\n");
             fileObj.write("\n</html>\n");
 
