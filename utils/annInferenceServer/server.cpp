@@ -3,6 +3,7 @@
 #include "compiler.h"
 #include "inference.h"
 #include "netutil.h"
+#include "shadow.h"
 #include <thread>
 
 int connection(int sock, Arguments * args, std::string clientName)
@@ -16,7 +17,7 @@ int connection(int sock, Arguments * args, std::string clientName)
     ERRCHK(sendCommand(sock, cmd, clientName));
     ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_SEND_MODE));
     int mode = cmd.data[0];
-    if(mode != INFCOM_MODE_CONFIGURE && mode != INFCOM_MODE_COMPILER && mode != INFCOM_MODE_INFERENCE) {
+    if(mode != INFCOM_MODE_CONFIGURE && mode != INFCOM_MODE_COMPILER && mode != INFCOM_MODE_INFERENCE && mode != INFCOM_MODE_SHADOW) {
         dumpCommand("reply", cmd);
         close(sock);
         return error("received incorrect response to INFCOM_CMD_SEND_MODE from %s", clientName.c_str());
@@ -36,6 +37,9 @@ int connection(int sock, Arguments * args, std::string clientName)
             status = ie->run();
             delete ie;
         }
+    }
+    else if(mode == INFCOM_MODE_SHADOW) {
+        status = runShadow(sock, args, clientName, &cmd);
     }
     if(status == 0) {
         close(sock);

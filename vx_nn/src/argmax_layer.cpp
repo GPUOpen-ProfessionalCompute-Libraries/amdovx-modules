@@ -29,19 +29,17 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if ((num_dims != 4 && num_dims != 3) || ((input_dims[0] & 3) != 0))
-        return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validation: argmax: #0 num_dims=%ld (num_dims must be 2 or 4)\n", num_dims);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, &input_dims[4-num_dims], sizeof(input_dims[0])*num_dims));
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validation: argmax: #0 type=%d (not float)\n", type);
 
     // check output object type and set configuration
     ERROR_CHECK_STATUS(vxQueryReference(parameters[1], VX_REFERENCE_TYPE, &type, sizeof(type)));
     if (type == VX_TYPE_IMAGE) {
         vx_df_image format;
         ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
-        if(format == VX_DF_IMAGE_U8 && input_dims[2] > 255)
-            return VX_ERROR_INVALID_FORMAT;
+        if(format == VX_DF_IMAGE_U8 && input_dims[2] > 256)
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 img U008 with input_dims[2](=%ld) > 256\n", input_dims[2]);
         if(format == VX_DF_IMAGE_VIRT)
             format = (input_dims[2] < 256) ? VX_DF_IMAGE_U8 : VX_DF_IMAGE_U16;
         vx_uint32 width = (vx_uint32)input_dims[0];
@@ -54,19 +52,19 @@ static vx_status VX_CALLBACK validateKernel(vx_node node, const vx_reference par
         vx_size output_num_dims, output_dims[4] = { 1, 1, 1, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &output_dims[4-output_num_dims], sizeof(output_dims[0])*output_num_dims));
         if (output_dims[2] != 1 && output_dims[2] != 2) // top_k must be 1 or 2
-            return VX_ERROR_INVALID_DIMENSION;
-        if(type == VX_TYPE_UINT8 && input_dims[2] > 255)
-            return VX_ERROR_INVALID_FORMAT;
+            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validation: argmax: #1 top_k=%ld (must be 1 or 2)\n", output_dims[2]);
+        if(type == VX_TYPE_UINT8 && input_dims[2] > 256)
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 tensor U8 with input_dims[2](=%ld) > 256\n", input_dims[2]);
         if(type != VX_TYPE_UINT8 && type != VX_TYPE_UINT16 && type != VX_TYPE_INT16)
-            return VX_ERROR_INVALID_FORMAT;
+            return ERRMSG(VX_ERROR_INVALID_FORMAT, "validate: argmax: #1 tensor output type=%d (must be U8/U16/I16)\n", type);
         ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &output_num_dims, sizeof(output_num_dims)));
-        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*output_num_dims));
+        ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, &output_dims[4-output_num_dims], sizeof(output_dims[0])*output_num_dims));
     }
     else
-        return VX_ERROR_INVALID_PARAMETERS;
+        return ERRMSG(VX_ERROR_INVALID_PARAMETERS, "validate: argmax: output object type=%d must be image or tensor\n", type);
 
     return VX_SUCCESS;
 }
@@ -101,7 +99,7 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 }, top_k = 1;
     vx_enum output_obj_type, output_data_type = VX_TYPE_UINT16;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, &input_dims[4-num_dims], sizeof(input_dims[0])*num_dims));
     ERROR_CHECK_STATUS(vxQueryReference(parameters[1], VX_REFERENCE_TYPE, &output_obj_type, sizeof(output_obj_type)));
     if(output_obj_type == VX_TYPE_IMAGE) {
         vx_df_image format;
@@ -114,18 +112,19 @@ static vx_status VX_CALLBACK opencl_codegen(
     else {
         vx_size num_dims_output, output_dims[4] = { 1, 1, 1, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims_output, sizeof(num_dims_output)));
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*num_dims_output));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &output_dims[4-num_dims_output], sizeof(output_dims[0])*num_dims_output));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &output_data_type, sizeof(output_data_type)));
         top_k = output_dims[2];
     }
     size_t N = input_dims[3];
 
     // compute global work
+    bool input_width_multiple_of_4 = (input_dims[0] & 3) ? false : true;
     opencl_work_dim = 3;
     opencl_local_work[0] = 8;
     opencl_local_work[1] = 8;
     opencl_local_work[2] = 1;
-    opencl_global_work[0] = ((input_dims[0] + 3) / 4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
+    opencl_global_work[0] = ((input_width_multiple_of_4 ? ((input_dims[0] + 3) / 4) : input_dims[0]) + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
     opencl_global_work[1] = (input_dims[1] + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
     opencl_global_work[2] = N;
 
@@ -137,80 +136,117 @@ static vx_status VX_CALLBACK opencl_codegen(
         "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
         "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, %s)\n"
         "{\n"
-        "    uint x = get_global_id(0) * 4;\n"
+        "    uint x = get_global_id(0) * %d;\n"
         "    uint y = get_global_id(1);\n"
         "    uint z = get_global_id(2);\n"
         "    if(x < %ld && y < %ld) {\n"
         "        i0_buf += i0_offset + z * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
-        "        uint4 cmax;\n"
+        "        %s cmax;\n"
         , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name
         , (output_obj_type == VX_TYPE_IMAGE) ?
             "uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset" :
             "__global uchar * o0_buf, uint o0_offset, uint4 o0_stride"
-        , input_dims[0], input_dims[1]);
+        , input_width_multiple_of_4 ? 4 : 1, input_dims[0], input_dims[1], input_width_multiple_of_4 ? "uint4" : "uint");
     opencl_kernel_code = item;
     if(top_k == 2) {
-        sprintf(item,
-            "        uint4 cmax1;\n"
-            "        float4 f, fmax, fmax1;\n"
-            "        fmax = *(__global float4 *)i0_buf;\n"
-            "        i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
-            "        cmax1.s0 = (f.s0 > fmax.s0) ? 0 : 1;\n"
-            "         cmax.s0 = (f.s0 > fmax.s0) ? 1 : 0;\n"
-            "        fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 :    f.s0;\n"
-            "         fmax.s0 = (f.s0 > fmax.s0) ?    f.s0 : fmax.s0;\n"
-            "        cmax1.s1 = (f.s1 > fmax.s1) ? 0 : 1;\n"
-            "         cmax.s1 = (f.s1 > fmax.s1) ? 1 : 0;\n"
-            "        fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 :    f.s1;\n"
-            "         fmax.s1 = (f.s1 > fmax.s1) ?    f.s1 : fmax.s1;\n"
-            "        cmax1.s2 = (f.s2 > fmax.s2) ? 0 : 1;\n"
-            "         cmax.s2 = (f.s2 > fmax.s2) ? 1 : 0;\n"
-            "        fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 :    f.s2;\n"
-            "         fmax.s2 = (f.s2 > fmax.s2) ?    f.s2 : fmax.s2;\n"
-            "        cmax1.s3 = (f.s3 > fmax.s3) ? 0 : 1;\n"
-            "         cmax.s3 = (f.s3 > fmax.s3) ? 1 : 0;\n"
-            "        fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 :    f.s3;\n"
-            "         fmax.s3 = (f.s3 > fmax.s3) ?    f.s3 : fmax.s3;\n"
-            "        for(uint c = 2; c < %ld; c++) {\n"
-            "            i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
-            "            cmax1.s0 = (f.s0 > fmax.s0) ? cmax.s0 : ((f.s0 > fmax1.s0) ? c    : cmax1.s0);\n"
-            "            fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 : ((f.s0 > fmax1.s0) ? f.s0 : fmax1.s0);\n"
-            "            cmax.s0  = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
-            "            fmax.s0  = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
-            "            cmax1.s1 = (f.s1 > fmax.s1) ? cmax.s1 : ((f.s1 > fmax1.s1) ? c    : cmax1.s1);\n"
-            "            fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 : ((f.s1 > fmax1.s1) ? f.s1 : fmax1.s1);\n"
-            "            cmax.s1  = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
-            "            fmax.s1  = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
-            "            cmax1.s2 = (f.s2 > fmax.s2) ? cmax.s2 : ((f.s2 > fmax1.s2) ? c    : cmax1.s2);\n"
-            "            fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 : ((f.s2 > fmax1.s2) ? f.s2 : fmax1.s2);\n"
-            "            cmax.s2  = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
-            "            fmax.s2  = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
-            "            cmax1.s3 = (f.s3 > fmax.s3) ? cmax.s3 : ((f.s3 > fmax1.s3) ? c    : cmax1.s3);\n"
-            "            fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 : ((f.s3 > fmax1.s3) ? f.s3 : fmax1.s3);\n"
-            "            cmax.s3  = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
-            "            fmax.s3  = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
-            "        }\n"
-            , input_dims[2]);
-        opencl_kernel_code += item;
+        if(input_width_multiple_of_4) {
+            sprintf(item,
+                "        uint4 cmax1;\n"
+                "        float4 f, fmax, fmax1;\n"
+                "        fmax = *(__global float4 *)i0_buf;\n"
+                "        i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
+                "        cmax1.s0 = (f.s0 > fmax.s0) ? 0 : 1;\n"
+                "         cmax.s0 = (f.s0 > fmax.s0) ? 1 : 0;\n"
+                "        fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 :    f.s0;\n"
+                "         fmax.s0 = (f.s0 > fmax.s0) ?    f.s0 : fmax.s0;\n"
+                "        cmax1.s1 = (f.s1 > fmax.s1) ? 0 : 1;\n"
+                "         cmax.s1 = (f.s1 > fmax.s1) ? 1 : 0;\n"
+                "        fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 :    f.s1;\n"
+                "         fmax.s1 = (f.s1 > fmax.s1) ?    f.s1 : fmax.s1;\n"
+                "        cmax1.s2 = (f.s2 > fmax.s2) ? 0 : 1;\n"
+                "         cmax.s2 = (f.s2 > fmax.s2) ? 1 : 0;\n"
+                "        fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 :    f.s2;\n"
+                "         fmax.s2 = (f.s2 > fmax.s2) ?    f.s2 : fmax.s2;\n"
+                "        cmax1.s3 = (f.s3 > fmax.s3) ? 0 : 1;\n"
+                "         cmax.s3 = (f.s3 > fmax.s3) ? 1 : 0;\n"
+                "        fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 :    f.s3;\n"
+                "         fmax.s3 = (f.s3 > fmax.s3) ?    f.s3 : fmax.s3;\n"
+                "        for(uint c = 2; c < %ld; c++) {\n"
+                "            i0_buf += i0_stride.s2; f = *(__global float4 *)i0_buf;\n"
+                "            cmax1.s0 = (f.s0 > fmax.s0) ? cmax.s0 : ((f.s0 > fmax1.s0) ? c    : cmax1.s0);\n"
+                "            fmax1.s0 = (f.s0 > fmax.s0) ? fmax.s0 : ((f.s0 > fmax1.s0) ? f.s0 : fmax1.s0);\n"
+                "            cmax.s0  = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
+                "            fmax.s0  = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
+                "            cmax1.s1 = (f.s1 > fmax.s1) ? cmax.s1 : ((f.s1 > fmax1.s1) ? c    : cmax1.s1);\n"
+                "            fmax1.s1 = (f.s1 > fmax.s1) ? fmax.s1 : ((f.s1 > fmax1.s1) ? f.s1 : fmax1.s1);\n"
+                "            cmax.s1  = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
+                "            fmax.s1  = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
+                "            cmax1.s2 = (f.s2 > fmax.s2) ? cmax.s2 : ((f.s2 > fmax1.s2) ? c    : cmax1.s2);\n"
+                "            fmax1.s2 = (f.s2 > fmax.s2) ? fmax.s2 : ((f.s2 > fmax1.s2) ? f.s2 : fmax1.s2);\n"
+                "            cmax.s2  = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
+                "            fmax.s2  = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
+                "            cmax1.s3 = (f.s3 > fmax.s3) ? cmax.s3 : ((f.s3 > fmax1.s3) ? c    : cmax1.s3);\n"
+                "            fmax1.s3 = (f.s3 > fmax.s3) ? fmax.s3 : ((f.s3 > fmax1.s3) ? f.s3 : fmax1.s3);\n"
+                "            cmax.s3  = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
+                "            fmax.s3  = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
+                "        }\n"
+                , input_dims[2]);
+            opencl_kernel_code += item;
+        }
+        else { // width not multiple of 4
+            sprintf(item,
+                "        uint cmax1;\n"
+                "        float f, fmax, fmax1;\n"
+                "        fmax = *(__global float *)i0_buf;\n"
+                "        i0_buf += i0_stride.s2; f = *(__global float *)i0_buf;\n"
+                "        cmax1.s0 = (f > fmax) ? 0 : 1;\n"
+                "         cmax.s0 = (f > fmax) ? 1 : 0;\n"
+                "        fmax1.s0 = (f > fmax) ? fmax :    f;\n"
+                "         fmax.s0 = (f > fmax) ?    f : fmax;\n"
+                "        for(uint c = 2; c < %ld; c++) {\n"
+                "            i0_buf += i0_stride.s2; f = *(__global float *)i0_buf;\n"
+                "            cmax1 = (f > fmax) ? cmax : ((f > fmax1) ? c : cmax1);\n"
+                "            fmax1 = (f > fmax) ? fmax : ((f > fmax1) ? f : fmax1);\n"
+                "            cmax  = (f > fmax) ? c : cmax;\n"
+                "            fmax  = (f > fmax) ? f : fmax;\n"
+                "        }\n"
+                , input_dims[2]);
+            opencl_kernel_code += item;
+        }
     }
     else if (top_k == 1) {
-        sprintf(item,
-            "        cmax = (uint4)0;\n"
-            "        float4 fmax = *(__global float4 *)i0_buf;\n"
-            "        for(uint c = 1; c < %ld; c++) {\n"
-            "            i0_buf += i0_stride.s2;\n"
-            "            float4 f = *(__global float4 *)i0_buf;\n"
-            "            cmax.s0 = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
-            "            fmax.s0 = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
-            "            cmax.s1 = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
-            "            fmax.s1 = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
-            "            cmax.s2 = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
-            "            fmax.s2 = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
-            "            cmax.s3 = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
-            "            fmax.s3 = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
-            "        }\n"
-            , input_dims[2]);
-        opencl_kernel_code += item;
+        if(input_width_multiple_of_4) {
+            sprintf(item,
+                "        cmax = (uint4)0;\n"
+                "        float4 fmax = *(__global float4 *)i0_buf;\n"
+                "        for(uint c = 1; c < %ld; c++) {\n"
+                "            i0_buf += i0_stride.s2;\n"
+                "            float4 f = *(__global float4 *)i0_buf;\n"
+                "            cmax.s0 = (f.s0 > fmax.s0) ? c    : cmax.s0;\n"
+                "            fmax.s0 = (f.s0 > fmax.s0) ? f.s0 : fmax.s0;\n"
+                "            cmax.s1 = (f.s1 > fmax.s1) ? c    : cmax.s1;\n"
+                "            fmax.s1 = (f.s1 > fmax.s1) ? f.s1 : fmax.s1;\n"
+                "            cmax.s2 = (f.s2 > fmax.s2) ? c    : cmax.s2;\n"
+                "            fmax.s2 = (f.s2 > fmax.s2) ? f.s2 : fmax.s2;\n"
+                "            cmax.s3 = (f.s3 > fmax.s3) ? c    : cmax.s3;\n"
+                "            fmax.s3 = (f.s3 > fmax.s3) ? f.s3 : fmax.s3;\n"
+                "        }\n"
+                , input_dims[2]);
+            opencl_kernel_code += item;
+        }
+        else { // width not multiple of 4
+            sprintf(item,
+                "        cmax = (uint)0;\n"
+                "        float fmax = *(__global float *)i0_buf;\n"
+                "        for(uint c = 1; c < %ld; c++) {\n"
+                "            i0_buf += i0_stride.s2;\n"
+                "            float f = *(__global float *)i0_buf;\n"
+                "            cmax = (f > fmax) ? c : cmax;\n"
+                "            fmax = (f > fmax) ? f : fmax;\n"
+                "        }\n"
+                , input_dims[2]);
+            opencl_kernel_code += item;
+        }
     }
     if(output_data_type == VX_TYPE_UINT8) {
         if(output_obj_type == VX_TYPE_IMAGE) {
@@ -221,13 +257,25 @@ static vx_status VX_CALLBACK opencl_codegen(
             opencl_kernel_code +=
                 "        o0_buf += o0_offset + z * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0;\n";
         }
-        opencl_kernel_code +=
-            "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
-            "        *(__global uint *)o0_buf = imax;\n";
-        if(top_k == 2) {
+        if(input_width_multiple_of_4) {
             opencl_kernel_code +=
-                "        uint imax1 = cmax1.s0 + (cmax1.s1 << 8) + (cmax1.s2 << 16) + (cmax1.s3 << 24);\n"
-                "        *(__global uint *)&o0_buf[o0_stride.s2] = imax1;\n";
+                "        uint imax = cmax.s0 + (cmax.s1 << 8) + (cmax.s2 << 16) + (cmax.s3 << 24);\n"
+                "        *(__global uint *)o0_buf = imax;\n";
+            if(top_k == 2) {
+                opencl_kernel_code +=
+                    "        uint imax1 = cmax1.s0 + (cmax1.s1 << 8) + (cmax1.s2 << 16) + (cmax1.s3 << 24);\n"
+                    "        *(__global uint *)&o0_buf[o0_stride.s2] = imax1;\n";
+            }
+        }
+        else {
+            opencl_kernel_code +=
+                "        uint imax = cmax;\n"
+                "        *(__global uchar *)o0_buf = (uchar)imax;\n";
+            if(top_k == 2) {
+                opencl_kernel_code +=
+                    "        uint imax1 = cmax1;\n"
+                    "        *(__global uchar *)&o0_buf[o0_stride.s2] = (uchar)imax1;\n";
+            }
         }
     }
     else if(output_data_type == VX_TYPE_UINT16) {
@@ -239,17 +287,27 @@ static vx_status VX_CALLBACK opencl_codegen(
             opencl_kernel_code +=
                 "        o0_buf += o0_offset + z * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0;\n";
         }
-        opencl_kernel_code +=
-            "        uint2 imax;\n"
-            "        imax.s0 = cmax.s0 + (cmax.s1 << 16);\n"
-            "        imax.s1 = cmax.s2 + (cmax.s3 << 16);\n"
-            "        *(__global uint2 *)o0_buf = imax;\n";
-        if(top_k == 2) {
+        if(input_width_multiple_of_4) {
             opencl_kernel_code +=
-                "        uint2 imax1;\n"
-                "        imax1.s0 = cmax1.s0 + (cmax1.s1 << 16);\n"
-                "        imax1.s1 = cmax1.s2 + (cmax1.s3 << 16);\n"
-                "        *(__global uint2 *)&o0_buf[o0_stride.s2] = imax1;\n";
+                "        uint2 imax;\n"
+                "        imax.s0 = cmax.s0 + (cmax.s1 << 16);\n"
+                "        imax.s1 = cmax.s2 + (cmax.s3 << 16);\n"
+                "        *(__global uint2 *)o0_buf = imax;\n";
+            if(top_k == 2) {
+                opencl_kernel_code +=
+                    "        uint2 imax1;\n"
+                    "        imax1.s0 = cmax1.s0 + (cmax1.s1 << 16);\n"
+                    "        imax1.s1 = cmax1.s2 + (cmax1.s3 << 16);\n"
+                    "        *(__global uint2 *)&o0_buf[o0_stride.s2] = imax1;\n";
+            }
+        }
+        else {
+            opencl_kernel_code +=
+                "        *(__global ushort *)o0_buf = (ushort)cmax;\n";
+            if(top_k == 2) {
+                opencl_kernel_code +=
+                    "        *(__global ushort *)&o0_buf[o0_stride.s2] = cmax1;\n";
+            }
         }
     }
     opencl_kernel_code +=

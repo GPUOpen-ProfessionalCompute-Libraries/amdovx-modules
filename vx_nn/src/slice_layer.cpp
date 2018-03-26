@@ -120,16 +120,19 @@ static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference
     vx_size input_dims[4], outputn_dims[4], num_channels = 0;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: slice: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #1 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: slice: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
-    if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    if (outputn_dims[3] != input_dims[3] || outputn_dims[1] != input_dims[1] || outputn_dims[0] != input_dims[0])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #1 dims input[%ld,%ld,%ld,%ld] != outputn[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    outputn_dims[0], outputn_dims[1], outputn_dims[2], outputn_dims[3]);
     num_channels = outputn_dims[2];
     //output tensor configuration
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -138,10 +141,13 @@ static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #2 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: slice: #2 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
-    if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    if (outputn_dims[3] != input_dims[3] || outputn_dims[1] != input_dims[1] || outputn_dims[0] != input_dims[0])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #2 dims input[%ld,%ld,%ld,%ld] != outputn[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    outputn_dims[0], outputn_dims[1], outputn_dims[2], outputn_dims[3]);
     num_channels += outputn_dims[2];
     //output tensor configuration
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
@@ -152,10 +158,13 @@ static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference
     while(parameters[i] && (i < 9)) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-        if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #%d num_dims=%ld (must be 4)\n", i, num_dims);
+        if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: slice: #%d type=%d (must be float)\n", i, type);
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[i], VX_TENSOR_DIMS, outputn_dims, sizeof(outputn_dims)));
-        if((input_dims[0] != outputn_dims[0]) || (input_dims[1] != outputn_dims[1]) || (input_dims[3] != outputn_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+        if (outputn_dims[3] != input_dims[3] || outputn_dims[1] != input_dims[1] || outputn_dims[0] != input_dims[0])
+            return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: #%d dims input[%ld,%ld,%ld,%ld] != outputn[%ld,%ld,%ld,%ld]\n", i,
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    outputn_dims[0], outputn_dims[1], outputn_dims[2], outputn_dims[3]);
         num_channels += outputn_dims[2];
 
         //output tensor configuration
@@ -166,7 +175,7 @@ static vx_status VX_CALLBACK validateSliceLayer(vx_node node, const vx_reference
         i++;
     }
 
-    if(num_channels != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    if(num_channels != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: slice: num_channels=%ld != input_dims[2]=%ld\n", num_channels, input_dims[2]);
 
     return VX_SUCCESS;
 }

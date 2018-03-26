@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
+#include <numeric>
 
 #if USE_SSE_OPTIMIZATION
 #if _WIN32
@@ -15,12 +16,21 @@
 #endif
 #endif
 
+const float BB_biases[10]             = {1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52};     // bounding box biases
+
+// sort indexes based on comparing values in v
+template <typename T>
+void sort_indexes(const std::vector<T> &v, std::vector<size_t> &idx) {
+  sort(idx.begin(), idx.end(),
+       [&v](size_t i1, size_t i2) {return v[i1] > v[i2];});
+}
+
 InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clientName_, InfComCommand * cmd)
     : sock{ sock_ }, args{ args_ }, clientName{ clientName_ },
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receiveFileNames { (bool)cmd->data[8] },
+      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
@@ -33,7 +43,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       threadDeviceInputCopy{ nullptr }, threadDeviceProcess{ nullptr }, threadDeviceOutputCopy{ nullptr },
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
-      queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr }
+      queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr },
+      region { nullptr }
 #if  USE_ADVANCED_MESSAGE_Q
     , inputQ(MAX_INPUT_QUEUE_DEPTH)
 #endif
@@ -48,6 +59,8 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     batchSize = args->getBatchSize();
     inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
     outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    if (detectBoundingBoxes)
+        region = new CYoloRegion();
     // lock devices
     if(!args->lockGpuDevices(GPUs, device_id))
         deviceLockSuccess = true;
@@ -57,7 +70,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     }
     numDecoderThreads = args->getNumDecoderThreads();
     numDecoderThreads = std::min(numDecoderThreads, batchSize);  // numDecoderThreads can't exceed the number of images to process in a batch
-    //std::cout << "INFO::inferenceserver is running with batchSize: "<< batchSize << "NumThreads: " << numDecoderThreads << std::endl;
+    std::cout << "INFO::inferenceserver is running with batchSize: "<< batchSize << "NumThreads: " << numDecoderThreads << std::endl;
 
     PROFILER_INITIALIZE();
 }
@@ -157,13 +170,14 @@ InferenceEngine::~InferenceEngine()
     if(moduleHandle) {
         dlclose(moduleHandle);
     }
+    if (region) delete region;
     PROFILER_SHUTDOWN();
 }
 
 vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
 {
     int length = width*height;
-    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_UNCHANGED);
+    cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_COLOR);
 
 #if USE_SSE_OPTIMIZATION
     unsigned char *data_resize = nullptr;
@@ -176,7 +190,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     {
         unsigned int aligned_size = ((length+width) * 3 + 128)&~127;
         data_resize = new unsigned char[aligned_size];
-        RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, width, height);
+        RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, matOrig.step, width, height);
         img = data_resize;
     }
 
@@ -244,7 +258,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
 #define FP_BITS     16
 #define FP_MUL      (1<<FP_BITS)
 
-void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int dwidth, unsigned int dheight)
+void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight,  unsigned int sstride, unsigned int dwidth, unsigned int dheight)
 {
     float xscale = (float)((double)swidth / (double)dwidth);
     float yscale = (float)((double)sheight / (double)dheight);
@@ -262,7 +276,7 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
     {
         int xf;
         int xmap = (xpos >> FP_BITS);
-        if (xmap >= (int)(swidth - 4)){
+        if (xmap >= (int)(swidth - 8)){
             aligned_width = x;
         }
         if (xmap >= (int)(swidth - 1)){
@@ -275,9 +289,8 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         Xf1[x] = (0x100 - xf);
     }
     aligned_width &= ~3;
-    int stride = swidth * 3;
     int dstride = dwidth * 3;
-    unsigned char *pSrcBorder = Rgb_in + (sheight*stride) - 3;    // points to the last pixel
+    unsigned char *pSrcBorder = Rgb_in + (sheight*sstride) - 3;    // points to the last pixel
 
     int ypos = (int)(FP_MUL * (yscale*0.5 - 0.5));
     for (int y = 0; y < (int)dheight; y++, ypos += yinc)
@@ -290,12 +303,12 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
         fy = ((ypos & 0xffff) + 0x80) >> 8;
         fy1 = (0x100 - fy);
         if (ym >= (int)(sheight - 1)){
-            pSrc1 = pSrc2 = Rgb_in + (sheight - 1)*stride;
+            pSrc1 = pSrc2 = Rgb_in + (sheight - 1)*sstride;
         }
         else
         {
-            pSrc1 = (ym<0)? Rgb_in : (Rgb_in + ym*stride);
-            pSrc2 = pSrc1 + stride;
+            pSrc1 = (ym<0)? Rgb_in : (Rgb_in + ym*sstride);
+            pSrc2 = pSrc1 + sstride;
         }
         __m128i w_y = _mm_setr_epi32(fy1, fy, fy1, fy);
         const __m128i mm_zeros = _mm_setzero_si128();
@@ -409,21 +422,18 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
     if (Xmap) delete[] Xmap;
 }
 
-
-void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int img_size, float *tens_buf)
+void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int imgsize, float *tens_buf)
 {
-   // printf("DecodeScaleAndConvertToTensorBatch: tens_buff: %p start:%d end:%d\n", tens_buf, start, end);
     for (int i = start; i < end; i++)
     {
         std::tuple<char*, int> image = batch_Q[i];
-        float * buf = tens_buf + img_size * i;
         char * byteStream = std::get<0>(image);
         int size = std::get<1>(image);
         if (byteStream == nullptr || size == 0) {
             break;
         }
         // decode, scale, and format convert into the OpenCL buffer
-
+        float * buf = tens_buf + imgsize * i;
         DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
         delete[] byteStream;
     }
@@ -445,6 +455,14 @@ int InferenceEngine::run()
     if (receiveFileNames && !useShadowFilenames)
     {
         return error_close(sock, "client is sending filenames but server is not configured with shadow folder\n");
+    }
+
+    //////
+    /// check if client is requesting topK which is not supported
+    ///
+    if (topK > 5)
+    {
+        return error_close(sock, "Number of topK confidances: %d not supported\n", topK);
     }
 
     //////
@@ -690,31 +708,132 @@ int InferenceEngine::run()
         if(resultCountAvailable > 0) {
             didSomething = true;
             while(resultCountAvailable > 0) {
-                int resultCount = std::min(resultCountAvailable, INFCOM_MAX_IMAGES_PER_PACKET);
-                InfComCommand cmd = {
-                    INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
-                };
-                for(int i = 0; i < resultCount; i++) {
+                if (!detectBoundingBoxes){
+                    if (topK < 1){
+                        int resultCount = std::min(resultCountAvailable, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
+                        InfComCommand cmd = {
+                            INFCOM_MAGIC, INFCOM_CMD_INFERENCE_RESULT, { resultCount, 0 }, { 0 }
+                        };
+                        for(int i = 0; i < resultCount; i++) {
+                            std::tuple<int,int> result;
+                            outputQ.dequeue(result);
+                            int tag = std::get<0>(result);
+                            int label = std::get<1>(result);
+                            if(tag < 0) {
+                                endOfSequence = true;
+                                resultCount = i;
+                                break;
+                            }
+                            cmd.data[2 + i * 2 + 0] = tag; // tag
+                            cmd.data[2 + i * 2 + 1] = label; // label
+                        }
+                        if(resultCount > 0) {
+                            cmd.data[0] = resultCount;
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            resultCountAvailable -= resultCount;
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
+                        }
+                        if(endOfSequence) {
+                            break;
+                        }
+                    }else {
+                        // send topK labels
+                        int maxResults = INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/(topK+1);
+                        int resultCount = std::min(resultCountAvailable, maxResults);
+                        InfComCommand cmd = {
+                            INFCOM_MAGIC, INFCOM_CMD_TOPK_INFERENCE_RESULT, { resultCount, topK }, { 0 }
+                        };
+                        for(int i = 0; i < resultCount; i++) {
+                            std::tuple<int,int> result;
+                            std::vector<unsigned int> labels;
+                            outputQ.dequeue(result);
+                            int tag = std::get<0>(result);
+                            if(tag < 0) {
+                                endOfSequence = true;
+                                resultCount = i;
+                                break;
+                            }
+                            outputQTopk.dequeue(labels);
+                            cmd.data[2 + i * (topK+1) + 0] = tag; // tag
+                            for (int j=0; j<topK; j++){
+                                cmd.data[3 + i * (topK+1) + j] = labels[j]; // label[j]
+                            }
+                            labels.clear();
+                        }
+                        if(resultCount > 0) {
+                            cmd.data[0] = resultCount;
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            resultCountAvailable -= resultCount;
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_TOPK_INFERENCE_RESULT));
+                        }
+                        if(endOfSequence) {
+                            break;
+                        }
+                    }
+                }else
+                {
+                    // Dequeue the bounding box
                     std::tuple<int,int> result;
+                    std::vector<ObjectBB> bounding_boxes;
                     outputQ.dequeue(result);
                     int tag = std::get<0>(result);
-                    int label = std::get<1>(result);
+                    int label = std::get<1>(result);        // label of first bounding box
                     if(tag < 0) {
                         endOfSequence = true;
-                        resultCount = i;
+                        resultCountAvailable--;
                         break;
+                    }else
+                    {
+                        int numBB = 0;
+                        int numMessages = 0;
+                        if (label >= 0) {
+                            OutputQBB.dequeue(bounding_boxes);
+                            numBB = bounding_boxes.size();
+                            if (numBB) numMessages = numBB/3;   // max 3 bb per mesasge
+                            if (numBB % 3) numMessages++;
+                        }
+                        if (!numBB) {
+                            InfComCommand cmd = {
+                                INFCOM_MAGIC, INFCOM_CMD_BB_INFERENCE_RESULT, { tag, 0 }, { 0 }        // no bb detected
+                            };
+                            ERRCHK(sendCommand(sock, cmd, clientName));
+                            ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_BB_INFERENCE_RESULT));
+                        } else
+                        {
+                            ObjectBB *pObj= &bounding_boxes[0];
+                            for (int i=0, j=0; i < numMessages, j < numBB; i++) {
+                                int numBB_per_message = std::min((numBB-j), 3);
+                                int bb_info = (numBB_per_message & 0xFFFF) | (numBB << 16);
+                                InfComCommand cmd = {
+                                    INFCOM_MAGIC, INFCOM_CMD_BB_INFERENCE_RESULT, { tag, bb_info }, { 0 }        // 3 bounding boxes in one message
+                                };
+                                cmd.data[2] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                cmd.data[3] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                cmd.data[4] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1
+                                cmd.data[5] = pObj->label;
+                                pObj++;
+                                if (numBB_per_message > 1) {
+                                    cmd.data[6] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                    cmd.data[7] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                    cmd.data[8] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1
+                                    cmd.data[9] = pObj->label;
+                                    pObj++;
+                                }
+                                if (numBB_per_message > 2) {
+                                    cmd.data[10] = (unsigned int)((pObj->y*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->x*0x7FFF)+0.5);
+                                    cmd.data[11] = (unsigned int)((pObj->h*0x7FFF)+0.5)<<16  | (unsigned int)((pObj->w*0x7FFF)+0.5);
+                                    cmd.data[12] = (unsigned int) ((pObj->confidence*0x3FFFFFFF)+0.5);    // convert float to Q30.1;
+                                    cmd.data[13] = pObj->label;
+                                    pObj++;
+                                }
+                                ERRCHK(sendCommand(sock, cmd, clientName));
+                                ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_BB_INFERENCE_RESULT));
+                                j += numBB_per_message;
+                            }
+                        }
+                        resultCountAvailable--;
                     }
-                    cmd.data[2 + i * 2 + 0] = tag; // tag
-                    cmd.data[2 + i * 2 + 1] = label; // label
-                }
-                if(resultCount > 0) {
-                    cmd.data[0] = resultCount;
-                    ERRCHK(sendCommand(sock, cmd, clientName));
-                    resultCountAvailable -= resultCount;
-                    ERRCHK(recvCommand(sock, cmd, clientName, INFCOM_CMD_INFERENCE_RESULT));
-                }
-                if(endOfSequence) {
-                    break;
+                    bounding_boxes.clear();
                 }
             }
         }
@@ -731,7 +850,7 @@ int InferenceEngine::run()
             if(imageCountRequested > 0) {
                 didSomething = true;
                 // send request for upto INFCOM_MAX_IMAGES_PER_PACKET images
-                imageCountRequested = std::min(imageCountRequested, INFCOM_MAX_IMAGES_PER_PACKET);
+                imageCountRequested = std::min(imageCountRequested, (INFCOM_MAX_IMAGES_FOR_TOP1_PER_PACKET/2));
                 InfComCommand cmd = {
                     INFCOM_MAGIC, INFCOM_CMD_SEND_IMAGES, { imageCountRequested }, { 0 }
                 };
@@ -775,10 +894,12 @@ int InferenceEngine::run()
                         int fsize = ftell(fp);
                         fseek(fp,0,SEEK_SET);
                         byteStream = new char [fsize];
-                        fread(byteStream, 1, fsize, fp);
+                        size = (int)fread(byteStream, 1, fsize, fp);
                         fclose(fp);
                         delete[] buff;
-                        size = fsize;       // actual size of the file
+                        if (size != fsize) {
+                            return error_close(sock, "error reading %d bytes from file:%s", fsize, fileNameDir.c_str());
+                        }
                     }
                     else
                     {
@@ -959,9 +1080,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         }
 
         // get next batch of inputs and convert them into tensor and release input byteStream
-        // TODO: replace with an efficient implementation
         int inputCount = 0;
-
         if (numDecoderThreads > 1) {
             // dequeue batch
             std::vector<std::tuple<char*, int>> batch_q;
@@ -990,10 +1109,8 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, (start+numImages), img_size, mapped_ptr);
                     start += numImages;
                     remSize--;
-                }
-               // numImages = subBatchSize + ((remSize > 0)? 1 : 0);
-                // do some work in this thread
-                DecodeScaleAndConvertToTensorBatch(batch_q, start, inputCount, img_size, mapped_ptr);
+                }                
+                DecodeScaleAndConvertToTensorBatch(batch_q, start, inputCount, img_size, mapped_ptr); // do some work in this thread
                 for (unsigned int t = 0; t < (numDecoderThreads-1); t++)
                 {
                     dec_threads[t].join();
@@ -1163,16 +1280,50 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
-            int label = 0;
-            float max_prob = buf[0];
-            for(int c = 1; c < dimOutput[2]; c++) {
-                float prob = buf[c];
-                if(prob > max_prob) {
-                    label = c;
-                    max_prob = prob;
+            if (!detectBoundingBoxes)
+            {
+                if (topK < 1){
+                    int label = 0;
+                    float max_prob = buf[0];
+                    for(int c = 1; c < dimOutput[2]; c++) {
+                        float prob = buf[c];
+                        if(prob > max_prob) {
+                            label = c;
+                            max_prob = prob;
+                        }
+                    }
+                    outputQ.enqueue(std::tuple<int,int>(tag,label));
+                }else {
+                    std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                    std::vector<size_t> idx(prob_vec.size());
+                    std::iota(idx.begin(), idx.end(), 0);
+                    sort_indexes(prob_vec, idx);            // sort indeces based on prob
+                    std::vector<unsigned int>    labels;
+                    outputQ.enqueue(std::tuple<int,int>(tag,idx[0]));
+                    int j=0;
+                    for (auto i: idx) {
+                        // make label which is index and prob
+                        int packed_label_prob = (i&0xFFFF)|(((unsigned int)((prob_vec[i]*0x7FFF)+0.5))<<16);   // convert prob to 16bit float and store in MSBs
+                        labels.push_back(packed_label_prob);
+                        if (++j >= topK) break;
+                    }
+                    outputQTopk.enqueue(labels);
+                }
+            }else
+            {
+                std::vector<ObjectBB> detected_objects;
+                region->GetObjectDetections(buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
+                if (detected_objects.size() > 0) {
+                    // add it to outputQ
+                    outputQ.enqueue(std::tuple<int,int>(tag,detected_objects[0].label));
+                    // add detected objects with BB into BoundingBox Q
+                    OutputQBB.enqueue(detected_objects);
+                } else
+                {
+                    // add it to outputQ
+                    outputQ.enqueue(std::tuple<int,int>(tag,-1));
                 }
             }
-            outputQ.enqueue(std::tuple<int,int>(tag,label));
         }
 
         // unlock the OpenCL buffer to perform the writing
@@ -1201,7 +1352,6 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
     // send end of sequence marker to next stage
     outputQ.enqueue(std::tuple<int,int>(-1,-1));
-
     args->lock();
     info("workDeviceOutputCopy: GPU#%d terminated for %s [processed %d batches, %d images]", gpu, clientName.c_str(), totalBatchCounter, totalImageCounter);
     args->unlock();

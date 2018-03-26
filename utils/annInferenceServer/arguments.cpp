@@ -301,10 +301,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
         }
         else if(!strcmp(argv[1], "-t")) {
             numDecoderThreads = atoi(argv[2]);
-            if (numDecoderThreads > 8) {
-                error("more than 8 decoder threads is not supported\n");
-                return -1;
-            }
+            if (numDecoderThreads < 0) numDecoderThreads = 0;
             argc -= 2;
             argv += 2;
         }

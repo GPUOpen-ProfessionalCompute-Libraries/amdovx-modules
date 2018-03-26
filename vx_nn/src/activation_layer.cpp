@@ -40,29 +40,30 @@ static vx_status VX_CALLBACK validateActivationLayer(vx_node node, const vx_refe
     // check scalar type
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[1], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: activation: #1 scalar type=%d (not enum)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: activation: #2 scalar type=%d (not float)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: activation: #3 scalar type=%d (not float)\n", type);
 
     // check tensor dimensions
     vx_size num_dims;
     vx_size input_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: activation: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: activation: #0 tensor type=%d (not float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: activation: #4 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: activation: #4 tensor type=%d (not float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if (output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[2] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[1] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input_dims[3] || output_dims[2] != input_dims[2] ||
+        output_dims[1] != input_dims[1] || output_dims[0] != input_dims[0])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: activation: dims input[%ld,%ld,%ld,%ld] != output[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -106,8 +107,13 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->outputDescriptor, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
 
     //activation Function Type
-    vx_nn_activation_function_e activationMode;
+    vx_int32 activationMode;
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[1], &activationMode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+
+    data->activAlpha = 1.0f;
+    data->activPower = 1.0f;
+    vx_float32 neg_slope = 0.0f;
+
     if (activationMode == VX_NN_ACTIVATION_RELU) {
         data->mode = miopenActivationRELU;
     }
@@ -123,9 +129,11 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     else if (activationMode == VX_NN_ACTIVATION_SOFTRELU) {
         data->mode = miopenActivationSOFTRELU;
     }
-    data->activAlpha = 1.0;
-    data->activBeta = 0.0;
-    data->activPower = 1.0;
+    else if (activationMode == VX_NN_ACTIVATION_LEAKY_RELU) {
+        data->mode = miopenActivationRELU;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &neg_slope, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->activBeta = neg_slope;
 
     //activation Descriptor.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateActivationDescriptor(&data->activationDesc)));
@@ -134,6 +142,7 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
 #if ENABLE_DEBUG_PRINT_DIMS
+    std::cout << "activation param active_alpha: " << data->activAlpha << "active_beta: " << data->activBeta << "activationmode: " << activationMode << std::endl;
     std::cout << "activation input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif

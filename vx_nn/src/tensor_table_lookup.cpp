@@ -171,10 +171,10 @@ static vx_status VX_CALLBACK validateTensorTableLookup(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_FIXED_POINT_POSITION, &output_fixedpt_pos, sizeof(output_fixedpt_pos)));
 
     if(input_ndims != output_ndims) return VX_ERROR_INVALID_DIMENSION;
-    if((input_ndims >= 1) && (input_dims[0] != input_dims[0])) return VX_ERROR_INVALID_DIMENSION;
-    if((input_ndims >= 2) && (input_dims[1] != input_dims[1])) return VX_ERROR_INVALID_DIMENSION;
-    if((input_ndims >= 3) && (input_dims[2] != input_dims[2])) return VX_ERROR_INVALID_DIMENSION;
-    if((input_ndims >= 4) && (input_dims[3] != input_dims[3])) return VX_ERROR_INVALID_DIMENSION;
+    if((input_ndims >= 1) && (input_dims[0] != output_dims[0])) return VX_ERROR_INVALID_DIMENSION;
+    if((input_ndims >= 2) && (input_dims[1] != output_dims[1])) return VX_ERROR_INVALID_DIMENSION;
+    if((input_ndims >= 3) && (input_dims[2] != output_dims[2])) return VX_ERROR_INVALID_DIMENSION;
+    if((input_ndims >= 4) && (input_dims[3] != output_dims[3])) return VX_ERROR_INVALID_DIMENSION;
     if(lut_type != output_type) return VX_ERROR_INVALID_TYPE;
     if((input_type == VX_TYPE_INT16) && (output_type == VX_TYPE_UINT8)) return VX_ERROR_INVALID_TYPE;
 

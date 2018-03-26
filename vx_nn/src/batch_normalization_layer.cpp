@@ -23,129 +23,129 @@ THE SOFTWARE.
 #include "kernels.h"
 
 struct BatchNormLayerLocalData {
-	NeuralNetworkCommonHandle * handle;
-	miopenTensorDescriptor_t input_desc;
-	cl_mem input_mem;
-	miopenTensorDescriptor_t output_desc;
-	cl_mem output_mem;
+    NeuralNetworkCommonHandle * handle;
+    miopenTensorDescriptor_t input_desc;
+    cl_mem input_mem;
+    miopenTensorDescriptor_t output_desc;
+    cl_mem output_mem;
     cl_mem workspace;
-    size_t workspace_size;	
-	float alpha, beta, eps;
-	miopenTensorDescriptor_t bnScaleBiasMeanVarDesc;
-	cl_mem bnScale, bnBias, bnMean, bnVariance;
+    size_t workspace_size;
+    float alpha, beta, eps;
+    miopenTensorDescriptor_t bnScaleBiasMeanVarDesc;
+    cl_mem bnScale, bnBias, bnMean, bnVariance;
 };
 
 static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
-	// check tensor dimensions
-	vx_enum type;
-	vx_size num_dims;
-	vx_size input_dims[4], output_dims[4];
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-	if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-	if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-	if (output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-	if (output_dims[2] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-	if (output_dims[1] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-	if (output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    // check tensor dimensions
+    vx_enum type;
+    vx_size num_dims;
+    vx_size input_dims[4], output_dims[4];
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #0 type=%d (must be float)\n", type);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #6 num_dims=%ld (must be 4)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #6 type=%d (must be float)\n", type);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    if (output_dims[3] != input_dims[3] || output_dims[2] != input_dims[2] ||
+        output_dims[1] != input_dims[1] || output_dims[0] != input_dims[0])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: dims input[%ld,%ld,%ld,%ld] != output[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
 
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	if (num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
-	if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-	vx_size mean_dims[1];
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, mean_dims, sizeof(mean_dims)));
-	if (mean_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #1 num_dims=%ld (must be 1 or 2)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #1 type=%d (must be float)\n", type);
+    vx_size mean_dims[2] = { 0, 1 };
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, mean_dims, num_dims * sizeof(vx_size)));
+    if (mean_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: mean[0](%ld) != input[2](%ld)\n", mean_dims[0], input_dims[2]);
 
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	if (num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
-	if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-	vx_size variance_dims[1];
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, variance_dims, sizeof(variance_dims)));
-	if (variance_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #2 type=%d (must be float)\n", type);
+    vx_size variance_dims[2] = { 0, 1 };
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, variance_dims, num_dims * sizeof(vx_size)));
+    if (variance_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: variance[0](%ld) != input[2](%ld)\n", variance_dims[0], input_dims[2]);
 
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	if (num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
-	if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-	vx_size scale_dims[1];
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, scale_dims, sizeof(scale_dims)));
-	if (scale_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #3 num_dims=%ld (must be 1 or 2)\n", num_dims);
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #3 type=%d (must be float)\n", type);
+    vx_size scale_dims[2] = { 0, 1 };
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, scale_dims, num_dims * sizeof(vx_size)));
+    if (scale_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: scale[0](%ld) != input[2](%ld)\n", scale_dims[0], input_dims[2]);
 
-	if (parameters[4]) {
-		ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-		ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-		if (num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
-		if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-		vx_size bias_dims[1];
-		ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-		if (bias_dims[0] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-	}
+    if (parameters[4]) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+        if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #4 num_dims=%ld (must be 1 or 2)\n", num_dims);
+        if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #4 type=%d (must be float)\n", type);
+        vx_size bias_dims[2] = { 0, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
+        if (bias_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: bias[0](%ld) != input[2](%ld)\n", bias_dims[0], input_dims[2]);
+    }
 
-	//output tensor configuration.
-	type = VX_TYPE_FLOAT32;
-	num_dims = 4;
-	ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-	ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-	ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    // output tensor configuration.
+    type = VX_TYPE_FLOAT32;
+    num_dims = 4;
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-	return VX_SUCCESS;
+    return VX_SUCCESS;
 }
 
 static vx_status VX_CALLBACK processBatchNormalizationLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
 {
-	BatchNormLayerLocalData * data = NULL;
-	ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-	miopenHandle_t miopenHandle = data->handle->miopen_handle;
+    BatchNormLayerLocalData * data = NULL;
+    ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
-    //miopen batch norm inference.
-	ERROR_CHECK_MIOPEN_STATUS(miopenBatchNormalizationForwardInference(miopenHandle, miopenBNSpatial, &data->alpha, &data->beta, data->input_desc, data->input_mem,
-		data->output_desc, data->output_mem, data->bnScaleBiasMeanVarDesc, data->bnScale, data->bnBias, data->bnMean, data->bnVariance, data->eps));
+    // miopen batch norm inference.
+    ERROR_CHECK_MIOPEN_STATUS(miopenBatchNormalizationForwardInference(miopenHandle, miopenBNSpatial, &data->alpha, &data->beta, data->input_desc, data->input_mem,
+        data->output_desc, data->output_mem, data->bnScaleBiasMeanVarDesc, data->bnScale, data->bnBias, data->bnMean, data->bnVariance, data->eps));
 
-	return VX_SUCCESS;
+    return VX_SUCCESS;
 }
 
 static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
-	BatchNormLayerLocalData * data = new BatchNormLayerLocalData;
-	memset(data, 0, sizeof(*data));
-	ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
+    BatchNormLayerLocalData * data = new BatchNormLayerLocalData;
+    memset(data, 0, sizeof(*data));
+    ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
-	//initialize input and output tensor descriptors.
-	vx_size input_dims[4], output_dims[4];
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-	ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
-	ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bnScaleBiasMeanVarDesc));
-	ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
-	ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
-	ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bnScaleBiasMeanVarDesc, miopenFloat, 1, input_dims[2], 1, 1));
-	ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
-	ERROR_CHECK_MIOPEN_STATUS(miopenDeriveBNTensorDescriptor(data->bnScaleBiasMeanVarDesc, data->input_desc, miopenBNSpatial));
+    // initialize input and output tensor descriptors.
+    vx_size input_dims[4], output_dims[4];
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bnScaleBiasMeanVarDesc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bnScaleBiasMeanVarDesc, miopenFloat, 1, input_dims[2], 1, 1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenDeriveBNTensorDescriptor(data->bnScaleBiasMeanVarDesc, data->input_desc, miopenBNSpatial));
 
-	data->alpha = 1; data->beta = 0;
+    data->alpha = 1; data->beta = 0;
 
-	//input and output memory.
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->bnMean, sizeof(data->bnMean)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bnVariance, sizeof(data->bnVariance)));
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_BUFFER_OPENCL, &data->bnScale, sizeof(data->bnScale)));
-    if(parameters[4])
-    {
+    // input and output memory.
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->bnMean, sizeof(data->bnMean)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bnVariance, sizeof(data->bnVariance)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_BUFFER_OPENCL, &data->bnScale, sizeof(data->bnScale)));
+    if(parameters[4]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->bnBias, sizeof(data->bnBias)));
     }
-    else{
+    else {
         vx_context   vxContext = vxGetContext((vx_reference)node);
         cl_context context;
         ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
@@ -155,19 +155,19 @@ static vx_status VX_CALLBACK initializeBatchNormalizationLayer(vx_node node, con
         err = clEnqueueFillBuffer(data->handle->cmdq, data->bnBias, &pattern, sizeof(cl_float), 0, input_dims[2], 0, NULL, NULL);
         if (err) return VX_FAILURE;
     }
-	ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[6], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
-	data->eps = 0.00001;
-	ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &data->eps, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    data->eps = 0.00001;
+    ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &data->eps, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
 
 #if ENABLE_DEBUG_PRINT_DIMS
-	std::cout << "batch_normalization input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
-	std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
+    std::cout << "batch_normalization input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
+    std::cout << " output " << output_dims[3] << " " << output_dims[2] << " " << output_dims[1] << " " << output_dims[0] << std::endl;
 #endif
 
-	ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
+    ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 
-	return VX_SUCCESS;
+    return VX_SUCCESS;
 }
 
 static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
@@ -192,50 +192,50 @@ static vx_status VX_CALLBACK uninitializeBatchNormalizationLayer(vx_node node, c
 
 vx_status publishBatchNormalizationLayer(vx_context context)
 {
-	// add kernel to the context with callbacks
-	vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.batch_normalization_layer", VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, processBatchNormalizationLayer, 4, validateBatchNormalizationLayer, initializeBatchNormalizationLayer, uninitializeBatchNormalizationLayer);
-	ERROR_CHECK_OBJECT(kernel);
+    // add kernel to the context with callbacks
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.batch_normalization_layer", VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, processBatchNormalizationLayer, 4, validateBatchNormalizationLayer, initializeBatchNormalizationLayer, uninitializeBatchNormalizationLayer);
+    ERROR_CHECK_OBJECT(kernel);
 
-	// enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
-	vx_bool enableBufferAccess = vx_true_e;
-	ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_BUFFER_ACCESS_ENABLE, &enableBufferAccess, sizeof(enableBufferAccess)));
+    // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
+    vx_bool enableBufferAccess = vx_true_e;
+    ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_BUFFER_ACCESS_ENABLE, &enableBufferAccess, sizeof(enableBufferAccess)));
 
-	// set kernel parameters
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
-	ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    // set kernel parameters
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
 
-	// finalize and release kernel object
-	ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
-	ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
+    // finalize and release kernel object
+    ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
+    ERROR_CHECK_STATUS(vxReleaseKernel(&kernel));
 
-	return VX_SUCCESS;
+    return VX_SUCCESS;
 }
 
 VX_API_ENTRY vx_node VX_API_CALL vxBatchNormalizationLayer(vx_graph graph, vx_tensor inputs, vx_tensor mean, vx_tensor variance, vx_tensor scale, vx_tensor bias, vx_float32 eps, vx_tensor output)
 {
-	vx_node node = NULL;
-	vx_context context = vxGetContext((vx_reference)graph);
-	if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
+    vx_node node = NULL;
+    vx_context context = vxGetContext((vx_reference)graph);
+    if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
         vx_scalar s_eps = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &eps, sizeof(eps));
         if(vxGetStatus((vx_reference)s_eps) == VX_SUCCESS)
         {
-			vx_reference params[] = {
-				(vx_reference)inputs,
-				(vx_reference)mean,
-				(vx_reference)variance,
-				(vx_reference)scale,
-				(vx_reference)bias,
-				(vx_reference)s_eps,
-				(vx_reference)output
-			};
-			node = createNode(graph, VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
+            vx_reference params[] = {
+                (vx_reference)inputs,
+                (vx_reference)mean,
+                (vx_reference)variance,
+                (vx_reference)scale,
+                (vx_reference)bias,
+                (vx_reference)s_eps,
+                (vx_reference)output
+            };
+            node = createNode(graph, VX_KERNEL_BATCH_NORMALISATION_LAYER_AMD, params, sizeof(params) / sizeof(params[0]));
             vxReleaseScalar(&s_eps);
-		}
-	}
-	return node;
+        }
+    }
+    return node;
 }
