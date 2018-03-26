@@ -804,21 +804,32 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\tselect {-webkit-appearance: none; -moz-appearance: none; text-indent: 0px; text-overflow: ''; color:maroon; }\n");
             fileObj.write("\t\n");
+            fileObj.write("\t.tooltip { position: relative; display: inline-block;}\n");
+            fileObj.write("\t.tooltip .tooltiptext { visibility: hidden; width: 150px; background-color: black; color: gold;\n");
+            fileObj.write("\t\ttext-align: center;  border-radius: 6px;  padding: 5px; position: absolute; z-index: 1;}\n");
+            fileObj.write("\t.tooltip:hover .tooltiptext { visibility: visible;}\n");
+            fileObj.write("\t\n");
             fileObj.write("\t</style>\n");
             fileObj.write("\n</head>\n");
             fileObj.write("\n\n<body>\n");
             fileObj.write("\t\n");
             fileObj.write("\t<div id=\"myModal\" class=\"modal\"> <span class=\"close\">&times;</span>  <img class=\"modal-content\" id=\"img01\">  <div id=\"caption\"></div> </div>\n");
             fileObj.write("\t\n");
+
+            // table order
             fileObj.write("\t<div id=\"mySidenav\" class=\"sidenav\">\n");
             fileObj.write("\t<a href=\"javascript:void(0)\" class=\"closebtn\" onclick=\"closeNav()\">&times;</a>\n");
             fileObj.write("\t<A HREF=\"#table0\"><font size=\"5\">Summary</font></A><br>\n");
-            fileObj.write("\t<A HREF=\"#table1\"><font size=\"5\">Results</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table1\"><font size=\"5\">Image Results</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table2\"><font size=\"5\">Hierarchy</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Labels</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table4\"><font size=\"5\">Graphs</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table5\"><font size=\"5\">Compare</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Help</font></A><br>\n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
+
+            // scripts
             fileObj.write("\t<script>\n");
             fileObj.write("\t\tfunction openNav() {\n");
             fileObj.write("\t\t\tdocument.getElementById(\"mySidenav\").style.width = \"250px\";\n");
@@ -866,17 +877,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t</div></a>\n");
             if(exportTool){
                 fileObj.write("\t<a href=\"https://www.amd.com/en\" target=\"_blank\">\n");
-                fileObj.write("\t<img \" src=\"icons/AMD_logo_white.png\" alt=\"AMD\" height=\"61\" /></a>\n");
+                fileObj.write("\t<img \" src=\"icons/small_amd_logo.png\" alt=\"AMD\" /></a>\n");
                 fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
-                fileObj.write("\t<img \" src=\"icons/vega_icon_150.png\" alt=\"GPUopen\" height=\"61\" /></a>\n");
+                fileObj.write("\t<img \" src=\"icons/small_radeon_logo.png\" alt=\"GPUopen\" /></a>\n");
                 fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
-                fileObj.write("\t<img \" src=\"icons/GitHub_logo_white.png\" alt=\"AMD GitHub\" height=\"61\" /></a>\n");
-                fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\"/> \n");
+                fileObj.write("\t<img \" src=\"icons/small_github_logo.png\" alt=\"AMD GitHub\" /></a>\n");
+                fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\" hspace=\"190\"/> \n");
             }
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
 
-            // Inference Summary
+            // Overall Summary
             QString text;
             int netSummaryImages =  state->imageDataSize - state->totalNoGroundTruth;
             float passProb = (state->top1TotProb+state->top2TotProb+state->top3TotProb+state->top4TotProb+state->top5TotProb);
@@ -930,44 +941,42 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.4f</b></font></td>\n",state->totalFailProb/state->totalMismatch);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n</table>\n<br><br><br>\n");
-            fileObj.write("\t<table align=\"center\" style=\"width: 80%\">\n");
+            // topK result
+            fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
             fileObj.write("\t<tr>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 1 Match</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 1 Match %</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 2 Match</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 2 Match %</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 3 Match</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 3 Match %</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 4 Match</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 4 Match %</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 5 Match</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Top 5 Match %</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>1st Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>2nd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>3rd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>4th Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>5th Match</b></font></td>\n");
             fileObj.write("\t\t</tr>\n");
             fileObj.write("\t<tr>\n");
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top1Count);
             fileObj.write(text.toStdString().c_str());
-            accuracyPer = ((float)state->top1Count/netSummaryImages);
-            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
-            fileObj.write(text.toStdString().c_str());
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top2Count);
-            fileObj.write(text.toStdString().c_str());
-            accuracyPer = ((float)state->top2Count/netSummaryImages);
-            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top3Count);
             fileObj.write(text.toStdString().c_str());
-            accuracyPer = ((float)state->top3Count/netSummaryImages);
-            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
-            fileObj.write(text.toStdString().c_str());
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top4Count);
-            fileObj.write(text.toStdString().c_str());
-            accuracyPer = ((float)state->top4Count/netSummaryImages);
-            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             text.sprintf("\t\t<td align=\"center\"><b>%d</b></td>\n",state->top5Count);
             fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            accuracyPer = ((float)state->top1Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f %%</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top2Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f %%</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top3Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f %%</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
+            accuracyPer = ((float)state->top4Count/netSummaryImages);
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f %%</b></td>\n",(accuracyPer*100));
+            fileObj.write(text.toStdString().c_str());
             accuracyPer = ((float)state->top5Count/netSummaryImages);
-            text.sprintf("\t\t<td align=\"center\"><b>%.2f</b></td>\n",(accuracyPer*100));
+            text.sprintf("\t\t<td align=\"center\"><b>%.2f %%</b></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t\t</tr>\n");
             fileObj.write("</table>\n");
@@ -978,20 +987,20 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\"><b>Image</b></font></td>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\"><b>FileName</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>1st</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b><div class=\"tooltip\">1st<span class=\"tooltiptext\">Result With Highest Probability. Click on the Text to Sort</span></div></b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>2nd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>3rd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>4th</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>5th</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Ground-Truth</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Matched</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b><div class=\"tooltip\">Ground Truth<span class=\"tooltiptext\">Input Image Label. Click on the Text to Sort</span></div></b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b><div class=\"tooltip\">Matched<span class=\"tooltiptext\">TopK Result Matched with Ground Truth. Click on the Text to Sort</span></div></b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Text-1</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Text-2</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Text-3</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Text-4</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Text-5</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Ground Truth Text</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-1</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b><div class=\"tooltip\">Prob-1<span class=\"tooltiptext\">Probability of the Top Match. Click on the Text to Sort</span></div></b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-2</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-3</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\"><b>Prob-4</b></font></td>\n");
@@ -1170,7 +1179,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("</table>\n");
 
             // hierarchy
-            fileObj.write("<A NAME=\"table2\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Hierarchy Summary</em></font></h1></A>\n");
+            fileObj.write("<A NAME=\"table2\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Hierarchy Summary (by probability level)</em></font></h1></A>\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 90%\">\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"2\"><b>Probability</b></font></td>\n");
@@ -1229,7 +1238,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("</table>\n");
 
             // label
-            fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary</em></font></h1></A>\n");
+            fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary (stats per image class)</em></font></h1></A>\n");
 
             if(state->topKValue > 4){
                 fileObj.write("\t<table class=\"sortable\" id=\"labelsTable\" cellspacing=\"0\" border=\"0\" align=\"center\">\n");
@@ -1245,11 +1254,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<tr>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label ID</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Images in DataBase</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top1</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top2</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top3</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top4</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched with Top5</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 1st Choice</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 2nd Choice</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 3rd Choice</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 4th Choice</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 5th Choice</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Top1 Label Match</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label Description</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
