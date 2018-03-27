@@ -775,7 +775,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t#myImg { border-radius: 5px; cursor: pointer; transition: 0.3s; }\n");
             fileObj.write("\t#myImg:hover { opacity: 0.7; }\n");
-            fileObj.write("\t.modal{ display: none; position: fixed; z-index: 1; padding-top: 100px; left: 0; top: 0;width: 100%;\n");
+            fileObj.write("\t.modal{ display: none; position: fixed; z-index: 8; padding-top: 100px; left: 0; top: 0;width: 100%;\n");
             fileObj.write("\t		height: 100%; overflow: auto; background-color: rgb(0,0,0); background-color: rgba(0,0,0,0.9); }\n");
             fileObj.write("\t.modal-content { margin: auto; display: block; width: 80%; max-width: 500px; }\n");
             fileObj.write("\t#caption { margin: auto; display: block; width: 80%; max-width: 700px; text-align: center; color: white;font-size: 18px; padding: 10px 0; height: 150px;}\n");
@@ -788,7 +788,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t@media only screen and (max-width: 400px){ .modal-content {     width: 100%; } }\n");
             fileObj.write("\t\n");
             fileObj.write("\tbody { font-family: \"Lato\", sans-serif;}\n");
-            fileObj.write("\t.sidenav { height: 100%; width: 0; position: fixed; z-index: 1; top: 0; left: 0; background-color: #111;\n");
+            fileObj.write("\t.sidenav { height: 100%; width: 0; position: fixed; z-index: 7; top: 0; left: 0; background-color: #111;\n");
             fileObj.write("\t\t overflow-x: hidden;    transition: 0.5s; padding-top: 60px;}\n");
             fileObj.write("\t.sidenav a { padding: 8px 8px 8px 32px; text-decoration: none; font-size: 25px; color: #818181; display: block; transition: 0.3s;}\n");
             fileObj.write("\t.sidenav a:hover { color: #f1f1f1;}\n");
@@ -797,7 +797,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t@media screen and (max-height: 450px) { .sidenav {padding-top: 15px;} .sidenav a {font-size: 18px;} }\n");
             fileObj.write("\t\n");
             fileObj.write("\tbody {margin:0;}\n");
-            fileObj.write("\t.navbar {  overflow: hidden;  background-color: #333;  position: fixed;  top: 0;  width: 100%;}\n");
+            fileObj.write("\t.navbar {  overflow: hidden;  background-color: #333;  position: fixed; z-index: 6;  top: 0;  width: 100%;}\n");
             fileObj.write("\t.navbar a {  float: left;  display: block;  color: #f2f2f2;  text-align: center;  padding: 14px 16px;  text-decoration: none;  font-size: 17px; }\n");
             fileObj.write("\t.navbar a:hover {  background: #ddd;  color: black;}\n");
             fileObj.write("\t.main {  padding: 16px;  margin-top: 30px; }\n");
@@ -806,7 +806,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t.tooltip { position: relative; display: inline-block;}\n");
             fileObj.write("\t.tooltip .tooltiptext { visibility: hidden; width: 150px; background-color: black; color: gold;\n");
-            fileObj.write("\t\ttext-align: center;  border-radius: 6px;  padding: 5px; position: absolute; z-index: 1;}\n");
+            fileObj.write("\t\ttext-align: center;  border-radius: 6px;  padding: 5px; position: absolute; z-index: 3;}\n");
             fileObj.write("\t.tooltip:hover .tooltiptext { visibility: visible;}\n");
             fileObj.write("\t\n");
             fileObj.write("\t</style>\n");
@@ -887,9 +887,25 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             text.sprintf("\t['Summary',   %d     , %d        , %d         ]\n",passCount,state->totalMismatch,state->totalNoGroundTruth);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = { title: 'Overall Result Summary', vAxis: { title: 'Images' }, width: 800, height: 500 };\n");
+            fileObj.write("\tvar options = { title: 'Overall Result Summary', vAxis: { title: 'Images' }, width: 800, height: 400 };\n");
             fileObj.write("\tvar chart = new google.charts.Bar(document.getElementById('Model_Stats'));\n");
             fileObj.write("\tchart.draw(data, google.charts.Bar.convertOptions(options));}\n");
+            fileObj.write("\t\n");
+            // TopK pass fail summary
+            fileObj.write("\tgoogle.charts.load('current', {'packages':['corechart']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(drawTopKResultChart);\n");
+            fileObj.write("\tfunction drawTopKResultChart() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('string', 'Top K');\n");
+            fileObj.write("\tdata.addColumn('number', 'Matchs');\n");
+            fileObj.write("\tdata.addRows([\n");
+            text.sprintf("\t[ 'Matched TopK Choice', %d  ],\n",passCount);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t[ 'MisMatched', %d  ]]);\n",state->totalMismatch);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\tvar options = { title:'Image Match/Mismatch Summary', width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.PieChart(document.getElementById('topK_result_chart_div'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
             // topK summary
             fileObj.write("\tgoogle.charts.load('current', {'packages':['corechart']});\n");
@@ -907,11 +923,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write(text.toStdString().c_str());
             text.sprintf("\t[ 'Matched 4th Choice', %d  ],\n",state->top4Count);
             fileObj.write(text.toStdString().c_str());
-            text.sprintf("\t[ 'Matched 5th Choice', %d  ],\n",state->top5Count);
+            text.sprintf("\t[ 'Matched 5th Choice', %d  ]]);\n",state->top5Count);
             fileObj.write(text.toStdString().c_str());
-            text.sprintf("\t[ 'MisMatched', %d  ]]);\n",state->totalMismatch);
-            fileObj.write(text.toStdString().c_str());
-            fileObj.write("\tvar options = { title:'Inference Highlights', width:600, height:600 };\n");
+            fileObj.write("\tvar options = { title:'TopK Image Matches', width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.PieChart(document.getElementById('result_chart_div'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -921,8 +935,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tfunction drawPassFailGraph() {\n");
             fileObj.write("\tvar data = new google.visualization.DataTable();\n");
             fileObj.write("\tdata.addColumn('number', 'X');\n");
-            fileObj.write("\tdata.addColumn('number', 'Pass');\n");
-            fileObj.write("\tdata.addColumn('number', 'Fail');\n");
+            fileObj.write("\tdata.addColumn('number', 'Match');\n");
+            fileObj.write("\tdata.addColumn('number', 'Mismatch');\n");
             fileObj.write("\tdata.addRows([\n");
             fileObj.write("\t[1, 0, 0],\n");
             float fVal=0.99;
@@ -941,7 +955,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -972,7 +986,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L1 Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L1 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L1_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1003,7 +1017,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L2 Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L2 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L2_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1034,7 +1048,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L3 Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L3 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L3_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1065,7 +1079,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L4 Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L4 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L4_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1096,7 +1110,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L5 Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:600, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L5 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L5_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1165,7 +1179,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative Hierarchy Levels Success/Failure', hAxis: { title: 'Probability' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:1200, height:800 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative Hierarchy Levels Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:1400, height:800 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Hierarchy_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1605,8 +1619,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             // Graph
             fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Graphs</em></font></h1></A>\n");
             fileObj.write("\t<center><div id=\"Model_Stats\" style=\"border: 1px solid #ccc\"></div></center>\n");
-            fileObj.write("\t<center><div id=\"result_chart_div\" style=\"border: 1px solid #ccc\"></div></center>\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 90%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"result_chart_div\" style=\"border: 1px solid #ccc\"></div></center></td>\n");
+            fileObj.write("\t <td><center><div id=\"topK_result_chart_div\" style=\"border: 1px solid #ccc\"></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t <td><center><div id=\"pass_fail_chart\" style=\"border: 1px solid #ccc\" ></div></center> </td>\n");
             fileObj.write("\t <td><center><div id=\"L1_pass_fail_chart\" style=\"border: 1px solid #ccc\" ></div></center> </td>\n");
