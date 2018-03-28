@@ -120,4 +120,12 @@ private:
     runtime_receiver_status progress;
 };
 
+/* Model Info Structure */
+struct ModelMaster {
+    QString name;
+    int matched;
+    int mismatched;
+};
+typedef struct ModelMaster ModelMasterInfo;
+
 #endif // INFERENCE_VIEWER_H
