@@ -1197,9 +1197,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<img \" src=\"icons/small_amd_logo.png\" alt=\"AMD\" /></a>\n");
                 fileObj.write("\t<a href=\"https://gpuopen.com/\" target=\"_blank\">\n");
                 fileObj.write("\t<img \" src=\"icons/small_radeon_logo.png\" alt=\"GPUopen\" /></a>\n");
-                fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules\" target=\"_blank\">\n");
+                fileObj.write("\t<a href=\"https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-modules#amd-openvx-modules-amdovx-modules\" target=\"_blank\">\n");
                 fileObj.write("\t<img \" src=\"icons/small_github_logo.png\" alt=\"AMD GitHub\" /></a>\n");
-                fileObj.write("\t<img \" src=\"icons/AIToolKit_400x90.png\" alt=\"AMD Inference ToolKit\" hspace=\"190\"/> \n");
+                fileObj.write("\t<img \" src=\"icons/ADAT_500x100.png\" alt=\"AMD Inference ToolKit\" hspace=\"100\" height=\"90\"/> \n");
             }
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
@@ -1251,10 +1251,10 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t</tr>\n<tr>\n");
             text.sprintf("\t<td><font color=\"black\" size=\"4\">Average Pass Probability for Top %d</font></td>\n",state->topKValue);
             fileObj.write(text.toStdString().c_str());
-            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.4f</b></font></td>\n",avgPassProb);
+            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f %%</b></font></td>\n",(avgPassProb*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Average mismatch Probability for Top 1</font></td>\n");
-            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.4f</b></font></td>\n",state->totalFailProb/state->totalMismatch);
+            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f %%</b></font></td>\n",((state->totalFailProb/state->totalMismatch)*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n</table>\n<br><br><br>\n");
             // topK result
@@ -1715,18 +1715,15 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                             modelInfo[ctr][j] = modelLine[i];
                             j++;
                         }
-
                         if (ctr > 5) {
                             printf("ERROR: model Info File ERROR count: %d\n", ctr);
                             return;
                         }
                     }
-
                     if (ctr != 5) {
                         printf("ERROR: model Info File ERROR -- count: %d\n", ctr);
                         return;
                     }
-
                     if(lineNumber){
                         int matchedImages, mismatchedImages;
                         QString modelName = modelInfo[0];
@@ -1764,28 +1761,14 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\tgoogle.charts.setOnLoadCallback(drawChart_master);\n");
                 fileObj.write("\tfunction drawChart_master(){\n");
                 fileObj.write("\tvar data = google.visualization.arrayToDataTable([\n");
-                fileObj.write("\t['  '");
+                fileObj.write("\t['Model'   ,'Match',   'Mismatch'],\n");
                 for(int i = 1; i < lineNumber; i++){
-                    text.sprintf(",'%s-Match'",modelMaster[i].name.toStdString().c_str());
+                    text.sprintf("\t['%s'   ,%d ,   %d]",modelMaster[i].name.toStdString().c_str(),modelMaster[i].matched, modelMaster[i].mismatched);
                     fileObj.write(text.toStdString().c_str());
+                    if(i != (lineNumber-1)) fileObj.write(",\n"); else fileObj.write("\n");
                 }
-                for(int i = 1; i < lineNumber; i++){
-                    text.sprintf(",'%s-Mismatch'",modelMaster[i].name.toStdString().c_str());
-                    fileObj.write(text.toStdString().c_str());
-                }
-                fileObj.write("],\n");
-                fileObj.write("\t['Summary'");
-                for(int i = 1; i < lineNumber; i++){
-                    text.sprintf(",%d",modelMaster[i].matched);
-                    fileObj.write(text.toStdString().c_str());
-                }
-                for(int i = 1; i < lineNumber; i++){
-                    text.sprintf(",%d",modelMaster[i].mismatched);
-                    fileObj.write(text.toStdString().c_str());
-                }
-                fileObj.write("]\n");
                 fileObj.write("\t]);\n");
-                fileObj.write("\tvar options = { title: 'Overall Result Summary', vAxis: { title: 'Images' }, width: 1400, height: 600 };\n");
+                fileObj.write("\tvar options = { title: 'Overall Result Summary', vAxis: { title: 'Images' }, width: 800, height: 600, bar: { groupWidth: '30%' }, isStacked: true , series: { 0:{color:'green'},1:{color:'Indianred'} }};\n");
                 fileObj.write("\tvar chart = new google.charts.Bar(document.getElementById('Model_Stats_master'));\n");
                 fileObj.write("\tchart.draw(data, google.charts.Bar.convertOptions(options));}\n");
                 fileObj.write("\t\n");
@@ -1816,9 +1799,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 70%\">\n");
             fileObj.write("\t<tr>\n");
-            fileObj.write("\t<td><H1><font color=\"maroon\" size=\"5\"><p>AMD Neural Net ToolKit is a comprehensive set of tools for neural net inception, development, training and deployment.");
-            fileObj.write("\tThe ToolKit provides you with tools to design, develop, prune, retrain, and infer your neural network workflow in any framework.\n");
-            fileObj.write("\tThe ToolKit is designed for developing models, prune your models, retrain and deploying them to any AMD hardware, from embedded to servers.</p>\n");
+            fileObj.write("\t<td><H1><font color=\"maroon\" size=\"10\"><p>AMD Neural Net ToolKit is a comprehensive set of help tools for neural net creation, development, training and deployment.");
+            fileObj.write("\tThe ToolKit provides you with help tools to design, develop, quantize, prune, retrain, and infer your neural network work in any framework.\n");
+            fileObj.write("\tThe ToolKit is designed help you deploy your work to any AMD or 3rd party hardware, from embedded to servers.</p>\n");
             fileObj.write("\t<p>AMD Neural Net ToolKit provides you with tools for accomplishing your tasks throughout the whole neural net life-cycle, from creating a model to deploying them for your target platforms.</p></font></H1></td>\n");
             fileObj.write("\t</tr>\n");
             fileObj.write("\t<tr>\n");
