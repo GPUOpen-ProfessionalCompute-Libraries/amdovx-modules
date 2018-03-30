@@ -59,23 +59,24 @@ def extractBinary(net_parameter, graph):
 
     return initializerList
  
-
-def caffe_graph_to_ir_graph(net_parameter):
+def caffe_graph_to_ir_graph(net_parameter, input_dims):
     graph = IrGraph()
     initializerList = extractBinary(net_parameter, graph)
+    
     return graph
 
-def caffe2ir(net_parameter, outputFolder):
-    graph = caffe_graph_to_ir_graph(net_parameter)
+def caffe2ir(net_parameter, input_dims, outputFolder):
+    graph = caffe_graph_to_ir_graph(net_parameter, input_dims)
     graph.toFile(outputFolder)
     print ("graph successfully formed.")
 
 def main():
-    if len(sys.argv) < 3:
-        print ("Usage : python caffe2nnir.py <caffeModel> <nnirOutputFolder>")
+    if len(sys.argv) < 4:
+        print ("Usage : python caffe2nnir.py <caffeModel> <nnirOutputFolder> --input-dims [n,c,h,w]")
         sys.exit(1)
     caffeFileName = sys.argv[1]
     outputFolder = sys.argv[2]
+    input_dims = sys.argv[4].replace('[','').replace(']','').split(',')
     print ("loading caffemodel from %s ..." % (caffeFileName))
     net_parameter = caffe_pb2.NetParameter()
     if not os.path.isfile(caffeFileName):
@@ -87,8 +88,9 @@ def main():
     net_parameter.ParseFromString(f.read())
     print ("caffemodel read successful")
     print ("converting to AMD NNIR model in %s ... " % (outputFolder))
+    print ("input parameters obtained are : " + str(input_dims[0]) + " " + str(input_dims[1]) + " " + str(input_dims[2]) + " " + str(input_dims[3])) 
 
-    caffe2ir(net_parameter, outputFolder)
+    caffe2ir(net_parameter, input_dims, outputFolder)
 
 if __name__ == '__main__':
     main()
