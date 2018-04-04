@@ -4,6 +4,7 @@ from nnir import *
 import sys
 import argparse
 import struct
+import math
 
 caffe2ir_op_type = {
     'Convolution': 'conv',
@@ -128,17 +129,17 @@ def extractCaffeAttrInfo(layer_param):
     attribute_map = {}
     if (layer_type == "Convolution" or layer_type == "Deconvolution"):
         conv = layer_param.convolution_param
-        pad_h = conv.pad_h if (conv.pad_h is not "") else (conv.pad[0] if (len(conv.pad) > 0) else 0)
-        pad_w = conv.pad_w if (conv.pad_w is not None) else (conv.pad[1] if (len(conv.pad) > 1) else pad_h)
-        stride_h = conv.stride_h if (conv.stride_h is not None) else (conv.stride[0] if (len(conv.stride) > 0) else 1)
-        stride_w = conv.stride_w if (conv.stride_w is not None) else (conv.stride[1] if (len(conv.stride) > 1) else stride_w)
-        kernel_h = conv.kernel_h if (conv.kernel_h is not None) else (conv.kernel_size[0] if (len(conv.kernel_size) > 0) else 0)
-        kernel_w = conv.kernel_w if (conv.kernel_w is not None) else (conv.kernel_size[1] if (len(conv.kernel_size) > 1) else kernel_h)
+        pad_h = conv.pad_h if (conv.HasField('pad_h')) else (int(conv.pad[0]) if (len(conv.pad) > 0) else 0)
+        pad_w = conv.pad_w if (conv.HasField('pad_w')) else (int(conv.pad[1]) if (len(conv.pad) > 1) else pad_h)
+        stride_h = conv.stride_h if (conv.HasField('stride_h')) else (int(conv.stride[0]) if (len(conv.stride) > 0) else 1)
+        stride_w = conv.stride_w if (conv.HasField('stride_w')) else (int(conv.stride[1]) if (len(conv.stride) > 1) else stride_h)
+        kernel_h = conv.kernel_h if (conv.HasField('kernel_h')) else (int(conv.kernel_size[0]) if (len(conv.kernel_size) > 0) else 0)
+        kernel_w = conv.kernel_w if (conv.HasField('kernel_w')) else (int(conv.kernel_size[1]) if (len(conv.kernel_size) > 1) else kernel_h)
         num_out = conv.num_output
         dilation_h = conv.dilation[0] if (len(conv.dilation) > 0) else 1
         dilation_w = conv.dilation[1] if (len(conv.dilation) > 1) else dilation_h
         bias_term = conv.bias_term
-        groups = conv.group if (conv.group is not None) else 1
+        groups = conv.group if (conv.HasField('group')) else 1
 
         attribute_map["strides"] = [stride_w, stride_h]
         attribute_map["kernel_shape"] = [kernel_w, kernel_h]
@@ -148,19 +149,19 @@ def extractCaffeAttrInfo(layer_param):
     
     elif (layer_type == "Pooling"):
         pooling = layer_param.pooling_param
-        pad_h = pooling.pad_h if (pooling.pad_h is not None) else pooling.pad
-        pad_w = pooling.pad_w if (pooling.pad_w is not None) else pooling.pad
-        stride_h = pooling.stride_h if (pooling.stride_h is not None) else pooling.stride
-        stride_w = pooling.stride_w if (pooling.stride_w is not None) else pooling.stride
-        kernel_h = pooling.kernel_h if (pooling.kernel_h is not None) else pooling.kernel_size
-        kernel_w = pooling.kernel_w if (pooling.kernel_w is not None) else pooling.kernel_size
+        pad_h = int(pooling.pad_h) if (pooling.HasField('pad_h')) else int(pooling.pad)
+        pad_w = int(pooling.pad_w) if (pooling.HasField('pad_w')) else int(pooling.pad)
+        stride_h = int(pooling.stride_h) if (pooling.HasField('stride_h')) else int(pooling.stride)
+        stride_w = int(pooling.stride_w) if (pooling.HasField('stride_w')) else int(pooling.stride)
+        kernel_h = int(pooling.kernel_h) if (pooling.HasField('kernel_h')) else int(pooling.kernel_size)
+        kernel_w = int(pooling.kernel_w) if (pooling.HasField('kernel_w')) else int(pooling.kernel_size)
         
         attribute_map["strides"] = [stride_w, stride_h]
         attribute_map["kernel_shape"] = [kernel_w, kernel_h]
         attribute_map["pads"] = [pad_w, pad_h, 0, 0]
     
     elif (layer_type == "LRN"):
-        lrn = layer.lrn_param
+        lrn = layer_param.lrn_param
         local_size = lrn.local_size
         alpha = lrn.alpha
         beta = lrn.beta
@@ -175,21 +176,95 @@ def extractCaffeAttrInfo(layer_param):
         attribute_map["epsilon"] = layer_param.batch_norm_param.eps
 
     return attribute_map
+
+def calculateTensorDims(layer_param, input_map, attribute_map):
+    output_dims = [0, 0, 0, 0]
+    inputs = input_map.keys()
+    if(layer_param.type == "Convolution"):
+        strides = attribute_map["strides"]
+        pads = attribute_map["pads"]
+        dilations = attribute_map["dilations"]
+        kernel_shape = attribute_map["kernel_shape"]
+        n,c,h,w = input_map[inputs[0]]
+        
+        output_dims[3] = ((int(w) + 2 * pads[0] - kernel_shape[0] - (kernel_shape[0] - 1) * (dilations[0] - 1))/ strides[0]) + 1
+        output_dims[2] = ((int(h) + 2 * pads[1] - kernel_shape[1] - (kernel_shape[1] - 1) * (dilations[1] - 1))/ strides[1]) + 1
+        output_dims[1] = layer_param.convolution_param.num_output
+        output_dims[0] = n
+
+    elif (layer_param.type == "Deconvolution"):
+        strides = attribute_map["strides"]
+        pads = attribute_map["pads"]
+        dilations = attribute_map["dilations"]
+        kernel_shape = attribute_map["kernel_shape"]
+        n,c,h,w = input_map[str(inputs[0])]
+
+        output_dims[3] = strides[0] * (w - 1) + dilations[0] * (kernel_shape[0] - 1) + 1 - (2 * pads[0])
+        output_dims[2] = strides[1] * (h - 1) + dilations[1] * (kernel_shape[1] - 1) + 1 - (2 * pads[1])
+        output_dims[1] = layer_param.convolution_param.num_output
+        output_dims[0] = n
+
+    elif (layer_param.type == "Pooling"):
+        strides = attribute_map["strides"]
+        pads = attribute_map["pads"]
+        kernel_shape = attribute_map["kernel_shape"]
+        n,c,h,w = input_map[str(inputs[0])]        
+
+        if (layer_param.pooling_param.global_pooling):
+            kernel_shape[1] = h
+            kernel_shape[0] = w
+            pads[0] = 0
+            pads[1] = 0
+            strides[0] = 1
+            strides[1] = 1
+        
+        output_dims[3] = int(math.ceil(float(w + 2 * pads[0] + strides[0] - kernel_shape[0])/strides[0]))
+        output_dims[2] = int(math.ceil(float(h + 2 * pads[1] + strides[1] - kernel_shape[1])/strides[1]))
+        output_dims[1] = c
+        output_dims[0] = n
     
-def extractCaffeNodeInfo(net_parameter, graph, inputList, initializerList):
+    elif (layer_param.type == "InnerProduct"):
+        n,c,h,w = input_map[str(inputs[0])]
+        output_dims[3] = 1
+        output_dims[2] = 1
+        output_dims[1] = layer_param.inner_product_param.num_output
+        output_dims[0] = n    
+    else:
+        output_dims[0],output_dims[1],output_dims[2],output_dims[3] = input_map[str(inputs[0])]
+
+    return output_dims
+        
+        
+    
+def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
     inputOutputMap = {}
+    dropoutLayerMap = {}
+    splitLayerMap = {}
     layers = net_parameter.layer
+    count = 0
     for i in range(len(layers)):
         layer_param = layers[i]
-        layer_name = layer_param.name
-        layer_type = layer_param.type
+        layer_name = str(layer_param.name)
+        layer_type = str(layer_param.type)
         inputs = layer_param.bottom
         outputs = layer_param.top
 
         if (layer_type == "Data" or layer_type == "ImageData" or layer_type == "Input"):
             continue
+        
+        if (layer_type == "Dropout"):
+            for k in range(len(inputs)):
+                dropoutLayerMap[str(outputs[k])] = str(inputs[k])
+            continue
 
+        if (layer_type == "Split"):
+            for k in range(len(outputs)):
+                splitLayerMap[str(outputs[k])] = str(inputs[k])
+            continue
+            
         layer_info_map = {}
+        input_map = {}
+        output_map = {}
         layer_info_map["layer_name"] = layer_name
         if layer_type in caffe2ir_op_type:
             layer_info_map["layer_type"] = caffe2ir_op_type[layer_type]
@@ -201,9 +276,56 @@ def extractCaffeNodeInfo(net_parameter, graph, inputList, initializerList):
             sys.exit(1)
 
         #extract attributes.
-        layer_info_map["attributes"] = extractCaffeAttrInfo(layer_param)
+        attribute_map = extractCaffeAttrInfo(layer_param)
+        layer_info_map["attributes"] = attribute_map
+
+        #extract input and output information.
+        #input information.
+        if (count == 0):
+            for k in range(len(inputs)):
+                if str(inputs[k]) in inputsInfo:
+                    input_map[str(inputs[k])] = inputsInfo[str(inputs[k])] 
+        else:
+            for k in range(len(inputs)):
+                previous_layer_info = inputOutputMap[count - 1]
+                prevOutMap = previous_layer_info["outputs"]
+                if str(inputs[k]) in prevOutMap:
+                    input_map[str(inputs[k])] = prevOutMap[str(inputs[k])]
+                elif str(inputs[k]) in dropoutLayerMap:
+                    input_map[dropoutLayerMap[str(inputs[k])]] =  prevOutMap[dropoutLayerMap[str(inputs[k])]]
+                elif str(inputs[k]) in splitLayerMap:
+                    input_map[splitLayerMap[str(inputs[k])]] = prevOutMap[splitLayerMap[str(inputs[k])]]
+                else:
+                    if (((layer_type == "Softmax") or (layer_type == "SoftmaxWithLoss")) and k != 0):
+                        break
+                    print ("ERROR: unknown dimensions for %s " % (inputs[k]))
+                    sys.exit(1)
+
+        # calculate output dimensions.
+        outputDims = calculateTensorDims(layer_param, input_map, attribute_map)
+        output_map[str(outputs[0])] = outputDims
+
+        ## add inputs and outputs to the layer info.
+        layer_info_map["inputs"] = input_map
+        layer_info_map["outputs"] = output_map
         
-        print (layer_info_map) 
+        #add weights and biases info if present into the layer info.
+        weights = layer_name + '_w'
+        biases = layer_name +  '_b'
+        weights_map = {}
+        bias_map = {}
+        if (weights in initializerInfo):
+            weights_map[weights] = initializerInfo[weights]
+            layer_info_map["weights"] = weights_map
+        if (biases in initializerInfo):
+            bias_map[biases] = initializerInfo[biases]
+            layer_info_map["biases"] = bias_map
+
+        print (layer_info_map)
+        inputOutputMap[count] = layer_info_map
+        count += 1
+        
+    return inputOutputMap
  
 def caffe_graph_to_ir_graph(net_parameter, input_dims):
     graph = IrGraph()
