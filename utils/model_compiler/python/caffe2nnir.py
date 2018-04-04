@@ -110,7 +110,7 @@ def extractInput(net_parameter, graph, input_dims):
     graph.addInput(caffe_blob_to_ir_tensor(input_name, "F032", input_dims))
     return inputList
 
-def extractOutput(net_parameter, graph):
+def extractOutput(net_parameter, graph, inputOutputMap):
     outputList = {}
     layers = net_parameter.layer
     last_layer_param = layers[len(layers) - 1]
@@ -119,9 +119,14 @@ def extractOutput(net_parameter, graph):
         bottom_list = last_layer_param.bottom
         output_name = caffe_name_to_ir_name(bottom_list[len(bottom_list) - 1])
     else:
-        output_name = caffe_name_to_ir_name(top_list[0])
-    
+        output_name = caffe_name_to_ir_name(str(top_list[0]))
     print ("output name is : " + output_name)
+    net_len = len(inputOutputMap)
+    out_layer_info = inputOutputMap[net_len - 1]
+    output_map = out_layer_info["outputs"]
+    output_dims = output_map[output_name]
+    graph.addOutput(caffe_blob_to_ir_tensor(output_name, "F032", output_dims))
+    return outputList
     
 
 def extractCaffeAttrInfo(layer_param):
@@ -332,7 +337,7 @@ def caffe_graph_to_ir_graph(net_parameter, input_dims):
     initializerMap = extractBinary(net_parameter, graph)
     inputMap = extractInput(net_parameter, graph, input_dims)
     inputOutputMap = extractCaffeNodeInfo(net_parameter, graph, inputMap, initializerMap) 
-    #outputList = extractOutput(net_parameter, graph)
+    outputList = extractOutput(net_parameter, graph, inputOutputMap )
     return graph
 
 def caffe2ir(net_parameter, input_dims, outputFolder):
