@@ -57,7 +57,7 @@ def extractBinary(net_parameter, graph):
             blob_data_type = "F064" if (len(weight_blob_proto.double_data) > 0) else "F032"
             print (blob_data_type)
             initializerList[weight_blob_name] = weight_blob_shape
-            graph.addVariable(caffe_blob_to_ir_tensor(weight_blob_name, blob_data_type, weight_blob_shape))
+            #graph.addVariable(caffe_blob_to_ir_tensor(weight_blob_name, blob_data_type, weight_blob_shape))
             buf = convert_caffe_bin_to_ir_bin(weight_blob_proto.double_data if blob_data_type == "F064" else weight_blob_proto.data)
             graph.addBinary(weight_blob_name, buf)
     
@@ -71,7 +71,7 @@ def extractBinary(net_parameter, graph):
             blob_data_type = "F064" if (len(bias_blob_proto.double_data) > 0) else "F032"
             print (blob_data_type)
             initializerList[bias_blob_name] = bias_blob_shape
-            graph.addVariable(caffe_blob_to_ir_tensor(bias_blob_name, blob_data_type, bias_blob_shape))
+            #graph.addVariable(caffe_blob_to_ir_tensor(bias_blob_name, blob_data_type, bias_blob_shape))
             buf = convert_caffe_bin_to_ir_bin(bias_blob_proto.double_data if blob_data_type == "F064" else bias_blob_proto.data)
             graph.addBinary(bias_blob_name, buf)
 
@@ -183,6 +183,7 @@ def extractCaffeAttrInfo(layer_param):
     return attribute_map
 
 def calculateTensorDims(layer_param, input_map, attribute_map):
+    dimList = {}
     output_dims = [0, 0, 0, 0]
     inputs = input_map.keys()
     if(layer_param.type == "Convolution"):
@@ -197,6 +198,12 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         output_dims[1] = layer_param.convolution_param.num_output
         output_dims[0] = n
 
+        weight_dims = [output_dims[1], c, kernel_shape[1], kernel_shape[0]]
+        dimList["weights"] = weight_dims
+        if (layer_param.convolution_param.bias_term):
+            bias_dims = [weight_dims[0]]
+            dimList["bias"] = bias_dims
+
     elif (layer_param.type == "Deconvolution"):
         strides = attribute_map["strides"]
         pads = attribute_map["pads"]
@@ -208,6 +215,12 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         output_dims[2] = strides[1] * (h - 1) + dilations[1] * (kernel_shape[1] - 1) + 1 - (2 * pads[1])
         output_dims[1] = layer_param.convolution_param.num_output
         output_dims[0] = n
+
+        weight_dims = [output_dims[1], c, kernel_shape[1] , kernel_shape[0]]
+        dimList["weights"] = weight_dims
+        if (layer_param.convolution_param.bias_term):
+            bias_dims = [weight_dims[0]]
+            dimList["bias"] = bias_dims
 
     elif (layer_param.type == "Pooling"):
         strides = attribute_map["strides"]
@@ -233,11 +246,24 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         output_dims[3] = 1
         output_dims[2] = 1
         output_dims[1] = layer_param.inner_product_param.num_output
-        output_dims[0] = n    
+        output_dims[0] = n  
+        
+        weight_dims = [output_dims[1], c, h, w]
+        dimList["weights"] = weight_dims
+        if (layer_param.inner_product_param.bias_term):
+            dimList["bias"] = [weight_dims[0]]
+ 
+    elif (layer_param.type == "Concat"):
+        inputs = input_map.keys()
+        for i in range(len(inputs)):
+            n,c,h,w = input_map[inputs[i]]
+            output_dims[1] += c
     else:
         output_dims[0],output_dims[1],output_dims[2],output_dims[3] = input_map[str(inputs[0])]
 
-    return output_dims
+    dimList["output"] = output_dims
+    
+    return dimList
         
         
     
@@ -307,8 +333,8 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
                     sys.exit(1)
 
         # calculate output dimensions.
-        outputDims = calculateTensorDims(layer_param, input_map, attribute_map)
-        output_map[str(outputs[0])] = outputDims
+        dimList = calculateTensorDims(layer_param, input_map, attribute_map)
+        output_map[str(outputs[0])] = dimList["output"]
 
         ## add inputs and outputs to the layer info.
         layer_info_map["inputs"] = input_map
@@ -320,11 +346,19 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
         weights_map = {}
         bias_map = {}
         if (weights in initializerInfo):
-            weights_map[weights] = initializerInfo[weights]
+            weight_dims = initializerInfo[weights]
+            if not weight_dims:
+                weight_dims = dimList["weights"]
+            weights_map[weights] = weight_dims
             layer_info_map["weights"] = weights_map
+            graph.addVariable(caffe_blob_to_ir_tensor(weights, "F032", weight_dims))
         if (biases in initializerInfo):
-            bias_map[biases] = initializerInfo[biases]
+            bias_dims = initializerInfo[biases]
+            if  not bias_dims:
+                bias_dims = dimList["bias"]
+            bias_map[biases] = bias_dims
             layer_info_map["biases"] = bias_map
+            graph.addVariable(caffe_blob_to_ir_tensor(biases, "F032", bias_dims))
 
         print (layer_info_map)
         inputOutputMap[count] = layer_info_map
