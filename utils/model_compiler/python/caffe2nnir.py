@@ -32,6 +32,61 @@ def convert_caffe_bin_to_ir_bin(floatlist):
     buf = struct.pack('%sf' % len(floatlist), *floatlist)
     return buf
 
+def caffe_attr_to_ir_attr(attribute_map):
+    attr = IrAttr()
+    attr_names = attribute_map.keys()
+    for i in range(len(attr_names)):
+        attributeInfo = attribute_map[attr_names[i]]
+        if type(attributeInfo) is float:
+            attr.set(attr_names[i], float(attributeInfo))
+        elif type(attributeInfo) is int:
+            attr.set(attr_names[i], int(attributeInfo))
+        elif type(attributeInfo) == type([]):
+            if (type(attributeInfo[0]) is int):
+                attr.set(attr_names[i], [int(v) for v in (attributeInfo)])
+            elif(type(attributeInfo[0]) is float):
+                attr.set(attr_names[i], [float(v) for v in (attributeInfo)])
+            #elif(type(attributeInfo[0] is str):
+            #    attr.set(attr_names[i], [str(v) for v in (attributeInfo)])
+            else:
+                print ("ERROR: unsupported list attribute")
+                sys.exit(1)
+        else:
+            print ("Unsupported type of caffe attribute %s" % attr_names[i])
+            sys.exit(1)
+    return attr
+
+def caffe_node_to_ir_node(layer_type, layer_info_map):
+    node = IrNode()
+    input_map = layer_info_map["inputs"]
+    output_map = layer_info_map["outputs"]
+    weight_map = {}
+    if "weights" in layer_info_map:
+        weight_map = layer_info_map["weights"]
+    bias_map = {}
+    if "biases" in layer_info_map:
+        bias_map = layer_info_map["biases"]
+    attribute_map = layer_info_map["attributes"]
+
+    inputs = []
+    for i in range(len(input_map.keys())):
+        inputs.append(input_map.keys()[i])
+    for i in range(len(weight_map.keys())):
+        inputs.append(weight_map.keys()[i])
+    for i in range(len(bias_map.keys())):
+        inputs.append(bias_map.keys()[i])
+
+    outputs = []
+    for i in range(len(output_map.keys())):
+        outputs.append(output_map.keys()[i])
+    
+
+    node.set(layer_type, [caffe_name_to_ir_name(name) for name in inputs],\
+                         [caffe_name_to_ir_name(name) for name in outputs],\
+                         caffe_attr_to_ir_attr(attribute_map))
+
+    return node
+
 def extractBinary(net_parameter, graph):
     initializerList = {}
     layers = net_parameter.layer
@@ -52,12 +107,12 @@ def extractBinary(net_parameter, graph):
             weight_len = len(weight_blob_proto.data)
             weight_blob_name = caffe_name_to_ir_name(layer_name + '_w')
             print (weight_blob_name)
-            weight_blob_shape = [int(x) for x in weight_blob_proto.shape.dim]
-            print (weight_blob_shape)
+            weight_blob_shape = []
+            #weight_blob_shape = [int(x) for x in weight_blob_proto.shape.dim]
+            #print (weight_blob_shape)
             blob_data_type = "F064" if (len(weight_blob_proto.double_data) > 0) else "F032"
             print (blob_data_type)
             initializerList[weight_blob_name] = weight_blob_shape
-            #graph.addVariable(caffe_blob_to_ir_tensor(weight_blob_name, blob_data_type, weight_blob_shape))
             buf = convert_caffe_bin_to_ir_bin(weight_blob_proto.double_data if blob_data_type == "F064" else weight_blob_proto.data)
             graph.addBinary(weight_blob_name, buf)
     
@@ -66,12 +121,12 @@ def extractBinary(net_parameter, graph):
             bias_len = len(bias_blob_proto.data)
             bias_blob_name = caffe_name_to_ir_name(layer_name + '_b')
             print (bias_blob_name)
-            bias_blob_shape = [int(x) for x in bias_blob_proto.shape.dim]
+            bias_blob_shape = []
+            #bias_blob_shape = [int(x) for x in bias_blob_proto.shape.dim]
             print (bias_blob_shape)
             blob_data_type = "F064" if (len(bias_blob_proto.double_data) > 0) else "F032"
             print (blob_data_type)
             initializerList[bias_blob_name] = bias_blob_shape
-            #graph.addVariable(caffe_blob_to_ir_tensor(bias_blob_name, blob_data_type, bias_blob_shape))
             buf = convert_caffe_bin_to_ir_bin(bias_blob_proto.double_data if blob_data_type == "F064" else bias_blob_proto.data)
             graph.addBinary(bias_blob_name, buf)
 
@@ -149,7 +204,7 @@ def extractCaffeAttrInfo(layer_param):
         attribute_map["strides"] = [stride_w, stride_h]
         attribute_map["kernel_shape"] = [kernel_w, kernel_h]
         attribute_map["group"] = groups
-        attribute_map["pads"] = [pad_w, pad_h, 0, 0]
+        attribute_map["pads"] = [pad_w, pad_h, pad_w, pad_h]
         attribute_map["dilations"] = [dilation_w, dilation_h]
     
     elif (layer_type == "Pooling"):
@@ -163,14 +218,15 @@ def extractCaffeAttrInfo(layer_param):
         
         attribute_map["strides"] = [stride_w, stride_h]
         attribute_map["kernel_shape"] = [kernel_w, kernel_h]
-        attribute_map["pads"] = [pad_w, pad_h, 0, 0]
+        attribute_map["pads"] = [pad_w, pad_h, pad_w, pad_h]
+        attribute_map["dilations"] = [0,0]
     
     elif (layer_type == "LRN"):
         lrn = layer_param.lrn_param
-        local_size = lrn.local_size
-        alpha = lrn.alpha
-        beta = lrn.beta
-        k = lrn.k
+        local_size = int(lrn.local_size)
+        alpha = float(lrn.alpha)
+        beta = float(lrn.beta)
+        k = float(lrn.k)
         
         attribute_map["alpha"] = alpha
         attribute_map["beta"] = beta
@@ -178,7 +234,11 @@ def extractCaffeAttrInfo(layer_param):
         attribute_map["bias"] = k
         
     elif (layer_type == "BatchNorm"):
-        attribute_map["epsilon"] = layer_param.batch_norm_param.eps
+        attribute_map["epsilon"] = float(layer_param.batch_norm_param.eps)
+    
+    elif (layer_type == "InnerProduct"):
+        attribute_map["broadcast"] = 1
+        attribute_map["transB"] = 1
 
     return attribute_map
 
@@ -192,6 +252,9 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         dilations = attribute_map["dilations"]
         kernel_shape = attribute_map["kernel_shape"]
         n,c,h,w = input_map[inputs[0]]
+
+        #output_dims[3] = (pads[0] + int(w) + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1
+        #output_dims[2] = (pads[1] + int(h) + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1
         
         output_dims[3] = ((int(w) + 2 * pads[0] - kernel_shape[0] - (kernel_shape[0] - 1) * (dilations[0] - 1))/ strides[0]) + 1
         output_dims[2] = ((int(h) + 2 * pads[1] - kernel_shape[1] - (kernel_shape[1] - 1) * (dilations[1] - 1))/ strides[1]) + 1
@@ -235,9 +298,19 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
             pads[1] = 0
             strides[0] = 1
             strides[1] = 1
-        
+        dilations = [0,0]
+        output_dims[3] = (pads[0] + int(w) + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1
+        output_dims[2] = (pads[1] + int(h) + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1
+        '''
         output_dims[3] = int(math.ceil(float(w + 2 * pads[0] + strides[0] - kernel_shape[0])/strides[0]))
         output_dims[2] = int(math.ceil(float(h + 2 * pads[1] + strides[1] - kernel_shape[1])/strides[1]))
+        if (pads[1] > 0):
+            if (output_dims[2] - 1) * stride[1] >= (h + pads[1]):
+                output_dims[2] = output_dims[2] - 1
+        if (pads[0] > 0):
+            if (output_dims[3] - 1) * strides[0] >= (w + pads[0]):
+                output_dims[3] = output_dims[3] - 1
+        '''
         output_dims[1] = c
         output_dims[0] = n
     
@@ -246,7 +319,7 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         output_dims[3] = 1
         output_dims[2] = 1
         output_dims[1] = layer_param.inner_product_param.num_output
-        output_dims[0] = n  
+        output_dims[0] = n 
         
         weight_dims = [output_dims[1], c, h, w]
         dimList["weights"] = weight_dims
@@ -264,13 +337,12 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
     dimList["output"] = output_dims
     
     return dimList
-        
-        
-    
+            
 def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
     inputOutputMap = {}
     dropoutLayerMap = {}
     splitLayerMap = {}
+    outputNameAliasMap = {}
     layers = net_parameter.layer
     count = 0
     for i in range(len(layers)):
@@ -290,6 +362,8 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
 
         if (layer_type == "Split"):
             for k in range(len(outputs)):
+                print (k)
+                print (inputs[k])
                 splitLayerMap[str(outputs[k])] = str(inputs[k])
             continue
             
@@ -323,18 +397,29 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
                 if str(inputs[k]) in prevOutMap:
                     input_map[str(inputs[k])] = prevOutMap[str(inputs[k])]
                 elif str(inputs[k]) in dropoutLayerMap:
-                    input_map[dropoutLayerMap[str(inputs[k])]] =  prevOutMap[dropoutLayerMap[str(inputs[k])]]
+                    if str(inputs[k]) in outputNameAliasMap:
+                        input_map[outputNameAliasMap[dropoutLayerMap[str(inputs[k])]]] = prevOutMap[outputNameAliasMap[dropoutLayerMap[str(inputs[k])]]]
+                    else:
+                        input_map[dropoutLayerMap[str(inputs[k])]] =  prevOutMap[dropoutLayerMap[str(inputs[k])]]
                 elif str(inputs[k]) in splitLayerMap:
-                    input_map[splitLayerMap[str(inputs[k])]] = prevOutMap[splitLayerMap[str(inputs[k])]]
+                    if str(inputs[k]) in outputNameAliasMap:
+                        input_map[outputNameAliasMap[splitLayerMap[str(inputs[k])]]] = prevOutMap[outputNameAliasMap[splitLayerMap[str(inputs[k])]]]
+                    else:
+                        input_map[splitLayerMap[str(inputs[k])]] = prevOutMap[splitLayerMap[str(inputs[k])]]
                 else:
                     if (((layer_type == "Softmax") or (layer_type == "SoftmaxWithLoss")) and k != 0):
                         break
-                    print ("ERROR: unknown dimensions for %s " % (inputs[k]))
-                    sys.exit(1)
+                    elif str(inputs[k]) in outputNameAliasMap:
+                        input_map[outputNameAliasMap[inputs[k]]] = prevOutMap[outputNameAliasMap[str(inputs[k])]]
+                    else:
+                        print ("ERROR: unknown dimensions for %s " % (inputs[k]))
+                        sys.exit(1)
 
         # calculate output dimensions.
         dimList = calculateTensorDims(layer_param, input_map, attribute_map)
-        output_map[str(outputs[0])] = dimList["output"]
+        if str(layer_name) != str(outputs[0]):
+            outputNameAliasMap[str(outputs[0])] = str(layer_name)
+        output_map[caffe_name_to_ir_name(layer_name)] = dimList["output"]
 
         ## add inputs and outputs to the layer info.
         layer_info_map["inputs"] = input_map
@@ -363,7 +448,11 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
         print (layer_info_map)
         inputOutputMap[count] = layer_info_map
         count += 1
-        
+
+        node = caffe_node_to_ir_node(layer_info_map["layer_type"], layer_info_map)
+        graph.addNode(node)
+
+    graph.updateLocals()
     return inputOutputMap
  
 def caffe_graph_to_ir_graph(net_parameter, input_dims):
