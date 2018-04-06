@@ -6,6 +6,7 @@ import argparse
 import struct
 import math
 
+# mapping from caffe layer types to nnir operators.
 caffe2ir_op_type = {
     'Convolution': 'conv',
     'Deconvolution': 'conv_transpose',
@@ -19,19 +20,23 @@ caffe2ir_op_type = {
     'SoftmaxWithLoss' : 'softmax'
 }
 
+# convert caffename to ir names.
 def caffe_name_to_ir_name(name):
     return '_'.join(('_'.join(name.split('/')).split('-')))
 
+# convert caffe blobs to ir tensor.
 def caffe_blob_to_ir_tensor(blob_name, blob_data_type, blob_shape):
     tensor = IrTensor()
     tensor.setName(caffe_name_to_ir_name(blob_name))
     tensor.setInfo(blob_data_type, [int(x) for x in blob_shape])
     return tensor
 
+# convert caffe bin formats to ir bin formats.
 def convert_caffe_bin_to_ir_bin(floatlist):
     buf = struct.pack('%sf' % len(floatlist), *floatlist)
     return buf
 
+# map caffe attr to ir attr.
 def caffe_attr_to_ir_attr(attribute_map):
     attr = IrAttr()
     attr_names = attribute_map.keys()
@@ -46,8 +51,6 @@ def caffe_attr_to_ir_attr(attribute_map):
                 attr.set(attr_names[i], [int(v) for v in (attributeInfo)])
             elif(type(attributeInfo[0]) is float):
                 attr.set(attr_names[i], [float(v) for v in (attributeInfo)])
-            #elif(type(attributeInfo[0] is str):
-            #    attr.set(attr_names[i], [str(v) for v in (attributeInfo)])
             else:
                 print ("ERROR: unsupported list attribute")
                 sys.exit(1)
@@ -56,6 +59,7 @@ def caffe_attr_to_ir_attr(attribute_map):
             sys.exit(1)
     return attr
 
+# map caffe node to ir node.
 def caffe_node_to_ir_node(layer_type, layer_info_map):
     node = IrNode()
     input_map = layer_info_map["inputs"]
@@ -79,59 +83,37 @@ def caffe_node_to_ir_node(layer_type, layer_info_map):
     outputs = []
     for i in range(len(output_map.keys())):
         outputs.append(output_map.keys()[i])
-    
 
     node.set(layer_type, [caffe_name_to_ir_name(name) for name in inputs],\
                          [caffe_name_to_ir_name(name) for name in outputs],\
                          caffe_attr_to_ir_attr(attribute_map))
-
     return node
 
-def extractBinary(net_parameter, graph):
-    initializerList = {}
-    layers = net_parameter.layer
-    print ("Total number of layers is : " + str(len(layers)))
-    if (len(layers) == 0):
-        print ("ERROR: unsupported caffemodel,  kindly upgrade your caffemodel with new proto style.")
-        sys.exit(1)
-
-    for i in range(len(layers)):
-        layer_parameter = layers[i]
-        layer_name = caffe_name_to_ir_name(layer_parameter.name)
-        print ("Layer name is : "  + layer_name)
+# extract binary data from caffe layers if present.
+def extractBinary(layer_parameter, graph):
+    layer_name = caffe_name_to_ir_name(layer_parameter.name)
+    print ("Extracting binaries from : "  + layer_name)
         
-        ## add weights and biases into the initializer list.
-        blob_size = len(layer_parameter.blobs)
-        if blob_size > 0:
-            weight_blob_proto = layer_parameter.blobs[0]
-            weight_len = len(weight_blob_proto.data)
-            weight_blob_name = caffe_name_to_ir_name(layer_name + '_w')
-            print (weight_blob_name)
-            weight_blob_shape = []
-            #weight_blob_shape = [int(x) for x in weight_blob_proto.shape.dim]
-            #print (weight_blob_shape)
-            blob_data_type = "F064" if (len(weight_blob_proto.double_data) > 0) else "F032"
-            print (blob_data_type)
-            initializerList[weight_blob_name] = weight_blob_shape
-            buf = convert_caffe_bin_to_ir_bin(weight_blob_proto.double_data if blob_data_type == "F064" else weight_blob_proto.data)
-            graph.addBinary(weight_blob_name, buf)
+    ## dump weights and biases if present.
+    blob_size = len(layer_parameter.blobs)
+    if blob_size > 0:
+        weight_blob_proto = layer_parameter.blobs[0]
+        weight_len = len(weight_blob_proto.data)
+        weight_blob_name = caffe_name_to_ir_name(layer_name + '_w')
+        print (weight_blob_name)
+        buf = convert_caffe_bin_to_ir_bin(weight_blob_proto.data)
+        graph.addBinary(weight_blob_name, buf)
     
-        if blob_size > 1:
-            bias_blob_proto = layer_parameter.blobs[1]
-            bias_len = len(bias_blob_proto.data)
-            bias_blob_name = caffe_name_to_ir_name(layer_name + '_b')
-            print (bias_blob_name)
-            bias_blob_shape = []
-            #bias_blob_shape = [int(x) for x in bias_blob_proto.shape.dim]
-            print (bias_blob_shape)
-            blob_data_type = "F064" if (len(bias_blob_proto.double_data) > 0) else "F032"
-            print (blob_data_type)
-            initializerList[bias_blob_name] = bias_blob_shape
-            buf = convert_caffe_bin_to_ir_bin(bias_blob_proto.double_data if blob_data_type == "F064" else bias_blob_proto.data)
-            graph.addBinary(bias_blob_name, buf)
+    if blob_size > 1:
+        bias_blob_proto = layer_parameter.blobs[1]
+        bias_len = len(bias_blob_proto.data)
+        bias_blob_name = caffe_name_to_ir_name(layer_name + '_b')
+        print (bias_blob_name)
+        blob_data_type = "F032"
+        buf = convert_caffe_bin_to_ir_bin(bias_blob_proto.data)
+        graph.addBinary(bias_blob_name, buf)
 
-    return initializerList
-
+# extracting input from caffe network and converting into ir input.
 def extractInput(net_parameter, graph, input_dims):
     inputList = {}
     layers = net_parameter.layer
@@ -140,15 +122,12 @@ def extractInput(net_parameter, graph, input_dims):
     input_name = ""
     if len(net_parameter.input) != 0:
         input_name = caffe_name_to_ir_name(net_parameter.input[0])
-        print ("Entered input")
     elif (first_layer_param_type == "Data" or first_layer_param_type == "Input" or first_layer_param_type == "ImageData"):
         top_list = first_layer_param.top
-        print ("top list size : " + str(len(top_list)))
         if (len(top_list) == 0):
             input_name = caffe_name_to_ir_name(first_layer_param.name)
         else:
             input_name = caffe_name_to_ir_name(top_list[0])
-        print ("entered type data, input, imagedata")
     else:
         bottom_list = first_layer_param.bottom
         if (len(bottom_list) == 0):
@@ -156,15 +135,12 @@ def extractInput(net_parameter, graph, input_dims):
             input_name = caffe_name_to_ir_name(top_list[0])
         else:
             input_name = caffe_name_to_ir_name(bottom_list[0])
-        print ("entered first layer")
-        print ("Lenght of bottom list is : " + str(len(bottom_list)))
     
-    print ("Input name : ")
-    print (input_name)
     inputList[str(input_name)] = input_dims
     graph.addInput(caffe_blob_to_ir_tensor(input_name, "F032", input_dims))
     return inputList
 
+# extraction of output from caffe network to ir output.
 def extractOutput(net_parameter, graph, inputOutputMap):
     outputList = {}
     layers = net_parameter.layer
@@ -183,7 +159,7 @@ def extractOutput(net_parameter, graph, inputOutputMap):
     graph.addOutput(caffe_blob_to_ir_tensor(output_name, "F032", output_dims))
     return outputList
     
-
+# extract layer attribute information from caffe layers.
 def extractCaffeAttrInfo(layer_param):
     layer_type = layer_param.type
     attribute_map = {}
@@ -242,6 +218,7 @@ def extractCaffeAttrInfo(layer_param):
 
     return attribute_map
 
+# calculate dimensions of the output of each layer.
 def calculateTensorDims(layer_param, input_map, attribute_map):
     dimList = {}
     output_dims = [0, 0, 0, 0]
@@ -289,7 +266,8 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         strides = attribute_map["strides"]
         pads = attribute_map["pads"]
         kernel_shape = attribute_map["kernel_shape"]
-        n,c,h,w = input_map[str(inputs[0])]        
+        n,c,h,w = input_map[str(inputs[0])]
+        dilations = attribute_map["dilations"]        
 
         if (layer_param.pooling_param.global_pooling):
             kernel_shape[1] = h
@@ -298,10 +276,10 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
             pads[1] = 0
             strides[0] = 1
             strides[1] = 1
-        dilations = [0,0]
-        output_dims[3] = (pads[0] + int(w) + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1
-        output_dims[2] = (pads[1] + int(h) + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1
-        '''
+        #dilations = [0,0]
+        #output_dims[3] = (pads[0] + int(w) + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1
+        #output_dims[2] = (pads[1] + int(h) + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1
+        
         output_dims[3] = int(math.ceil(float(w + 2 * pads[0] + strides[0] - kernel_shape[0])/strides[0]))
         output_dims[2] = int(math.ceil(float(h + 2 * pads[1] + strides[1] - kernel_shape[1])/strides[1]))
         if (pads[1] > 0):
@@ -310,7 +288,7 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
         if (pads[0] > 0):
             if (output_dims[3] - 1) * strides[0] >= (w + pads[0]):
                 output_dims[3] = output_dims[3] - 1
-        '''
+        
         output_dims[1] = c
         output_dims[0] = n
     
@@ -337,14 +315,20 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
     dimList["output"] = output_dims
     
     return dimList
-            
-def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
+
+# extract caffe node information into ir nodes.            
+def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
     inputOutputMap = {}
     dropoutLayerMap = {}
     splitLayerMap = {}
     outputNameAliasMap = {}
     layers = net_parameter.layer
     count = 0
+
+    if (len(layers) == 0):
+        print ("ERROR: unsupported caffemodel, kindly upgrade your caffemodel.")
+        sys.exit(1)
+
     for i in range(len(layers)):
         layer_param = layers[i]
         layer_name = str(layer_param.name)
@@ -426,25 +410,24 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
         layer_info_map["outputs"] = output_map
         
         #add weights and biases info if present into the layer info.
+        extractBinary(layer_param, graph)
         weights = layer_name + '_w'
         biases = layer_name +  '_b'
         weights_map = {}
         bias_map = {}
-        if (weights in initializerInfo):
-            weight_dims = initializerInfo[weights]
-            if not weight_dims:
-                weight_dims = dimList["weights"]
+        if "weights" in dimList:
+            weights = layer_name + '_w'
+            weight_dims = dimList["weights"]
             weights_map[weights] = weight_dims
-            layer_info_map["weights"] = weights_map
             graph.addVariable(caffe_blob_to_ir_tensor(weights, "F032", weight_dims))
-        if (biases in initializerInfo):
-            bias_dims = initializerInfo[biases]
-            if  not bias_dims:
-                bias_dims = dimList["bias"]
+            layer_info_map["weights"] = weights_map
+        if "bias" in dimList:
+            biases = layer_name + "_b"
+            bias_dims = dimList["bias"]
             bias_map[biases] = bias_dims
-            layer_info_map["biases"] = bias_map
             graph.addVariable(caffe_blob_to_ir_tensor(biases, "F032", bias_dims))
-
+            layer_info_map["biases"] = bias_map
+    
         print (layer_info_map)
         inputOutputMap[count] = layer_info_map
         count += 1
@@ -454,19 +437,20 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, initializerInfo):
 
     graph.updateLocals()
     return inputOutputMap
- 
+
+# convert caffe graph to ir graph. 
 def caffe_graph_to_ir_graph(net_parameter, input_dims):
     graph = IrGraph()
-    initializerMap = extractBinary(net_parameter, graph)
     inputMap = extractInput(net_parameter, graph, input_dims)
-    inputOutputMap = extractCaffeNodeInfo(net_parameter, graph, inputMap, initializerMap) 
+    inputOutputMap = extractCaffeNodeInfo(net_parameter, graph, inputMap) 
     outputList = extractOutput(net_parameter, graph, inputOutputMap )
     return graph
 
+# convert caffe representation to ir representation.
 def caffe2ir(net_parameter, input_dims, outputFolder):
     graph = caffe_graph_to_ir_graph(net_parameter, input_dims)
     graph.toFile(outputFolder)
-    print ("graph successfully formed.")
+    print ("OK: graph successfully formed.")
 
 def main():
     if len(sys.argv) < 4:
@@ -475,17 +459,17 @@ def main():
     caffeFileName = sys.argv[1]
     outputFolder = sys.argv[2]
     input_dims = sys.argv[4].replace('[','').replace(']','').split(',')
-    print ("loading caffemodel from %s ..." % (caffeFileName))
+    print ("OK: loading caffemodel from %s ..." % (caffeFileName))
     net_parameter = caffe_pb2.NetParameter()
     if not os.path.isfile(caffeFileName):
         print ("ERROR: unable to open : " + caffeFileName)
         sys.exit(1)
 
-    print ('parsing the string from caffe model.')
+    print ("parsing the caffemodel from : ")
     print (caffeFileName)
     net_parameter.ParseFromString(open(caffeFileName, 'rb').read())
-    print ("caffemodel read successful")
-    print ("converting to AMD NNIR model in %s ... " % (outputFolder))
+    print ("OK: caffemodel read successful")
+    print ("converting to AMD NNIR format in %s ... " % (outputFolder))
     print ("input parameters obtained are : " + str(input_dims[0]) + " " + str(input_dims[1]) + " " + str(input_dims[2]) + " " + str(input_dims[3])) 
 
     caffe2ir(net_parameter, input_dims, outputFolder)
