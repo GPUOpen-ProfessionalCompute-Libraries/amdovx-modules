@@ -329,7 +329,7 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
     
     return dimList
 
-# extract caffe node information into ir nodes.            
+# extract caffe node information into ir nodes.           
 def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
     inputOutputMap = {}
     dropoutLayerMap = {}
@@ -337,12 +337,9 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
     outputNameAliasMap = {}
     inputsMap = {}
     outputsMap = {}
-    layers = net_parameter.layer
     count = 0
 
-    if (len(layers) == 0):
-        print ("ERROR: unsupported caffemodel, kindly upgrade your caffemodel.")
-        sys.exit(1)
+    layers = net_parameter.layer
 
     for i in range(len(layers)):
         layer_param = layers[i]
@@ -351,27 +348,30 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
         inputs = layer_param.bottom
         outputs = layer_param.top
 
+        # ignoring the input/data layer as input is already obtained in previous step.
         if (layer_type == "Data" or layer_type == "ImageData" or layer_type == "Input"):
             continue
-        
+
+        # dropout layer is copy layer in inference, hence aliasing the input for dropout layer for next layer.
         if (layer_type == "Dropout"):
-            for k in range(len(inputs)):
-                dropoutLayerMap[caffe_name_to_ir_name(str(outputs[k]))] = caffe_name_to_ir_name(str(inputs[k]))
+            in_name = str(inputs[0])
+            if in_name in outputNameAliasMap:
+                in_name = outputNameAliasMap[in_name]
+            dropoutLayerMap[caffe_name_to_ir_name(str(outputs[0]))] = caffe_name_to_ir_name(str(inputs[0]))
             continue
 
+        # split layer optimization.
         if (layer_type == "Split"):
-            in_split = caffe_name_to_ir_name(str(inputs[0]))
-            for k in range(len(outputs)):            
-                splitLayerMap[caffe_name_to_ir_name(str(outputs[k]))] = in_split
-                print ("Added key %s with value %s in split" % (caffe_name_to_ir_name(str(outputs[k])), caffe_name_to_ir_name(str(inputs[0]))))
+            in_name = caffe_name_to_ir_name(str(inputs[0]))
+            if (in_name in outputNameAliasMap):
+                in_name = outputNameAliasMap[in_name]
+            for k in range(len(outputs)):
+                splitLayerMap[caffe_name_to_ir_name(outputs[k])] = caffe_name_to_ir_name(str(inputs[0]))
             continue
 
-        if (layer_type == "Scale"):
-            print ("Number of inputs to scale layers : " + str(len(inputs)))
-            
         layer_info_map = {}
-        input_map = {}
-        output_map = {}
+        input_info_map = {}
+        output_info_map = {}
         layer_info_map["layer_name"] = layer_name
         if layer_type in caffe2ir_op_type:
             layer_info_map["layer_type"] = caffe2ir_op_type[layer_type]
@@ -382,60 +382,70 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
             print ("ERROR: caffe operation %s is not supported yet." % (layer_type))
             sys.exit(1)
 
-        #extract attributes.
+        # extract attributes of the layer.
         attribute_map = extractCaffeAttrInfo(layer_param)
         layer_info_map["attributes"] = attribute_map
 
-        #extract input and output information.
-        #input information.
+        #extract input information.
         if (count == 0):
             for k in range(len(inputs)):
                 in_name = caffe_name_to_ir_name(str(inputs[k]))
                 if str(inputs[k]) in inputsInfo:
-                    input_map[in_name] = inputsInfo[in_name]
+                    input_info_map[in_name] = inputsInfo[in_name]
+                else:
+                    print ("ERROR: unable to get the input dimensions for the layer %s" % (layer_name))
+                    sys.exit(1)
         else:
             for k in range(len(inputs)):
                 previous_layer_info = inputOutputMap[count - 1]
                 prevOutMap = previous_layer_info["outputs"]
-                input_name = caffe_name_to_ir_name(str(inputs[k]))
+                input_name = str(caffe_name_to_ir_name(str(inputs[0])))
+
+                # changing the name of the input based on alias name for top==bottom in previous layer.
+                if (input_name in outputNameAliasMap):
+                    input_name = outputNameAliasMap[input_name]
+
+                if (input_name in splitLayerMap):
+                    input_name = splitLayerMap[input_name]
+
+                if (input_name in dropoutLayerMap):
+                    input_name = dropoutLayerMap[input_name]
+                
+                # get the input dimensions.
                 if input_name in prevOutMap:
-                    input_map[input_name] = prevOutMap[input_name]
+                    input_info_map[input_name] = prevOutMap[input_name]
                 elif input_name in outputsMap:
-                    input_map[input_name] = outputsMap[input_name]
+                    input_info_map[input_name] = outputsMap[input_name]
+                elif input_name in inputsMap:
+                    input_info_map[input_name] = inputsMap[input_name]
                 elif input_name in dropoutLayerMap:
-                    if input_name in outputNameAliasMap:
-                        input_map[outputNameAliasMap[dropoutLayerMap[input_name]]] = prevOutMap[outputNameAliasMap[dropoutLayerMap[input_name]]]
-                    else:
-                        input_map[dropoutLayerMap[input_name]] =  prevOutMap[dropoutLayerMap[input_name]]
+                    input_info_map[dropoutLayerMap[input_name]] = outputsMap[dropoutLayerMap[input_name]]
                 elif input_name in splitLayerMap:
-                    if input_name in outputNameAliasMap:
-                        input_map[outputNameAliasMap[splitLayerMap[input_name]]] = prevOutMap[outputNameAliasMap[splitLayerMap[input_name]]]
-                    else:
-                        input_map[splitLayerMap[input_name]] = prevOutMap[splitLayerMap[input_name]]
+                    input_info_map[splitLayerMap[input_name]] = prevOutMap[splitLayerMap[input_name]]
                 else:
                     if (((layer_type == "Softmax") or (layer_type == "SoftmaxWithLoss")) and k != 0):
                         break
                     elif input_name in outputNameAliasMap:
-                        input_map[outputNameAliasMap[input_name]] = prevOutMap[outputNameAliasMap[input_name]]
+                        input_info_map[outputNameAliasMap[input_name]] = prevOutMap[outputNameAliasMap[input_name]]
                     else:
-                        print ("ERROR: unknown dimensions for %s with layer name : %s" % (input_name, layer_param.name))
+                        print ("ERROR: unknown dimensions for %s in the layer %s " % (input_name, layer_name))
                         sys.exit(1)
 
-        #update master inputs list.
-        inputsMap.update(input_map)        
-
-        # calculate output dimensions.
-        dimList = calculateTensorDims(layer_param, input_map, attribute_map)
+        inputsMap.update(input_info_map)
+    
+        #calculate output,weight and bias dimensions.
+        dimList = calculateTensorDims(layer_param, input_info_map, attribute_map)
         if caffe_name_to_ir_name(str(layer_name)) != caffe_name_to_ir_name(str(outputs[0])):
             outputNameAliasMap[caffe_name_to_ir_name(str(outputs[0]))] = caffe_name_to_ir_name(str(layer_name))
 
-        output_map[caffe_name_to_ir_name(layer_name)] = dimList["output"]
-        outputsMap[caffe_name_to_ir_name(layer_name)] = dimList["output"]
+        output_info_map[layer_name] = dimList["output"]
+        outputsMap.update(output_info_map)
 
-        ## add inputs and outputs to the layer info.
-        layer_info_map["inputs"] = input_map
-        layer_info_map["outputs"] = output_map
-        
+        # add inputs and outputs to layer info.
+        layer_info_map["inputs"] = input_info_map
+        layer_info_map["outputs"] = output_info_map
+
+        # add weights and biases if present.
         #add weights and biases info if present into the layer info.
         extractBinary(layer_param, graph)
         weights = layer_name + '_w'
@@ -455,8 +465,9 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
             bias_map[biases] = bias_dims
             graph.addVariable(caffe_blob_to_ir_tensor(biases, "F032", bias_dims))
             layer_info_map["biases"] = bias_map
-    
+
         print (layer_info_map)
+
         inputOutputMap[count] = layer_info_map
         count += 1
 
@@ -466,6 +477,7 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo):
     graph.updateLocals()
     return inputOutputMap
 
+                                
 # convert caffe graph to ir graph. 
 def caffe_graph_to_ir_graph(net_parameter, input_dims):
     graph = IrGraph()
@@ -476,6 +488,9 @@ def caffe_graph_to_ir_graph(net_parameter, input_dims):
 
 # convert caffe representation to ir representation.
 def caffe2ir(net_parameter, input_dims, outputFolder):
+    if (len(net_parameter.layer) == 0):
+        print ("ERROR: unsupported caffemodel, kindly upgrade your caffemodel.")
+        sys.exit(1)
     graph = caffe_graph_to_ir_graph(net_parameter, input_dims)
     graph.toFile(outputFolder)
     print ("OK: graph successfully formed.")
@@ -487,6 +502,7 @@ def main():
     caffeFileName = sys.argv[1]
     outputFolder = sys.argv[2]
     input_dims = sys.argv[4].replace('[','').replace(']','').split(',')
+
     print ("OK: loading caffemodel from %s ..." % (caffeFileName))
     net_parameter = caffe_pb2.NetParameter()
     if not os.path.isfile(caffeFileName):
