@@ -204,7 +204,7 @@ def generateModuleH(graph,fileName):
 """ % (tensor.name, ', '.join([str(v) for v in reversed(tensor.shape)])))
         f.write( \
 """//
-vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename);
+extern "C" VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename);
 
 #endif
 """ % (', '.join(['vx_tensor ' + tensor.name for tensor in graph.inputs]), \
@@ -261,7 +261,7 @@ static vx_status initializeTensor(vx_context context, vx_tensor tensor, FILE * f
     return VX_SUCCESS;
 }
 
-vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
+VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
 {
     vx_context context = vxGetContext((vx_reference)graph);
     ERROR_CHECK_OBJECT(context);
@@ -384,24 +384,22 @@ vx_status annAddToGraph(vx_graph graph, %s, %s, const char * binaryFilename)
         node.inputs[0], node.inputs[1], node.inputs[2] if hasBias else 'NULL', node.outputs[0]))
                 else:
                     raise ValueError("Unsupported gemm configuration by OpenVX: alpha={} beta={} transA={} transB={}".format(alpha, beta, transA, transB))
-            elif node.type == 'max_pool':
+            elif node.type == 'max_pool' or node.type == 'avg_pool':
                 f.write( \
 """
-    { vx_node node = vxPoolingLayer(graph, %s, VX_NN_POOLING_MAX, %d, %d, %d, %d, VX_ROUND_POLICY_TO_NEAREST_EVEN, %s);
+    { vx_node node = vxPoolingLayer(graph, %s, %s, %d, %d, %d, %d, VX_ROUND_POLICY_TO_NEAREST_EVEN, %s);
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
+      vx_enum border_mode = %d;
+      vx_scalar s_border_mode = vxCreateScalarWithSize(context, VX_TYPE_ENUM, &border_mode, sizeof(border_mode));
+      ERROR_CHECK_OBJECT(s_border_mode);
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 8, (vx_reference) s_border_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_border_mode));
     }
-""" % (node.inputs[0], node.attr.get('kernel_shape')[0], node.attr.get('kernel_shape')[1], \
-       node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0]))
-            elif node.type == 'avg_pool':
-                f.write( \
-"""
-    { vx_node node = vxPoolingLayer(graph, %s, VX_NN_POOLING_AVG, %d, %d, %d, %d, VX_ROUND_POLICY_TO_NEAREST_EVEN, %s);
-      ERROR_CHECK_OBJECT(node);
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
-""" % (node.inputs[0], node.attr.get('kernel_shape')[0], node.attr.get('kernel_shape')[1], \
-       node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0]))
+""" % (node.inputs[0], 'VX_NN_POOLING_AVG' if node.type == 'avg_pool' else 'VX_NN_POOLING_MAX', \
+       node.attr.get('kernel_shape')[0], node.attr.get('kernel_shape')[1], \
+       node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0], \
+       (1 if node.attr.get('border_mode') == 'discard' else 0)))
             elif node.type == 'global_avg_pool':
                 f.write( \
 """

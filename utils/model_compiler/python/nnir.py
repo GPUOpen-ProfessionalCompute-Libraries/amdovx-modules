@@ -66,6 +66,8 @@ class IrAttr:
             , 'spatial_scale' : 1.0     # spatial_scale - ROI pool
             , 'split' : []              # length of each output for split
             , 'output_pads' : [0, 0]    # output padding for conv_transpose
+            , 'border_mode' : 'fill_0'  # border mode: fill_0, discard
+            , 'dim_round_mode' : 'floor' # rounding mode for output dim calculation: floor, ceil
         }
         self.dict_set = []
 
@@ -250,14 +252,20 @@ class IrGraph:
                     strides = node.attr.get('strides')
                     dilations = node.attr.get('dilations')
                     kernel_shape = node.attr.get('kernel_shape')
+                    dim_round_mode = node.attr.get('dim_round_mode')
                     input_shape = input.shape
                     k = input_shape[1]
                     if node.type == 'conv':
                         weight = self.tensor_dict[node.inputs[1]]
                         k = weight.shape[0]
+                    round0 = 0
+                    round1 = 0
+                    if(dim_round_mode == 'ceil'):
+                        round0 = strides[0] - 1
+                        round1 = strides[1] - 1
                     output_shape = [input_shape[0], k, \
-                        (pads[0] + input_shape[2] + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1)) // strides[0] + 1, \
-                        (pads[1] + input_shape[3] + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1)) // strides[1] + 1]
+                        (pads[0] + input_shape[2] + pads[2] - ((kernel_shape[0] - 1) * dilations[0] + 1) + round0) // strides[0] + 1, \
+                        (pads[1] + input_shape[3] + pads[3] - ((kernel_shape[1] - 1) * dilations[1] + 1) + round1) // strides[1] + 1]
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, output_shape)
