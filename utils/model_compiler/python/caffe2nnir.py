@@ -47,10 +47,12 @@ def caffe_attr_to_ir_attr(attribute_map):
             attr.set(attr_names[i], float(attributeInfo))
         elif type(attributeInfo) is int:
             attr.set(attr_names[i], int(attributeInfo))
+        elif type(attributeInfo) is str:
+            attr.set(attr_names[i], str(attributeInfo))
         elif type(attributeInfo) == type([]):
             if (type(attributeInfo[0]) is int):
                 attr.set(attr_names[i], [int(v) for v in (attributeInfo)])
-            elif(type(attributeInfo[0]) is float):
+            elif (type(attributeInfo[0]) is float):
                 attr.set(attr_names[i], [float(v) for v in (attributeInfo)])
             else:
                 print ("ERROR: unsupported list attribute")
@@ -196,6 +198,7 @@ def extractCaffeAttrInfo(layer_param):
         attribute_map["strides"] = [stride_w, stride_h]
         attribute_map["kernel_shape"] = [kernel_w, kernel_h]
         attribute_map["pads"] = [pad_w, pad_h, pad_w, pad_h]
+        attribute_map["dim_round_mode"] = "ceil"
         #attribute_map["dilations"] = [1,1]
     
     elif (layer_type == "LRN"):
