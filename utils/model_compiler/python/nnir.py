@@ -107,6 +107,8 @@ class IrAttr:
                 self.set(name, [int(x) for x in value.split(',')])
             elif value_type == 'float':
                 self.set(name, float(value))
+            elif value_type == 'str':
+                self.set(name, str(value))
             else:
                 self.set(name, int(value))
 
