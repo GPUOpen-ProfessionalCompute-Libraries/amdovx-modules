@@ -151,6 +151,8 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     vx_size kernel_h, kernel_w;
     kernel_h = weights_dims[1];
     kernel_w = weights_dims[0];
+    dilation_h = ((kernel_h - 1) > 1) ? (params.a_x/ (kernel_h - 1) + 1) : 1;
+    dilation_w = ((kernel_w - 1) > 1) ? (params.a_y/ (kernel_w - 1) + 1) : 1;
     stride_w = (input_dims[0] > 1) ? ((output_dims[0] + 2 * pad_w - 1 - dilation_w * (kernel_w - 1) + ((input_dims[0] - 1) / 2)) / (input_dims[0] - 1)) : 1;
     stride_h = (input_dims[1] > 1) ? ((output_dims[1] + 2 * pad_h - 1 - dilation_h * (kernel_h - 1) + ((input_dims[1] - 1) / 2)) / (input_dims[1] - 1)) : 1;
 
@@ -208,6 +210,7 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     std::cout << "deconv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
     std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
+    std::cout << "dilations " << dilation_h << " " << dilation_w << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
     std::cout << " output " << output_dims[0] << " " << output_dims[1] << " " << output_dims[2] << " " << output_dims[3] << std::endl;
 #endif
