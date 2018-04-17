@@ -557,11 +557,11 @@ def caffe2ir(net_parameter, input_dims, outputFolder, verbose):
 
 def main():
     if len(sys.argv) < 4:
-        print ("Usage : python caffe2nnir.py <caffeModel> <nnirOutputFolder> --input-dims [n,c,h,w] [--verbose 0|1]")
+        print ("Usage : python caffe2nnir.py <caffeModel> <nnirOutputFolder> --input-dims n,c,h,w [--verbose 0|1]")
         sys.exit(1)
     caffeFileName = sys.argv[1]
     outputFolder = sys.argv[2]
-    input_dims = sys.argv[4].replace('[','').replace(']','').split(',')
+    input_dims = sys.argv[4].split(',')
 
     verbose = 0
     if(len(sys.argv) > 5):
