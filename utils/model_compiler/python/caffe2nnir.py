@@ -159,24 +159,19 @@ def extractInput(net_parameter, graph, input_dims):
     return inputList
 
 # extraction of output from caffe network to ir output.
-def extractOutput(net_parameter, graph, inputOutputMap, verbose):
+def extractOutput(graph, inputOutputLayers, verbose):
     outputList = {}
-    layers = net_parameter.layer
-    last_layer_param = layers[len(layers) - 1]
-    top_list = last_layer_param.top
-    if (len(top_list) == 0):
-        bottom_list = last_layer_param.bottom
-        output_name = caffe_name_to_ir_name(bottom_list[len(bottom_list) - 1])
-    else:
-        output_name = caffe_name_to_ir_name(str(top_list[0]))
+    last_layer_index = len(inputOutputLayers) - 1
+    last_layer_info = inputOutputLayers[last_layer_index]
+    output_map = last_layer_info["outputs"]
+    output_name = output_map.keys()[0]
     if (verbose):
         print ("output name is : " + output_name)
-    net_len = len(inputOutputMap)
-    out_layer_info = inputOutputMap[net_len - 1]
-    output_map = out_layer_info["outputs"]
     output_dims = output_map[output_name]
     graph.addOutput(caffe_blob_to_ir_tensor(output_name, "F032", output_dims))
+    outputList[output_name] = output_dims
     return outputList
+
 
 # extract layer attribute information from caffe layers.
 def extractCaffeAttrInfo(layer_param):
@@ -496,7 +491,7 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
 
         #calculate output,weight and bias dimensions.
         dimList = calculateTensorDims(layer_param, input_info_map, attribute_map)
-        if caffe_name_to_ir_name(str(layer_name)) != caffe_name_to_ir_name(str(outputs[0])):
+        if (len(outputs) > 0) and caffe_name_to_ir_name(str(layer_name)) != caffe_name_to_ir_name(str(outputs[0])):
             outputNameAliasMap[caffe_name_to_ir_name(str(outputs[0]))] = caffe_name_to_ir_name(str(layer_name))
 
         output_info_map[layer_name] = dimList["output"]
@@ -548,7 +543,7 @@ def caffe_graph_to_ir_graph(net_parameter, input_dims, verbose):
     graph = IrGraph()
     inputMap = extractInput(net_parameter, graph, input_dims)
     inputOutputMap = extractCaffeNodeInfo(net_parameter, graph, inputMap, verbose)
-    outputList = extractOutput(net_parameter, graph, inputOutputMap, verbose)
+    outputList = extractOutput(graph, inputOutputMap, verbose)
     return graph
 
 # convert caffe representation to ir representation.
