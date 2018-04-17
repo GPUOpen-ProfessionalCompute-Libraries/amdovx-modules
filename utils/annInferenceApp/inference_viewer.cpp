@@ -1409,16 +1409,19 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Misclassified Top1 Label</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label Description</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
+                int totalLabelsFound = 0;
                 for(int i = 0; i < 1000; i++){
                     if(state->topLabelMatch[i][0] || state->topLabelMatch[i][6]){
                         QString labelTxt = state->dataLabels ? (*state->dataLabels)[i] : "Unknown";
                         labelTxt = labelTxt.replace(QRegExp("n[0-9]{8}"),"");
+                        labelTxt = labelTxt.toLower();
                         fileObj.write("\t<tr>\n");
                         text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",i);
                         fileObj.write(text.toStdString().c_str());
                         if(state->topLabelMatch[i][0]){
                             text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
                             fileObj.write(text.toStdString().c_str());
+                            totalLabelsFound++;
                         }
                         else{
                             text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
@@ -1448,6 +1451,16 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                     }
                 }
                 fileObj.write("</table>\n");
+
+                fileObj.write("\t<table align=\"center\">\n");
+                fileObj.write("\t<col width=\"265\">\n");
+                fileObj.write("\t<col width=\"50\">\n");
+                fileObj.write("\t<tr>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Total Labels Used</font></td>\n");
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsFound);
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t</tr>\n");
+                fileObj.write("</table>\n");
             }
 
             // Image result
@@ -1457,19 +1470,19 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\" size=\"2\" ><b>Image</b></font></td>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\" size=\"2\"><b>FileName</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Ground Truth Text</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Ground Truth</font><span class=\"tooltiptext\">Input Image Label. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">1st</font><span class=\"tooltiptext\">Result With Highest Probability. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>2nd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>3rd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>4th</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>5th</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Ground Truth</font><span class=\"tooltiptext\">Input Image Label. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Matched</font><span class=\"tooltiptext\">TopK Result Matched with Ground Truth. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-1</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-2</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-3</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-4</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-5</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Ground Truth Text</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Prob-1</font><span class=\"tooltiptext\">Probability of the Top Match. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-2</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-3</b></font></td>\n");
@@ -1492,15 +1505,15 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 float prob_4 = state->resultImageProbTopK[i][3];
                 float prob_5 = state->resultImageProbTopK[i][4];
                 labelTxt_1 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]] : "Unknown";
-                labelTxt_1 = labelTxt_1.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_1 = labelTxt_1.replace(QRegExp("n[0-9]{8}"),"");labelTxt_1 = labelTxt_1.toLower();
                 labelTxt_2 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]] : "Unknown";
-                labelTxt_2 = labelTxt_2.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_2 = labelTxt_2.replace(QRegExp("n[0-9]{8}"),"");labelTxt_2 = labelTxt_2.toLower();
                 labelTxt_3 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]] : "Unknown";
-                labelTxt_3 = labelTxt_3.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_3 = labelTxt_3.replace(QRegExp("n[0-9]{8}"),"");labelTxt_3 = labelTxt_3.toLower();
                 labelTxt_4 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]] : "Unknown";
-                labelTxt_4 = labelTxt_4.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_4 = labelTxt_4.replace(QRegExp("n[0-9]{8}"),"");labelTxt_4 = labelTxt_4.toLower();
                 labelTxt_5 = state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]] : "Unknown";
-                labelTxt_5 = labelTxt_5.replace(QRegExp("n[0-9]{8}"),"");
+                labelTxt_5 = labelTxt_5.replace(QRegExp("n[0-9]{8}"),"");labelTxt_5 = labelTxt_5.toLower();
                 if(truth >= 0)
                 {
                     if(truth == label_1) { match = 1; }
@@ -1510,6 +1523,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                     else if(truth == label_5) { match = 5; }
                     truthLabel = state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown";
                     truthLabel = truthLabel.replace(QRegExp("n[0-9]{8}"),"");
+                    truthLabel = truthLabel.toLower();
                     if(!exportTool){
                     text.sprintf("\t\t<td height=\"17\" align=\"center\"><img id=\"myImg%d\" src=\"file://%s/%s\"alt=\"<b>GROUND TRUTH:</b> %s<br><b>CLASSIFIED AS:</b> %s\"width=\"30\" height=\"30\"></td>\n",
                                  i,state->dataFolder.toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str(),
@@ -1528,6 +1542,10 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                                      state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                     }
+                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",truthLabel.toStdString().c_str());
+                    fileObj.write(text.toStdString().c_str());
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",truth);
+                    fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_1);
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_2);
@@ -1538,30 +1556,20 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_5);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",truth);
-                    fileObj.write(text.toStdString().c_str());
                     if(match)
                         text.sprintf("\t\t<td align=\"center\"><font color=\"green\" size=\"2\"><b>%d</b></font></td>\n",match);
                     else
                         text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",match);
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_1.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_2.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_3.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_4.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_5.toStdString().c_str());
-                    fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[truth].toStdString().c_str() : "Unknown");
-                    text.sprintf("\t\t<td align=\"left\">%s</td>\n",truthLabel.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
                     text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_1);
                     fileObj.write(text.toStdString().c_str());
@@ -1590,46 +1598,38 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                                      state->imageDataFilenames[i].toStdString().c_str(),state->imageDataFilenames[i].toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                     }
-                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_1);
+                    fileObj.write("\t\t<td align=\"left\"><b>unknown</b></td>\n");
+                    fileObj.write("\t\t<td align=\"center\">-1</td>\n");
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_1);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_2);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_2);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_3);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_3);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_4);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_4);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%d</td>\n",label_5);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%d</font></td>\n",label_5);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">-1</td>\n");
-                    fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\"><font color=\"blue\"><b>-1</b></font></td>\n");
-                    fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][0]].toStdString().c_str() : "Unknown");
+                    fileObj.write("\t\t<td align=\"center\"><font color=\"blue\"><b>-1</b></font></td>\n");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_1.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][1]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_2.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][2]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_3.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][3]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_4.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    //text.sprintf("\t\t<td align=\"left\">%s</td>\n",state->dataLabels ? (*state->dataLabels)[ state->resultImageLabelTopK[i][4]].toStdString().c_str() : "Unknown");
                     text.sprintf("\t\t<td align=\"left\">%s</td>\n",labelTxt_5.toStdString().c_str());
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"left\"><b>Unknown</b></td>\n");
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_1);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_1);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_2);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_2);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_3);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_3);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_4);
                     fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_4);
-                    fileObj.write(text.toStdString().c_str());
-                    text.sprintf("\t\t<td align=\"center\">%.4f</td>\n",prob_5);
+                    text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\">%.4f</font></td>\n",prob_5);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fileObj.write("\t\t</tr>\n");
