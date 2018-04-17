@@ -354,7 +354,10 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
             elif node.type == 'conv_transpose':
                 pads = node.attr.get('pads')
-                output_pads = node.attr.get('output_pads')
+                dilations = node.attr.get('dilations')
+                kernel_shape = node.attr.get('kernel_shape')
+                output_pads = [(dilations[0] - 1) * (kernel_shape[0] - 1), \
+                                (dilations[1] - 1) * (kernel_shape[1] - 1)]
                 f.write( \
 """
     { vx_nn_deconvolution_params_t conv_params = { 0 };
@@ -368,7 +371,7 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
-""" % (pads[0], pads[1], output_pads[0] - 1, output_pads[1] - 1, \
+""" % (pads[0], pads[1], output_pads[0] , output_pads[1] , \
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
             elif node.type == 'gemm':
                 alpha = node.attr.get('alpha')
