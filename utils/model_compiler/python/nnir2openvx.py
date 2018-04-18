@@ -767,7 +767,7 @@ VX_API_ENTRY int VX_API_CALL annCopyToInferenceInput(pyif_ann_handle handle, flo
         status = VX_FAILURE;
         printf("ERROR: annCopyToInferenceInput: invalid input buffer size (must be %d) -- got %%d\\n", (int)inp_size);
     }
-    else if(handle->input != nullptr) {
+    else if(handle->input == nullptr) {
         printf("ERROR: annCopyToInferenceInput: input is not valid\\n");
     }
     else if(!is_nhwc) {
@@ -846,7 +846,7 @@ def generatePythonScriptSample(graph,fileName):
         generateLicenseForScript(f)
         f.write( \
 """
-import ctypes
+import sys,os,ctypes 
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
@@ -873,7 +873,28 @@ class AnnAPI:
         self.annRunInference.argtypes = [ctypes.c_void_p, ctypes.c_int]
         print('OK: AnnAPI found "' + self.annQueryInference().decode("utf-8") + '" as configuration in ' + library)
 
-api = AnnAPI('libannpython.dylib')
+if __name__ == '__main__':
+    if len(sys.argv) < 4:
+        print ("Usage : python anntest.py <libannpython> <weightsfile> <input_tensor_file> <output_tensor_file>")
+        sys.exit(1)
+    annlibPythonName = sys.argv[1]
+    weightsFile = sys.argv[2]
+    inputTensorFile = sys.argv[3]
+    outputTensorFile = sys.argv[3]
+    api = AnnAPI(annlibPythonName)
+    hdl = api.annCreateInference(weightsFile)
+    im = np.frombuffer(open(inputTensorFile, 'rb').read(), dtype=np.float32)
+    status = api.annCopyToInferenceInput(hdl, np.ascontiguousarray(im, dtype=np.float32), 416*416*3*4, 0)
+    print('INFO: annCopyToInferenceInput status %d'  %(status))
+    status = api.annRunInference(hdl, 1)
+    print('INFO: annRunInference status %d ' %(status))
+    out_buf = bytearray(12*12*125*4)
+    out = np.frombuffer(out_buf, dtype=np.float32)
+    status = api.annCopyFromInferenceOutput(hdl, np.ascontiguousarray(out, dtype=np.float32), 12*12*125*4)
+    print('INFO: annCopyFromInferenceOutput status %d' %(status))
+    fid = open(outputTensorFile, 'wb')
+    fid.write(out.tobytes())
+    fid.close()
 """)
 
 def generateTestCPP(graph,argmaxOutput,fileName):
