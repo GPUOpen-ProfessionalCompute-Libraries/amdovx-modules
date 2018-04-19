@@ -17,6 +17,12 @@ To convert an ONNX model into AMD NNIR model:
 % python onnx2nnir.py model.pb nnirModelFolder
 ```
 
+To convert a caffemodel into AMD NNIR model:
+
+```
+% python caffe2nnir.py <net.caffeModel> <nnirOutputFolder> --input-dims n,c,h,w [--verbose 0|1]
+```
+
 To update batch size in AMD NNIR model:
 ````
 % python nnir-update.py --batch-size N nnirModelFolder nnirModelFolderN

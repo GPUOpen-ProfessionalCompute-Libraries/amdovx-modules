@@ -92,6 +92,15 @@ def onnx_node_to_ir_attr(node):
                 attr.set(name,list(item.strings))
             else:
                 raise ValueError("Unsupported ONNX attribute: {}".format(item))
+    if attr.is_set('output_padding'):
+        output_padding = attr.get('output_padding')
+        kernel_shape = attr.get('kernel_shape')
+        if (kernel_shape[0] <= 1) or (kernel_shape[1] <= 1) or \
+           ((output_padding[0] % (kernel_shape[0] - 1)) != 0) or \
+           ((output_padding[1] % (kernel_shape[1] - 1)) != 0):
+            raise ValueError("Unsupported ONNX value for output_padding attribute")
+        dilations = [output_padding[0] / (kernel_shape[0] - 1) + 1, output_padding[1] / (kernel_shape[1] - 1) + 1]
+        attr.set('dilations', dilations)
     return attr
 
 def onnx_node_to_ir_node(onnx_node):
