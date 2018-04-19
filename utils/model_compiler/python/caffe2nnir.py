@@ -230,7 +230,11 @@ def extractCaffeAttrInfo(layer_param):
     elif (layer_type == "InnerProduct"):
         attribute_map["broadcast"] = 1
         attribute_map["transB"] = 1
-
+    elif (layer_type == "ReLU"):
+        relu = layer_param.relu_param
+        slope = relu.negative_slope
+        attribute_map["alpha"] = slope
+            
     return attribute_map
 
 # calculate dimensions of the output of each layer.
@@ -366,10 +370,10 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
 
         # dropout layer is copy layer in inference, hence aliasing the input for dropout layer for next layer.
         if (layer_type == "Dropout"):
-            in_name = str(inputs[0])
+            in_name = caffe_name_to_ir_name(str(inputs[0]))
             if in_name in outputNameAliasMap:
                 in_name = outputNameAliasMap[in_name]
-            dropoutLayerMap[caffe_name_to_ir_name(str(outputs[0]))] = caffe_name_to_ir_name(str(inputs[0]))
+            dropoutLayerMap[caffe_name_to_ir_name(str(outputs[0]))] = in_name
             continue
 
         # split layer optimization.
@@ -378,7 +382,7 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
             if (in_name in outputNameAliasMap):
                 in_name = outputNameAliasMap[in_name]
             for k in range(len(outputs)):
-                splitLayerMap[caffe_name_to_ir_name(outputs[k])] = caffe_name_to_ir_name(str(inputs[0]))
+                splitLayerMap[caffe_name_to_ir_name(outputs[k])] = in_name
             continue
 
         layer_info_map = {}
