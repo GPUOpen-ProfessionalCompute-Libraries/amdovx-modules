@@ -1390,26 +1390,33 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             if(state->topKValue > 4){
                 fileObj.write("\t<table class=\"sortable\" id=\"labelsTable\" align=\"center\">\n");
                 fileObj.write("\t<col width=\"80\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"120\">\n");
-                fileObj.write("\t<col width=\"150\">\n");
                 fileObj.write("\t<col width=\"200\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"100\">\n");
+                fileObj.write("\t<col width=\"150\">\n");
+
                 fileObj.write("\t<tr>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label ID</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label Description</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Images in DataBase</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched Top1 %</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched Top5 %</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 1st</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 2nd</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 3rd</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 4th</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 5th</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Misclassified Top1 Label</b></font></td>\n");
-                fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label Description</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"blue\" size=\"3\"><b>Misclassified Top1 Label</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
                 int totalLabelsFound = 0;
+                int totalLabelsUnfounded = 0;
+                int totalLabelsNeverfound = 0;
                 for(int i = 0; i < 1000; i++){
                     if(state->topLabelMatch[i][0] || state->topLabelMatch[i][6]){
                         QString labelTxt = state->dataLabels ? (*state->dataLabels)[i] : "Unknown";
@@ -1418,14 +1425,37 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                         fileObj.write("\t<tr>\n");
                         text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",i);
                         fileObj.write(text.toStdString().c_str());
+                        text.sprintf("\t\t<td align=\"left\"><b>%s</b></td>\n",labelTxt.toStdString().c_str());
+                        fileObj.write(text.toStdString().c_str());
                         if(state->topLabelMatch[i][0]){
-                            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
+                            float top1 = 0, top5 = 0;
+                            top1 = float(state->topLabelMatch[i][1]);
+                            top1 = ((top1/state->topLabelMatch[i][0])*100);
+                            top5 = float(state->topLabelMatch[i][1]+state->topLabelMatch[i][2]+state->topLabelMatch[i][3]+state->topLabelMatch[i][4]+state->topLabelMatch[i][5]);
+                            top5 = (float(top5/state->topLabelMatch[i][0])*100);
+                            if(top5 == 100.00){
+                                text.sprintf("\t\t<td align=\"center\"><font color=\"green\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
+                                fileObj.write(text.toStdString().c_str());
+                            }
+                            else{
+                                text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
+                                fileObj.write(text.toStdString().c_str());
+                            }
+                            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%.2f</b></font></td>\n",top1);
+                            fileObj.write(text.toStdString().c_str());
+                            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%.2f</b></font></td>\n",top5);
                             fileObj.write(text.toStdString().c_str());
                             totalLabelsFound++;
+                            if(top5 == 0.00) totalLabelsNeverfound++;
                         }
                         else{
                             text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
                             fileObj.write(text.toStdString().c_str());
+                            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>0.00</b></font></td>\n");
+                            fileObj.write(text.toStdString().c_str());
+                            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>0.00</b></font></td>\n");
+                            fileObj.write(text.toStdString().c_str());
+                            totalLabelsUnfounded++;
                         }
                         text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][1]);
                         fileObj.write(text.toStdString().c_str());
@@ -1437,27 +1467,41 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                         fileObj.write(text.toStdString().c_str());
                         text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][5]);
                         fileObj.write(text.toStdString().c_str());
-                        if(state->topLabelMatch[i][6]){
+                        if(state->topLabelMatch[i][0] && state->topLabelMatch[i][6] ){
                             text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
                             fileObj.write(text.toStdString().c_str());
                         }
                         else{
-                            text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
-                            fileObj.write(text.toStdString().c_str());
+                            if(state->topLabelMatch[i][0]){
+                                text.sprintf("\t\t<td align=\"center\"><font color=\"green\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
+                                fileObj.write(text.toStdString().c_str());
+                            }
+                            else{
+                                text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
+                                fileObj.write(text.toStdString().c_str());
+                            }
                         }
-                        text.sprintf("\t\t<td align=\"left\"><b>%s</b></td>\n",labelTxt.toStdString().c_str());
-                        fileObj.write(text.toStdString().c_str());
                         fileObj.write("\t\t</tr>\n");
                     }
                 }
                 fileObj.write("</table>\n");
-
+                fileObj.write("<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Label Summary</em></font></h1>\n");
                 fileObj.write("\t<table align=\"center\">\n");
-                fileObj.write("\t<col width=\"265\">\n");
+                fileObj.write("\t<col width=\"350\">\n");
                 fileObj.write("\t<col width=\"50\">\n");
                 fileObj.write("\t<tr>\n");
-                fileObj.write("\t<td><font color=\"black\" size=\"4\">Total Labels Used</font></td>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels in Ground Truth</font></td>\n");
                 text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsFound);
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t</tr>\n");
+                fileObj.write("\t<tr>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels in Ground Truth <b>not found</b></font></td>\n");
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsNeverfound);
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t</tr>\n");
+                fileObj.write("\t<tr>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels <b>not in Ground Truth Found</b></font></td>\n");
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsUnfounded);
                 fileObj.write(text.toStdString().c_str());
                 fileObj.write("\t</tr>\n");
                 fileObj.write("</table>\n");
