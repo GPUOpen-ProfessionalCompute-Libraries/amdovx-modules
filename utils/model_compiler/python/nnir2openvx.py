@@ -880,17 +880,22 @@ if __name__ == '__main__':
     annlibPythonName = sys.argv[1]
     weightsFile = sys.argv[2]
     inputTensorFile = sys.argv[3]
-    outputTensorFile = sys.argv[3]
+    outputTensorFile = sys.argv[4]
     api = AnnAPI(annlibPythonName)
+    input_info,output_info = api.annQueryInference().decode("utf-8").split(';')
+    input,name,ni,ci,hi,wi = input_info.split(',')
     hdl = api.annCreateInference(weightsFile)
-    im = np.frombuffer(open(inputTensorFile, 'rb').read(), dtype=np.float32)
-    status = api.annCopyToInferenceInput(hdl, np.ascontiguousarray(im, dtype=np.float32), 416*416*3*4, 0)
+    im = np.fromfile(inputTensorFile, dtype=np.float32)
+    inp_size = int(ni)*int(ci)*int(hi)*int(wi)*4
+    status = api.annCopyToInferenceInput(hdl, np.ascontiguousarray(im, dtype=np.float32), inp_size, 0)
     print('INFO: annCopyToInferenceInput status %d'  %(status))
     status = api.annRunInference(hdl, 1)
     print('INFO: annRunInference status %d ' %(status))
-    out_buf = bytearray(12*12*125*4)
+    output,name,n,c,h,w = output_info.split(',')
+    out_size = int(n)*int(c)*int(h)*int(w)*4
+    out_buf = bytearray(out_size)
     out = np.frombuffer(out_buf, dtype=np.float32)
-    status = api.annCopyFromInferenceOutput(hdl, np.ascontiguousarray(out, dtype=np.float32), 12*12*125*4)
+    status = api.annCopyFromInferenceOutput(hdl, np.ascontiguousarray(out, dtype=np.float32), out_size)
     print('INFO: annCopyFromInferenceOutput status %d' %(status))
     fid = open(outputTensorFile, 'wb')
     fid.write(out.tobytes())
