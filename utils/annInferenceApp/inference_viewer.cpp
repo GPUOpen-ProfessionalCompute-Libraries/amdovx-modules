@@ -871,6 +871,21 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\t<script src=\"https://www.kryogenix.org/code/browser/sorttable/sorttable.js\"></script>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction filterResultTable(rowNum, DataVar) {\n");
+            fileObj.write("\t\tvar input, filter, table, tr, td, i;\n");
+            fileObj.write("\t\tinput = document.getElementById(DataVar);\n");
+            fileObj.write("\t\tfilter = input.value.toUpperCase();\n");
+            fileObj.write("\t\ttable = document.getElementById(\"resultsTable\");\n");
+            fileObj.write("\t\ttr = table.getElementsByTagName(\"tr\");\n");
+            fileObj.write("\t\tfor (i = 1; i < tr.length; i++) {\n");
+            fileObj.write("\t\ttd = tr[i].getElementsByTagName(\"td\")[rowNum];\n");
+            fileObj.write("\t\tif (td) { if (td.innerHTML.toUpperCase().indexOf(filter) > -1) {tr[i].style.display = \"\"; }\n");
+            fileObj.write("\t\telse { tr[i].style.display = \"none\";}}}}\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\t\n");
+
 
             // graph script
             QString text;
@@ -1510,6 +1525,27 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             // Image result
             fileObj.write("\t<!-- Image Summary -->\n");
             fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Image Results</em></font></h1></A>\n");
+            fileObj.write("\t\t<table id=\"filterTable\" align=\"center\" cellspacing=\"2\" border=\"0\" style=\"width: 60%\">\n");
+            fileObj.write("\t\t<tr>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthName\" onkeyup=\"filterResultTable(2,id)\" placeholder=\"Ground Truth Name\" title=\"Ground Truth Name\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthID\" onkeyup=\"filterResultTable(3,id)\" placeholder=\"Ground Truth ID\" title=\"Ground Truth ID\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Text1\" onkeyup=\"filterResultTable(10,id)\" placeholder=\"Text 1\" title=\"Text1\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1\" onkeyup=\"filterResultTable(4,id)\" placeholder=\"1st Match\" title=\"1st Match\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1Prob\" onkeyup=\"filterResultTable(15,id)\" placeholder=\"1st Match Prob\" title=\"1st Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2\" onkeyup=\"filterResultTable(5,id)\" placeholder=\"2nd Match\" title=\"2nd Match\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2Prob\" onkeyup=\"filterResultTable(16,id)\" placeholder=\"2nd Match Prob\" title=\"2nd Match Prob\"></td>\n");
+            fileObj.write("\t\t</tr>\n<tr>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top3\" onkeyup=\"filterResultTable(6,id)\" placeholder=\"3rd Match\" title=\"3rd Match\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top3Prob\" onkeyup=\"filterResultTable(17,id)\" placeholder=\"3rd Match Prob\" title=\"3rd Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4\" onkeyup=\"filterResultTable(7,id)\" placeholder=\"4th Match\" title=\"4th Match\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4Prob\" onkeyup=\"filterResultTable(18,id)\" placeholder=\"4th Match Prob\" title=\"4th Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5\" onkeyup=\"filterResultTable(8,id)\" placeholder=\"5th Match\" title=\"5th Match\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5Prob\" onkeyup=\"filterResultTable(19,id)\" placeholder=\"5th Match Prob\" title=\"5th Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" maxlength=\"2\" id=\"Matched\" onkeyup=\"filterResultTable(9,id)\" placeholder=\"Matched\" title=\"Type in a name\"></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t\t</table>\n");
+            fileObj.write("\t\t<br>\n");
+            fileObj.write("\t\t\n");
             fileObj.write("<table id=\"resultsTable\" class=\"sortable\" align=\"center\" cellspacing=\"2\" border=\"0\" style=\"width: 98%\">\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\" size=\"2\" ><b>Image</b></font></td>\n");
