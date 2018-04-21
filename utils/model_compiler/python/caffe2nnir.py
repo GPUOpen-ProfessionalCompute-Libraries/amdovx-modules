@@ -445,6 +445,8 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
         # extract attributes of the layer.
         attribute_map = extractCaffeAttrInfo(layer_param)
         layer_info_map["attributes"] = attribute_map
+        if (layer_type == "ReLU" and attribute_map["alpha"] != 0):
+            layer_info_map["layer_type"] = "leaky_relu"
 
         #extract input information.
         if (count == 0):
