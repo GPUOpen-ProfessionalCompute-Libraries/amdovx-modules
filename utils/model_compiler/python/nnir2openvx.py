@@ -425,6 +425,14 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
 """ % (node.inputs[0], node.outputs[0]))
+            elif node.type == 'leaky_relu':
+                f.write( \
+"""
+    {  vx_node node = vxActivationLayer(graph, %s, VX_NN_ACTIVATION_LEAKY_RELU, %f, 0.0f, %s);
+       ERROR_CHECK_OBJECT(node);
+       ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""" % (node.inputs[0], node.attr.get('alpha'), node.outputs[0]))
             elif node.type == 'add' or node.type == 'sum':
                 if len(node.inputs) == 2:
                     f.write( \
@@ -767,7 +775,7 @@ VX_API_ENTRY int VX_API_CALL annCopyToInferenceInput(pyif_ann_handle handle, flo
         status = VX_FAILURE;
         printf("ERROR: annCopyToInferenceInput: invalid input buffer size (must be %d) -- got %%d\\n", (int)inp_size);
     }
-    else if(handle->input != nullptr) {
+    else if(handle->input == nullptr) {
         printf("ERROR: annCopyToInferenceInput: input is not valid\\n");
     }
     else if(!is_nhwc) {
@@ -846,7 +854,7 @@ def generatePythonScriptSample(graph,fileName):
         generateLicenseForScript(f)
         f.write( \
 """
-import ctypes
+import sys,os,ctypes 
 import numpy as np
 from numpy.ctypeslib import ndpointer
 
@@ -873,7 +881,33 @@ class AnnAPI:
         self.annRunInference.argtypes = [ctypes.c_void_p, ctypes.c_int]
         print('OK: AnnAPI found "' + self.annQueryInference().decode("utf-8") + '" as configuration in ' + library)
 
-api = AnnAPI('libannpython.dylib')
+if __name__ == '__main__':
+    if len(sys.argv) < 4:
+        print ("Usage : python anntest.py <libannpython> <weightsfile> <input_tensor_file> <output_tensor_file>")
+        sys.exit(1)
+    annlibPythonName = sys.argv[1]
+    weightsFile = sys.argv[2]
+    inputTensorFile = sys.argv[3]
+    outputTensorFile = sys.argv[4]
+    api = AnnAPI(annlibPythonName)
+    input_info,output_info = api.annQueryInference().decode("utf-8").split(';')
+    input,name,ni,ci,hi,wi = input_info.split(',')
+    hdl = api.annCreateInference(weightsFile)
+    im = np.fromfile(inputTensorFile, dtype=np.float32)
+    inp_size = int(ni)*int(ci)*int(hi)*int(wi)*4
+    status = api.annCopyToInferenceInput(hdl, np.ascontiguousarray(im, dtype=np.float32), inp_size, 0)
+    print('INFO: annCopyToInferenceInput status %d'  %(status))
+    status = api.annRunInference(hdl, 1)
+    print('INFO: annRunInference status %d ' %(status))
+    output,name,n,c,h,w = output_info.split(',')
+    out_size = int(n)*int(c)*int(h)*int(w)*4
+    out_buf = bytearray(out_size)
+    out = np.frombuffer(out_buf, dtype=np.float32)
+    status = api.annCopyFromInferenceOutput(hdl, np.ascontiguousarray(out, dtype=np.float32), out_size)
+    print('INFO: annCopyFromInferenceOutput status %d' %(status))
+    fid = open(outputTensorFile, 'wb')
+    fid.write(out.tobytes())
+    fid.close()
 """)
 
 def generateTestCPP(graph,argmaxOutput,fileName):
