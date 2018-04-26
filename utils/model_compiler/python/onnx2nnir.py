@@ -58,6 +58,7 @@ onnx2ir_op_type = {
     'Gemm'               : 'gemm',
     'LRN'                : 'lrn',
     'Concat'             : 'concat',
+    'LeakyRelu'          : 'leaky_relu',
     'GlobalAveragePool'  : 'global_avg_pool',
     'Softmax'            : 'softmax'
 }

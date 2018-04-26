@@ -135,6 +135,7 @@ class IrNode:
             'slice' : 1,
             'concat' : 1,
             'global_avg_pool' : 1,
+            'leaky_relu' : 1,
         }
 
     def set(self,type,inputs,outputs,attr):
@@ -235,7 +236,7 @@ class IrGraph:
         self.locals = []
         for node in self.nodes:
             for output in node.outputs:
-                if node.type in ['sum', 'add', 'sub', 'mul', 'muladd', 'batch_norm', 'relu', 'softmax']:
+                if node.type in ['sum', 'add', 'sub', 'mul', 'muladd', 'batch_norm', 'relu', 'leaky_relu', 'softmax']:
                     input = self.tensor_dict[node.inputs[0]]
                     local = IrTensor()
                     local.setName(output)
