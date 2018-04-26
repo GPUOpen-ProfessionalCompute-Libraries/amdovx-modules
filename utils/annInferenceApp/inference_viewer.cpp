@@ -767,6 +767,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             if(exportTool){
                 fileObj.write("\t<link rel=\"icon\" href=\"icons/vega_icon_150.png\"/>\n");
             }
+            // page style
             fileObj.write("\n\t<style type=\"text/css\">\n");
             fileObj.write("\t\n");
             fileObj.write("\tbody,div,table,thead,tbody,tfoot,tr,th,td,p { font-family:\"Liberation Sans\"; font-size:x-small }\n");
@@ -817,7 +818,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<div id=\"myModal\" class=\"modal\"> <span class=\"close\">&times;</span>  <img class=\"modal-content\" id=\"img01\">  <div id=\"caption\"></div> </div>\n");
             fileObj.write("\t\n");
 
-            // table order
+            // table content order
             fileObj.write("\t<div id=\"mySidenav\" class=\"sidenav\">\n");
             fileObj.write("\t<a href=\"javascript:void(0)\" class=\"closebtn\" onclick=\"closeNav()\">&times;</a>\n");
             fileObj.write("\t<A HREF=\"#table0\"><font size=\"5\">Summary</font></A><br>\n");
@@ -826,7 +827,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Labels</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table4\"><font size=\"5\">Image Results</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table5\"><font size=\"5\">Compare</font></A><br>\n");
-            fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Help</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Error Suspects</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table7\"><font size=\"5\">Help</font></A><br>\n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
 
@@ -1201,7 +1203,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
             fileObj.write("\t</script>\n");
 
-            // side view
+            // Top view header
             fileObj.write("\t<div class=\"navbar\">\n");
             fileObj.write("\t<a href=\"#\">\n");
             fileObj.write("\t<div id=\"main\">\n");
@@ -1429,9 +1431,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 5th</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"blue\" size=\"3\"><b>Misclassified Top1 Label</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
-                int totalLabelsFound = 0;
-                int totalLabelsUnfounded = 0;
-                int totalLabelsNeverfound = 0;
+                int totalLabelsFound = 0, totalImagesWithLabelFound = 0;
+                int totalLabelsUnfounded = 0, totalImagesWithLabelNotFound = 0;
+                int totalLabelsNeverfound = 0, totalImagesWithFalseLabelFound = 0;
                 for(int i = 0; i < 1000; i++){
                     if(state->topLabelMatch[i][0] || state->topLabelMatch[i][6]){
                         QString labelTxt = state->dataLabels ? (*state->dataLabels)[i] : "Unknown";
@@ -1448,6 +1450,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                             top1 = ((top1/state->topLabelMatch[i][0])*100);
                             top5 = float(state->topLabelMatch[i][1]+state->topLabelMatch[i][2]+state->topLabelMatch[i][3]+state->topLabelMatch[i][4]+state->topLabelMatch[i][5]);
                             top5 = (float(top5/state->topLabelMatch[i][0])*100);
+                            int imagesFound = (state->topLabelMatch[i][1]+state->topLabelMatch[i][2]+state->topLabelMatch[i][3]+state->topLabelMatch[i][4]+state->topLabelMatch[i][5]);
+                            totalImagesWithLabelFound += imagesFound;
+                            totalImagesWithLabelNotFound += state->topLabelMatch[i][0] - imagesFound;
                             if(top5 == 100.00){
                                 text.sprintf("\t\t<td align=\"center\"><font color=\"green\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][0]);
                                 fileObj.write(text.toStdString().c_str());
@@ -1492,6 +1497,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                                 fileObj.write(text.toStdString().c_str());
                             }
                             else{
+                                totalImagesWithFalseLabelFound += state->topLabelMatch[i][6];
                                 text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
                                 fileObj.write(text.toStdString().c_str());
                             }
@@ -1504,19 +1510,38 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<table align=\"center\">\n");
                 fileObj.write("\t<col width=\"350\">\n");
                 fileObj.write("\t<col width=\"50\">\n");
+                fileObj.write("\t<col width=\"150\">\n");
                 fileObj.write("\t<tr>\n");
-                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels in Ground Truth</font></td>\n");
-                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsFound);
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels in Ground Truth <b>found</b></font></td>\n");
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",(totalLabelsFound-totalLabelsNeverfound));
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b> images</font></td>\n",totalImagesWithLabelFound);
                 fileObj.write(text.toStdString().c_str());
                 fileObj.write("\t</tr>\n");
                 fileObj.write("\t<tr>\n");
                 fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels in Ground Truth <b>not found</b></font></td>\n");
                 text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsNeverfound);
                 fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b> images</font></td>\n",totalImagesWithLabelNotFound);
+                fileObj.write(text.toStdString().c_str());
                 fileObj.write("\t</tr>\n");
                 fileObj.write("\t<tr>\n");
-                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels <b>not in Ground Truth Found</b></font></td>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\"><b>Total</b> Labels in Ground Truth</font></td>\n");
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsFound);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b> images</font></td>\n",(totalImagesWithLabelFound+totalImagesWithLabelNotFound));
+                fileObj.write(text.toStdString().c_str());
+                fileObj.write("\t</tr>\n");
+                fileObj.write("</table>\n");
+                fileObj.write("\t<br><br><table align=\"center\">\n");
+                fileObj.write("\t<col width=\"400\">\n");
+                fileObj.write("\t<col width=\"50\">\n");
+                fileObj.write("\t<col width=\"150\">\n");
+                fileObj.write("\t<tr>\n");
+                fileObj.write("\t<td><font color=\"black\" size=\"4\">Labels <b>not in Ground Truth</b> found in 1st Match</font></td>\n");
                 text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",totalLabelsUnfounded);
+                fileObj.write(text.toStdString().c_str());
+                text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b> images</font></td>\n",totalImagesWithFalseLabelFound);
                 fileObj.write(text.toStdString().c_str());
                 fileObj.write("\t</tr>\n");
                 fileObj.write("</table>\n");
@@ -1873,9 +1898,16 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t</tr>\n");
                 fileObj.write("\t</table>\n");
             }
+
+            // Error Suspects
+            fileObj.write("\t<!-- Error Suspects -->\n");
+            fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Error Suspects</em></font></h1></A>\n");
+            fileObj.write("\t\n");
+
+
             // HELP
             fileObj.write("\t<!-- HELP -->\n");
-            fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>HELP</em></font></h1></A>\n");
+            fileObj.write("<A NAME=\"table7\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>HELP</em></font></h1></A>\n");
             fileObj.write("\t\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 70%\">\n");
             fileObj.write("\t<tr>\n");
