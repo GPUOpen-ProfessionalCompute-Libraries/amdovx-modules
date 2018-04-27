@@ -501,8 +501,9 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
             elif node.type == 'lrn':
                 f.write( \
 """
-    { vx_node node = vxNormalizationLayer(graph, %s, VX_NN_NORMALIZATION_SAME_MAP, %d, %ef, %ef, %s);
-""" % (node.inputs[0], node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0]))
+    { vx_node node = vxNormalizationLayer(graph, %s, %s , %d, %ef, %ef, %s);
+""" % (node.inputs[0], "VX_NN_NORMALIZATION_SAME_MAP" if node.attr.get('mode') == 0 else "VX_NN_NORMALIZATION_ACROSS_MAPS" , \
+       node.attr.get('size'), node.attr.get('alpha'), node.attr.get('beta'), node.outputs[0]))
                 if (node.attr.get('bias') != 1.0):
                     f.write( \
 """   vx_float32 bias = %s;

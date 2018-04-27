@@ -67,6 +67,7 @@ class IrAttr:
             , 'split' : []              # length of each output for split
             , 'border_mode' : 'fill_0'  # border mode: fill_0, discard
             , 'dim_round_mode' : 'floor' # rounding mode for output dim calculation: floor, ceil
+            , 'mode' : 0                 # attribute to differentiate layer modes.
         }
         self.dict_set = []
 
