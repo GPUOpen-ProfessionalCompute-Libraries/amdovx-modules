@@ -218,11 +218,16 @@ def extractCaffeAttrInfo(layer_param):
         alpha = float(lrn.alpha)
         beta = float(lrn.beta)
         k = float(lrn.k)
+        norm_region = lrn.norm_region
 
         attribute_map["alpha"] = alpha
         attribute_map["beta"] = beta
         attribute_map["size"] = local_size
         attribute_map["bias"] = k
+        if (norm_region == caffe_pb2.LRNParameter.ACROSS_CHANNELS):
+            attribute_map["mode"] = 1
+        elif (norm_region == caffe_pb2.LRNParameter.WITHIN_CHANNEL):
+            attribute_map["mode"] = 0
 
     elif (layer_type == "BatchNorm"):
         attribute_map["epsilon"] = float(layer_param.batch_norm_param.eps)
@@ -540,7 +545,6 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
         node = caffe_node_to_ir_node(layer_info_map["layer_type"], layer_info_map)
         graph.addNode(node)
 
-    graph.updateLocals()
     return inputOutputMap
 
 
@@ -550,6 +554,7 @@ def caffe_graph_to_ir_graph(net_parameter, input_dims, verbose):
     inputMap = extractInput(net_parameter, graph, input_dims)
     inputOutputMap = extractCaffeNodeInfo(net_parameter, graph, inputMap, verbose)
     outputList = extractOutput(graph, inputOutputMap, verbose)
+    graph.updateLocals()
     return graph
 
 # convert caffe representation to ir representation.
