@@ -973,7 +973,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1004,7 +1004,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L1 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L1 Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L1_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1035,7 +1035,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L2 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L2 Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L2_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1066,7 +1066,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L3 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L3 Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L3_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1097,7 +1097,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L4 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L4 Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L4_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1128,7 +1128,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative L5 Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative L5 Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('L5_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1197,7 +1197,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fVal=fVal-0.01;
             }
             fileObj.write("\t]);\n");
-            fileObj.write("\tvar options = {  title:'Cummulative Hierarchy Levels Success/Failure', hAxis: { title: 'Probability', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:1400, height:800 };\n");
+            fileObj.write("\tvar options = {  title:'Cummulative Hierarchy Levels Success/Failure', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Percentage of Dataset'}, series: { 0.01: {curveType: 'function'} }, width:1400, height:800 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Hierarchy_pass_fail_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
@@ -1247,7 +1247,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n");
             fileObj.write("\t</table>\n<br><br><br>\n");
-            fileObj.write("\t<table align=\"center\">\n \t<col width=\"285\">\n \t<col width=\"100\">\n \t<col width=\"320\">\n \t<col width=\"100\">\n<tr>\n");
+            fileObj.write("\t<table align=\"center\">\n \t<col width=\"300\">\n \t<col width=\"100\">\n \t<col width=\"350\">\n \t<col width=\"100\">\n<tr>\n");
             text.sprintf("\t<td><font color=\"black\" size=\"4\">Total <b>Top %d Match</b></font></td>\n\n",state->topKValue);
             fileObj.write(text.toStdString().c_str());
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",passCount);
@@ -1266,11 +1266,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f %%</b></font></td>\n",(accuracyPer*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n<tr>\n");
-            text.sprintf("\t<td><font color=\"black\" size=\"4\">Average Pass Probability for Top %d</font></td>\n",state->topKValue);
+            text.sprintf("\t<td><font color=\"black\" size=\"4\">Average Pass Confidence for Top %d</font></td>\n",state->topKValue);
             fileObj.write(text.toStdString().c_str());
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f %%</b></font></td>\n",(avgPassProb*100));
             fileObj.write(text.toStdString().c_str());
-            fileObj.write("\t<td><font color=\"black\" size=\"4\">Average mismatch Probability for Top 1</font></td>\n");
+            fileObj.write("\t<td><font color=\"black\" size=\"4\">Average mismatch Confidence for Top 1</font></td>\n");
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%.2f %%</b></font></td>\n",((state->totalFailProb/state->totalMismatch)*100));
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n</table>\n<br><br><br>\n");
@@ -1314,6 +1314,15 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t</tr>\n");
             fileObj.write("</table>\n");
 
+            // summary data and time
+            //QString DateTime = QDate::currentDate().toString();//QDateTime::currentMSecsSinceEpoch();
+            //text.sprintf("\t<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Summary Generated On: </font><font color=\"black\" size=\"4\">%s</font></em></h1>\n",DateTime.toStdString().c_str());
+            //fileObj.write(text.toStdString().c_str());
+            const QDateTime now = QDateTime::currentDateTime();
+            QString DateTime_test = now.toString("yyyy-MM-dd hh:mm:ss");
+            text.sprintf("\t<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Summary Generated On: </font><font color=\"black\" size=\"4\">%s</font></em></h1>\n",DateTime_test.toStdString().c_str());
+            fileObj.write(text.toStdString().c_str());
+
             // Graph
             fileObj.write("\t<!-- Graph Summary -->\n");
             fileObj.write("<A NAME=\"table1\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Graphs</em></font></h1></A>\n");
@@ -1342,10 +1351,10 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
 
             // hierarchy
             fileObj.write("\t<!-- hierarchy Summary -->\n");
-            fileObj.write("<A NAME=\"table2\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Hierarchy Summary (by probability level)</em></font></h1></A>\n");
+            fileObj.write("<A NAME=\"table2\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Hierarchy Summary (by Confidence level)</em></font></h1></A>\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 80%\">\n");
             fileObj.write("\t<tr>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Probability</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Confidence</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Pass</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Fail</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Category 1 Pass</b></font></td>\n");
@@ -1556,16 +1565,16 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthID\" onkeyup=\"filterResultTable(3,id)\" placeholder=\"Ground Truth ID\" title=\"Ground Truth ID\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Text1\" onkeyup=\"filterResultTable(10,id)\" placeholder=\"Text 1\" title=\"Text1\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1\" onkeyup=\"filterResultTable(4,id)\" placeholder=\"1st Match\" title=\"1st Match\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1Prob\" onkeyup=\"filterResultTable(15,id)\" placeholder=\"1st Match Prob\" title=\"1st Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1Prob\" onkeyup=\"filterResultTable(15,id)\" placeholder=\"1st Match Conf\" title=\"1st Match Prob\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2\" onkeyup=\"filterResultTable(5,id)\" placeholder=\"2nd Match\" title=\"2nd Match\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2Prob\" onkeyup=\"filterResultTable(16,id)\" placeholder=\"2nd Match Prob\" title=\"2nd Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2Prob\" onkeyup=\"filterResultTable(16,id)\" placeholder=\"2nd Match Conf\" title=\"2nd Match Prob\"></td>\n");
             fileObj.write("\t\t</tr>\n<tr>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top3\" onkeyup=\"filterResultTable(6,id)\" placeholder=\"3rd Match\" title=\"3rd Match\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top3Prob\" onkeyup=\"filterResultTable(17,id)\" placeholder=\"3rd Match Prob\" title=\"3rd Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top3Prob\" onkeyup=\"filterResultTable(17,id)\" placeholder=\"3rd Match Conf\" title=\"3rd Match Prob\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4\" onkeyup=\"filterResultTable(7,id)\" placeholder=\"4th Match\" title=\"4th Match\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4Prob\" onkeyup=\"filterResultTable(18,id)\" placeholder=\"4th Match Prob\" title=\"4th Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4Prob\" onkeyup=\"filterResultTable(18,id)\" placeholder=\"4th Match Conf\" title=\"4th Match Prob\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5\" onkeyup=\"filterResultTable(8,id)\" placeholder=\"5th Match\" title=\"5th Match\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5Prob\" onkeyup=\"filterResultTable(19,id)\" placeholder=\"5th Match Prob\" title=\"5th Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5Prob\" onkeyup=\"filterResultTable(19,id)\" placeholder=\"5th Match Conf\" title=\"5th Match Prob\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" maxlength=\"2\" id=\"Matched\" onkeyup=\"filterResultTable(9,id)\" placeholder=\"Matched\" title=\"Type in a name\"></td>\n");
             fileObj.write("\t\t</tr>\n");
             fileObj.write("\t\t</table>\n");
@@ -1577,7 +1586,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td height=\"17\" align=\"center\"><font color=\"Maroon\" size=\"2\"><b>FileName</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Ground Truth Text</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Ground Truth</font><span class=\"tooltiptext\">Input Image Label. Click on the Text to Sort</span></div></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">1st</font><span class=\"tooltiptext\">Result With Highest Probability. Click on the Text to Sort</span></div></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">1st</font><span class=\"tooltiptext\">Result With Highest Confidence. Click on the Text to Sort</span></div></b></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>2nd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>3rd</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>4th</b></font></td>\n");
@@ -1588,11 +1597,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-3</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-4</b></font></td>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Text-5</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Prob-1</font><span class=\"tooltiptext\">Probability of the Top Match. Click on the Text to Sort</span></div></b></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-2</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-3</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-4</b></font></td>\n");
-            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Prob-5</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><b><div class=\"tooltip\"><font color=\"Maroon\" size=\"2\">Conf-1</font><span class=\"tooltiptext\">Confidence of the Top Match. Click on the Text to Sort</span></div></b></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Conf-2</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Conf-3</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Conf-4</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"2\"><b>Conf-5</b></font></td>\n");
             fileObj.write("\t\t</tr>\n");
             for(int i = 0; i < state->imageDataSize; i++) {
                 fileObj.write("\t\t<tr>\n");
