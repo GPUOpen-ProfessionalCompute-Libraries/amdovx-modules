@@ -68,6 +68,7 @@ class IrAttr:
             , 'border_mode' : 'fill_0'  # border mode: fill_0, discard
             , 'dim_round_mode' : 'floor' # rounding mode for output dim calculation: floor, ceil
             , 'mode' : 0                 # attribute to differentiate layer modes.
+            , 'shape' : []               # shape attribute
         }
         self.dict_set = []
 
@@ -137,6 +138,7 @@ class IrNode:
             'concat' : 1,
             'global_avg_pool' : 1,
             'leaky_relu' : 1,
+            'reshape' : 1,
         }
 
     def set(self,type,inputs,outputs,attr):
@@ -327,6 +329,21 @@ class IrGraph:
                         local.setName(name)
                         local.setInfo(input.type, shape)
                         self.addLocal(local)
+                elif node.type in ['reshape']:
+                    input = self.tensor_dict[node.inputs[0]]
+                    shape = node.attr.get('shape')
+                    icount = 1
+                    for d in input.shape:
+                        icount = icount * d
+                    ocount = 1
+                    for d in shape:
+                        ocount = icount * d
+                    if icount != ocount:
+                        raise ValueError("reshape: mismatch detected: " + node.inputs[0] + ":" + str(input.shape) + " " + node.outputs[0] + ":" + str(shape))
+                    local = IrTensor()
+                    local.setName(output)
+                    local.setInfo(input.type, shape)
+                    self.addLocal(local)
                 else:
                     raise ValueError("Unsupported IR node type: {}".format(node.type))
 
