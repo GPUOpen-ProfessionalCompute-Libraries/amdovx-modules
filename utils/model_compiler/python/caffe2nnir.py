@@ -5,6 +5,7 @@ import sys
 import argparse
 import struct
 import math
+import collections
 
 # mapping from caffe layer types to nnir operators.
 # pooling is mapped to either avg_pool or max_pool
@@ -352,7 +353,7 @@ def calculateTensorDims(layer_param, input_map, attribute_map):
 
 # extract caffe node information into ir nodes.
 def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
-    inputOutputMap = {}
+    inputOutputMap = collections.OrderedDict()
     dropoutLayerMap = {}
     splitLayerMap = {}
     outputNameAliasMap = {}
@@ -391,8 +392,8 @@ def extractCaffeNodeInfo(net_parameter, graph, inputsInfo, verbose):
             continue
 
         layer_info_map = {}
-        input_info_map = {}
-        output_info_map = {}
+        input_info_map = collections.OrderedDict()
+        output_info_map = collections.OrderedDict()
         layer_info_map["layer_name"] = layer_name
         if layer_type in caffe2ir_op_type:
             layer_info_map["layer_type"] = caffe2ir_op_type[layer_type]
