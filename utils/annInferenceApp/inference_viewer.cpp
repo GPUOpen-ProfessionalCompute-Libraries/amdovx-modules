@@ -901,6 +901,43 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\telse { tr[i].style.display = \"none\";}}}}\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\t\n");
+            fileObj.write("\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction clearLabelFilter() {\n");
+            fileObj.write("\t\tdocument.getElementById('Label ID').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Label Description').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Images in DataBase').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched Top1 %').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched Top5 %').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched 1st').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched 2nd').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched 3th').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched 4th').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched 5th').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Misclassified Top1 Label').value = ''\n");
+            fileObj.write("\t\tfilterLabelTable(0,'Label ID') }\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\n");
+            fileObj.write("\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction clearResultFilter() {\n");
+            fileObj.write("\t\tdocument.getElementById('GroundTruthText').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('GroundTruthID').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Matched').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top1').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top1Prob').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Text1').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top2').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top2Prob').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top3').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top3Prob').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top4').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top4Prob').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top4').value = ''\n");
+            fileObj.write("\t\tdocument.getElementById('Top5Prob').value = ''\n");
+            fileObj.write("\t\tfilterResultTable(2,'GroundTruthText') }\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\n");
 
 
             // graph script
@@ -1329,12 +1366,15 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("</table>\n");
 
             // summary data and time
+            QDateTime curtim = QDateTime::currentDateTime();
+            QString abbr = curtim.timeZoneAbbreviation();
+            //printf("TimeZone: %s",abbr.toStdString().c_str());
             //QString DateTime = QDate::currentDate().toString();//QDateTime::currentMSecsSinceEpoch();
             //text.sprintf("\t<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Summary Generated On: </font><font color=\"black\" size=\"4\">%s</font></em></h1>\n",DateTime.toStdString().c_str());
             //fileObj.write(text.toStdString().c_str());
             const QDateTime now = QDateTime::currentDateTime();
             QString DateTime_test = now.toString("yyyy-MM-dd hh:mm:ss");
-            text.sprintf("\t<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Summary Generated On: </font><font color=\"black\" size=\"4\">%s</font></em></h1>\n",DateTime_test.toStdString().c_str());
+            text.sprintf("\t<h1 align=\"center\"><font color=\"DodgerBlue\" size=\"4\"><br><em>Summary Generated On: </font><font color=\"black\" size=\"4\">%s %s</font></em></h1>\n",DateTime_test.toStdString().c_str(),abbr.toStdString().c_str());
             fileObj.write(text.toStdString().c_str());
 
             // Graph
@@ -1440,6 +1480,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 4th\" onkeyup=\"filterLabelTable(8,id)\" placeholder=\"Matched 4th\" title=\"Matched 4th\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 5th\" onkeyup=\"filterLabelTable(9,id)\" placeholder=\"Matched 5th\" title=\"Matched 5th\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"14\" id=\"Misclassified Top1 Label\" onkeyup=\"filterLabelTable(10,id)\"placeholder=\"Misclassified Top1 Label\" title=\"Misclassified Top1 Label\"></td>\n");
+            fileObj.write("\t<td align=\"center\"><button style=\"background-color:yellow;\" onclick=\"clearLabelFilter()\">Clear Filter</button></td>\n");
             fileObj.write("\t\t</tr>\n");
             fileObj.write("\t\t</table>\n");
             fileObj.write("\t\t<br>\n");
@@ -1592,11 +1633,12 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("<A NAME=\"table4\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Image Results</em></font></h1></A>\n");
             fileObj.write("\t\t<table id=\"filterTable\" align=\"center\" cellspacing=\"2\" border=\"0\" style=\"width: 60%\">\n");
             fileObj.write("\t\t<tr>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthName\" onkeyup=\"filterResultTable(2,id)\" placeholder=\"Ground Truth Name\" title=\"Ground Truth Name\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthText\" onkeyup=\"filterResultTable(2,id)\" placeholder=\"Ground Truth Text\" title=\"Ground Truth Text\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"GroundTruthID\" onkeyup=\"filterResultTable(3,id)\" placeholder=\"Ground Truth ID\" title=\"Ground Truth ID\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Text1\" onkeyup=\"filterResultTable(10,id)\" placeholder=\"Text 1\" title=\"Text1\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" maxlength=\"2\" id=\"Matched\" onkeyup=\"filterResultTable(9,id)\" placeholder=\"Matched\" title=\"Type in a name\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1\" onkeyup=\"filterResultTable(4,id)\" placeholder=\"1st Match\" title=\"1st Match\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top1Prob\" onkeyup=\"filterResultTable(15,id)\" placeholder=\"1st Match Conf\" title=\"1st Match Prob\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Text1\" onkeyup=\"filterResultTable(10,id)\" placeholder=\"Text 1\" title=\"Text1\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2\" onkeyup=\"filterResultTable(5,id)\" placeholder=\"2nd Match\" title=\"2nd Match\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top2Prob\" onkeyup=\"filterResultTable(16,id)\" placeholder=\"2nd Match Conf\" title=\"2nd Match Prob\"></td>\n");
             fileObj.write("\t\t</tr>\n<tr>\n");
@@ -1606,7 +1648,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top4Prob\" onkeyup=\"filterResultTable(18,id)\" placeholder=\"4th Match Conf\" title=\"4th Match Prob\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5\" onkeyup=\"filterResultTable(8,id)\" placeholder=\"5th Match\" title=\"5th Match\"></td>\n");
             fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Top5Prob\" onkeyup=\"filterResultTable(19,id)\" placeholder=\"5th Match Conf\" title=\"5th Match Prob\"></td>\n");
-            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" maxlength=\"2\" id=\"Matched\" onkeyup=\"filterResultTable(9,id)\" placeholder=\"Matched\" title=\"Type in a name\"></td>\n");
+            fileObj.write("\t\t<td></td>\n");
+            fileObj.write("\t<td align=\"center\"><button style=\"background-color:yellow;\" onclick=\"clearResultFilter()\">Clear Filter</button></td>\n");
             fileObj.write("\t\t</tr>\n");
             fileObj.write("\t\t</table>\n");
             fileObj.write("\t\t<br>\n");
