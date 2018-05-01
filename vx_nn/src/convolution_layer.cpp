@@ -38,6 +38,11 @@ struct ConvolutionLayerLocalData {
     size_t workspace_size;
     miopenTensorDescriptor_t bias_desc;
     cl_mem bias_mem;
+    miopenActivationMode_t activation_mode;
+    double activation_alpha;
+    double activation_beta;
+    double activation_power;
+    miopenActivationDescriptor_t activation_desc;
 };
 
 static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
@@ -46,6 +51,13 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     vx_enum type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
     if(type != VX_TYPE_NN_CONVOLUTION_PARAMS) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #3 type=%d (must be CONV_PARAMS)\n", type);
+    if(parameters[5]) {
+        ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[5], VX_SCALAR_TYPE, &type, sizeof(type)));
+        if(type != VX_TYPE_INT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 type=%d (must be VX_TYPE_INT32)\n", type);
+        vx_int32 activation_mode = 0;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(activation_mode != 0 && activation_mode != 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 activation_mode=%d (must be 0 or 1)\n", activation_mode);
+    }
 
     // check tensor dimensions
     vx_size num_dims;
@@ -107,6 +119,12 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
                                                            &data->beta, data->output_desc, data->output_mem));
     }
 
+    // activation (in-place in output_mem)
+    if(parameters[5]) {
+        float alpha = 1.0f, beta = 0.0f;
+        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &alpha, data->output_desc, data->output_mem, &beta, data->output_desc, data->output_mem));
+    }
+
     return VX_SUCCESS;
 }
 
@@ -166,6 +184,23 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->conv_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->conv_desc, mode, pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w));
 
+    // activation descriptor
+    vx_int32 activation_mode = 0;
+    if(parameters[5]) {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->activation_mode = miopenActivationPATHTRU;
+    if(activation_mode == 1) {
+        data->activation_mode = miopenActivationRELU;
+        data->activation_alpha = 1.0;
+        data->activation_beta = 0.0;
+        data->activation_power = 1.0;
+    }
+    if(data->activation_mode == miopenActivationRELU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
+    }
+
     //Memory Declaration.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
@@ -219,6 +254,9 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->conv_desc));
+    if(data->activation_mode != miopenActivationPATHTRU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
+    }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->weight_desc));
@@ -233,7 +271,7 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
 vx_status publishConvolutionLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.convolution_layer", VX_KERNEL_CONVOLUTION_LAYER, processConvolutionLayer, 5, validateConvolutionLayer, initializeConvolutionLayer, uninitializeConvolutionLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.convolution_layer", VX_KERNEL_CONVOLUTION_LAYER, processConvolutionLayer, 6, validateConvolutionLayer, initializeConvolutionLayer, uninitializeConvolutionLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -246,6 +284,7 @@ vx_status publishConvolutionLayer(vx_context context)
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 2, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_OPTIONAL));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 3, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 4, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
     // finalize and release kernel object
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
