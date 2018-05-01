@@ -547,6 +547,14 @@ class IrGraph:
                      (node.type == 'max_pool' or node.type == 'avg_pool' or node.type == 'global_avg_pool'):
                     prevSkipNode = node
                     prevOutput = node.outputs[0]
+                elif node.type == 'relu' and \
+                     (prevNode.type == 'conv' or prevNode.type == 'max_pool' or \
+                      prevNode.type == 'avg_pool' or prevNode.type == 'global_avg_pool'):
+                    prevNode.attr.set('mode', 1)
+                    prevNode.outputs[0] = node.outputs[0]
+                    prevOutput = node.outputs[0]
+                    nodesToRemove.append(node)
+                    fusedAnOp = True
                 elif prevNode.type == 'add' and node.type == 'add' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
                     ck = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)

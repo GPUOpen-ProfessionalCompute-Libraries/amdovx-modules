@@ -348,10 +348,19 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       conv_params.dilation_y = %d;
       vx_node node = vxConvolutionLayer(graph, %s, %s, %s, &conv_params, sizeof(conv_params), %s);
       ERROR_CHECK_OBJECT(node);
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (pads[0], pads[1], dilations[0] - 1, dilations[1] - 1, \
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 5, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'conv_transpose':
                 pads = node.attr.get('pads')
                 dilations = node.attr.get('dilations')
@@ -402,21 +411,39 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       ERROR_CHECK_OBJECT(s_border_mode);
       ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 8, (vx_reference) s_border_mode));
       ERROR_CHECK_STATUS(vxReleaseScalar(&s_border_mode));
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (node.inputs[0], 'VX_NN_POOLING_AVG' if node.type == 'avg_pool' else 'VX_NN_POOLING_MAX', \
        node.attr.get('kernel_shape')[0], node.attr.get('kernel_shape')[1], \
        node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0], \
        (1 if node.attr.get('border_mode') == 'discard' else 0)))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 9, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'global_avg_pool':
                 f.write( \
 """
     { vx_node node = vxPoolingLayer(graph, %s, VX_NN_POOLING_AVG, %d, %d, %d, %d, VX_ROUND_POLICY_TO_NEAREST_EVEN, %s);
       ERROR_CHECK_OBJECT(node);
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (node.inputs[0], graph.tensor_shapes[node.inputs[0]][2], graph.tensor_shapes[node.inputs[0]][3], \
        node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0]))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 9, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'relu':
                 f.write( \
 """
@@ -708,8 +735,8 @@ VX_API_ENTRY pyif_ann_handle VX_API_CALL annCreateInference(const char * binaryF
                     printf("ERROR: vxCreateTensor(input:[%s]): failed (%%d)\\n", status);
                 }
                 else {
-                    vx_size out_dim[4] = { %s };
-                    handle->output = vxCreateTensor(handle->context, 4, out_dim, VX_TYPE_FLOAT32, 0);
+                    vx_size out_dim[%d] = { %s };
+                    handle->output = vxCreateTensor(handle->context, %d, out_dim, VX_TYPE_FLOAT32, 0);
                     if((status = vxGetStatus((vx_reference)handle->output)) != VX_SUCCESS) {
                         printf("ERROR: vxCreateTensor(output:[%s]): failed (%%d)\\n", status);
                     }
@@ -745,8 +772,8 @@ VX_API_ENTRY pyif_ann_handle VX_API_CALL annCreateInference(const char * binaryF
 
     return handle;
 }
-""" % (', '.join([str(v) for v in reversed(input_shape)]), 'x'.join([str(v) for v in input_shape]), \
-       ', '.join([str(v) for v in reversed(output_shape)]), 'x'.join([str(v) for v in output_shape])))
+""" % (', '.join([str(v) for v in reversed(input_shape)]), 'x'.join([str(v) for v in input_shape]), len(output_shape), \
+       ', '.join([str(v) for v in reversed(output_shape)]), len(output_shape), 'x'.join([str(v) for v in output_shape])))
 
             f.write( \
 """
@@ -825,6 +852,10 @@ VX_API_ENTRY int VX_API_CALL annCopyToInferenceInput(pyif_ann_handle handle, flo
 """ % (input_shape[3]*4, input_shape[2]*input_shape[3]*4, input_shape[1]*input_shape[2]*input_shape[3]*4, \
        input_buf_size, input_buf_size, input_shape[0], input_shape[1], input_shape[2], input_shape[3]))
 
+            if len(output_shape) == 4:
+                tshape = [output_shape[0], output_shape[1], output_shape[2], output_shape[3]]
+            else:
+                tshape = [1, 1, output_shape[0], output_shape[1]]
             f.write( \
 """
 VX_API_ENTRY int VX_API_CALL annCopyFromInferenceOutput(pyif_ann_handle handle, float * out_ptr, size_t out_size)
@@ -839,12 +870,12 @@ VX_API_ENTRY int VX_API_CALL annCopyFromInferenceOutput(pyif_ann_handle handle, 
         status = VX_FAILURE;
         printf("ERROR: annCopyFromInferenceOutput: invalid output buffer size (must be %d) -- got %%d\\n", (int)out_size);
     }
-    else if(handle->output && (status = vxCopyTensorPatch(handle->output, 4, nullptr, nullptr, stride, out_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST)) != VX_SUCCESS) {
+    else if(handle->output && (status = vxCopyTensorPatch(handle->output, %d, nullptr, nullptr, stride, out_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST)) != VX_SUCCESS) {
         printf("ERROR: annCopyFromInferenceOutput: vxCopyTensorPatch: failed (%%d)\\n", status);
     }
     return status;
 }
-""" % (output_shape[3]*4, output_shape[2]*output_shape[3]*4, output_shape[1]*output_shape[2]*output_shape[3]*4, output_buf_size, output_buf_size))
+""" % (tshape[3]*4, tshape[2]*tshape[3]*4, tshape[1]*tshape[2]*tshape[3]*4, output_buf_size, output_buf_size, len(output_shape)))
 
             f.write( \
 """
