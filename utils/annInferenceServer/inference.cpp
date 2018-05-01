@@ -799,7 +799,7 @@ int InferenceEngine::run()
                         } else
                         {
                             ObjectBB *pObj= &bounding_boxes[0];
-                            for (int i=0, j=0; i < numMessages, j < numBB; i++) {
+                            for (int i=0, j=0; (i < numMessages && j < numBB); i++) {
                                 int numBB_per_message = std::min((numBB-j), 3);
                                 int bb_info = (numBB_per_message & 0xFFFF) | (numBB << 16);
                                 InfComCommand cmd = {

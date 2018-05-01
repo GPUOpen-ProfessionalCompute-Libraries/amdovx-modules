@@ -130,4 +130,16 @@ VX_API_ENTRY vx_node VX_API_CALL vxSliceLayer(vx_graph graph, vx_tensor input, v
  */
 VX_API_ENTRY vx_node VX_API_CALL vxUpsampleNearestLayer(vx_graph graph, vx_tensor input, vx_tensor output);
 
+/*! \brief [Graph] Creates a Convolutional Network Reshape Layer Node.
+ * \details Reshaping is done with alias if available (output tensor will point to input tensor memory). Otherwise it will do a copy.\n
+ * This function supports 4D tensors as input and output.
+ * \param [in] graph The handle to the graph.
+ * \param [in] inputs The input tensor data.
+ * \param [out] outputs The output tensor data. Output will have the same number of dimensions as input. Output tensor data type must be same as the inputs. The width and height dimensions of output must be integer multiple of input. The batch and channel dimensions of output and input must be same.
+ * \return <tt> vx_node</tt>.
+ * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
+ * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
+ */
+VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayer(vx_graph graph, vx_tensor input, vx_tensor output);
+
 #endif
