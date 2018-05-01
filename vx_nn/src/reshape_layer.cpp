@@ -56,6 +56,8 @@ static vx_status VX_CALLBACK validateReshapeLayer(vx_node node, const vx_referen
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    //alias output to input tensor
+    vxAliasTensor((vx_tensor)parameters[0], 0, (vx_tensor)parameters[1]);
 
     return VX_SUCCESS;
 }
@@ -74,7 +76,15 @@ static vx_status VX_CALLBACK processReshapeLayer(vx_node node, const vx_referenc
     if (data->aliased == vx_false_e) {
         vx_size size = dims[0]*dims[1]*dims[2]*dims[3]*sizeof(VX_TYPE_FLOAT32);
         ERROR_CHECK_STATUS(clEnqueueCopyBuffer(data->handle->cmdq, data->input_mem, data->output_mem, 0, 0, size, 0, NULL, NULL));
+#if ENABLE_DEBUG_PRINT_DIMS
+        std::cout << "Reshape Layer: not using aliased buffer "<< std::endl;
+#endif
+    } else {
+#if ENABLE_DEBUG_PRINT_DIMS
+        std::cout << "Reshape Layer: using aliased buffer "<< std::endl;
+#endif
     }
+
     return VX_SUCCESS;
 }
 
@@ -106,13 +116,12 @@ static vx_status VX_CALLBACK uninitializeReshapeLayer(vx_node node, const vx_ref
 //! \brief The kernel publisher.
 vx_status publishReshapeLayer(vx_context context)
 {
-    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.reshape_layer", VX_KERNEL_RESHAPE_LAYER, processReshapeLayer, 4, validateReshapeLayer, initializeReshapeLayer, uninitializeReshapeLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "com.amd.nn_extension.reshape_layer", VX_KERNEL_RESHAPE_LAYER, processReshapeLayer, 2, validateReshapeLayer, initializeReshapeLayer, uninitializeReshapeLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
     vx_bool enableBufferAccess = vx_true_e;
     ERROR_CHECK_STATUS(vxSetKernelAttribute(kernel, VX_KERNEL_ATTRIBUTE_AMD_OPENCL_BUFFER_ACCESS_ENABLE, &enableBufferAccess, sizeof(enableBufferAccess)));
-
     // set kernel parameters.
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 0, VX_INPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 1, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
@@ -123,7 +132,7 @@ vx_status publishReshapeLayer(vx_context context)
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayerNode(vx_graph graph, vx_image input, vx_tensor output)
+VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayerNode(vx_graph graph, vx_tensor input, vx_tensor output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
@@ -132,7 +141,7 @@ VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayerNode(vx_graph graph, vx_image inp
             (vx_reference)input,
             (vx_reference)output,
         };
-            node = createNode(graph, VX_KERNEL_RESHAPE_LAYER, params, sizeof(params) / sizeof(params[0]));
+        node = createNode(graph, VX_KERNEL_RESHAPE_LAYER, params, sizeof(params) / sizeof(params[0]));
     }
     return node;
 }
