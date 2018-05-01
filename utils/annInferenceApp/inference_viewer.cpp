@@ -887,6 +887,20 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\telse { tr[i].style.display = \"none\";}}}}\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction filterLabelTable(rowNum, DataVar) {\n");
+            fileObj.write("\t\tvar input, filter, table, tr, td, i;\n");
+            fileObj.write("\t\tinput = document.getElementById(DataVar);\n");
+            fileObj.write("\t\tfilter = input.value.toUpperCase();\n");
+            fileObj.write("\t\ttable = document.getElementById(\"labelsTable\");\n");
+            fileObj.write("\t\ttr = table.getElementsByTagName(\"tr\");\n");
+            fileObj.write("\t\tfor (i = 1; i < tr.length; i++) {\n");
+            fileObj.write("\t\ttd = tr[i].getElementsByTagName(\"td\")[rowNum];\n");
+            fileObj.write("\t\tif (td) { if (td.innerHTML.toUpperCase().indexOf(filter) > -1) {tr[i].style.display = \"\"; }\n");
+            fileObj.write("\t\telse { tr[i].style.display = \"none\";}}}}\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\t\n");
 
 
             // graph script
@@ -1412,7 +1426,24 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             // label
             fileObj.write("\t<!-- Label Summary -->\n");
             fileObj.write("<A NAME=\"table3\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Label Summary (stats per image class)</em></font></h1></A>\n");
-
+            fileObj.write("\t\t<table id=\"filterLabelTable\" align=\"center\" cellspacing=\"2\" border=\"0\" style=\"width: 70%\">\n");
+            fileObj.write("\t\t<tr>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Label ID\" onkeyup=\"filterLabelTable(0,id)\" placeholder=\"Label ID\" title=\"Label ID\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Label Description\" onkeyup=\"filterLabelTable(1,id)\" placeholder=\"Label Description\" title=\"Label Description\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Images in DataBase\" onkeyup=\"filterLabelTable(2,id)\" placeholder=\"Images in DataBase\" title=\"Images in DataBase\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched Top1 %\" onkeyup=\"filterLabelTable(3,id)\" placeholder=\"Matched Top1 %\" title=\"Matched Top1 %\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched Top5 %\" onkeyup=\"filterLabelTable(4,id)\" placeholder=\"Matched Top5 %\" title=\"Matched Top5 %\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 1st\" onkeyup=\"filterLabelTable(5,id)\" placeholder=\"Matched 1st\" title=\"Matched 1st\"></td>\n");
+            fileObj.write("\t\t</tr>\n<tr>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 2nd\" onkeyup=\"filterLabelTable(6,id)\" placeholder=\"Matched 2nd\" title=\"Matched 2nd\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 3th\" onkeyup=\"filterLabelTable(7,id)\" placeholder=\"Matched 3th\" title=\"Matched 3th\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 4th\" onkeyup=\"filterLabelTable(8,id)\" placeholder=\"Matched 4th\" title=\"Matched 4th\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"10\" id=\"Matched 5th\" onkeyup=\"filterLabelTable(9,id)\" placeholder=\"Matched 5th\" title=\"Matched 5th\"></td>\n");
+            fileObj.write("\t\t<td><input type=\"text\" size=\"14\" id=\"Misclassified Top1 Label\" onkeyup=\"filterLabelTable(10,id)\"placeholder=\"Misclassified Top1 Label\" title=\"Misclassified Top1 Label\"></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t\t</table>\n");
+            fileObj.write("\t\t<br>\n");
+            fileObj.write("\t\t\n");
             if(state->topKValue > 4){
                 fileObj.write("\t<table class=\"sortable\" id=\"labelsTable\" align=\"center\">\n");
                 fileObj.write("\t<col width=\"80\">\n");
