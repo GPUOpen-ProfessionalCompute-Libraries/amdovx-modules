@@ -27,6 +27,7 @@ struct ReshapeLayerLocalData {
     cl_mem input_mem;
     cl_mem output_mem;
     vx_bool aliased;
+    vx_size memsizeInBytes;
 };
 
 
@@ -65,17 +66,14 @@ static vx_status VX_CALLBACK validateReshapeLayer(vx_node node, const vx_referen
 
 static vx_status VX_CALLBACK processReshapeLayer(vx_node node, const vx_reference * parameters, vx_uint32 num)
 {
-    vx_size dims[4];
     ReshapeLayerLocalData * data= NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, dims, sizeof(dims)));
 
     if (data->aliased == vx_false_e) {
-        vx_size size = dims[0]*dims[1]*dims[2]*dims[3]*sizeof(VX_TYPE_FLOAT32);
-        ERROR_CHECK_STATUS(clEnqueueCopyBuffer(data->handle->cmdq, data->input_mem, data->output_mem, 0, 0, size, 0, NULL, NULL));
+        ERROR_CHECK_STATUS(clEnqueueCopyBuffer(data->handle->cmdq, data->input_mem, data->output_mem, 0, 0, data->memsizeInBytes, 0, NULL, NULL));
 #if ENABLE_DEBUG_PRINT_DIMS
         std::cout << "Reshape Layer: not using aliased buffer "<< std::endl;
 #endif
@@ -91,11 +89,14 @@ static vx_status VX_CALLBACK processReshapeLayer(vx_node node, const vx_referenc
 
 static vx_status VX_CALLBACK initializeReshapeLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
+    vx_size dims[4];
     ReshapeLayerLocalData * data = new ReshapeLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, dims, sizeof(dims)));
     // check if the input and output tensors are aliased
     data->aliased = vxIsTensorAliased((vx_tensor)parameters[0], 0, (vx_tensor)parameters[1]);
+    data->memsizeInBytes = dims[0]*dims[1]*dims[2]*dims[3]*sizeof(VX_TYPE_FLOAT32);
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     return VX_SUCCESS;
@@ -132,7 +133,7 @@ vx_status publishReshapeLayer(vx_context context)
     return VX_SUCCESS;
 }
 
-VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayerNode(vx_graph graph, vx_tensor input, vx_tensor output)
+VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayer(vx_graph graph, vx_tensor input, vx_tensor output)
 {
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);

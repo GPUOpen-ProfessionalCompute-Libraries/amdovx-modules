@@ -140,6 +140,6 @@ VX_API_ENTRY vx_node VX_API_CALL vxUpsampleNearestLayer(vx_graph graph, vx_tenso
  * \returns A node reference <tt>\ref vx_node</tt>. Any possible errors preventing a
  * successful creation should be checked using <tt>\ref vxGetStatus</tt>.
  */
-VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayerNode(vx_graph graph, vx_tensor input, vx_tensor output);
+VX_API_ENTRY vx_node VX_API_CALL vxReshapeLayer(vx_graph graph, vx_tensor input, vx_tensor output);
 
 #endif
