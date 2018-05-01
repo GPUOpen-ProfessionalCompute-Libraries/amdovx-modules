@@ -708,8 +708,8 @@ VX_API_ENTRY pyif_ann_handle VX_API_CALL annCreateInference(const char * binaryF
                     printf("ERROR: vxCreateTensor(input:[%s]): failed (%%d)\\n", status);
                 }
                 else {
-                    vx_size out_dim[4] = { %s };
-                    handle->output = vxCreateTensor(handle->context, 4, out_dim, VX_TYPE_FLOAT32, 0);
+                    vx_size out_dim[%d] = { %s };
+                    handle->output = vxCreateTensor(handle->context, %d, out_dim, VX_TYPE_FLOAT32, 0);
                     if((status = vxGetStatus((vx_reference)handle->output)) != VX_SUCCESS) {
                         printf("ERROR: vxCreateTensor(output:[%s]): failed (%%d)\\n", status);
                     }
@@ -745,8 +745,8 @@ VX_API_ENTRY pyif_ann_handle VX_API_CALL annCreateInference(const char * binaryF
 
     return handle;
 }
-""" % (', '.join([str(v) for v in reversed(input_shape)]), 'x'.join([str(v) for v in input_shape]), \
-       ', '.join([str(v) for v in reversed(output_shape)]), 'x'.join([str(v) for v in output_shape])))
+""" % (', '.join([str(v) for v in reversed(input_shape)]), 'x'.join([str(v) for v in input_shape]), len(output_shape), \
+       ', '.join([str(v) for v in reversed(output_shape)]), len(output_shape), 'x'.join([str(v) for v in output_shape])))
 
             f.write( \
 """
@@ -825,6 +825,10 @@ VX_API_ENTRY int VX_API_CALL annCopyToInferenceInput(pyif_ann_handle handle, flo
 """ % (input_shape[3]*4, input_shape[2]*input_shape[3]*4, input_shape[1]*input_shape[2]*input_shape[3]*4, \
        input_buf_size, input_buf_size, input_shape[0], input_shape[1], input_shape[2], input_shape[3]))
 
+            if len(output_shape) == 4:
+                tshape = [output_shape[0], output_shape[1], output_shape[2], output_shape[3]]
+            else:
+                tshape = [1, 1, output_shape[0], output_shape[1]]
             f.write( \
 """
 VX_API_ENTRY int VX_API_CALL annCopyFromInferenceOutput(pyif_ann_handle handle, float * out_ptr, size_t out_size)
@@ -839,12 +843,12 @@ VX_API_ENTRY int VX_API_CALL annCopyFromInferenceOutput(pyif_ann_handle handle, 
         status = VX_FAILURE;
         printf("ERROR: annCopyFromInferenceOutput: invalid output buffer size (must be %d) -- got %%d\\n", (int)out_size);
     }
-    else if(handle->output && (status = vxCopyTensorPatch(handle->output, 4, nullptr, nullptr, stride, out_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST)) != VX_SUCCESS) {
+    else if(handle->output && (status = vxCopyTensorPatch(handle->output, %d, nullptr, nullptr, stride, out_ptr, VX_READ_ONLY, VX_MEMORY_TYPE_HOST)) != VX_SUCCESS) {
         printf("ERROR: annCopyFromInferenceOutput: vxCopyTensorPatch: failed (%%d)\\n", status);
     }
     return status;
 }
-""" % (output_shape[3]*4, output_shape[2]*output_shape[3]*4, output_shape[1]*output_shape[2]*output_shape[3]*4, output_buf_size, output_buf_size))
+""" % (tshape[3]*4, tshape[2]*tshape[3]*4, tshape[1]*tshape[2]*tshape[3]*4, output_buf_size, output_buf_size, len(output_shape)))
 
             f.write( \
 """
