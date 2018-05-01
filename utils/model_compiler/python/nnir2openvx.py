@@ -348,10 +348,19 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       conv_params.dilation_y = %d;
       vx_node node = vxConvolutionLayer(graph, %s, %s, %s, &conv_params, sizeof(conv_params), %s);
       ERROR_CHECK_OBJECT(node);
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (pads[0], pads[1], dilations[0] - 1, dilations[1] - 1, \
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 5, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'conv_transpose':
                 pads = node.attr.get('pads')
                 dilations = node.attr.get('dilations')
@@ -402,21 +411,39 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       ERROR_CHECK_OBJECT(s_border_mode);
       ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 8, (vx_reference) s_border_mode));
       ERROR_CHECK_STATUS(vxReleaseScalar(&s_border_mode));
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (node.inputs[0], 'VX_NN_POOLING_AVG' if node.type == 'avg_pool' else 'VX_NN_POOLING_MAX', \
        node.attr.get('kernel_shape')[0], node.attr.get('kernel_shape')[1], \
        node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0], \
        (1 if node.attr.get('border_mode') == 'discard' else 0)))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 9, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'global_avg_pool':
                 f.write( \
 """
     { vx_node node = vxPoolingLayer(graph, %s, VX_NN_POOLING_AVG, %d, %d, %d, %d, VX_ROUND_POLICY_TO_NEAREST_EVEN, %s);
       ERROR_CHECK_OBJECT(node);
-      ERROR_CHECK_STATUS(vxReleaseNode(&node));
-    }
 """ % (node.inputs[0], graph.tensor_shapes[node.inputs[0]][2], graph.tensor_shapes[node.inputs[0]][3], \
        node.attr.get('pads')[0], node.attr.get('pads')[1], node.outputs[0]))
+                if (node.attr.get('mode') != 0):
+                    f.write( \
+"""      vx_int32 mode = %s;
+      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 9, (vx_reference) s_mode));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
+""" % (node.attr.get('mode')))
+                f.write( \
+"""      ERROR_CHECK_STATUS(vxReleaseNode(&node));
+    }
+""")
             elif node.type == 'relu':
                 f.write( \
 """
