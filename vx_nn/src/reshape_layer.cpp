@@ -50,13 +50,13 @@ static vx_status VX_CALLBACK validateReshapeLayer(vx_node node, const vx_referen
 
     // check if the input and output are of the same size in memory
     if ( (output_dims[0]*output_dims[1]*output_dims[2]*output_dims[3]) != (input_dims[0]*input_dims[1]*input_dims[2]*input_dims[3]))
-         return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: reshape: output_dims[%ldx%ldx%ldx%ld] output_dims[%ldx%ldx%ldx%ld]\n", output_dims[3], output_dims[2], output_dims[1], output_dims[0], input_dims[3], input_dims[2], input_dims[3], input_dims[2]);
+         return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: reshape: output_dims[%ldx%ldx%ldx%ld] input_dims[%ldx%ldx%ldx%ld]\n", output_dims[3], output_dims[2], output_dims[1], output_dims[0], input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
 
     // set output tensor configuration
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    //alias output to input tensor
+    //alias output to input tensor for zero copy
     vxAliasTensor((vx_tensor)parameters[0], 0, (vx_tensor)parameters[1]);
 
     return VX_SUCCESS;
