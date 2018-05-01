@@ -35,6 +35,11 @@ struct PoolingLayerLocalData {
     size_t pooling_workspace_size;
     miopenPoolingMode_t mode;
     vx_enum pad_border_mode;
+    miopenActivationMode_t activation_mode;
+    double activation_alpha;
+    double activation_beta;
+    double activation_power;
+    miopenActivationDescriptor_t activation_desc;
 };
 
 static vx_status VX_CALLBACK validatePoolingLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
@@ -81,6 +86,13 @@ static vx_status VX_CALLBACK validatePoolingLayer(vx_node node, const vx_referen
             return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #8 pad_border_mode=%d (must be 0 or 1)\n", pad_border_mode);
         }
     }
+    if(parameters[9]) {
+        ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[9], VX_SCALAR_TYPE, &type, sizeof(type)));
+        if(type != VX_TYPE_INT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #8 type=%d (must be VX_TYPE_INT32)\n", type);
+        vx_int32 activation_mode = 0;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[9], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(activation_mode != 0 && activation_mode != 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #5 activation_mode=%d (must be 0 or 1)\n", activation_mode);
+    }
 
     // output tensor configuration
     type = VX_TYPE_FLOAT32;
@@ -101,6 +113,12 @@ static vx_status VX_CALLBACK processPoolingLayer(vx_node node, const vx_referenc
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
     ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, nullptr, 0));
+
+    // activation (in-place in output_mem)
+    if(parameters[9]) {
+        float alpha = 1.0f, beta = 0.0f;
+        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &alpha, data->output_desc, data->output_mem, &beta, data->output_desc, data->output_mem));
+    }
 
     return VX_SUCCESS;
 }
@@ -158,6 +176,23 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     data->alpha = 1;
     data->beta = 0;
 
+    // activation descriptor
+    vx_int32 activation_mode = 0;
+    if(parameters[9]) {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[9], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->activation_mode = miopenActivationPATHTRU;
+    if(activation_mode == 1) {
+        data->activation_mode = miopenActivationRELU;
+        data->activation_alpha = 1.0;
+        data->activation_beta = 0.0;
+        data->activation_power = 1.0;
+    }
+    if(data->activation_mode == miopenActivationRELU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
+    }
+
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "pooling input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
     std::cout << "kernel " << kernel_h << " " << kernel_w << " ";
@@ -174,6 +209,9 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
+    if(data->activation_mode != miopenActivationPATHTRU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
+    }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
     if (data) {
@@ -186,7 +224,7 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 vx_status publishPoolingLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.pooling_layer", VX_KERNEL_POOLING_LAYER, processPoolingLayer, 9, validatePoolingLayer, initializePoolingLayer, uninitializePoolingLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.pooling_layer", VX_KERNEL_POOLING_LAYER, processPoolingLayer, 10, validatePoolingLayer, initializePoolingLayer, uninitializePoolingLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -203,6 +241,7 @@ vx_status publishPoolingLayer(vx_context context)
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 8, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 9, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
     // finalize and release kernel object
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
