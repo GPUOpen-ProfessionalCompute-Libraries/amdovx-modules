@@ -26,6 +26,7 @@ class IrTensor:
         self.name = 'Unknown'
         self.type = 'F032'
         self.shape = [0]
+        self.format = 'NCHW'
 
     def setName(self,name):
         self.name = name
@@ -34,14 +35,18 @@ class IrTensor:
         self.type = type
         self.shape = shape
 
+    def setFormat(self,format):
+        self.format = format
+
     def toString(self):
-        return self.name + ';' + self.type + ';' + ','.join([str(v) for v in self.shape])
+        return self.name + ';' + self.type + ';' + ','.join([str(v) for v in self.shape]) + ';' + self.format
 
     def fromString(self,s):
         lT = s.split(';')
         self.name = lT[0]
         self.type = lT[1]
         self.shape = [int(v) for v in lT[2].split(',')]
+        self.format = lT[3]
 
 class IrAttr:
     def __init__(self):
@@ -139,6 +144,8 @@ class IrNode:
             'global_avg_pool' : 1,
             'leaky_relu' : 1,
             'reshape' : 1,
+            'transpose' : 1,
+            'copy' : 1,
         }
 
     def set(self,type,inputs,outputs,attr):
@@ -244,12 +251,14 @@ class IrGraph:
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, input.shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['global_avg_pool']:
                     input = self.tensor_dict[node.inputs[0]]
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, [input.shape[0], input.shape[1], 1, 1])
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['conv', 'avg_pool', 'max_pool', 'lrn']:
                     input = self.tensor_dict[node.inputs[0]]
@@ -274,6 +283,7 @@ class IrGraph:
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, output_shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['conv_transpose']:
                     input = self.tensor_dict[node.inputs[0]]
@@ -289,6 +299,7 @@ class IrGraph:
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, output_shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['gemm']:
                     A = self.tensor_dict[node.inputs[0]]
@@ -308,6 +319,7 @@ class IrGraph:
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, output_shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['concat']:
                     input = self.tensor_dict[node.inputs[0]]
@@ -320,6 +332,7 @@ class IrGraph:
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 elif node.type in ['slice']:
                     input = self.tensor_dict[node.inputs[0]]
@@ -328,21 +341,51 @@ class IrGraph:
                         local = IrTensor()
                         local.setName(name)
                         local.setInfo(input.type, shape)
+                        local.setFormat(input.format)
                         self.addLocal(local)
                 elif node.type in ['reshape']:
                     input = self.tensor_dict[node.inputs[0]]
-                    shape = node.attr.get('shape')
+                    param = node.attr.get('shape')
                     icount = 1
-                    for d in input.shape:
-                        icount = icount * d
                     ocount = 1
-                    for d in shape:
-                        ocount = icount * d
+                    shape = [input.shape[0]]
+                    for d in input.shape[1:]:
+                        icount = icount * d
+                    for d in param:
+                        if d > 0:
+                            ocount = ocount * d
+                    for d in param:
+                        if d < 1:
+                            d = icount // ocount
+                            ocount = ocount * d
+                        shape.append(d)
                     if icount != ocount:
                         raise ValueError("reshape: mismatch detected: " + node.inputs[0] + ":" + str(input.shape) + " " + node.outputs[0] + ":" + str(shape))
                     local = IrTensor()
                     local.setName(output)
                     local.setInfo(input.type, shape)
+                    local.setFormat(input.format)
+                    self.addLocal(local)
+                elif node.type in ['transpose']:
+                    input = self.tensor_dict[node.inputs[0]]
+                    axes = node.attr.get('axes')
+                    if input.format == 'NCHW' and axes == [0, 2, 3, 1]:
+                        format = 'NHWC'
+                    elif input.format == 'NHWC' and axes == [0, 3, 1, 2]:
+                        format = 'NCHW'
+                    else:
+                        raise ValueError("transpose: unsupported transpose: " + input.toString() + " " + str(axes))
+                    local = IrTensor()
+                    local.setName(output)
+                    local.setInfo(input.type, input.shape)
+                    local.setFormat(format)
+                    self.addLocal(local)
+                elif node.type in ['copy']:
+                    input = self.tensor_dict[node.inputs[0]]
+                    local = IrTensor()
+                    local.setName(output)
+                    local.setInfo(input.type, input.shape)
+                    local.setFormat(input.format)
                     self.addLocal(local)
                 else:
                     raise ValueError("Unsupported IR node type: {}".format(node.type))
@@ -410,6 +453,22 @@ class IrGraph:
                     prevSkipNode = None
                     prevNode = node
                     prevOutput = node.outputs[0]
+                elif node.type == 'copy':
+                    if prevSkipNode != None:
+                        prevSkipNode.outputs[0] = node.outputs[0]
+                    else:
+                        prevNode.outputs[0] = node.outputs[0]
+                    prevOutput = node.outputs[0]
+                    nodesToRemove.append(node)
+                    fusedAnOp = True
+                elif node.type == 'transpose':
+                    if prevSkipNode != None:
+                        prevSkipNode.outputs[0] = node.outputs[0]
+                    else:
+                        prevNode.outputs[0] = node.outputs[0]
+                    prevOutput = node.outputs[0]
+                    nodesToRemove.append(node)
+                    fusedAnOp = True
                 elif (prevNode.type == 'mul' or prevNode.type == 'add' or prevNode.type == 'muladd') \
                         and node.type == 'conv' and prevOutput == node.inputs[0] \
                         and tensorReadCount[prevOutput] == 1:
