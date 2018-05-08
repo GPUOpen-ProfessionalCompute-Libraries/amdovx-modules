@@ -14,6 +14,7 @@ inference_receiver::inference_receiver(
         QString serverHost_, int serverPort_, QString modelName_,
         int GPUs_, int * inputDim_, int * outputDim_, const char * runtimeOptions_,
         QVector<QByteArray> * imageBuffer_,
+        QVector<QString> * shadowFileBuffer_,
         runtime_receiver_status * progress_,
         QObject *parent) : QObject(parent)
 {
@@ -24,6 +25,7 @@ inference_receiver::inference_receiver(
     labelCount = 0;
     dataLabels = nullptr;
     imageBuffer = imageBuffer_;
+    shadowFileBuffer = shadowFileBuffer_;
     serverHost = serverHost_;
     serverPort = serverPort_;
     modelName = modelName_;
@@ -68,6 +70,7 @@ void inference_receiver::run()
     progress->images_received = 0;
     progress->completed_send = false;
     progress->completed = false;
+    sendFileNames = SEND_FILENAME;
 
     TcpConnection * connection = new TcpConnection(serverHost, serverPort, 3000, this);
     if(connection->connected()) {
@@ -94,7 +97,7 @@ void inference_receiver::run()
                 InfComCommand reply = {
                     INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
                     { INFCOM_MODE_INFERENCE, GPUs,
-                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2] },
+                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2],  sendFileNames},
                     { 0 }
                 };
                 QString text = modelName;
@@ -120,7 +123,14 @@ void inference_receiver::run()
                 bool failed = false;
                 for(int i = 0; i < count; i++) {
                     // send the image at nextImageToSend
-                    if(!connection->sendImage(nextImageToSend, (*imageBuffer)[nextImageToSend], progress->errorCode, progress->message, abortRequsted)) {
+                    if (sendFileNames) {
+                        QByteArray fileNameBuffer;
+                        fileNameBuffer.append((*shadowFileBuffer)[nextImageToSend]);
+                        if(!connection->sendImage(nextImageToSend, fileNameBuffer, progress->errorCode, progress->message, abortRequsted)) {
+                            failed = true;
+                            break;
+                        }
+                    }else if(!connection->sendImage(nextImageToSend, (*imageBuffer)[nextImageToSend], progress->errorCode, progress->message, abortRequsted)) {
                         failed = true;
                         break;
                     }

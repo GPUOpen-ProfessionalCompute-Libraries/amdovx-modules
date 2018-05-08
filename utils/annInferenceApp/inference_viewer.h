@@ -28,6 +28,7 @@ public:
     QVector<int> imageLabel;
     QVector<int> inferenceResultTop;
     QVector<QString> inferenceResultSummary;
+    QVector<QString> shadowFileBuffer;
     // receiver
     QThread * receiver_thread;
     inference_receiver * receiver_worker;
