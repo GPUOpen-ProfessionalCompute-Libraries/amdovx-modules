@@ -14,7 +14,8 @@ inference_receiver::inference_receiver(
         QString serverHost_, int serverPort_, QString modelName_,
         int GPUs_, int * inputDim_, int * outputDim_, const char * runtimeOptions_,
         QVector<QByteArray> * imageBuffer_,
-        runtime_receiver_status * progress_, int enableSF_, int topKValue_,
+        runtime_receiver_status * progress_, int sendFileName_, int topKValue_,
+        QVector<QString> * shadowFileBuffer_,
         QObject *parent) : QObject(parent)
 {
     perfRate = 0;
@@ -32,8 +33,9 @@ inference_receiver::inference_receiver(
     outputDim = outputDim_;
     runtimeOptions = runtimeOptions_;
     progress = progress_;
-    enableSF = enableSF_;
+    sendFileName = sendFileName_;
     topKValue = topKValue_;
+    shadowFileBuffer = shadowFileBuffer_;
 }
 
 inference_receiver::~inference_receiver()
@@ -99,7 +101,7 @@ void inference_receiver::run()
                 InfComCommand reply = {
                     INFCOM_MAGIC, INFCOM_CMD_SEND_MODE,
                     { INFCOM_MODE_INFERENCE, GPUs,
-                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2], enableSF, topKValue },
+                      inputDim[0], inputDim[1], inputDim[2], outputDim[0], outputDim[1], outputDim[2], sendFileName, topKValue },
                     { 0 }
                 };
                 QString text = modelName;
@@ -125,7 +127,15 @@ void inference_receiver::run()
                 bool failed = false;
                 for(int i = 0; i < count; i++) {
                     // send the image at nextImageToSend
-                    if(!connection->sendImage(nextImageToSend, (*imageBuffer)[nextImageToSend], progress->errorCode, progress->message, abortRequsted)) {
+                    if (sendFileName) {
+                        QByteArray fileNameBuffer;
+                        fileNameBuffer.append((*shadowFileBuffer)[nextImageToSend]);
+                        if(!connection->sendImage(nextImageToSend, fileNameBuffer, progress->errorCode, progress->message, abortRequsted)) {
+                            failed = true;
+                            break;
+                        }
+                    }
+                    else if(!connection->sendImage(nextImageToSend, (*imageBuffer)[nextImageToSend], progress->errorCode, progress->message, abortRequsted)) {
                         failed = true;
                         break;
                     }

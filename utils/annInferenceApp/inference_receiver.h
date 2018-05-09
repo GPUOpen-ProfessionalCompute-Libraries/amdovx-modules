@@ -31,7 +31,8 @@ public:
             QString serverHost, int serverPort, QString modelName,
             int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
             QVector<QByteArray> * imageBuffer,
-            runtime_receiver_status * progress, int enableSF, int topKValue,
+            runtime_receiver_status * progress, int sendFileName, int topKValue,
+            QVector<QString> * shadowFileBuffer,
             QObject *parent = nullptr);
     ~inference_receiver();
 
@@ -65,6 +66,7 @@ private:
     float perfRate;
     QVector<QByteArray> * imageBuffer;
     QVector<QString> * dataLabels;
+    QVector<QString> * shadowFileBuffer;
     QString serverHost;
     int serverPort;
     QString modelName;
@@ -73,7 +75,7 @@ private:
     int * outputDim;
     const char * runtimeOptions;
     runtime_receiver_status * progress;
-    int enableSF;
+    int sendFileName;
     int topKValue;
 };
 

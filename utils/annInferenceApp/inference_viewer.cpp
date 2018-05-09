@@ -67,7 +67,7 @@ inference_state::inference_state()
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
         QVector<QString> * dataLabels, QVector<QString> * dataHierarchy, QString dataFilename, QString dataFolder,
         int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-        bool repeat_images, bool sendScaledImages, int enableSF, int topKValue,
+        bool repeat_images, bool sendScaledImages, int sendFileName_, int topKValue,
         QWidget *parent) :
     QWidget(parent),
     ui(new Ui::inference_viewer),
@@ -90,7 +90,7 @@ inference_viewer::inference_viewer(QString serverHost, int serverPort, QString m
     state->serverPort = serverPort;
     state->modelName = modelName;
     state->sendScaledImages = sendScaledImages;
-    state->enableSF = enableSF;
+    state->sendFileName = sendFileName_;
     state->topKValue = topKValue;
     progress.completed = false;
     progress.errorCode = 0;
@@ -135,7 +135,7 @@ void inference_viewer::startReceiver()
     state->receiver_worker = new inference_receiver(
                 state->serverHost, state->serverPort, state->modelName,
                 state->GPUs, state->inputDim, state->outputDim, INFCOM_RUNTIME_OPTIONS,
-                &state->imageBuffer, &progress, state->enableSF, state->topKValue);
+                &state->imageBuffer, &progress, state->sendFileName, state->topKValue, &state->shadowFileBuffer);
     state->receiver_worker->moveToThread(state->receiver_thread);
     connect(state->receiver_worker, SIGNAL (error(QString)), this, SLOT (errorString(QString)));
     connect(state->receiver_thread, SIGNAL (started()), state->receiver_worker, SLOT (run()));
@@ -2256,6 +2256,15 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 progress.completed_load = true;
                 break;
             }
+
+            if(state->sendFileName){
+                // extract only the last folder and filename for shadow
+                QStringList fileNameList = fileName.split("/");
+                QString subFileName = fileNameList.at(fileNameList.size()- 2) + "/" + fileNameList.last();
+                //printf("Inference viewer adding file %s to shadow array of size %d\n", subFileName.toStdString().c_str(), byteArray.size());
+                state->shadowFileBuffer.push_back(subFileName);
+            }
+
             QByteArray byteArray = fileObj.readAll();
             state->imageBuffer.push_back(byteArray);
             state->imageLoadCount++;

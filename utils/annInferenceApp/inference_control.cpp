@@ -33,6 +33,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
 
     maxGPUs = 1;
     enableSF = 0;
+    sendFileName = 0;
     enableTopK = 0;
     topKValue = 0;
     compiler_status.completed = false;
@@ -240,7 +241,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editModelName, row, 3, 1, 1);
     controlLayout->addWidget(editServerPassword, row, 4, 1, 1);
     row++;
-    checkShadowFolder = new QCheckBox("Enable Shadow Folder");
+    checkShadowFolder = new QCheckBox("Send FileName");
     checkShadowFolder->setChecked(false);
     checkShadowFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
     editShadowFolderAddr = new QLineEdit("");
@@ -1049,7 +1050,7 @@ void inference_control::runInference()
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
                 dataLabels, dataHierarchy, editImageListFile->text(), editImageFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, enableSF, topKValue);
+                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, sendFileName, topKValue);
     viewer->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     viewer->show();
     close();
@@ -1083,12 +1084,14 @@ void inference_control::topKResultsEnable(bool topKEnable)
 void inference_control::shadowFolderEnable(bool shadowEnable)
 {
     if(shadowEnable){
-        editShadowFolderAddr->setVisible(true);
-        buttonShadowFolder->setVisible(true);
+        editShadowFolderAddr->setVisible(false);
+        buttonShadowFolder->setVisible(false);
+        sendFileName = 1;
     }
     else
     {
         editShadowFolderAddr->setVisible(false);
         buttonShadowFolder->setVisible(false);
+        sendFileName = 0;
     }
 }

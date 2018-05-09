@@ -30,6 +30,7 @@ public:
     QVector<int> imageLabel;
     QVector<int> inferenceResultTop;
     QVector<QString> inferenceResultSummary;
+    QVector<QString> shadowFileBuffer;
     // receiver
     QThread * receiver_thread;
     inference_receiver * receiver_worker;
@@ -68,7 +69,7 @@ public:
     QString modelName;
     int maxImageDataSize;
     bool sendScaledImages;
-    int enableSF;
+    int sendFileName;
     int topKValue;
     //test summary
     int top1Count,top2Count,top3Count,top4Count,top5Count;

@@ -118,6 +118,7 @@ private:
     int numModelTypes;
     int maxGPUs;
     int enableSF;
+    int sendFileName;
     int enableTopK;
     int topKValue;
     QVector<QString> * dataLabels;
