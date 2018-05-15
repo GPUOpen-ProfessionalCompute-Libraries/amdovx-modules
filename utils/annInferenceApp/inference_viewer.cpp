@@ -938,6 +938,14 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\tfilterResultTable(2,'GroundTruthText') }\n");
             fileObj.write("\t</script>\n");
             fileObj.write("\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\tfunction findGroundTruthLabel(label) {\n");
+            fileObj.write("\tclearResultFilter();\n");
+            fileObj.write("\tdocument.getElementById('GroundTruthText').value = label;\n");
+            fileObj.write("\tfilterResultTable(2,'GroundTruthText');\n");
+            fileObj.write("\twindow.location.href = '#table4';\n");
+            fileObj.write("\t}\n");
+            fileObj.write("\t</script>\n");
 
 
             // graph script
@@ -1523,7 +1531,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                         fileObj.write("\t<tr>\n");
                         text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",i);
                         fileObj.write(text.toStdString().c_str());
-                        text.sprintf("\t\t<td align=\"left\"><b>%s</b></td>\n",labelTxt.toStdString().c_str());
+                        text.sprintf("\t\t<td align=\"left\"onclick=\"findGroundTruthLabel('%s')\"><b>%s</b></td>\n",labelTxt.toStdString().c_str(),labelTxt.toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                         if(state->topLabelMatch[i][0]){
                             float top1 = 0, top5 = 0;
