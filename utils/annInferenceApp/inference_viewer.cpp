@@ -946,6 +946,41 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\twindow.location.href = '#table4';\n");
             fileObj.write("\t}\n");
             fileObj.write("\t</script>\n");
+            fileObj.write("\n");
+            fileObj.write("\t<script>\n");
+            fileObj.write("\tfunction findImagesWithNoGroundTruthLabel() {\n");
+            fileObj.write("\tclearResultFilter();\n");
+            fileObj.write("\tdocument.getElementById('GroundTruthID').value = '-1';\n");
+            fileObj.write("\tfilterResultTable(3,'GroundTruthID');\n");
+            fileObj.write("\twindow.location.href = '#table4';\n");
+            fileObj.write("\t}\n");
+            fileObj.write("\tfunction findImageMisMatch() {\n");
+            fileObj.write("\tclearResultFilter();\n");
+            fileObj.write("\tdocument.getElementById('Matched').value = '0';\n");
+            fileObj.write("\tfilterResultTable(9,'Matched');\n");
+            fileObj.write("\twindow.location.href = '#table4';\n");
+            fileObj.write("\t}\n");
+            fileObj.write("\n");
+            fileObj.write("\n");
+            fileObj.write("\t\tfunction filterResultTableInverse(rowNum, DataVar) {\n");
+            fileObj.write("\t\tvar input, filter, table, tr, td, i;\n");
+            fileObj.write("\t\tinput = document.getElementById(DataVar);\n");
+            fileObj.write("\t\tfilter = input.value.toUpperCase();\n");
+            fileObj.write("\t\ttable = document.getElementById(\"resultsTable\");\n");
+            fileObj.write("\t\ttr = table.getElementsByTagName(\"tr\");\n");
+            fileObj.write("\t\tfor (i = 1; i < tr.length; i++) {\n");
+            fileObj.write("\t\ttd = tr[i].getElementsByTagName(\"td\")[rowNum];\n");
+            fileObj.write("\t\tif (td) { if (td.innerHTML.toUpperCase().indexOf(filter) <= -1) {tr[i].style.display = \"\"; }\n");
+            fileObj.write("\t\telse { tr[i].style.display = \"none\";}}}}\n");
+            fileObj.write("\t\tfunction findImagesWithGroundTruthLabel(){\n");
+            fileObj.write("\t\tclearResultFilter();\n");
+            fileObj.write("\t\tdocument.getElementById('Matched').value = '-1';\n");
+            fileObj.write("\t\tfilterResultTableInverse(9, 'Matched')\n");
+            fileObj.write("\t\twindow.location.href = '#table4';\n");
+            fileObj.write("\t\t}\n");
+            fileObj.write("\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\n");
 
 
             // graph script
@@ -1292,12 +1327,12 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<col width=\"50\">\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Images <b>With Ground Truth</b></font></td>\n");
-            text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",netSummaryImages);
+            text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\" onclick=\"findImagesWithGroundTruthLabel()\"><b>%d</b></font></td>\n",netSummaryImages);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Images <b>Without Ground Truth</b></font></td>\n");
-            text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",state->totalNoGroundTruth);
+            text.sprintf("\t<td align=\"center\"><font color=\"black\" size=\"4\" onclick=\"findImagesWithNoGroundTruthLabel()\"><b>%d</b></font></td>\n",state->totalNoGroundTruth);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n");
             fileObj.write("\t<tr>\n");
@@ -1312,7 +1347,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",passCount);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t<td><font color=\"black\" size=\"4\">Total <b>Mismatch</b></font></td>\n");
-            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\"><b>%d</b></font></td>\n",state->totalMismatch);
+            text.sprintf("\t <td align=\"center\"><font color=\"black\" size=\"4\" onclick=\"findImageMisMatch()\"><b>%d</b></font></td>\n",state->totalMismatch);
             fileObj.write(text.toStdString().c_str());
             fileObj.write("\t</tr>\n<tr>\n");
             text.sprintf("\t<td><font color=\"black\" size=\"4\"><b>Accuracy on Top %d</b></font></td>\n",state->topKValue);
