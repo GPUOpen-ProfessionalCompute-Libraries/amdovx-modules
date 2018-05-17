@@ -22,6 +22,12 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
+enum {
+    RELU_MODE_NONE,
+    RELU_MODE_FUSED,
+    RELU_MODE_SEPERATE
+};
+
 struct ConvolutionLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     float alpha;
@@ -43,6 +49,8 @@ struct ConvolutionLayerLocalData {
     double activation_beta;
     double activation_power;
     miopenActivationDescriptor_t activation_desc;
+    vx_int32 relu_mode;
+    vx_float32 leaky_alpha;
 };
 
 static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
@@ -53,10 +61,10 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     if(type != VX_TYPE_NN_CONVOLUTION_PARAMS) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #3 type=%d (must be CONV_PARAMS)\n", type);
     if(parameters[5]) {
         ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[5], VX_SCALAR_TYPE, &type, sizeof(type)));
-        if(type != VX_TYPE_INT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 type=%d (must be VX_TYPE_INT32)\n", type);
-        vx_int32 activation_mode = 0;
-        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-        if(activation_mode != 0 && activation_mode != 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 activation_mode=%d (must be 0 or 1)\n", activation_mode);
+        if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 type=%d (must be VX_TYPE_FLOAT32)\n", type);
+        vx_float32 leaky_alpha = 0.0f;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &leaky_alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(leaky_alpha < 0 || leaky_alpha >= 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 leaky_alpha=%f (must be between 0 to 1.)\n", leaky_alpha);
     }
 
     // check tensor dimensions
@@ -113,16 +121,18 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     //ConvolutionForward.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
                                                        data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
+
     //Convolution Forward Bias.
 	if(parameters[2]) {
+        if (data->relu_mode == RELU_MODE_FUSED) data->beta = data->leaky_alpha - 3;
 		ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
                                                            &data->beta, data->output_desc, data->output_mem));
     }
 
     // activation (in-place in output_mem)
-    if(parameters[5]) {
-        float alpha = 1.0f, beta = 0.0f;
-        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &alpha, data->output_desc, data->output_mem, &beta, data->output_desc, data->output_mem));
+    if (data->relu_mode == RELU_MODE_SEPERATE) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &data->activation_alpha, data->output_desc, data->output_mem,
+                                                          &data->activation_beta, data->output_desc, data->output_mem));
     }
 
     return VX_SUCCESS;
@@ -141,6 +151,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     vx_size pad_h, pad_w;
     vx_size dilation_w, dilation_h;
     vx_enum downscale_size_rounding, overflow_policy, rounding_policy;
+    vx_float32 leaky_alpha;
 
     pad_h = params.padding_y; pad_w = params.padding_x;
     downscale_size_rounding = params.down_scale_size_rounding;
@@ -149,6 +160,21 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     dilation_h = params.dilation_y + 1;
     dilation_w = params.dilation_x + 1;
     miopenConvolutionMode_t mode = miopenConvolution;
+
+    //getting the relu mode whether to fuse it into bias or not.
+    if (!parameters[5]) {
+       leaky_alpha = 1.0;
+       data->relu_mode = RELU_MODE_NONE;
+    }
+    else {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &leaky_alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+
+    if (leaky_alpha != 1.0) {
+        data->relu_mode = (parameters[2]) ? RELU_MODE_FUSED : RELU_MODE_SEPERATE;
+    }
+
+    data->leaky_alpha = leaky_alpha;
 
     vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
@@ -184,29 +210,29 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->conv_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->conv_desc, mode, pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w));
 
-    // activation descriptor
-    vx_int32 activation_mode = 0;
-    if(parameters[5]) {
-        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    }
-    data->activation_mode = miopenActivationPATHTRU;
-    if(activation_mode == 1) {
-        data->activation_mode = miopenActivationRELU;
-        data->activation_alpha = 1.0;
-        data->activation_beta = 0.0;
-        data->activation_power = 1.0;
-    }
-    if(data->activation_mode == miopenActivationRELU) {
-        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
-        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
-    }
-
     //Memory Declaration.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->weight_mem, sizeof(data->weight_mem)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+        data->alpha = 1;
+        data->beta = 0;
+    }
+
+    //run activation mode without fusing into bias.
+    if (data->relu_mode == RELU_MODE_SEPERATE) {
+        data->activation_mode = miopenActivationPATHTRU;
+        if(leaky_alpha != 1.0) {
+            data->activation_mode = miopenActivationRELU;
+            data->activation_alpha = 1.0;
+            data->activation_beta = leaky_alpha;
+            data->activation_power = 1.0;
+        }
+        if(data->activation_mode == miopenActivationRELU) {
+            ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
+            ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
+        }
     }
 
     //Workspace Size.
@@ -225,9 +251,6 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
         if(err) return VX_FAILURE;
     }
 
-    data->alpha = 1;
-    data->beta = 0;
-
     //Finding best Convolution Algorithm.
     miopenConvAlgoPerf_t perf;
     int algo_count;
@@ -237,6 +260,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "alpha : " << data->alpha << " " << "beta :" << data->beta << " ";
     std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
