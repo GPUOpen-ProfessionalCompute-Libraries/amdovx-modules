@@ -75,6 +75,21 @@ vx_reference getNodeParameterByIndex(vx_node node, vx_uint32 index)
     return ref;
 }
 
+int handleEnvironmentVariables(const char* searchEnvName)
+{
+#if _WIN32
+    char text[64] = { 0 };
+    if (GetEnvironmentVariableA(searchEnvName, text, (DWORD)sizeof(text)) > 0) {
+        return atoi(text);
+    }
+#else
+    const char * text = getenv(searchEnvName);
+    if (text) {
+        return atoi(text);
+    }
+#endif
+}
+
 vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
 {
     NeuralNetworkCommonHandle * handle = NULL;
@@ -86,17 +101,9 @@ vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
         handle = new NeuralNetworkCommonHandle;
         memset(handle, 0, sizeof(*handle));
         const char * searchEnvName = "NN_MIOPEN_SEARCH";
-#if _WIN32
-        char text[64] = { 0 };
-        if (GetEnvironmentVariableA(searchEnvName, text, (DWORD)sizeof(text)) > 0) {
-            handle->exhaustiveSearch = atoi(text) ? true : false;
-        }
-#else
-        const char * text = getenv(searchEnvName);
-        if (text) {
-            handle->exhaustiveSearch = atoi(text) ? true : false;
-        }
-#endif
+        int isEnvSet = handleEnvironmentVariables(searchEnvName);
+        if (isEnvSet) handle->exhaustiveSearch = true;
+
         handle->count = 1;
         ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_ATTRIBUTE_AMD_OPENCL_COMMAND_QUEUE, &handle->cmdq, sizeof(handle->cmdq)));
         
