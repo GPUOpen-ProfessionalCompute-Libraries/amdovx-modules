@@ -17,6 +17,15 @@ public:
 
 private:
     Ui::perf_graph *ui;
+    float maxFPS;
+
+public slots:
+     void closePerformanceView();
+     void resetPerformanceView();
+     void setModelName(QString ModelName);
+     void setNumGPU(int numGPU);
+     void updateFPSValue(float fps);
+     void updateTotalImagesValue(int images);
 };
 
 #endif // PERF_GRAPH_H

@@ -62,6 +62,9 @@ inference_state::inference_state()
     serverHost = "";
     serverPort = 0;
     maxImageDataSize = 0;
+    // perf results
+    perfButtonRect = QRect(0, 0, 0, 0);
+    perfButtonPressed = false;
 }
 
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
@@ -155,6 +158,14 @@ void inference_viewer::terminate()
         }
     }
     close();
+}
+
+void inference_viewer::showPerfResults()
+{
+    state->performance.setModelName(state->modelName);
+    state->performance.setNumGPU(state->GPUs);
+    state->performance.show();
+
 }
 
 void inference_viewer::saveResults()
@@ -2103,6 +2114,15 @@ void inference_viewer::mousePressEvent(QMouseEvent * event)
         {
             state->saveButtonPressed = true;
         }
+        // check perf button
+        state->perfButtonPressed = false;
+        if((x >= state->perfButtonRect.x()) &&
+           (x < (state->perfButtonRect.x() + state->perfButtonRect.width())) &&
+           (y >= state->perfButtonRect.y()) &&
+           (y < (state->perfButtonRect.y() + state->perfButtonRect.height())))
+        {
+            state->perfButtonPressed = true;
+        }
     }
 }
 
@@ -2130,8 +2150,17 @@ void inference_viewer::mouseReleaseEvent(QMouseEvent * event)
         {
             saveResults();
         }
+        else if((x >= state->perfButtonRect.x()) &&
+                (x < (state->perfButtonRect.x() + state->perfButtonRect.width())) &&
+                (y >= state->perfButtonRect.y()) &&
+                (y < (state->perfButtonRect.y() + state->perfButtonRect.height())))
+        {
+            //TBD Function
+            showPerfResults();
+        }
         state->exitButtonPressed = false;
         state->saveButtonPressed = false;
+        state->perfButtonPressed = false;
         // abort loading
         if(!state->imageLoadDone &&
            (x >= state->statusBarRect.x()) &&
@@ -2170,6 +2199,9 @@ void inference_viewer::keyReleaseEvent(QKeyEvent * event)
     else if(event->key() == Qt::Key_S) {
         saveResults();
     }
+    else if(event->key() == Qt::Key_P) {
+        showPerfResults();
+    }
 }
 
 void inference_viewer::paintEvent(QPaintEvent *)
@@ -2182,15 +2214,17 @@ void inference_viewer::paintEvent(QPaintEvent *)
     // calculate window layout
     QString exitButtonText = " Close ";
     QString saveButtonText = " Save ";
+    QString perfButtonText = "Performance";
     QFontMetrics fontMetrics(state->statusBarFont);
-    int buttonTextWidth = fontMetrics.width(exitButtonText);
-    int statusBarX = 8 + 2*(10 + buttonTextWidth + 10 + 8), statusBarY = 8;
+    int buttonTextWidth = fontMetrics.width(perfButtonText);
+    int statusBarX = 8 + 3*(10 + buttonTextWidth + 10 + 8), statusBarY = 8;
     int statusBarWidth = width() - 8 - statusBarX;
     int statusBarHeight = fontMetrics.height() + 16;
     int imageX = 8;
     int imageY = statusBarY + statusBarHeight + 8;
     state->saveButtonRect = QRect(8, statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
     state->exitButtonRect = QRect(8 + (10 + buttonTextWidth + 10 + 8), statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
+    state->perfButtonRect = QRect(8 + (70 + buttonTextWidth + 65 + 16), statusBarY, 10 + buttonTextWidth + 10, statusBarHeight);
     state->statusBarRect = QRect(statusBarX, statusBarY, statusBarWidth, statusBarHeight);
     QColor statusBarColorBackground(192, 192, 192);
     QColor statusBarColorLoad(255, 192, 64);
@@ -2450,6 +2484,8 @@ void inference_viewer::paintEvent(QPaintEvent *)
         }
         // get received image/rate
         float imagesPerSec = state->receiver_worker->getPerfImagesPerSecond();
+        state->performance.updateFPSValue(imagesPerSec);
+        state->performance.updateTotalImagesValue(progress.images_received);
         if(imagesPerSec > 0) {
             QString text;
             text.sprintf("... %.1f images/sec", imagesPerSec);
@@ -2463,9 +2499,11 @@ void inference_viewer::paintEvent(QPaintEvent *)
     painter.setBrush(state->exitButtonPressed ? buttonBrushColorPressed : buttonBrushColor);
     painter.drawRoundedRect(state->exitButtonRect, 4, 4);
     painter.drawRoundedRect(state->saveButtonRect, 4, 4);
+    painter.drawRoundedRect(state->perfButtonRect, 4, 4);
     painter.setPen(buttonTextColor);
     painter.drawText(state->exitButtonRect, Qt::AlignCenter, exitButtonText);
     painter.drawText(state->saveButtonRect, Qt::AlignCenter, saveButtonText);
+    painter.drawText(state->perfButtonRect, Qt::AlignCenter, perfButtonText);
 
     // in case fatal error, replace status text with the error message
     if(fatalError.length() > 0)

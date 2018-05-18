@@ -8,9 +8,10 @@
         <file>images/AIToolKit_400x90.png</file>
         <file>images/ADAT_500x100.png</file>
         <file>images/AMD_logo_white.png</file>
+        <file>images/amd-logo-150x150.jpg</file>
+        <file>images/small_radeon_logo.png</file>
         <file>images/GitHub_logo_white.png</file>
         <file>images/small_amd_logo.png</file>
         <file>images/small_github_logo.png</file>
-        <file>images/small_radeon_logo.png</file>
     </qresource>
 </RCC>

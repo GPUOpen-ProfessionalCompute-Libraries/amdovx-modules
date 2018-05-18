@@ -2,6 +2,7 @@
 #define INFERENCE_VIEWER_H
 
 #include "inference_receiver.h"
+#include "perf_graph.h"
 #include <QWidget>
 #include <QFont>
 #include <QThread>
@@ -79,6 +80,10 @@ public:
     float top1TotProb,top2TotProb, top3TotProb, top4TotProb, top5TotProb;
     int totalMismatch, totalNoGroundTruth;
     float totalPassProb, totalFailProb;
+    // performance results
+    QRect perfButtonRect;
+    bool perfButtonPressed;
+    perf_graph performance;
 };
 
 class inference_viewer : public QWidget
@@ -106,6 +111,7 @@ protected:
 private:
     void startReceiver();
     void saveResults();
+    void showPerfResults();
     void saveSummary(QString fileName);
     void saveHTML(QString fileName, bool exportTool);
     void terminate();

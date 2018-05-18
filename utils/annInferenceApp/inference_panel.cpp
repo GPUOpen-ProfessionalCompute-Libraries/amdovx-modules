@@ -19,3 +19,5 @@ void inference_panel::viewPerformanceGraph()
 {
     display_panel.show();
 }
+
+
