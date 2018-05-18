@@ -822,6 +822,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\ttext-align: center;  border-radius: 6px;  padding: 5px; position: absolute; z-index: 3;}\n");
             fileObj.write("\t.tooltip:hover .tooltiptext { visibility: visible;}\n");
             fileObj.write("\t\n");
+            fileObj.write("\t\t.footer { position: fixed; left: 0;    bottom: 0;  width: 100%;    background-color: #333;  color: white;  text-align: center;}\n");
+            fileObj.write("\t\n");
             fileObj.write("\t</style>\n");
             fileObj.write("\n</head>\n");
             fileObj.write("\n\n<body>\n");
@@ -2078,6 +2080,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<td><H2>Help</H2></td>\n");
             fileObj.write("\t</tr>\n");
             fileObj.write("\t</table>\n");
+            fileObj.write("\t<br><br><br>\n");
+            fileObj.write("\t\t<div class=\"footer\"> <p>©2018 Advanced Micro Devices, Inc</p></div>\n");
             fileObj.write("\t\n");
             fileObj.write("\n</body>\n");
             fileObj.write("\n</html>\n");
