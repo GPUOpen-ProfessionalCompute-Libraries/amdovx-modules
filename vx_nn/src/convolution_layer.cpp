@@ -21,7 +21,6 @@ THE SOFTWARE.
 */
 
 #include "kernels.h"
-#define ENABLE_DUMP_LAYERS 1
 
 enum {
     NONE,                       //No bias and no activation present.
