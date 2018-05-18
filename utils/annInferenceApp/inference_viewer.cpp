@@ -838,7 +838,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Labels</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table4\"><font size=\"5\">Image Results</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table5\"><font size=\"5\">Compare</font></A><br>\n");
-            fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Error Suspects</font></A><br>\n");
+            //fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Error Suspects</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table7\"><font size=\"5\">Help</font></A><br>\n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
@@ -2037,9 +2037,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             }
 
             // Error Suspects
-            fileObj.write("\t<!-- Error Suspects -->\n");
-            fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Error Suspects</em></font></h1></A>\n");
-            fileObj.write("\t\n");
+            //fileObj.write("\t<!-- Error Suspects -->\n");
+            //fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Error Suspects</em></font></h1></A>\n");
+            //fileObj.write("\t\n");
 
 
             // HELP
