@@ -952,15 +952,21 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t</script>\n");
             fileObj.write("\n");
             fileObj.write("\t<script>\n");
-            fileObj.write("\tfunction findGroundTruthLabel(label) {\n");
-            fileObj.write("\tclearResultFilter();\n");
-            fileObj.write("\tdocument.getElementById('GroundTruthText').value = label;\n");
-            fileObj.write("\tfilterResultTable(2,'GroundTruthText');\n");
-            fileObj.write("\twindow.location.href = '#table4';\n");
-            fileObj.write("\t}\n");
-            fileObj.write("\t</script>\n");
+            fileObj.write("\t\tfunction findGroundTruthLabel(label,labelID) {\n");
+            fileObj.write("\t\tclearResultFilter();\n");
+            fileObj.write("\t\tdocument.getElementById('GroundTruthText').value = label;\n");
+            fileObj.write("\t\tdocument.getElementById('GroundTruthID').value = labelID;\n");
+            fileObj.write("\t\tandResultFilter();\n");
+            fileObj.write("\t\twindow.location.href = '#table4';\n");
+            fileObj.write("\t\t}\n");
             fileObj.write("\n");
-            fileObj.write("\t<script>\n");
+            fileObj.write("\t\tfunction findMisclassifiedGroundTruthLabel(label) {\n");
+            fileObj.write("\t\tclearResultFilter();\n");
+            fileObj.write("\t\tdocument.getElementById('Text1').value = label;\n");
+            fileObj.write("\t\tfilterResultTable(10,'Text1');\n");
+            fileObj.write("\t\twindow.location.href = '#table4';\n");
+            fileObj.write("\t\t}\n");
+            fileObj.write("\n");
             fileObj.write("\t\tfunction goToImageResults() { window.location.href = '#table4';}\n");
             fileObj.write("\n");
             fileObj.write("\t\tfunction findImagesWithNoGroundTruthLabel() {\n");
@@ -1780,9 +1786,9 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                         labelTxt = labelTxt.replace(QRegExp("n[0-9]{8}"),"");
                         labelTxt = labelTxt.toLower();
                         fileObj.write("\t<tr>\n");
-                        text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\"><b>%d</b></font></td>\n",i);
+                        text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"2\" onclick=\"findGroundTruthLabel('%s',%d)\"><b>%d</b></font></td>\n",labelTxt.toStdString().c_str(),i,i);
                         fileObj.write(text.toStdString().c_str());
-                        text.sprintf("\t\t<td align=\"left\"onclick=\"findGroundTruthLabel('%s')\"><b>%s</b></td>\n",labelTxt.toStdString().c_str(),labelTxt.toStdString().c_str());
+                        text.sprintf("\t\t<td align=\"left\" onclick=\"findGroundTruthLabel('%s',%d)\"><b>%s</b></td>\n",labelTxt.toStdString().c_str(),i,labelTxt.toStdString().c_str());
                         fileObj.write(text.toStdString().c_str());
                         if(state->topLabelMatch[i][0]){
                             float top1 = 0, top5 = 0;
@@ -1838,7 +1844,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                             }
                             else{
                                 totalImagesWithFalseLabelFound += state->topLabelMatch[i][6];
-                                text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\"><b>%d</b></font></td>\n",state->topLabelMatch[i][6]);
+                                text.sprintf("\t\t<td align=\"center\"><font color=\"red\" size=\"2\" onclick=\"findMisclassifiedGroundTruthLabel('%s')\"><b>%d</b></font></td>\n",labelTxt.toStdString().c_str(),state->topLabelMatch[i][6]);
                                 fileObj.write(text.toStdString().c_str());
                             }
                         }
