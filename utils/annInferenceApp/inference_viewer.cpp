@@ -2108,7 +2108,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t\tvar modalImg = document.getElementById(\"img01\");\n");
                 fileObj.write("\t\tvar captionText = document.getElementById(\"caption\");\n");
                 fileObj.write("\t\timg1.onclick = function(){ modal.style.display = \"block\"; modalImg.src = this.src; captionText.innerHTML = this.alt; }\n");
-                fileObj.write("\t\tvar span = document.getElementsByClassName(\"close\")[0];\n");
+                fileObj.write("\t\tvar span = document.getElementsByClassName(\"modal\")[0];\n");
                 fileObj.write("\t\tspan.onclick = function() { modal.style.display = \"none\"; }\n");
                 fileObj.write("\t\t</script>\n");
                 fileObj.write("\t\t\n");
