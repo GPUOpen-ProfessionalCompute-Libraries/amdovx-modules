@@ -967,6 +967,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\twindow.location.href = '#table4';\n");
             fileObj.write("\t\t}\n");
             fileObj.write("\n");
+            fileObj.write("\t\tfunction highlightRow(obj){\n");
+            fileObj.write("\t\tvar tr=obj; while (tr.tagName.toUpperCase()!='TR'&&tr.parentNode){  tr=tr.parentNode;}\n");
+            fileObj.write("\t\tif (!tr.col){tr.col=tr.bgColor; } if (obj.checked){  tr.bgColor='#d5f5e3';}\n");
+            fileObj.write("\t\telse {  tr.bgColor=tr.col;}}\n");
+            fileObj.write("\n");
             fileObj.write("\t\tfunction goToImageResults() { window.location.href = '#table4';}\n");
             fileObj.write("\n");
             fileObj.write("\t\tfunction findImagesWithNoGroundTruthLabel() {\n");
@@ -1763,6 +1768,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<col width=\"100\">\n");
                 fileObj.write("\t<col width=\"100\">\n");
                 fileObj.write("\t<col width=\"150\">\n");
+                fileObj.write("\t<col width=\"60\">\n");
 
                 fileObj.write("\t<tr>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Label ID</b></font></td>\n");
@@ -1776,6 +1782,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 4th</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"maroon\" size=\"3\"><b>Matched 5th</b></font></td>\n");
                 fileObj.write("\t<td align=\"center\"><font color=\"blue\" size=\"3\"><b>Misclassified Top1 Label</b></font></td>\n");
+                fileObj.write("\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>Check</b></font></td>\n");
                 fileObj.write("\t\t</tr>\n");
                 int totalLabelsFound = 0, totalImagesWithLabelFound = 0;
                 int totalLabelsUnfounded = 0, totalImagesWithLabelNotFound = 0;
@@ -1848,6 +1855,8 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                                 fileObj.write(text.toStdString().c_str());
                             }
                         }
+                        text.sprintf("\t\t<td align=\"center\"><input id=\"id_%d\" name=\"id[%d]\" type=\"checkbox\" value=\"%d\" onClick=\"highlightRow(this);\"></td>\n",i,i,i);
+                        fileObj.write(text.toStdString().c_str());
                         fileObj.write("\t\t</tr>\n");
                     }
                 }
