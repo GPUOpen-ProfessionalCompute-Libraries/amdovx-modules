@@ -291,6 +291,40 @@ color: rgb(0, 0, 0);</string>
     <number>1</number>
    </property>
   </widget>
+  <widget class="QLabel" name="startName_label">
+   <property name="geometry">
+    <rect>
+     <x>230</x>
+     <y>600</y>
+     <width>231</width>
+     <height>61</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+font: 75 36pt &quot;Ubuntu&quot;;</string>
+   </property>
+   <property name="text">
+    <string>Start Time:</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="StartTime_label">
+   <property name="geometry">
+    <rect>
+     <x>470</x>
+     <y>610</y>
+     <width>511</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(170, 0, 0);
+font: 75 28pt &quot;Ubuntu&quot;;</string>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
  </widget>
  <resources>
   <include location="resources.qrc"/>

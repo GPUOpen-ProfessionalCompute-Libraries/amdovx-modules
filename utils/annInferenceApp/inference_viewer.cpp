@@ -65,6 +65,7 @@ inference_state::inference_state()
     // perf results
     perfButtonRect = QRect(0, 0, 0, 0);
     perfButtonPressed = false;
+    startTime =  "";
 }
 
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
@@ -117,6 +118,13 @@ inference_viewer::inference_viewer(QString serverHost, int serverPort, QString m
     updateTimer = new QTimer(this);
     connect(updateTimer, SIGNAL(timeout()), this, SLOT(update()));
     updateTimer->start(40);
+
+    // summary date and time
+    QDateTime curtim = QDateTime::currentDateTime();
+    QString abbr = curtim.timeZoneAbbreviation();
+    const QDateTime now = QDateTime::currentDateTime();
+    QString DateTime_test = now.toString("yyyy-MM-dd hh:mm:ss");
+    state->startTime.sprintf("%s %s",DateTime_test.toStdString().c_str(),abbr.toStdString().c_str());
 }
 
 inference_viewer::~inference_viewer()
@@ -163,6 +171,7 @@ void inference_viewer::terminate()
 void inference_viewer::showPerfResults()
 {
     state->performance.setModelName(state->modelName);
+    state->performance.setStartTime(state->startTime);
     state->performance.setNumGPU(state->GPUs);
     state->performance.show();
 
@@ -1635,7 +1644,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\t</tr>\n");
             fileObj.write("</table>\n");
 
-            // summary data and time
+            // summary date and time
             QDateTime curtim = QDateTime::currentDateTime();
             QString abbr = curtim.timeZoneAbbreviation();
             //printf("TimeZone: %s",abbr.toStdString().c_str());

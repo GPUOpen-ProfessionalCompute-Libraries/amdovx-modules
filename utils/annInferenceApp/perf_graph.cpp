@@ -23,6 +23,10 @@ void perf_graph::setModelName(QString ModelName)
 {
    ui->modelName_label->setText(ModelName);
 }
+void perf_graph::setStartTime(QString startTime)
+{
+   ui->StartTime_label->setText(startTime);
+}
 void perf_graph::setNumGPU(int numGPU)
 {
    ui->GPU_lcdNumber->display(numGPU);
