@@ -352,11 +352,11 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
       node.inputs[0], node.inputs[1], node.inputs[2] if len(node.inputs) == 3 else 'NULL', node.outputs[0]))
                 if (node.attr.get('mode') != 0):
                     f.write( \
-"""      vx_int32 mode = %s;
-      vx_scalar s_mode = vxCreateScalarWithSize(context, VX_TYPE_INT32, &mode, sizeof(mode));
-      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 5, (vx_reference) s_mode));
-      ERROR_CHECK_STATUS(vxReleaseScalar(&s_mode));
-""" % (node.attr.get('mode')))
+"""      vx_float32 alpha = 0;
+      vx_scalar s_alpha = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &alpha, sizeof(alpha));
+      ERROR_CHECK_STATUS(vxSetParameterByIndex(node, 5, (vx_reference) s_alpha));
+      ERROR_CHECK_STATUS(vxReleaseScalar(&s_alpha));
+""")
                 f.write( \
 """      ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
