@@ -85,6 +85,8 @@ public:
     bool perfButtonPressed;
     perf_graph performance;
     QString startTime;
+    QElapsedTimer timerElapsed;
+    QString elapsedTime;
 };
 
 class inference_viewer : public QWidget

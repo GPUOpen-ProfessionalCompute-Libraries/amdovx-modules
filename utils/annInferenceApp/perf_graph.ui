@@ -107,9 +107,9 @@ font: 75 36pt &quot;Ubuntu&quot;;</string>
    <property name="geometry">
     <rect>
      <x>470</x>
-     <y>520</y>
+     <y>510</y>
      <width>411</width>
-     <height>81</height>
+     <height>71</height>
     </rect>
    </property>
    <property name="styleSheet">
@@ -127,7 +127,7 @@ color: rgb(0, 0, 0);</string>
    <property name="geometry">
     <rect>
      <x>140</x>
-     <y>530</y>
+     <y>510</y>
      <width>321</width>
      <height>61</height>
     </rect>
@@ -295,7 +295,7 @@ color: rgb(0, 0, 0);</string>
    <property name="geometry">
     <rect>
      <x>230</x>
-     <y>600</y>
+     <y>580</y>
      <width>231</width>
      <height>61</height>
     </rect>
@@ -312,7 +312,41 @@ font: 75 36pt &quot;Ubuntu&quot;;</string>
    <property name="geometry">
     <rect>
      <x>470</x>
-     <y>610</y>
+     <y>590</y>
+     <width>511</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(170, 0, 0);
+font: 75 28pt &quot;Ubuntu&quot;;</string>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+  </widget>
+  <widget class="QLabel" name="ElapsedTimeName_label">
+   <property name="geometry">
+    <rect>
+     <x>170</x>
+     <y>650</y>
+     <width>291</width>
+     <height>61</height>
+    </rect>
+   </property>
+   <property name="styleSheet">
+    <string notr="true">color: rgb(0, 0, 0);
+font: 75 36pt &quot;Ubuntu&quot;;</string>
+   </property>
+   <property name="text">
+    <string>Elapsed Time:</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="elapsedTime_label">
+   <property name="geometry">
+    <rect>
+     <x>480</x>
+     <y>660</y>
      <width>511</width>
      <height>51</height>
     </rect>

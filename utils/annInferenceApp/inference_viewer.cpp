@@ -16,6 +16,7 @@
 #include <QDesktopServices>
 #include <QBuffer>
 #include <sstream>
+#include <QElapsedTimer>
 
 #define WINDOW_TITLE             "Inference Viewer"
 #define ICON_SIZE                64
@@ -66,6 +67,7 @@ inference_state::inference_state()
     perfButtonRect = QRect(0, 0, 0, 0);
     perfButtonPressed = false;
     startTime =  "";
+    elapsedTime = "";
 }
 
 inference_viewer::inference_viewer(QString serverHost, int serverPort, QString modelName,
@@ -120,6 +122,7 @@ inference_viewer::inference_viewer(QString serverHost, int serverPort, QString m
     updateTimer->start(40);
 
     // summary date and time
+    state->timerElapsed.start();
     QDateTime curtim = QDateTime::currentDateTime();
     QString abbr = curtim.timeZoneAbbreviation();
     const QDateTime now = QDateTime::currentDateTime();
@@ -2733,6 +2736,12 @@ void inference_viewer::paintEvent(QPaintEvent *)
         }
         // get received image/rate
         float imagesPerSec = state->receiver_worker->getPerfImagesPerSecond();
+        int E_secs = state->timerElapsed.elapsed() / 1000;
+        int E_mins = (E_secs / 60) % 60;
+        int E_hours = (E_secs / 3600);
+        E_secs = E_secs % 60;
+        state->elapsedTime.sprintf("%d:%d:%d",E_hours,E_mins,E_secs);
+        state->performance.updateElapsedTime(state->elapsedTime);
         state->performance.updateFPSValue(imagesPerSec);
         state->performance.updateTotalImagesValue(progress.images_received);
         if(imagesPerSec > 0) {

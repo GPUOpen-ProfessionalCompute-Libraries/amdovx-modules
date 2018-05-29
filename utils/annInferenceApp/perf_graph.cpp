@@ -27,6 +27,10 @@ void perf_graph::setStartTime(QString startTime)
 {
    ui->StartTime_label->setText(startTime);
 }
+void perf_graph::updateElapsedTime(QString elapsedTime)
+{
+   ui->elapsedTime_label->setText(elapsedTime);
+}
 void perf_graph::setNumGPU(int numGPU)
 {
    ui->GPU_lcdNumber->display(numGPU);

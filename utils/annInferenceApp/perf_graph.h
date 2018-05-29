@@ -25,6 +25,7 @@ public slots:
      void setModelName(QString ModelName);
      void setNumGPU(int numGPU);
      void setStartTime(QString startTime);
+     void updateElapsedTime(QString elapsedTime);
      void updateFPSValue(float fps);
      void updateTotalImagesValue(int images);
 };
