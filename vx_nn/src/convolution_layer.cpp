@@ -22,10 +22,19 @@ THE SOFTWARE.
 
 #include "kernels.h"
 
+enum {
+    NONE,                       //No bias and no activation present.
+    BIAS_ONLY,                  //only bias is present.
+    ACTIVATION_ONLY,            // only activation is present.
+    BIAS_ACTIVATION_SEPERATE,   // both bias and activation are executed seperately.
+    BIAS_ACTIVATION_FUSED       //both bias and activation are fused.
+};
+
 struct ConvolutionLayerLocalData {
     NeuralNetworkCommonHandle * handle;
-    float alpha;
-    float beta;
+    float conv_alpha;
+    float conv_beta;
+    float bias_alpha, bias_beta;
     miopenTensorDescriptor_t input_desc;
     cl_mem input_mem;
     miopenTensorDescriptor_t weight_desc;
@@ -39,10 +48,13 @@ struct ConvolutionLayerLocalData {
     miopenTensorDescriptor_t bias_desc;
     cl_mem bias_mem;
     miopenActivationMode_t activation_mode;
-    double activation_alpha;
-    double activation_beta;
-    double activation_power;
+    float activation_alpha;
+    float activation_beta;
+    float activation_power;
     miopenActivationDescriptor_t activation_desc;
+    vx_int32 bias_activ_mode;
+    vx_float32 leaky_alpha;
+    vx_int32 nn_cbr_mode;
 };
 
 static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
@@ -53,10 +65,10 @@ static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_ref
     if(type != VX_TYPE_NN_CONVOLUTION_PARAMS) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #3 type=%d (must be CONV_PARAMS)\n", type);
     if(parameters[5]) {
         ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[5], VX_SCALAR_TYPE, &type, sizeof(type)));
-        if(type != VX_TYPE_INT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 type=%d (must be VX_TYPE_INT32)\n", type);
-        vx_int32 activation_mode = 0;
-        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-        if(activation_mode != 0 && activation_mode != 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 activation_mode=%d (must be 0 or 1)\n", activation_mode);
+        if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 type=%d (must be VX_TYPE_FLOAT32)\n", type);
+        vx_float32 leaky_alpha = 1.0f;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &leaky_alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(leaky_alpha < 0 || leaky_alpha > 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: conv: #5 leaky_alpha=%f (must be between 0 to 1.)\n", leaky_alpha);
     }
 
     // check tensor dimensions
@@ -111,18 +123,19 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
     //ConvolutionForward.
-    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
-                                                       data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
-    //Convolution Forward Bias.
-	if(parameters[2]) {
-		ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->alpha, data->bias_desc, data->bias_mem,
-                                                           &data->beta, data->output_desc, data->output_mem));
+    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->conv_alpha, data->input_desc, data->input_mem,
+                                                       data->weight_desc,data->weight_mem,data->conv_desc,data->algo,&data->conv_beta, data->output_desc, data->output_mem, data->workspace, data->workspace_size));
+
+    //Convolution Forward Bias if bias_activ mode is BIAS_ONLY or BIAS_ACTIVATION_FUSED or BIAS_ACTIVATION_SEPERATE.
+    if(data->bias_activ_mode == BIAS_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardBias(data->handle->miopen_handle, &data->bias_alpha, data->bias_desc, data->bias_mem,
+                                                           &data->bias_beta, data->output_desc, data->output_mem));
     }
 
     // activation (in-place in output_mem)
-    if(parameters[5]) {
-        float alpha = 1.0f, beta = 0.0f;
-        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &alpha, data->output_desc, data->output_mem, &beta, data->output_desc, data->output_mem));
+    if (data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &data->activation_alpha, data->output_desc, data->output_mem,
+                                                          &data->activation_beta, data->output_desc, data->output_mem));
     }
 
     return VX_SUCCESS;
@@ -149,6 +162,35 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     dilation_h = params.dilation_y + 1;
     dilation_w = params.dilation_x + 1;
     miopenConvolutionMode_t mode = miopenConvolution;
+
+    // override default cbr_mode by NN_MIOPEN_CBR_MODE environment variable.
+    data->nn_cbr_mode = getEnvironmentVariable("NN_MIOPEN_CBR_MODE");
+    if (data->nn_cbr_mode < 0)
+        data->nn_cbr_mode = 0; // default cbr_mode
+
+    // initialize the bias activ mode
+    data->conv_alpha = 1.0; data->conv_beta = 0.0;
+    data->bias_alpha = 1.0; data->bias_beta = 0.0;
+    data->leaky_alpha = 1.0;
+    data->bias_activ_mode = NONE;
+    if (parameters[2]) {
+        data->bias_activ_mode = BIAS_ONLY;
+    }
+    if (parameters[5]) {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &data->leaky_alpha, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if (data->leaky_alpha >= 0 && data->leaky_alpha <= 1) {
+            if(data->bias_activ_mode == BIAS_ONLY) {
+                data->bias_activ_mode = BIAS_ACTIVATION_SEPERATE;
+                if(data->nn_cbr_mode == 1) {
+                    data->bias_activ_mode = BIAS_ACTIVATION_FUSED;
+                    data->bias_beta = data->leaky_alpha - 3;
+                }
+            }
+            else {
+                data->bias_activ_mode = ACTIVATION_ONLY;
+            }
+        }
+    }
 
     vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
@@ -184,29 +226,23 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->conv_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenInitConvolutionDescriptor(data->conv_desc, mode, pad_h, pad_w, stride_h, stride_w, dilation_h, dilation_w));
 
-    // activation descriptor
-    vx_int32 activation_mode = 0;
-    if(parameters[5]) {
-        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[5], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
-    }
-    data->activation_mode = miopenActivationPATHTRU;
-    if(activation_mode == 1) {
-        data->activation_mode = miopenActivationRELU;
-        data->activation_alpha = 1.0;
-        data->activation_beta = 0.0;
-        data->activation_power = 1.0;
-    }
-    if(data->activation_mode == miopenActivationRELU) {
-        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
-        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
-    }
-
     //Memory Declaration.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->weight_mem, sizeof(data->weight_mem)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+    }
+
+    //initialize activation parameters if bias_activ_mode is ACTIVATION_ONLY or BIAS_ACTIVATION_SEPERATE.
+    data->activation_mode = miopenActivationPATHTRU;
+    if (data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
+        data->activation_mode = miopenActivationRELU;
+        data->activation_alpha = 1.0;
+        data->activation_beta = data->leaky_alpha;
+        data->activation_power = 1.0;
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
     }
 
     //Workspace Size.
@@ -225,9 +261,6 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
         if(err) return VX_FAILURE;
     }
 
-    data->alpha = 1;
-    data->beta = 0;
-
     //Finding best Convolution Algorithm.
     miopenConvAlgoPerf_t perf;
     int algo_count;
@@ -237,6 +270,14 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
+    std::cout << "conv_alpha : " << data->conv_alpha << " " << "conv_beta : " << data->conv_beta << " ";
+    std::cout << "bias_alpha : " << data->bias_alpha << " " << "bias_beta : " << data->bias_beta << " ";
+    std::cout << "Leaky_alpha : " << data->leaky_alpha << " ";
+    std::cout << "nn_cbr_mode : " << data->nn_cbr_mode << " ";
+    if (data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
+            std::cout << "activation alpha : " << data->activation_alpha << " activation beta:" << data->activation_beta << " ";
+    }
+    std::cout << "Bias Mode : " << data->bias_activ_mode << " ";
     std::cout << "weights " << weights_dims[0] << " " << weights_dims[1] << " "<< weights_dims[2] <<" " <<  weights_dims[3] << " ";
     std::cout << "bias " << bias_dims[0] << " ";
     std::cout << "stride " << stride_h << " " << stride_w << " " << "pad " << pad_h << " " << pad_w;
@@ -254,7 +295,7 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->conv_desc));
-    if(data->activation_mode != miopenActivationPATHTRU) {
+    if(data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
         ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
     }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
