@@ -852,7 +852,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<A HREF=\"#table3\"><font size=\"5\">Labels</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table4\"><font size=\"5\">Image Results</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table5\"><font size=\"5\">Compare</font></A><br>\n");
-            //fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Error Suspects</font></A><br>\n");
+            fileObj.write("\t<A HREF=\"#table6\"><font size=\"5\">Model Score</font></A><br>\n");
             fileObj.write("\t<A HREF=\"#table7\"><font size=\"5\">Help</font></A><br>\n");
             fileObj.write("\t</div>\n");
             fileObj.write("\t\n");
@@ -2273,10 +2273,568 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 fileObj.write("\t</table>\n");
             }
 
-            // Error Suspects
-            //fileObj.write("\t<!-- Error Suspects -->\n");
-            //fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Error Suspects</em></font></h1></A>\n");
-            //fileObj.write("\t\n");
+            // Model Score
+            fileObj.write("\t<!-- Model Score -->\n");
+
+            for(int i = 0; i < 100; i++){
+                state->top5PassFail[i][0] = state->top5PassFail[i][1] = 0;
+                state->top5PassFail[i][2] = state->top5PassFail[i][3] = 0;
+                state->top5PassFail[i][4] = state->top5PassFail[i][5] = 0;
+                state->top5PassFail[i][6] = state->top5PassFail[i][7] = 0;
+                state->top5PassFail[i][8] = state->top5PassFail[i][9] = 0;
+            }
+            for(int i = 0; i < state->imageDataSize; i++) {
+               int truth = state->imageLabel[i];
+                   if(truth >= 0) {
+                       int label_1 = state->resultImageLabelTopK[i][0];
+                       int label_2 = state->resultImageLabelTopK[i][1];
+                       int label_3 = state->resultImageLabelTopK[i][2];
+                       int label_4 = state->resultImageLabelTopK[i][3];
+                       int label_5 = state->resultImageLabelTopK[i][4];
+                       float prob_1 = state->resultImageProbTopK[i][0];
+                       float prob_2 = state->resultImageProbTopK[i][1];
+                       float prob_3 = state->resultImageProbTopK[i][2];
+                       float prob_4 = state->resultImageProbTopK[i][3];
+                       float prob_5 = state->resultImageProbTopK[i][4];
+
+                       if(truth == label_1) {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][0]++;}
+                               count++;
+                           }
+                       }
+                       else if(truth == label_2) {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][2]++;}
+                               count++;
+                           }
+                       }
+                       else if(truth == label_3) {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][4]++;}
+                               count++;
+                           }
+                       }
+                       else if(truth == label_4) {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
+                               if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][6]++;}
+                               count++;
+                           }
+                       }
+                       else if(truth == label_5) {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
+                               if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][7]++;}
+                               if((prob_5 <= (f + 0.01)) && prob_5 > f){state->top5PassFail[count][8]++;}
+                               count++;
+                           }
+                       }
+                       else {
+                           int count = 0;
+                           for(float f = 0;f < 1; f=f+0.01){
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
+                               if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][7]++;}
+                               if((prob_5 <= (f + 0.01)) && prob_5 > f){state->top5PassFail[count][9]++;}
+                               count++;
+                           }
+                       }
+                    }
+            }
+
+
+            fileObj.write("<A NAME=\"table6\"><h1 align=\"center\"><font color=\"DodgerBlue\" size=\"6\"><br><br><br><em>Model Score</em></font></h1></A>\n");
+            fileObj.write("\t\n");
+
+            float Top1PassScore = 0, Top1FailScore = 0;
+            float Top2PassScore = 0, Top2FailScore = 0;
+            float Top3PassScore = 0, Top3FailScore = 0;
+            float Top4PassScore = 0, Top4FailScore = 0;
+            float Top5PassScore = 0, Top5FailScore = 0;
+            float confID=0.99;
+            for(int i = 99; i >= 0; i--){
+                Top1PassScore += confID * state->top5PassFail[i][0];
+                Top1FailScore += confID * state->top5PassFail[i][1];
+                Top2PassScore += confID * state->top5PassFail[i][2];
+                Top2FailScore += confID * state->top5PassFail[i][3];
+                Top3PassScore += confID * state->top5PassFail[i][4];
+                Top3FailScore += confID * state->top5PassFail[i][5];
+                Top4PassScore += confID * state->top5PassFail[i][6];
+                Top4FailScore += confID * state->top5PassFail[i][7];
+                Top5PassScore += confID * state->top5PassFail[i][8];
+                Top5FailScore += confID * state->top5PassFail[i][9];
+                confID = confID - 0.01;
+            }
+
+            // standard score result
+            float Top1Score = state->top1Count;
+            float ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
+            float Top2Score = state->top1Count + state->top2Count;
+            float ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
+            float Top3Score = state->top1Count + state->top2Count + state->top3Count;
+            float ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
+            float Top4Score = state->top1Count + state->top2Count + state->top3Count + state->top4Count;
+            float ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
+            float Top5Score = state->top1Count + state->top2Count + state->top3Count + state->top4Count + state->top5Count;
+            float ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
+
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Standard Scoring</font></h1></A>\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>2nd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>3rd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>4th Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>5th Match</b></font></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count + state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop1);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop2);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop3);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop4);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop5);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("</table>\n");
+            fileObj.write("\t\n");
+
+            // Method 1 result
+            Top1Score = Top1PassScore - Top1FailScore;
+            ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
+            Top2Score = (Top1PassScore + Top2PassScore) - Top2FailScore;
+            ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
+            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore;
+            ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
+            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore;
+            ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
+            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore;
+            ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
+
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 1 Scoring</font></h1></A>\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>2nd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>3rd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>4th Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>5th Match</b></font></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count + state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop1);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop2);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop3);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop4);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop5);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("</table>\n");
+            fileObj.write("\t\n");
+
+            // Method 2 result
+            Top1Score = Top1PassScore;
+            ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
+            Top2Score = (Top1PassScore + Top2PassScore);
+            ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
+            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore);
+            ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
+            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore);
+            ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
+            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore);
+            ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
+
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 2 Scoring</font></h1></A>\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>2nd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>3rd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>4th Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>5th Match</b></font></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count + state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop1);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop2);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop3);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop4);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop5);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("</table>\n");
+            fileObj.write("\t\n");
+
+            float top5ModelScore[100][15];
+            for(int i = 0; i < 100; i++){
+                top5ModelScore[i][0] = 0; top5ModelScore[i][1] = 0; top5ModelScore[i][2] = 0; top5ModelScore[i][3] = 0; top5ModelScore[i][4] = 0;
+                top5ModelScore[i][5] = 0; top5ModelScore[i][6] = 0; top5ModelScore[i][7] = 0; top5ModelScore[i][8] = 0; top5ModelScore[i][9] = 0;
+                top5ModelScore[i][10] = 0; top5ModelScore[i][11] = 0; top5ModelScore[i][12] = 0; top5ModelScore[i][13] = 0; top5ModelScore[i][10] = 0; top5ModelScore[i][14] = 0;
+            }
+
+            float standardPassTop1 = 0, standardPassTop2 = 0;
+            float standardPassTop3 = 0, standardPassTop4 = 0;
+            float standardPassTop5 = 0;
+            Top1PassScore = 0; Top1FailScore = 0; Top2PassScore = 0; Top2FailScore = 0; Top3PassScore = 0;
+            Top3FailScore = 0; Top4PassScore = 0; Top4FailScore = 0; Top5PassScore = 0; Top5FailScore = 0;
+            confID = 0.99;
+            for(int i = 99; i >= 0; i--)
+            {
+                Top1PassScore += confID * state->topKPassFail[i][0];
+                Top1FailScore += confID * state->topKPassFail[i][1];
+                Top2PassScore += confID * state->top5PassFail[i][2];
+                Top2FailScore += confID * state->top5PassFail[i][3];
+                Top3PassScore += confID * state->top5PassFail[i][4];
+                Top3FailScore += confID * state->top5PassFail[i][5];
+                Top4PassScore += confID * state->top5PassFail[i][6];
+                Top4FailScore += confID * state->top5PassFail[i][7];
+                Top5PassScore += confID * state->top5PassFail[i][8];
+                Top5FailScore += confID * state->top5PassFail[i][9];
+
+                // method 1
+                top5ModelScore[i][0] = ((Top1PassScore - Top1FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][2] = (((Top1PassScore + Top2PassScore) - Top2FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][4] = (((Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][6] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][8] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore)/netSummaryImages)*100;
+                // method 2
+                top5ModelScore[i][1] = (Top1PassScore/netSummaryImages)*100;
+                top5ModelScore[i][3] = ((Top1PassScore + Top2PassScore)/netSummaryImages)*100;
+                top5ModelScore[i][5] = ((Top1PassScore + Top2PassScore + Top3PassScore)/netSummaryImages)*100;
+                top5ModelScore[i][7] = ((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore)/netSummaryImages)*100;
+                top5ModelScore[i][9] = ((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore)/netSummaryImages)*100;
+
+                // standard method
+                standardPassTop1 += state->topKPassFail[i][0];
+                standardPassTop2 += state->topKPassFail[i][0] + state->top5PassFail[i][2];
+                standardPassTop3 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4];
+                standardPassTop4 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4] + state->top5PassFail[i][6];
+                standardPassTop5 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4] + state->top5PassFail[i][6] + state->top5PassFail[i][8];
+
+
+                top5ModelScore[i][10] = (standardPassTop1/netSummaryImages)*100;
+                top5ModelScore[i][11] = (standardPassTop2/netSummaryImages)*100;
+                top5ModelScore[i][12] = (standardPassTop3/netSummaryImages)*100;
+                top5ModelScore[i][13] = (standardPassTop4/netSummaryImages)*100;
+                top5ModelScore[i][14] = (standardPassTop5/netSummaryImages)*100;
+
+                confID = confID - 0.01;
+            }
+
+            fileObj.write("\t<script type=\"text/javascript\">\n");
+            fileObj.write("\t\n");
+            // Top 1 Score thresholds
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Top1ScoreGraph);\n");
+            fileObj.write("\tfunction Top1ScoreGraph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Standard');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f,  %.4f,  %.4f,    %.4f]\n",fVal,top5ModelScore[i][10],top5ModelScore[i][0],top5ModelScore[i][1]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][10],top5ModelScore[i][0],top5ModelScore[i][1]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Model Score Top 1', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Top1_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // Top 2 Score thresholds
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Top2ScoreGraph);\n");
+            fileObj.write("\tfunction Top2ScoreGraph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Standard');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][11],top5ModelScore[i][2],top5ModelScore[i][3]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][11],top5ModelScore[i][2],top5ModelScore[i][3]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Model Score Top 2', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Top2_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // Top 3 Score thresholds
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Top3ScoreGraph);\n");
+            fileObj.write("\tfunction Top3ScoreGraph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Standard');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f,    %.4f, %.4f,    %.4f]\n",fVal,top5ModelScore[i][12],top5ModelScore[i][4],top5ModelScore[i][5]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f,    %.4f, %.4f,    %.4f],\n",fVal,top5ModelScore[i][12],top5ModelScore[i][4],top5ModelScore[i][5]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Model Score Top 3', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Top3_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // Top 4 Score thresholds
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Top4ScoreGraph);\n");
+            fileObj.write("\tfunction Top4ScoreGraph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Standard');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][13],top5ModelScore[i][6],top5ModelScore[i][7]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][13],top5ModelScore[i][6],top5ModelScore[i][7]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Model Score Top 4', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Top4_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // Top 5 Score thresholds
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Top5ScoreGraph);\n");
+            fileObj.write("\tfunction Top5ScoreGraph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Standard');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][14],top5ModelScore[i][8],top5ModelScore[i][9]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][14],top5ModelScore[i][8],top5ModelScore[i][9]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Model Score Top 5', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('Top5_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // Standard Score Model
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(StandardTop5Graph);\n");
+            fileObj.write("\tfunction StandardTop5Graph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 3');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 4');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 5');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][10],top5ModelScore[i][11],top5ModelScore[i][12],top5ModelScore[i][13],top5ModelScore[i][14]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][10],top5ModelScore[i][11],top5ModelScore[i][12],top5ModelScore[i][13],top5ModelScore[i][14]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Standard Scoring Method', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('standard_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // method 1 Score Model
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Method1Top5Graph);\n");
+            fileObj.write("\tfunction Method1Top5Graph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 3');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 4');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 5');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Method 1 Scoring', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('method_1_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // method 2 Score Model
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Method2Top5Graph);\n");
+            fileObj.write("\tfunction Method2Top5Graph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 3');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 4');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 5');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Method 2 Scoring', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('method_2_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t</script>\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 90%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"Top1_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t <td><center><div id=\"Top2_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"Top3_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t <td><center><div id=\"Top4_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"Top5_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t <td><center><div id=\"standard_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"method_1_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t <td><center><div id=\"method_2_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
+            fileObj.write("\t</table>\n");
+            fileObj.write("\t\n");
 
             // HELP
             fileObj.write("\t<!-- HELP -->\n");
