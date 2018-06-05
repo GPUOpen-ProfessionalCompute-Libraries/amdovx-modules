@@ -22,6 +22,7 @@
 #define ICON_SIZE                64
 #define ICON_STRIDE              (ICON_SIZE + 8)
 #define INFCOM_RUNTIME_OPTIONS   ""
+#define HIERARCHY_PENALTY        0.2
 
 inference_state::inference_state()
 {
@@ -623,6 +624,36 @@ void inference_viewer::saveResults()
             fatalError.sprintf("ERROR: unable to create: %s", fileName.toStdString().c_str());
         }
     }
+}
+
+float inference_viewer::calculateHierarchyPenalty(int truth, int result)
+{
+    float penaltyValue = 0;
+    if(state->dataHierarchy->size()){
+        int penaltyMultiplier = 0;
+        QString truthHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[truth] : "Unknown";
+        QString resultHierarchy = state->dataHierarchy ? (*state->dataHierarchy)[result] : "Unknown";
+        std::string input_result = resultHierarchy.toStdString().c_str();
+        std::string input_truth = truthHierarchy.toStdString().c_str();
+        std::istringstream ss_result(input_result);
+        std::istringstream ss_truth(input_truth);
+        std::string token_result, token_truth;
+        int previousTruth = 0;
+        while(std::getline(ss_result, token_result, ',') && std::getline(ss_truth, token_truth, ',')) {
+            if(token_truth.size() && (token_truth == token_result)){
+                previousTruth = 1;
+            }
+            else if( previousTruth == 1 && (!token_result.size() && !token_truth.size())){
+            }
+            else{
+                previousTruth = 0;
+                penaltyMultiplier++;
+            }
+        }
+        penaltyMultiplier = penaltyMultiplier - 1;
+        penaltyValue = HIERARCHY_PENALTY * penaltyMultiplier;
+    }
+    return penaltyValue;
 }
 
 void inference_viewer::saveSummary(QString fileName)
@@ -2275,16 +2306,19 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
 
             // Model Score
             fileObj.write("\t<!-- Model Score -->\n");
-
+            float hierarchyPenalty[100][5];
             for(int i = 0; i < 100; i++){
                 state->top5PassFail[i][0] = state->top5PassFail[i][1] = 0;
                 state->top5PassFail[i][2] = state->top5PassFail[i][3] = 0;
                 state->top5PassFail[i][4] = state->top5PassFail[i][5] = 0;
                 state->top5PassFail[i][6] = state->top5PassFail[i][7] = 0;
                 state->top5PassFail[i][8] = state->top5PassFail[i][9] = 0;
+                hierarchyPenalty[i][0] = hierarchyPenalty[i][1] = 0;
+                hierarchyPenalty[i][2] = hierarchyPenalty[i][3] = 0;
+                hierarchyPenalty[i][4] = 0;
             }
             for(int i = 0; i < state->imageDataSize; i++) {
-               int truth = state->imageLabel[i];
+                   int truth = state->imageLabel[i];
                    if(truth >= 0) {
                        int label_1 = state->resultImageLabelTopK[i][0];
                        int label_2 = state->resultImageLabelTopK[i][1];
@@ -2307,7 +2341,10 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                        else if(truth == label_2) {
                            int count = 0;
                            for(float f = 0;f < 1; f=f+0.01){
-                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){
+                                   state->top5PassFail[count][1]++;
+                                   hierarchyPenalty[count][0] += calculateHierarchyPenalty(truth,label_1);
+                               }
                                if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][2]++;}
                                count++;
                            }
@@ -2315,8 +2352,14 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                        else if(truth == label_3) {
                            int count = 0;
                            for(float f = 0;f < 1; f=f+0.01){
-                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
-                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){
+                                   state->top5PassFail[count][1]++;
+                                   hierarchyPenalty[count][0] += calculateHierarchyPenalty(truth,label_1);
+                               }
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){
+                                   state->top5PassFail[count][3]++;
+                                   hierarchyPenalty[count][1] += calculateHierarchyPenalty(truth,label_2);
+                               }
                                if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][4]++;}
                                count++;
                            }
@@ -2324,9 +2367,18 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                        else if(truth == label_4) {
                            int count = 0;
                            for(float f = 0;f < 1; f=f+0.01){
-                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
-                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
-                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){
+                                   state->top5PassFail[count][1]++;
+                                   hierarchyPenalty[count][0] += calculateHierarchyPenalty(truth,label_1);
+                               }
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){
+                                   state->top5PassFail[count][3]++;
+                                   hierarchyPenalty[count][1] += calculateHierarchyPenalty(truth,label_2);
+                               }
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){
+                                   state->top5PassFail[count][5]++;
+                                   hierarchyPenalty[count][2] += calculateHierarchyPenalty(truth,label_3);
+                               }
                                if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][6]++;}
                                count++;
                            }
@@ -2334,10 +2386,22 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                        else if(truth == label_5) {
                            int count = 0;
                            for(float f = 0;f < 1; f=f+0.01){
-                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
-                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
-                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
-                               if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][7]++;}
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){
+                                   state->top5PassFail[count][1]++;
+                                   hierarchyPenalty[count][0] += calculateHierarchyPenalty(truth,label_1);
+                               }
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){
+                                   state->top5PassFail[count][3]++;
+                                   hierarchyPenalty[count][1] += calculateHierarchyPenalty(truth,label_2);
+                               }
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){
+                                   state->top5PassFail[count][5]++;
+                                   hierarchyPenalty[count][2] += calculateHierarchyPenalty(truth,label_3);
+                               }
+                               if((prob_4 <= (f + 0.01)) && prob_4 > f){
+                                   state->top5PassFail[count][7]++;
+                                   hierarchyPenalty[count][3] += calculateHierarchyPenalty(truth,label_4);
+                               }
                                if((prob_5 <= (f + 0.01)) && prob_5 > f){state->top5PassFail[count][8]++;}
                                count++;
                            }
@@ -2345,11 +2409,26 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                        else {
                            int count = 0;
                            for(float f = 0;f < 1; f=f+0.01){
-                               if((prob_1 <= (f + 0.01)) && prob_1 > f){state->top5PassFail[count][1]++;}
-                               if((prob_2 <= (f + 0.01)) && prob_2 > f){state->top5PassFail[count][3]++;}
-                               if((prob_3 <= (f + 0.01)) && prob_3 > f){state->top5PassFail[count][5]++;}
-                               if((prob_4 <= (f + 0.01)) && prob_4 > f){state->top5PassFail[count][7]++;}
-                               if((prob_5 <= (f + 0.01)) && prob_5 > f){state->top5PassFail[count][9]++;}
+                               if((prob_1 <= (f + 0.01)) && prob_1 > f){
+                                   state->top5PassFail[count][1]++;
+                                   hierarchyPenalty[count][0] += calculateHierarchyPenalty(truth,label_1);
+                               }
+                               if((prob_2 <= (f + 0.01)) && prob_2 > f){
+                                   state->top5PassFail[count][3]++;
+                                   hierarchyPenalty[count][1] += calculateHierarchyPenalty(truth,label_2);
+                               }
+                               if((prob_3 <= (f + 0.01)) && prob_3 > f){
+                                   state->top5PassFail[count][5]++;
+                                   hierarchyPenalty[count][2] += calculateHierarchyPenalty(truth,label_3);
+                               }
+                               if((prob_4 <= (f + 0.01)) && prob_4 > f){
+                                   state->top5PassFail[count][7]++;
+                                   hierarchyPenalty[count][3] += calculateHierarchyPenalty(truth,label_4);
+                               }
+                               if((prob_5 <= (f + 0.01)) && prob_5 > f){
+                                   state->top5PassFail[count][9]++;
+                                   hierarchyPenalty[count][4] += calculateHierarchyPenalty(truth,label_5);
+                               }
                                count++;
                            }
                        }
@@ -2365,6 +2444,12 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             float Top3PassScore = 0, Top3FailScore = 0;
             float Top4PassScore = 0, Top4FailScore = 0;
             float Top5PassScore = 0, Top5FailScore = 0;
+            float Top1HierarchyPenalty = 0;
+            float Top2HierarchyPenalty = 0;
+            float Top3HierarchyPenalty = 0;
+            float Top4HierarchyPenalty = 0;
+            float Top5HierarchyPenalty = 0;
+
             float confID=0.99;
             for(int i = 99; i >= 0; i--){
                 Top1PassScore += confID * state->top5PassFail[i][0];
@@ -2377,6 +2462,13 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 Top4FailScore += confID * state->top5PassFail[i][7];
                 Top5PassScore += confID * state->top5PassFail[i][8];
                 Top5FailScore += confID * state->top5PassFail[i][9];
+
+                Top1HierarchyPenalty += hierarchyPenalty[i][0];
+                Top2HierarchyPenalty += hierarchyPenalty[i][1];
+                Top3HierarchyPenalty += hierarchyPenalty[i][2];
+                Top4HierarchyPenalty += hierarchyPenalty[i][3];
+                Top5HierarchyPenalty += hierarchyPenalty[i][4];
+
                 confID = confID - 0.01;
             }
 
@@ -2429,18 +2521,18 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
 
             // Method 1 result
-            Top1Score = Top1PassScore - Top1FailScore;
+            Top1Score = Top1PassScore;
             ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
-            Top2Score = (Top1PassScore + Top2PassScore) - Top2FailScore;
+            Top2Score = (Top1PassScore + Top2PassScore);
             ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
-            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore;
+            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore);
             ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
-            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore;
+            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore);
             ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
-            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore;
+            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore);
             ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
 
-            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 1 Scoring</font></h1></A>\n");
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 1 Scoring - Confidence Aware</font></h1></A>\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
@@ -2477,18 +2569,18 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t\n");
 
             // Method 2 result
-            Top1Score = Top1PassScore;
+            Top1Score = Top1PassScore - Top1FailScore;
             ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
-            Top2Score = (Top1PassScore + Top2PassScore);
+            Top2Score = (Top1PassScore + Top2PassScore) - Top2FailScore;
             ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
-            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore);
+            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore;
             ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
-            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore);
+            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore;
             ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
-            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore);
+            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore;
             ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
 
-            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 2 Scoring</font></h1></A>\n");
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 2 Scoring - Error Aware</font></h1></A>\n");
             fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
             fileObj.write("\t<tr>\n");
             fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
@@ -2524,11 +2616,60 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("</table>\n");
             fileObj.write("\t\n");
 
-            float top5ModelScore[100][15];
+            // Method 3 result
+            Top1Score = Top1PassScore - (Top1FailScore + Top1HierarchyPenalty) ;
+            ModelScoreTop1 = (Top1Score/netSummaryImages)*100;
+            Top2Score = (Top1PassScore + Top2PassScore) - (Top2FailScore + Top2HierarchyPenalty);
+            ModelScoreTop2 = (Top2Score/netSummaryImages)*100;
+            Top3Score = (Top1PassScore + Top2PassScore + Top3PassScore) - (Top3FailScore + Top3HierarchyPenalty);
+            ModelScoreTop3 = (Top3Score/netSummaryImages)*100;
+            Top4Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - (Top4FailScore + Top4HierarchyPenalty);
+            ModelScoreTop4 = (Top4Score/netSummaryImages)*100;
+            Top5Score = (Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - (Top5FailScore + Top5HierarchyPenalty);
+            ModelScoreTop5 = (Top5Score/netSummaryImages)*100;
+
+            fileObj.write("<br><h1 align=\"center\"><font color=\"DarkSalmon\" size=\"4\">Method 3 Scoring - Hierarchy Aware</font></h1></A>\n");
+            fileObj.write("\t<table align=\"center\" style=\"width: 40%\">\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>1st Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>2nd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>3rd Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>4th Match</b></font></td>\n");
+            fileObj.write("\t\t<td align=\"center\"><font color=\"Maroon\" size=\"3\"><b>5th Match</b></font></td>\n");
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%d</b></font></td>\n",state->top1Count + state->top2Count + state->top3Count + state->top4Count + state->top5Count);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop1);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop2);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop3);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop4);
+            fileObj.write(text.toStdString().c_str());
+            text.sprintf("\t\t<td align=\"center\"><font color=\"black\" size=\"3\"><b>%.2f %%</b></font></td>\n",ModelScoreTop5);
+            fileObj.write(text.toStdString().c_str());
+            fileObj.write("\t\t</tr>\n");
+            fileObj.write("</table>\n");
+            fileObj.write("\t\n");
+
+            float top5ModelScore[100][20];
             for(int i = 0; i < 100; i++){
                 top5ModelScore[i][0] = 0; top5ModelScore[i][1] = 0; top5ModelScore[i][2] = 0; top5ModelScore[i][3] = 0; top5ModelScore[i][4] = 0;
                 top5ModelScore[i][5] = 0; top5ModelScore[i][6] = 0; top5ModelScore[i][7] = 0; top5ModelScore[i][8] = 0; top5ModelScore[i][9] = 0;
                 top5ModelScore[i][10] = 0; top5ModelScore[i][11] = 0; top5ModelScore[i][12] = 0; top5ModelScore[i][13] = 0; top5ModelScore[i][10] = 0; top5ModelScore[i][14] = 0;
+                top5ModelScore[i][15] = 0; top5ModelScore[i][16] = 0; top5ModelScore[i][17] = 0; top5ModelScore[i][18] = 0; top5ModelScore[i][10] = 0; top5ModelScore[i][19] = 0;
             }
 
             float standardPassTop1 = 0, standardPassTop2 = 0;
@@ -2536,6 +2677,7 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             float standardPassTop5 = 0;
             Top1PassScore = 0; Top1FailScore = 0; Top2PassScore = 0; Top2FailScore = 0; Top3PassScore = 0;
             Top3FailScore = 0; Top4PassScore = 0; Top4FailScore = 0; Top5PassScore = 0; Top5FailScore = 0;
+            Top1HierarchyPenalty = Top2HierarchyPenalty = Top3HierarchyPenalty = Top4HierarchyPenalty = Top5HierarchyPenalty = 0;
             confID = 0.99;
             for(int i = 99; i >= 0; i--)
             {
@@ -2550,18 +2692,33 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 Top5PassScore += confID * state->top5PassFail[i][8];
                 Top5FailScore += confID * state->top5PassFail[i][9];
 
+                Top1HierarchyPenalty += hierarchyPenalty[i][0];
+                Top2HierarchyPenalty += hierarchyPenalty[i][1];
+                Top3HierarchyPenalty += hierarchyPenalty[i][2];
+                Top4HierarchyPenalty += hierarchyPenalty[i][3];
+                Top5HierarchyPenalty += hierarchyPenalty[i][4];
+
+
                 // method 1
-                top5ModelScore[i][0] = ((Top1PassScore - Top1FailScore)/netSummaryImages)*100;
-                top5ModelScore[i][2] = (((Top1PassScore + Top2PassScore) - Top2FailScore)/netSummaryImages)*100;
-                top5ModelScore[i][4] = (((Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore)/netSummaryImages)*100;
-                top5ModelScore[i][6] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore)/netSummaryImages)*100;
-                top5ModelScore[i][8] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore)/netSummaryImages)*100;
-                // method 2
                 top5ModelScore[i][1] = (Top1PassScore/netSummaryImages)*100;
                 top5ModelScore[i][3] = ((Top1PassScore + Top2PassScore)/netSummaryImages)*100;
                 top5ModelScore[i][5] = ((Top1PassScore + Top2PassScore + Top3PassScore)/netSummaryImages)*100;
                 top5ModelScore[i][7] = ((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore)/netSummaryImages)*100;
                 top5ModelScore[i][9] = ((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore)/netSummaryImages)*100;
+
+                // method 2
+                top5ModelScore[i][0] = ((Top1PassScore - Top1FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][2] = (((Top1PassScore + Top2PassScore) - Top2FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][4] = (((Top1PassScore + Top2PassScore + Top3PassScore) - Top3FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][6] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - Top4FailScore)/netSummaryImages)*100;
+                top5ModelScore[i][8] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - Top5FailScore)/netSummaryImages)*100;
+
+                // method 3
+                top5ModelScore[i][15] = ((Top1PassScore - (Top1FailScore + Top1HierarchyPenalty))/netSummaryImages)*100;
+                top5ModelScore[i][16] = (((Top1PassScore + Top2PassScore) - (Top2FailScore + Top2HierarchyPenalty))/netSummaryImages)*100;
+                top5ModelScore[i][17] = (((Top1PassScore + Top2PassScore + Top3PassScore) - (Top3FailScore + Top3HierarchyPenalty))/netSummaryImages)*100;
+                top5ModelScore[i][18] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore) - (Top4FailScore + Top4HierarchyPenalty))/netSummaryImages)*100;
+                top5ModelScore[i][19] = (((Top1PassScore + Top2PassScore + Top3PassScore + Top4PassScore + Top5PassScore) - (Top5FailScore + Top5HierarchyPenalty))/netSummaryImages)*100;
 
                 // standard method
                 standardPassTop1 += state->topKPassFail[i][0];
@@ -2569,8 +2726,6 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
                 standardPassTop3 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4];
                 standardPassTop4 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4] + state->top5PassFail[i][6];
                 standardPassTop5 += state->topKPassFail[i][0] + state->top5PassFail[i][2] + state->top5PassFail[i][4] + state->top5PassFail[i][6] + state->top5PassFail[i][8];
-
-
                 top5ModelScore[i][10] = (standardPassTop1/netSummaryImages)*100;
                 top5ModelScore[i][11] = (standardPassTop2/netSummaryImages)*100;
                 top5ModelScore[i][12] = (standardPassTop3/netSummaryImages)*100;
@@ -2591,16 +2746,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tdata.addColumn('number', 'Standard');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 3');\n");
             fileObj.write("\tdata.addRows([\n");
-            fileObj.write("\t[1, 0, 0, 0],\n");
+            fileObj.write("\t[1, 0, 0, 0, 0],\n");
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f,  %.4f,  %.4f,    %.4f]\n",fVal,top5ModelScore[i][10],top5ModelScore[i][0],top5ModelScore[i][1]);
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,  %.4f,    %.4f]\n",fVal,top5ModelScore[i][10],top5ModelScore[i][1],top5ModelScore[i][0],top5ModelScore[i][15]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][10],top5ModelScore[i][0],top5ModelScore[i][1]);
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][10],top5ModelScore[i][1],top5ModelScore[i][0],top5ModelScore[i][15]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2619,16 +2775,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tdata.addColumn('number', 'Standard');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 3');\n");
             fileObj.write("\tdata.addRows([\n");
-            fileObj.write("\t[1, 0, 0, 0],\n");
+            fileObj.write("\t[1, 0, 0, 0, 0],\n");
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][11],top5ModelScore[i][2],top5ModelScore[i][3]);
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][11],top5ModelScore[i][3],top5ModelScore[i][2],top5ModelScore[i][16]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f,  %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][11],top5ModelScore[i][2],top5ModelScore[i][3]);
+                    text.sprintf("\t[%.2f,  %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][11],top5ModelScore[i][3],top5ModelScore[i][2],top5ModelScore[i][16]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2647,16 +2804,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tdata.addColumn('number', 'Standard');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 3');\n");
             fileObj.write("\tdata.addRows([\n");
-            fileObj.write("\t[1, 0, 0, 0],\n");
+            fileObj.write("\t[1, 0, 0, 0, 0],\n");
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f,    %.4f, %.4f,    %.4f]\n",fVal,top5ModelScore[i][12],top5ModelScore[i][4],top5ModelScore[i][5]);
+                    text.sprintf("\t[%.2f,    %.4f, %.4f, %.4f,    %.4f]\n",fVal,top5ModelScore[i][12],top5ModelScore[i][5],top5ModelScore[i][4],top5ModelScore[i][17]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f,    %.4f, %.4f,    %.4f],\n",fVal,top5ModelScore[i][12],top5ModelScore[i][4],top5ModelScore[i][5]);
+                    text.sprintf("\t[%.2f,    %.4f, %.4f, %.4f,    %.4f],\n",fVal,top5ModelScore[i][12],top5ModelScore[i][5],top5ModelScore[i][4],top5ModelScore[i][17]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2675,16 +2833,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tdata.addColumn('number', 'Standard');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 3');\n");
             fileObj.write("\tdata.addRows([\n");
-            fileObj.write("\t[1, 0, 0, 0],\n");
+            fileObj.write("\t[1, 0, 0, 0, 0],\n");
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][13],top5ModelScore[i][6],top5ModelScore[i][7]);
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][13],top5ModelScore[i][7],top5ModelScore[i][6],top5ModelScore[i][18]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][13],top5ModelScore[i][6],top5ModelScore[i][7]);
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][13],top5ModelScore[i][7],top5ModelScore[i][6],top5ModelScore[i][18]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2703,16 +2862,17 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\tdata.addColumn('number', 'Standard');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 1');\n");
             fileObj.write("\tdata.addColumn('number', 'Method 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Method 3');\n");
             fileObj.write("\tdata.addRows([\n");
-            fileObj.write("\t[1, 0, 0, 0],\n");
+            fileObj.write("\t[1, 0, 0, 0, 0],\n");
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][14],top5ModelScore[i][8],top5ModelScore[i][9]);
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][14],top5ModelScore[i][9],top5ModelScore[i][8],top5ModelScore[i][19]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f, %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][14],top5ModelScore[i][8],top5ModelScore[i][9]);
+                    text.sprintf("\t[%.2f, %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][14],top5ModelScore[i][9],top5ModelScore[i][8],top5ModelScore[i][19]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2768,11 +2928,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2798,11 +2958,11 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fVal=0.99;
             for(int i = 99; i >= 0; i--){
                 if(i == 0){
-                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 else{
-                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][1],top5ModelScore[i][3],top5ModelScore[i][5],top5ModelScore[i][7],top5ModelScore[i][9]);
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][0],top5ModelScore[i][2],top5ModelScore[i][4],top5ModelScore[i][6],top5ModelScore[i][8]);
                     fileObj.write(text.toStdString().c_str());
                 }
                 fVal=fVal-0.01;
@@ -2810,6 +2970,36 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t]);\n");
             fileObj.write("\tvar options = {  title:'Method 2 Scoring', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
             fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('method_2_model_score_chart'));\n");
+            fileObj.write("\tchart.draw(data, options);}\n");
+            fileObj.write("\t\n");
+            // method 3 Score Model
+            fileObj.write("\tgoogle.charts.load('current', {packages: ['corechart', 'line']});\n");
+            fileObj.write("\tgoogle.charts.setOnLoadCallback(Method3Top5Graph);\n");
+            fileObj.write("\tfunction Method3Top5Graph() {\n");
+            fileObj.write("\tvar data = new google.visualization.DataTable();\n");
+            fileObj.write("\tdata.addColumn('number', 'X');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 1');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 2');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 3');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 4');\n");
+            fileObj.write("\tdata.addColumn('number', 'Top 5');\n");
+            fileObj.write("\tdata.addRows([\n");
+            fileObj.write("\t[1, 0, 0, 0, 0, 0],\n");
+            fVal=0.99;
+            for(int i = 99; i >= 0; i--){
+                if(i == 0){
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f]\n",fVal,top5ModelScore[i][15],top5ModelScore[i][16],top5ModelScore[i][17],top5ModelScore[i][18],top5ModelScore[i][19]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                else{
+                    text.sprintf("\t[%.2f, %.4f,    %.4f,   %.4f,   %.4f,    %.4f],\n",fVal,top5ModelScore[i][15],top5ModelScore[i][16],top5ModelScore[i][17],top5ModelScore[i][18],top5ModelScore[i][19]);
+                    fileObj.write(text.toStdString().c_str());
+                }
+                fVal=fVal-0.01;
+            }
+            fileObj.write("\t]);\n");
+            fileObj.write("\tvar options = {  title:'Method 3 Scoring', hAxis: { title: 'Confidence', direction: '-1' }, vAxis: {title: 'Score Percentage'}, series: { 0.01: {curveType: 'function'} }, width:750, height:400 };\n");
+            fileObj.write("\tvar chart = new google.visualization.LineChart(document.getElementById('method_3_model_score_chart'));\n");
             fileObj.write("\tchart.draw(data, options);}\n");
             fileObj.write("\t\n");
             fileObj.write("\t\n");
@@ -2832,6 +3022,10 @@ void inference_viewer::saveHTML(QString fileName, bool exportTool)
             fileObj.write("\t<tr>\n");
             fileObj.write("\t <td><center><div id=\"method_1_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
             fileObj.write("\t <td><center><div id=\"method_2_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t</tr>\n");
+            fileObj.write("\t<tr>\n");
+            fileObj.write("\t <td><center><div id=\"method_3_model_score_chart\" style=\"border: 0px solid #ccc\" ></div></center></td>\n");
+            fileObj.write("\t <td><center></center></td>\n");
             fileObj.write("\t</tr>\n");
             fileObj.write("\t</table>\n");
             fileObj.write("\t\n");
