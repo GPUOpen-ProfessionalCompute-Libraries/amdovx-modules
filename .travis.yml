@@ -1,5 +1,5 @@
 language: cpp
-sudo: true
+sudo: require
 dist: Xenial Xerus
 
 os:
@@ -23,11 +23,13 @@ addons:
             - ubuntu-toolchain-r-test
         packages:
             - lcov
+            - gcc-6
+            - g++-6
+            - cmake
   
 branches:
   - master
-  - develo
-  - travisCI
+  - develop
 
 before_script:
   - git clone https://github.com/kiritigowda/help
@@ -43,4 +45,4 @@ after_success:
 
 notifications:
   email:
-- kiritigowda@gmail.com
+        - kiritigowda@gmail.com
