@@ -22,8 +22,8 @@ install:
   - sudo apt install rocm-dkms
 
 before_script:
-  - docker pull kiritigowda/amd-neural-net-inference
-  - docker run -it -d --name amdovx --network host kiritigowda/amd-neural-net-inference bash
+  - docker pull kiritigowda/amdovx-test-docker
+  - docker run -it -d --name amdovx --network host kiritigowda/amdovx-test-docker bash
   - docker cp ../amdovx-modules amdovx:/amdovx-modules
 
 script:
