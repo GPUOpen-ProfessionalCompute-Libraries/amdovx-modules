@@ -21,6 +21,7 @@
 #define ICON_STRIDE              (ICON_SIZE + 8)
 #define INFCOM_RUNTIME_OPTIONS   ""
 
+
 inference_state::inference_state()
 {
     // initialize
@@ -130,7 +131,7 @@ void inference_viewer::startReceiver()
     state->receiver_worker = new inference_receiver(
                 state->serverHost, state->serverPort, state->modelName,
                 state->GPUs, state->inputDim, state->outputDim, INFCOM_RUNTIME_OPTIONS,
-                &state->imageBuffer, &progress);
+                &state->imageBuffer, &state->shadowFileBuffer, &progress);
     state->receiver_worker->moveToThread(state->receiver_thread);
     connect(state->receiver_worker, SIGNAL (error(QString)), this, SLOT (errorString(QString)));
     connect(state->receiver_thread, SIGNAL (started()), state->receiver_worker, SLOT (run()));
@@ -438,6 +439,13 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 progress.completed_load = true;
                 break;
             }
+#if SEND_FILENAME
+            // extract only the last folder and filename for shadow
+            QStringList fileNameList = fileName.split("/");
+            QString subFileName = fileNameList.at(fileNameList.size()- 2) + "/" + fileNameList.last();
+            //printf("Inference viewer adding file %s to shadow array of size %d\n", subFileName.toStdString().c_str(), byteArray.size());
+            state->shadowFileBuffer.push_back(subFileName);
+#endif
             QByteArray byteArray = fileObj.readAll();
             state->imageBuffer.push_back(byteArray);
             state->imageLoadCount++;

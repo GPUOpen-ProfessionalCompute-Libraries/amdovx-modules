@@ -8,6 +8,8 @@
 #include <QElapsedTimer>
 #include <QMouseEvent>
 #include <mutex>
+#define SEND_FILENAME          0
+
 
 struct runtime_receiver_status {
     bool completed;
@@ -30,7 +32,7 @@ public:
     explicit inference_receiver(
             QString serverHost, int serverPort, QString modelName,
             int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
-            QVector<QByteArray> * imageBuffer,
+            QVector<QByteArray> * imageBuffer, QVector<QString> * shadowFileBuffer,
             runtime_receiver_status * progress,
             QObject *parent = nullptr);
     ~inference_receiver();
@@ -64,6 +66,7 @@ private:
     float perfRate;
     QVector<QByteArray> * imageBuffer;
     QVector<QString> * dataLabels;
+    QVector<QString> * shadowFileBuffer;
     QString serverHost;
     int serverPort;
     QString modelName;
@@ -72,6 +75,7 @@ private:
     int * outputDim;
     const char * runtimeOptions;
     runtime_receiver_status * progress;
+    int sendFileNames;
 };
 
 #endif // INFERENCE_RECEIVER_H
