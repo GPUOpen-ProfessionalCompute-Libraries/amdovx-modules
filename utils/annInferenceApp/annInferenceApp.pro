@@ -25,7 +25,6 @@ DEFINES += QT_DEPRECATED_WARNINGS
 # You can also select to disable deprecated APIs only up to a certain version of Qt.
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
-
 SOURCES += \
     main.cpp \
     inference_viewer.cpp \
@@ -40,9 +39,9 @@ HEADERS += \
     inference_receiver.h \
     inference_control.h \
     inference_compiler.h \
-    infcom.h \
     assets.h \
-    tcpconnection.h
+    tcpconnection.h \
+    ../annInferenceServer/infcom.h
 
 FORMS += \
         inference_viewer.ui

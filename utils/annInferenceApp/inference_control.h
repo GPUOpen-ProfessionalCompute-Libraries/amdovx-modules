@@ -2,7 +2,7 @@
 #define INFERENCE_CONTROL_H
 
 #include "inference_viewer.h"
-#include "infcom.h"
+#include "../annInferenceServer/infcom.h"
 #include "inference_compiler.h"
 #include <QWidget>
 #include <QLabel>

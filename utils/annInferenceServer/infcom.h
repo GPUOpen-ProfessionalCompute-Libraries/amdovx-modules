@@ -41,7 +41,7 @@
 // Inference Run Protocol:
 //    client: (connect)
 //  * server: InfComCommand:INFCOM_MODE_INFERENCE
-//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc} message="modelName [options]"
+//    client: InfComCommand:INFCOM_CMD_SEND_MODE with data={INFCOM_MODE_INFERENCE,GPUs,iw,ih,ic,ow,oh,oc,rf,topK,BB} message="modelName [options]"
 //  * server: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={maxCount}
 //    client: InfComCommand:INFCOM_CMD_SEND_IMAGES with data={count} -- count:0..maxCount
 //    client: for each image: { <tag:32-bit> <size:32-bit> <byte-stream> <eof-marker:32-bit> }
@@ -72,7 +72,7 @@
 //  * server: InfComCommand:INFCOM_CMD_SHADOW_RESULT with data={count, INFCOM_CMD_SHADOW_CREATE_FOLDER, <tag0>,<created/failed>,<tag1>,<created/failed>,...}}
 //  * Repeat above commands
 //  * server: InfComCommand:INFCOM_CMD_SHADOW_SEND_FILES with data={count}
-//    client: for each folder: {<tag:32-bit> <size:32-bit> <foldername> <eof-marker:32-bit>}
+//    client: for each file: {<tag:32-bit> <size:32-bit> <foldername> <eof-marker:32-bit>}
 //  * server: InfComCommand:INFCOM_CMD_SHADOW_RESULT with data={count, INFCOM_CMD_SHADOW_SEND_FILES, <tag0>,<copied/failed>,<tag1>,<copied/failed>,...}}
 //  * Repeat above commands
 //  * server: InfComCommand:INFCOM_CMD_DONE
@@ -98,8 +98,9 @@
 #define INFCOM_CMD_BB_INFERENCE_RESULT         305
 #define INFCOM_CMD_SHADOW_SEND_FOLDERNAMES     401
 #define INFCOM_CMD_SHADOW_CREATE_FOLDER        402
-#define INFCOM_CMD_SHADOW_SEND_FILES           403
-#define INFCOM_CMD_SHADOW_RESULT               404
+#define INFCOM_CMD_SHADOW_CREATE_LMDB          403
+#define INFCOM_CMD_SHADOW_SEND_FILES           404
+#define INFCOM_CMD_SHADOW_RESULT               405
 
 // InfComCommand.data[0] for INFCOM_CMD_SEND_MODE
 #define INFCOM_MODE_CONFIGURE                  1

@@ -46,6 +46,8 @@
 #define BOUNDING_BOX_NMS_THRESHHOLD         0.4
 #define BOUNDING_BOX_NUMBER_OF_CLASSES      20
 
+#define LMDB_RECORD_TYPE_BITMAPS            0
+
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -209,8 +211,11 @@ private:
     int GPUs;
     int dimInput[3];
     int dimOutput[3];
+    int receiveFileNames;
     bool useShadowFilenames;
-    bool receiveFileNames;
+    bool useLMDB;
+    char *shadowMap;
+    int  lmdbImageSize, lmdbNumOfRecords;
     int topK;
     int reverseInputChannelOrder;
     float preprocessMpy[3];

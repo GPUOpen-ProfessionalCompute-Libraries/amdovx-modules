@@ -7,6 +7,7 @@
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
 #include <numeric>
+#include <sys/mman.h>
 
 #if USE_SSE_OPTIMIZATION
 #if _WIN32
@@ -30,7 +31,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       GPUs{ cmd->data[1] },
       dimInput{ cmd->data[2], cmd->data[3], cmd->data[4] },
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
-      receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
+      receiveFileNames { cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
       moduleHandle{ nullptr }, annCreateGraph{ nullptr },
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
@@ -67,6 +68,69 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     if (!args->getlocalShadowRootDir().empty()){
         useShadowFilenames = true;
         std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
+    }
+    lmdbNumOfRecords = 0;
+   // std::cout << "INFO:ReceiveFileNames: " << receiveFileNames << std::endl;
+    if (receiveFileNames > 1) {
+        if (!args->getlocalShadowLmdbPath().empty()){
+            useLMDB = true;
+            std::cout << "INFO::inferenceserver is running with LocalShadowFolder with LMDB and infcom command receiving only tags" << std::endl;
+        }else
+        {
+            std::cout << "INFO::invalid lmdb path" << args->getlocalShadowLmdbPath() << std::endl;
+        }
+        // hack:: create a mmap, decode and copy all the files into memmap
+        #if (LMDB_RECORD_TYPE_BITMAPS)
+            lmdbImageSize = (dimInput[0] * dimInput[1] * dimInput[2] + 1024)*4 & ~4095;     // align to 4k
+        #else
+            lmdbImageSize = 256*1024;       //256k
+        #endif
+
+        // calculate size of map (~10000*imgSize)
+        lmdbNumOfRecords = 5000;
+        shadowMap = (char *)mmap(NULL, lmdbImageSize*lmdbNumOfRecords, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+        if ((void *)shadowMap != MAP_FAILED) {
+            std::cout << "INFO::Created Shadow Map" << std::endl;
+            std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
+            int endOfSequence = 0;
+            unsigned char *byteBuff = new unsigned char[1024*1024];    // maximum size is assumed iMB
+            for (int i=0; !endOfSequence; i++)
+            {
+                char fileName[256];
+                sprintf(fileName, "%s%04d%s", "/image_", i, ".JPEG");
+                std::string fullFileName = fileNameDir;
+                fullFileName.append(fileName);
+                FILE * fp = fopen(fullFileName.c_str(), "rb");
+                if(!fp || i >= lmdbNumOfRecords) {
+                    if (fp) fclose(fp);
+                    std::cout << "INFO::Couldn't open File" << fullFileName.c_str() << std::endl;
+                    endOfSequence = 1;
+                    continue;
+                }
+                else
+                {
+                    //std::cout << "INFO::Opened file" << fullFileName.c_str() << std::endl;
+                }
+
+                fseek(fp,0,SEEK_END);
+                int fsize = ftell(fp);
+                fseek(fp,0,SEEK_SET);
+                int size = fread(&byteBuff[0], 1, fsize, fp);
+                fclose(fp);
+                #if (LMDB_RECORD_TYPE_BITMAPS)
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteBuff, (float *)(shadowMap+i*lmdbImageSize));
+                #else
+                    *((int*)(shadowMap+i*lmdbImageSize)) = size;
+                    memcpy((char*)(shadowMap+i*lmdbImageSize+4), byteBuff, size);
+                #endif
+                std::cout << "INFO::Decoded file " << i << std::endl;
+            }
+            std::cout << "INFO::Decoded files to LMDB" << std::endl;
+            delete [] byteBuff;
+        }else {
+            std::cout << "INFO::mmap failed" << std::endl;
+            useLMDB = false;
+        }
     }
 
     PROFILER_INITIALIZE();
@@ -168,6 +232,8 @@ InferenceEngine::~InferenceEngine()
         dlclose(moduleHandle);
     }
     if (region) delete region;
+    if (shadowMap)
+        munmap((void *)shadowMap, lmdbImageSize*lmdbNumOfRecords)
     PROFILER_SHUTDOWN();
 }
 
@@ -874,11 +940,11 @@ int InferenceEngine::run()
                     int tag = header[0];
                     int size = header[1];
                     // do sanity check with unreasonable parameters
-                    if(tag < 0 || size <= 0 || size > 50000000) {
+                    if(tag < 0 || size < 0 || size > 50000000) {
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
                     char * byteStream = 0;
-                    if (receiveFileNames)
+                    if (receiveFileNames == 1)
                     {
                         std::string fileNameDir = args->getlocalShadowRootDir() + "/";
                         char * buff = new char [size];
@@ -898,6 +964,17 @@ int InferenceEngine::run()
                         if (size != fsize) {
                             return error_close(sock, "error reading %d bytes from file:%s", fsize, fileNameDir.c_str());
                         }
+                    }else if(useLMDB) {
+                        // read input file from LMDB
+                        //std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
+                        if (size){
+                            char * buff = new char [size];
+                            ERRCHK(recvBuffer(sock, buff, size, clientName));
+                            //lmdbName.append(std::string(buff, size));
+                            delete[] buff;
+                        }
+                        byteStream = new char [4];   // for sanity
+                        *((int *)byteStream) = tag;     // needed later
                     }
                     else
                     {
@@ -1139,7 +1216,20 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             }
             // decode, scale, and format convert into the OpenCL buffer
             float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
+            if (!useLMDB) {
+                DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
+            } else {
+                // copy decoded image from shadowMap
+                int tag = *((int*)byteStream);
+                #if (LMDB_RECORD_TYPE_BITMAPS)
+                    memcpy(buf, (float *) (shadowMap + tag*lmdbImageSize), (dimInput[0] * dimInput[1] * dimInput[2]));
+                #else
+                    size = ((int *)(shadowMap + tag*lmdbImageSize))[0];
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)(shadowMap + tag*lmdbImageSize+4), buf);
+                #endif
+
+            }
+
             // release byteStream
             delete[] byteStream;
         }

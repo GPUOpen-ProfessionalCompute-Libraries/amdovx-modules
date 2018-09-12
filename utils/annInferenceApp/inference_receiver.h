@@ -9,7 +9,7 @@
 #include <QMouseEvent>
 #include <mutex>
 #define SEND_FILENAME          0
-
+#define SHADOW_USE_LMDB        0
 
 struct runtime_receiver_status {
     bool completed;

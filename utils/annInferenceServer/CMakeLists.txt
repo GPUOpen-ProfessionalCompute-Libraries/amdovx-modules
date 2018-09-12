@@ -44,7 +44,7 @@ list(APPEND SOURCES
 )
 
 add_executable(annInferenceServer ${SOURCES})
-target_link_libraries(annInferenceServer vx_nn openvx pthread)
+target_link_libraries(annInferenceServer vx_nn openvx pthread lmdb)
 install (TARGETS annInferenceServer DESTINATION bin)
 
 if (OpenCL_FOUND)

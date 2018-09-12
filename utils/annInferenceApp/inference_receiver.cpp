@@ -70,7 +70,11 @@ void inference_receiver::run()
     progress->images_received = 0;
     progress->completed_send = false;
     progress->completed = false;
-    sendFileNames = SEND_FILENAME;
+#if  SEND_FILENAME
+    sendFileNames = SHADOW_USE_LMDB? 2: 1;
+#else
+    sendFileNames = 0;
+#endif
 
     TcpConnection * connection = new TcpConnection(serverHost, serverPort, 3000, this);
     if(connection->connected()) {

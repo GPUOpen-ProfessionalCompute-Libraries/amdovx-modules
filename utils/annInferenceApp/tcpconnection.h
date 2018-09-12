@@ -1,7 +1,7 @@
 #ifndef TCPCONNECTION_H
 #define TCPCONNECTION_H
 
-#include "infcom.h"
+#include "../annInferenceServer/infcom.h"
 #include <QTcpSocket>
 
 class TcpConnection : public QTcpSocket

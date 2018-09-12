@@ -96,6 +96,14 @@ public:
     {
         localShadowRootDir = localShadowDir;
     }
+    // set localShadowRootDir (full absolute path)
+    void setLocalShadowLmdbPath(const std::string& lmdbDir)
+    {
+        lmdbSubPath = lmdbDir;
+    }
+    const std::string& getlocalShadowLmdbPath() {
+        return lmdbSubPath;
+    }
 
     // device resources
     int lockGpuDevices(int GPUs, cl_device_id * device_id_);
@@ -126,6 +134,7 @@ private:
     std::string configurationFile;
     std::string configurationDir;
     std::string localShadowRootDir;
+    std::string lmdbSubPath;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc

@@ -238,7 +238,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
                                      " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>]"
-                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>]";
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>] [-l <lmdb-path>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -295,6 +295,17 @@ int Arguments::initializeConfig(int argc, char * argv[])
             }else {
                 setLocalShadowRootDir(argv[2]);
                 printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
+            }
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "-l")) {
+            if (!strcmp(argv[2],"")) {
+                error("invalid lmdb path %s", argv[2]);
+                return -1;
+            }else {
+                setLocalShadowLmdbPath(argv[2]);
+                printf("Set shadow folder to %s\n", lmdbSubPath.c_str());
             }
             argc -= 2;
             argv += 2;
