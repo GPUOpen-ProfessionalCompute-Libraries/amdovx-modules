@@ -22,7 +22,7 @@ import sys
 from nnir import *
 
 def main():
-    usage = 'Usage: python nnir-update.py [--batch-size <n>] [--fuse-ops 0|1] [--slice-groups 0|1] <nnirInputFolder> <nnirOutputFolder>'
+    usage = 'Usage: python nnir-update.py [--batch-size <n>] [--fuse-ops 0|1] [--slice-groups 0|1] [--convert-fp16 0|1] <nnirInputFolder> <nnirOutputFolder>'
     batchSize = 0
     fuseOps = False
     sliceGroups = False
@@ -38,7 +38,7 @@ def main():
         elif sys.argv[pos] == '--slice-groups':
             sliceGroups = False if int(sys.argv[pos+1]) == 0 else True
             pos = pos + 2
-        if sys.argv[pos] == '--convert-fp16':
+        elif sys.argv[pos] == '--convert-fp16':
             convertFp16 = False if int(sys.argv[pos+1]) == 0 else True
             pos = pos + 2
         else:

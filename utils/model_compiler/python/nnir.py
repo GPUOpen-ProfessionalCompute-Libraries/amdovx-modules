@@ -478,7 +478,7 @@ class IrGraph:
                 if node.type == 'batch_norm':
                     scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
-                    mean = np.frombuffer(self.binaries[node.inputs[3]], dtype=np.npType)
+                    mean = np.frombuffer(self.binaries[node.inputs[3]], dtype=npType)
                     variance = np.frombuffer(self.binaries[node.inputs[4]], dtype=npType)
                     epsilon = node.attr.get('epsilon')
                     scale = scale / np.sqrt(variance + epsilon)
@@ -559,13 +559,13 @@ class IrGraph:
                         offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
                     elif node.type == 'mul':
                         scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
-                        offset = np.repeat(np.array([0], dtype=np.float32), K)
+                        offset = np.repeat(np.array([0], dtype=npType), K)
                     elif node.type == 'add':
-                        scale = np.repeat(np.array([1], dtype=np.float32), K)
+                        scale = np.repeat(np.array([1], dtype=npType), K)
                         offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     weight = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
                     if len(prevNode.inputs) == 2:
-                        bias = np.repeat(np.array([0], dtype=np.float32), K)
+                        bias = np.repeat(np.array([0], dtype=npType), K)
                         tensor = IrTensor()
                         tensor.setName(prevNode.inputs[1] + '__bias')
                         if self.all_F032:
