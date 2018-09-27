@@ -595,9 +595,12 @@ class IrGraph:
                     prevOutput = node.outputs[0]
                 elif node.type == 'relu' and \
                      (prevNode.type == 'conv' or prevNode.type == 'max_pool' or \
-                      prevNode.type == 'avg_pool' or prevNode.type == 'global_avg_pool'):
+                     prevNode.type == 'avg_pool' or prevNode.type == 'global_avg_pool'):
                     prevNode.attr.set('mode', 1)
-                    prevNode.outputs[0] = node.outputs[0]
+                    if prevSkipNode != None:
+                        prevSkipNode.outputs[0] = node.outputs[0]
+                    else:
+                        prevNode.outputs[0] = node.outputs[0]
                     prevOutput = node.outputs[0]
                     nodesToRemove.append(node)
                     fusedAnOp = True

@@ -60,10 +60,8 @@ struct ConvolutionLayerLocalData {
     vx_bool fusion_possible;
     miopenFusionPlanDescriptor_t fusePlanDesc;
     miopenOperatorArgs_t fusionArgs;
-    miopenFusionOpDescriptor_t convoOp;
-    miopenFusionOpDescriptor_t biasOp;
-    miopenFusionOpDescriptor_t activOp;
 };
+
 
 static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
@@ -131,10 +129,10 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     if (data->fusion_possible == true)
     {
-        printf("Executing Fusion plan\n");
         // execute fusion plan
         ERROR_CHECK_MIOPEN_STATUS(miopenExecuteFusionPlan(data->handle->miopen_handle, data->fusePlanDesc, data->input_desc, data->input_mem, data->output_desc, data->output_mem, data->fusionArgs));
-        printf("after Executing Fusion plan\n");
+        //printf("Executed Fusion plan\n");
+
     }else
     {
         //ConvolutionForward.
@@ -181,7 +179,6 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
     // override default cbr_mode by NN_MIOPEN_CBR_MODE environment variable.
     vx_int32 nn_cbr_mode = getEnvironmentVariable("NN_MIOPEN_CBR_MODE");
-    printf("nn_cbr_mode: %d\n", nn_cbr_mode);
     if (nn_cbr_mode < 0) nn_cbr_mode = 0; // default cbr_mode
 
     // initialize the bias activ mode
@@ -211,7 +208,8 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1) + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
 
     data->bias_activ_mode = NONE;
-    data->fusion_possible = nn_cbr_mode && (stride_w == 1) && (stride_h == 1) && (dilation_w == 1) && (dilation_h == 1);   // MIOpen only support stride 1 for fusion
+    data->fusion_possible = nn_cbr_mode && (stride_w == 1) && (stride_h == 1) && (dilation_w == 1) && (dilation_h == 1) && (pad_w <=1) && (pad_h <=1);   // MIOpen only support stride 1 for fusion
+    //data->fusion_possible &= (kernel_h <= 1) && (kernel_w <= 1);
     if (parameters[2]) {
         data->bias_activ_mode = data->fusion_possible? BIAS_ONLY_FUSED : BIAS_ONLY_SEPERATE;
     }
@@ -254,38 +252,72 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
     }
+    miopenFusionOpDescriptor_t convoOp = 0;
+    miopenFusionOpDescriptor_t biasOp = 0;
+    miopenFusionOpDescriptor_t activOp = 0;
+
 
     if ((data->bias_activ_mode == BIAS_ONLY_FUSED) || (data->bias_activ_mode == ACTIVATION_ONLY_FUSED) || (data->bias_activ_mode == BIAS_ACTIVATION_FUSED)) {
-
+       // printf("miopenFusion Mode %d\n", data->bias_activ_mode);
         miopenCreateFusionPlan(&data->fusePlanDesc, miopenVerticalFusion, data->input_desc);
         miopenCreateOperatorArgs(&data->fusionArgs);
-        miopenCreateOpConvForward(data->fusePlanDesc, &data->convoOp, data->conv_desc, data->weight_desc);
-        if (parameters[2])
+        miopenCreateOpConvForward(data->fusePlanDesc, &convoOp, data->conv_desc, data->weight_desc);
+        if (data->bias_activ_mode == BIAS_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED)
         {
-            miopenCreateOpBiasForward(data->fusePlanDesc, &data->biasOp, data->bias_desc);        // add bias to fusion plan
+            miopenCreateOpBiasForward(data->fusePlanDesc, &biasOp, data->bias_desc);        // add bias to fusion plan
         }
-        if (data->leaky_alpha >= 0 && data->leaky_alpha <= 1) {
-            miopenCreateOpActivationForward(data->fusePlanDesc, &data->activOp, miopenActivationRELU);
+        if (data->bias_activ_mode == ACTIVATION_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED) {
+            miopenCreateOpActivationForward(data->fusePlanDesc, &activOp, miopenActivationRELU);
         }
         // compile fusion plan
         auto status = miopenCompileFusionPlan(data->handle->miopen_handle, data->fusePlanDesc);
-        if (status != miopenStatusSuccess)
+        if (status != miopenStatusSuccess){
           data->fusion_possible = false;
+#if ENABLE_DEBUG_PRINT_DIMS
+          std::cout << "miopenCompileFusionPlan returned failure" << std::endl;
+#endif
+        }
         else {
-            printf("miopenCompileFusionPlan succeeded\n");
             // Set the Args
-            miopenSetOpArgsConvForward(data->fusionArgs, data->convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
-            if (data->activOp) {
+            miopenSetOpArgsConvForward(data->fusionArgs, convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
+            if (biasOp)
+                miopenSetOpArgsBiasForward(data->fusionArgs, biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
+            if (activOp) {
                 data->activation_alpha = 1.0;
                 data->activation_beta = data->leaky_alpha;
                 data->activation_power = 1.0;
-                miopenSetOpArgsActivForward(data->fusionArgs, data->activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
+                miopenSetOpArgsActivForward(data->fusionArgs, activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
             }
-            if (data->biasOp)
-                miopenSetOpArgsBiasForward(data->fusionArgs, data->biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
+#if 0
+            //Finding best Convolution Algorithm. Not needed for now
+            miopenConvAlgoPerf_t perf;
+            int algo_count;
+            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanConvolutionGetAlgo(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,                                                                        data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
+            data->algo = perf.fwd_algo;
+            //Workspace Size.
+            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanGetWorkSpaceSize(data->handle->miopen_handle, data->fusePlanDesc, &data->workspace_size, data->algo));
+            if (data->workspace_size > 0) {
+                vx_context   vxContext = vxGetContext((vx_reference)node);
+                cl_context context;
+                ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
+                data->workspace_size = (data->workspace_size + 3) & ~3;
+                data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
+                if (!data->workspace) {
+                    return VX_FAILURE;
+                }
+                cl_float pattern = 0;
+                cl_int err;
+                if (data->data_type == miopenFloat)
+                    err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
+                else
+                    err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
+                if(err) return VX_FAILURE;
+            }
+#endif
         }
 
     }
+
     if (data->fusion_possible != true)
     {
         //initialize activation parameters if bias_activ_mode is ACTIVATION_ONLY or BIAS_ACTIVATION_SEPERATE.
@@ -298,41 +330,39 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
             ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
             ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
         }
-
-    }
-    //Workspace Size.
-    ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->conv_desc, data->output_desc, &data->workspace_size ));
-    if (data->workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace_size = (data->workspace_size + 3) & ~3;
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
-        if (!data->workspace) {
-            return VX_FAILURE;
+        //Workspace Size.
+        ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->conv_desc, data->output_desc, &data->workspace_size ));
+        if (data->workspace_size > 0) {
+            vx_context   vxContext = vxGetContext((vx_reference)node);
+            cl_context context;
+            ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
+            data->workspace_size = (data->workspace_size + 3) & ~3;
+            data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
+            if (!data->workspace) {
+                return VX_FAILURE;
+            }
+            cl_float pattern = 0;
+            cl_int err;
+            if (data->data_type == miopenFloat)
+                err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
+            else
+                err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
+            if(err) return VX_FAILURE;
         }
-        cl_float pattern = 0;
-        cl_int err;
-        if (data->data_type == miopenFloat)
-            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
-        else
-            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
-        if(err) return VX_FAILURE;
+        //Finding best Convolution Algorithm.
+        miopenConvAlgoPerf_t perf;
+        int algo_count;
+        ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,                                                                        data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
+        data->algo = perf.fwd_algo;
     }
-
-    //Finding best Convolution Algorithm.
-    miopenConvAlgoPerf_t perf;
-    int algo_count;
-    ERROR_CHECK_MIOPEN_STATUS(miopenFindConvolutionForwardAlgorithm(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,                                                                        data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
-    data->algo = perf.fwd_algo;
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "conv input " << input_dims[0] << " " << input_dims[1] << " " << input_dims[2] << " " << input_dims[3] << " ";
     std::cout << "conv_alpha : " << data->conv_alpha << " " << "conv_beta : " << data->conv_beta << " ";
     std::cout << "bias_alpha : " << data->bias_alpha << " " << "bias_beta : " << data->bias_beta << " ";
     std::cout << "Leaky_alpha : " << data->leaky_alpha << " ";
-    std::cout << "fusion_possible : " << data->fusion_possible << " ";
-    if (data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
+    std::cout << "fusion_possible : " << data->fusion_possible << " " << "fusion_mode: " << data->bias_activ_mode << " ";
+    if (data->bias_activ_mode > BIAS_ONLY_FUSED) {
             std::cout << "activation alpha : " << data->activation_alpha << " activation beta:" << data->activation_beta << " ";
     }
     std::cout << "Bias Mode : " << data->bias_activ_mode << " ";
