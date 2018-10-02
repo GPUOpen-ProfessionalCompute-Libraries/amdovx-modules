@@ -181,7 +181,7 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     if(parameters[9]) {
         ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[9], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     }
-    data->activation_mode = miopenActivationPATHTRU;
+    data->activation_mode = miopenActivationPASTHRU;
     if(activation_mode == 1) {
         data->activation_mode = miopenActivationRELU;
         data->activation_alpha = 1.0;
@@ -209,7 +209,7 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
-    if(data->activation_mode != miopenActivationPATHTRU) {
+    if(data->activation_mode != miopenActivationPASTHRU) {
         ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
     }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
