@@ -45,7 +45,7 @@ static vx_status VX_CALLBACK validateImageToTensorKernel(vx_node node, const vx_
     vx_size num_dims, output_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: img2tensor: #1 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: img2tensor: #1 type=%d (must be float/float16)\n", type);
     if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: img2tensor: #1 num_dims=%ld (must be 4)\n", num_dims);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*num_dims));
     if ((output_dims[2] != 3 && output_dims[2] != 1) || output_dims[0] != (size_t)width || (output_dims[1] * output_dims[3]) != (size_t)height)
@@ -89,11 +89,14 @@ static vx_status VX_CALLBACK opencl_codegen(
     vx_uint32 width, height, N;
     vx_df_image format;
     vx_size num_dims, output_dims[4] = { 1, 1, 1, 1 };
+    vx_enum type;
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_FORMAT, &format, sizeof(format)));
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[0], VX_IMAGE_HEIGHT, &height, sizeof(height)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*num_dims));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims[0])*num_dims));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     height = (vx_uint32)output_dims[1];
     N = (vx_uint32)output_dims[3];
 
@@ -109,6 +112,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         opencl_global_work[2] = N;
 
         char item[8192];
+        if (type == VX_TYPE_FLOAT32){
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
@@ -131,6 +135,32 @@ static vx_status VX_CALLBACK opencl_codegen(
             "    }\n"
             "}\n"
             , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        } else {
+            sprintf(item,
+                "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+                "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+                "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float ka, float kb, uint reverse_channel_order)\n"
+                "{\n"
+                "    uint x = get_global_id(0);\n"
+                "    uint y = get_global_id(1);\n"
+                "    uint n = get_global_id(2);\n"
+                "    if(x < %d && y < %d) {\n"
+                "        uint ioffset = i0_offset + (y + n * %d) * i0_stride + x * 3;\n"
+                "        uint2 rgb2 = vload2(0, (__global uint *)&i0_buf[ioffset & ~3]);\n"
+                "        uint rgb = amd_bytealign(rgb2.s1, rgb2.s0, ioffset & 3);\n"
+                "        half r = (half)ka * amd_unpack0(rgb) + (half)kb;\n"
+                "        half g = (half)ka * amd_unpack1(rgb) + (half)kb;\n"
+                "        half b = (half)ka * amd_unpack2(rgb) + (half)kb;\n"
+                "        o0_buf += o0_offset + n * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0;\n"
+                "        *(__global half *)&o0_buf[               0] = reverse_channel_order ? b : r;\n"
+                "        *(__global half *)&o0_buf[    o0_stride.s2] =                             g;\n"
+                "        *(__global half *)&o0_buf[2 * o0_stride.s2] = reverse_channel_order ? r : b;\n"
+                "    }\n"
+                "}\n"
+                , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+
+        }
         opencl_kernel_code = item;
     }
     else if(format == VX_DF_IMAGE_U8) {
@@ -143,6 +173,7 @@ static vx_status VX_CALLBACK opencl_codegen(
         opencl_global_work[2] = N;
 
         char item[8192];
+        if (type == VX_TYPE_FLOAT32){
         sprintf(item,
                 "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
                 "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
@@ -161,6 +192,27 @@ static vx_status VX_CALLBACK opencl_codegen(
                 "    }\n"
                 "}\n"
             , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        } else {
+            sprintf(item,
+                    "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+                    "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                    "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+                    "void %s(uint i0_width, uint i0_height, __global uchar * i0_buf, uint i0_stride, uint i0_offset, __global uchar * o0_buf, uint o0_offset, uint4 o0_stride, float a, float b, uint reverse_channel_order)\n"
+                    "{\n"
+                    "    uint x = get_global_id(0) * 4;\n"
+                    "    uint y = get_global_id(1);\n"
+                    "    uint n = get_global_id(2);\n"
+                    "    if(x < %d && y < %d) {\n"
+                    "        uint u4 = *(__global uint *)&i0_buf[i0_offset + (y + n * %d) * i0_stride + x];\n"
+                    "        half p0 = (half)a * amd_unpack0(u4) + (half)b;\n"
+                    "        half p1 = (half)a * amd_unpack1(u4) + (half)b;\n"
+                    "        half p2 = (half)a * amd_unpack2(u4) + (half)b;\n"
+                    "        half p3 = (half)a * amd_unpack3(u4) + (half)b;\n"
+                    "        *(__global half4 *)&o0_buf[o0_offset + n * o0_stride.s3 + y * o0_stride.s1 + x * o0_stride.s0] = (half4)(p0 , p1, p2, p3);\n"
+                    "    }\n"
+                    "}\n"
+                , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        }
         opencl_kernel_code = item;
     }
 

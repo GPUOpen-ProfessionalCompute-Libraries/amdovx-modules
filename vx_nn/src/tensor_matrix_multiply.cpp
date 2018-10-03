@@ -41,7 +41,7 @@ struct LocalData {
 static vx_status VX_CALLBACK validate(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
     if (type != VX_TYPE_TENSOR_MATRIX_MULTIPLY_PARAMS) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #3 type=%d (must be MATMUL_PARAMS)\n", type);
     vx_tensor_matrix_multiply_params_t params = { 0 };
@@ -56,29 +56,29 @@ static vx_status VX_CALLBACK validate(vx_node node, const vx_reference parameter
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims < 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: matmul: #0 num_dims=%ld (must >= 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #0 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, num_dims*sizeof(vx_size)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims < 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: matmul: #1 num_dims=%ld (must >= 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #1 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, num_dims*sizeof(vx_size)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         if (num_dims < 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: matmul: #2 num_dims=%ld (must >= 2)\n", num_dims);
-        if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #2 type=%d (must be float)\n", type);
+        if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #2 type=%d (must be float)\n", type);
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, input3_dims, num_dims*sizeof(vx_size)));
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     if (num_dims < 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: matmul: #4 num_dims=%ld (must >= 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #4 type=%d (must be float)\n", type);
+    if ((out_type != VX_TYPE_FLOAT32)&& (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: matmul: #4 type=%d (must be float/float16)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, num_dims*sizeof(vx_size)));
 
     // set output tensor configuration
-    type = VX_TYPE_FLOAT32;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    out_type = type;
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
@@ -132,24 +132,24 @@ static vx_status VX_CALLBACK initialize(vx_node node, const vx_reference *parame
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims < 2) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, num_dims*sizeof(vx_size)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims < 2) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, num_dims*sizeof(vx_size)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         if (num_dims < 2) return VX_ERROR_INVALID_DIMENSION;
-        if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return VX_ERROR_INVALID_TYPE;
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, input3_dims, num_dims*sizeof(vx_size)));
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims < 2) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return VX_ERROR_INVALID_TYPE;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, num_dims*sizeof(vx_size)));
 
     // create and initialize local data
@@ -209,10 +209,20 @@ static vx_status VX_CALLBACK initialize(vx_node node, const vx_reference *parame
             data->copy_global[0] = (width  + data->copy_local[0] - 1) & ~(data->copy_local[0] - 1);
             data->copy_global[1] = (height + data->copy_local[1] - 1) & ~(data->copy_local[1] - 1);
             data->copy_global[2] =  1;
+            if (type == VX_TYPE_FLOAT32) {
             code =
                 "#define BLKW " + std::to_string(BLKW) + "\n"
                 "__kernel __attribute__((reqd_work_group_size(BLKW, BLKW, 1)))\n"
-                "__kernel void copy(const __global float * __restrict inp, __global float * __restrict out)\n"
+                "__kernel void copy(const __global float * __restrict inp, __global float * __restrict out)\n";
+            }else
+            {
+                code =
+                    "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                    "#define BLKW " + std::to_string(BLKW) + "\n"
+                    "__kernel __attribute__((reqd_work_group_size(BLKW, BLKW, 1)))\n"
+                    "__kernel void copy(const __global half * __restrict inp, __global half * __restrict out)\n";
+            }
+            code +=
                 "{\n"
                 "   __local float lbuf[BLKW*BLKW];\n"
                 "   uint gx = get_group_id(0);\n"
@@ -241,9 +251,18 @@ static vx_status VX_CALLBACK initialize(vx_node node, const vx_reference *parame
             data->copy_global[0] = (width + data->copy_local[0] - 1) & ~(data->copy_local[0] - 1);
             data->copy_global[1] =  height;
             data->copy_global[2] =  1;
+            if (type == VX_TYPE_FLOAT32) {
             code =
                 "__kernel __attribute__((reqd_work_group_size(64, 1, 1)))\n"
-                "__kernel void copy(const __global float * __restrict inp, __global float * __restrict out)\n"
+                "__kernel void copy(const __global float * __restrict inp, __global float * __restrict out)\n";
+            }else
+            {
+                code =
+                    "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                    "__kernel __attribute__((reqd_work_group_size(64, 1, 1)))\n"
+                    "__kernel void copy(const __global half * __restrict inp, __global half * __restrict out)\n";
+            }
+            code +=
                 "{\n"
                 "   uint x = get_global_id(0);\n"
                 "   uint y = get_global_id(1);\n"

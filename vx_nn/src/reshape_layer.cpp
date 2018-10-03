@@ -35,26 +35,26 @@ static vx_status VX_CALLBACK validateReshapeLayer(vx_node node, const vx_referen
 {
     // check input and output tensor dimensions
     vx_size num_dims;
-    vx_enum type;
+    vx_enum type, out_type;
     vx_size input_dims[4], output_dims[4];
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: reshape: #0 num_dims=%ld (must be 4)\n", num_dims);
-    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: reshape: #0 type=%d (must be float)\n", type);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: reshape: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: reshape: #1 num_dims=%ld (must be 4)\n", num_dims);
-    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: reshape: #1 type=%d (must be float)\n", type);
+    if ((out_type != VX_TYPE_FLOAT32) && (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: reshape: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
     // check if the input and output are of the same size in memory
-    if ( (output_dims[0]*output_dims[1]*output_dims[2]*output_dims[3]) != (input_dims[0]*input_dims[1]*input_dims[2]*input_dims[3]))
+    if ( (output_dims[0]*output_dims[1]*output_dims[2]*output_dims[3]) != (input_dims[0]*input_dims[1]*input_dims[2]*input_dims[3]) || (out_type != type))
          return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: reshape: output_dims[%ldx%ldx%ldx%ld] input_dims[%ldx%ldx%ldx%ld]\n", output_dims[3], output_dims[2], output_dims[1], output_dims[0], input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
 
     // set output tensor configuration
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     //alias output to input tensor for zero copy
@@ -90,13 +90,15 @@ static vx_status VX_CALLBACK processReshapeLayer(vx_node node, const vx_referenc
 static vx_status VX_CALLBACK initializeReshapeLayer(vx_node node, const vx_reference *parameters, vx_uint32 num)
 {
     vx_size dims[4];
+    vx_enum type;
     ReshapeLayerLocalData * data = new ReshapeLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, dims, sizeof(dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     // check if the input and output tensors are aliased
     data->aliased = vxIsTensorAliased((vx_tensor)parameters[0], 0, (vx_tensor)parameters[1]);
-    data->memsizeInBytes = dims[0]*dims[1]*dims[2]*dims[3]*sizeof(VX_TYPE_FLOAT32);
+    data->memsizeInBytes = dims[0]*dims[1]*dims[2]*dims[3]*sizeof(type);
 
     ERROR_CHECK_STATUS(vxSetNodeAttribute(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     return VX_SUCCESS;

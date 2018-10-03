@@ -59,6 +59,9 @@ struct ConvolutionLayerLocalData {
     vx_float32 leaky_alpha;
     vx_bool fusion_possible;
     miopenFusionPlanDescriptor_t fusePlanDesc;
+    miopenFusionOpDescriptor_t convoOp;
+    miopenFusionOpDescriptor_t biasOp;
+    miopenFusionOpDescriptor_t activOp;
     miopenOperatorArgs_t fusionArgs;
 };
 
@@ -129,10 +132,8 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     if (data->fusion_possible == true)
     {
-        // execute fusion plan
         ERROR_CHECK_MIOPEN_STATUS(miopenExecuteFusionPlan(data->handle->miopen_handle, data->fusePlanDesc, data->input_desc, data->input_mem, data->output_desc, data->output_mem, data->fusionArgs));
-        //printf("Executed Fusion plan\n");
-
+        //ERROR_CHECK_STATUS(clFinish(data->handle->cmdq));       // this is required to fix the sync issue in fusion
     }else
     {
         //ConvolutionForward.
@@ -252,47 +253,43 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
     }
-    miopenFusionOpDescriptor_t convoOp = 0;
-    miopenFusionOpDescriptor_t biasOp = 0;
-    miopenFusionOpDescriptor_t activOp = 0;
-
 
     if ((data->bias_activ_mode == BIAS_ONLY_FUSED) || (data->bias_activ_mode == ACTIVATION_ONLY_FUSED) || (data->bias_activ_mode == BIAS_ACTIVATION_FUSED)) {
-       // printf("miopenFusion Mode %d\n", data->bias_activ_mode);
-        miopenCreateFusionPlan(&data->fusePlanDesc, miopenVerticalFusion, data->input_desc);
-        miopenCreateOperatorArgs(&data->fusionArgs);
-        miopenCreateOpConvForward(data->fusePlanDesc, &convoOp, data->conv_desc, data->weight_desc);
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateFusionPlan(&data->fusePlanDesc, miopenVerticalFusion, data->input_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateOpConvForward(data->fusePlanDesc, &data->convoOp, data->conv_desc, data->weight_desc));
         if (data->bias_activ_mode == BIAS_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED)
         {
-            miopenCreateOpBiasForward(data->fusePlanDesc, &biasOp, data->bias_desc);        // add bias to fusion plan
+            ERROR_CHECK_MIOPEN_STATUS(miopenCreateOpBiasForward(data->fusePlanDesc, &data->biasOp, data->bias_desc));        // add bias to fusion plan
         }
         if (data->bias_activ_mode == ACTIVATION_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED) {
-            miopenCreateOpActivationForward(data->fusePlanDesc, &activOp, miopenActivationRELU);
+            ERROR_CHECK_MIOPEN_STATUS(miopenCreateOpActivationForward(data->fusePlanDesc, &data->activOp, miopenActivationRELU));
         }
         // compile fusion plan
         auto status = miopenCompileFusionPlan(data->handle->miopen_handle, data->fusePlanDesc);
         if (status != miopenStatusSuccess){
           data->fusion_possible = false;
+
 #if ENABLE_DEBUG_PRINT_DIMS
-          std::cout << "miopenCompileFusionPlan returned failure" << std::endl;
+          std::cout << "miopenCompileFusionPlan returned failure running without fused kernels: " << data->bias_activ_mode << std::endl;
 #endif
         }
         else {
             // Set the Args
-            miopenSetOpArgsConvForward(data->fusionArgs, convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
-            if (biasOp)
-                miopenSetOpArgsBiasForward(data->fusionArgs, biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
-            if (activOp) {
+            miopenCreateOperatorArgs(&data->fusionArgs);
+            miopenSetOpArgsConvForward(data->fusionArgs, data->convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
+            if (data->biasOp)
+                miopenSetOpArgsBiasForward(data->fusionArgs, data->biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
+            if (data->activOp) {
                 data->activation_alpha = 1.0;
                 data->activation_beta = data->leaky_alpha;
                 data->activation_power = 1.0;
-                miopenSetOpArgsActivForward(data->fusionArgs, activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
+                miopenSetOpArgsActivForward(data->fusionArgs, data->activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
             }
 #if 0
             //Finding best Convolution Algorithm. Not needed for now
             miopenConvAlgoPerf_t perf;
             int algo_count;
-            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanConvolutionGetAlgo(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,                                                                        data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
+            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanConvolutionGetAlgo(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
             data->algo = perf.fwd_algo;
             //Workspace Size.
             ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanGetWorkSpaceSize(data->handle->miopen_handle, data->fusePlanDesc, &data->workspace_size, data->algo));
@@ -383,8 +380,9 @@ static vx_status VX_CALLBACK uninitializeConvolutionLayer(vx_node node, const vx
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     if (data->fusePlanDesc) miopenDestroyFusionPlan(data->fusePlanDesc);
+    if (data->fusionArgs) miopenDestroyOperatorArgs(data->fusionArgs);
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyConvolutionDescriptor(data->conv_desc));
-    if(data->activation_desc) {
+    if (data->activation_desc) {
         ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
     }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
