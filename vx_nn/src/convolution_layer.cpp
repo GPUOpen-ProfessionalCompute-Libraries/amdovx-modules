@@ -235,7 +235,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     }
 
     //initialize activation parameters if bias_activ_mode is ACTIVATION_ONLY or BIAS_ACTIVATION_SEPERATE.
-    data->activation_mode = miopenActivationPATHTRU;
+    data->activation_mode = miopenActivationPASTHRU;
     if (data->bias_activ_mode == ACTIVATION_ONLY || data->bias_activ_mode == BIAS_ACTIVATION_SEPERATE) {
         data->activation_mode = miopenActivationRELU;
         data->activation_alpha = 1.0;
