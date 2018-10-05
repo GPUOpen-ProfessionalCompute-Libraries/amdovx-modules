@@ -289,40 +289,10 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
         auto status = miopenCompileFusionPlan(data->handle->miopen_handle, data->fusePlanDesc);
         if (status != miopenStatusSuccess){
           data->fusion_possible = false;
-
 #if ENABLE_DEBUG_PRINT_DIMS
           std::cout << "miopenCompileFusionPlan returned failure running without fused kernels: " << data->bias_activ_mode << std::endl;
 #endif
         }
-        else {
-#if 0
-            //Finding best Convolution Algorithm. Not needed for now
-            miopenConvAlgoPerf_t perf;
-            int algo_count;
-            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanConvolutionGetAlgo(data->handle->miopen_handle, data->input_desc, data->input_mem, data->weight_desc, data->weight_mem,data->conv_desc, data->output_desc, data->output_mem, 1, &algo_count, &perf, data->workspace, data->workspace_size, data->handle->exhaustiveSearch));
-            data->algo = perf.fwd_algo;
-            //Workspace Size.
-            ERROR_CHECK_MIOPEN_STATUS(miopenFusionPlanGetWorkSpaceSize(data->handle->miopen_handle, data->fusePlanDesc, &data->workspace_size, data->algo));
-            if (data->workspace_size > 0) {
-                vx_context   vxContext = vxGetContext((vx_reference)node);
-                cl_context context;
-                ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-                data->workspace_size = (data->workspace_size + 3) & ~3;
-                data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
-                if (!data->workspace) {
-                    return VX_FAILURE;
-                }
-                cl_float pattern = 0;
-                cl_int err;
-                if (data->data_type == miopenFloat)
-                    err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
-                else
-                    err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
-                if(err) return VX_FAILURE;
-            }
-#endif
-        }
-
     }
 
     if (data->fusion_possible != true)
