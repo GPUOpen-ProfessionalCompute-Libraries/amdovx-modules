@@ -122,6 +122,8 @@ private:
     QString lastDimH;
     QString lastPreprocessMpy[3];
     QString lastPreprocessAdd[3];
+    int sendFileNames;
+    int useShadowLMDB;
 };
 
 #endif // INFERENCE_CONTROL_H

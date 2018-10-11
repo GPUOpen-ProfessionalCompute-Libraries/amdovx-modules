@@ -15,7 +15,7 @@ inference_receiver::inference_receiver(
         int GPUs_, int * inputDim_, int * outputDim_, const char * runtimeOptions_,
         QVector<QByteArray> * imageBuffer_,
         QVector<QString> * shadowFileBuffer_,
-        runtime_receiver_status * progress_,
+        runtime_receiver_status * progress_, int shadowMode_,
         QObject *parent) : QObject(parent)
 {
     perfRate = 0;
@@ -34,6 +34,7 @@ inference_receiver::inference_receiver(
     outputDim = outputDim_;
     runtimeOptions = runtimeOptions_;
     progress = progress_;
+    shadowMode = shadowMode;
 }
 
 inference_receiver::~inference_receiver()
@@ -71,15 +72,16 @@ void inference_receiver::run()
     progress->completed_send = false;
     progress->completed = false;
 #if  SEND_FILENAME
-    sendFileNames = SHADOW_USE_LMDB? 2: 1;
+  //  sendFileNames = SHADOW_USE_LMDB? 2: 1;
 #else
-    sendFileNames = 0;
+   // sendFileNames = 0;
 #endif
 
     TcpConnection * connection = new TcpConnection(serverHost, serverPort, 3000, this);
     if(connection->connected()) {
         int nextImageToSend = 0;
         InfComCommand cmd;
+        int sendFileNames = shadowMode&1+(shadowMode&2>>1);
         while(!abortRequsted && connection->recvCmd(cmd)) {
         {
             if(abortRequsted)

@@ -97,12 +97,12 @@ public:
         localShadowRootDir = localShadowDir;
     }
     // set localShadowRootDir (full absolute path)
-    void setLocalShadowLmdbPath(const std::string& lmdbDir)
+    void setLocalShadowLmdbName(const std::string& lmdbname)
     {
-        lmdbSubPath = lmdbDir;
+        localLmdbName = lmdbname;
     }
-    const std::string& getlocalShadowLmdbPath() {
-        return lmdbSubPath;
+    const std::string& getlocalLmdbName() {
+        return localLmdbName;
     }
 
     // device resources
@@ -134,7 +134,7 @@ private:
     std::string configurationFile;
     std::string configurationDir;
     std::string localShadowRootDir;
-    std::string lmdbSubPath;
+    std::string localLmdbName;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc

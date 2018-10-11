@@ -67,69 +67,85 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
         deviceLockSuccess = true;
     if (!args->getlocalShadowRootDir().empty()){
         useShadowFilenames = true;
-        std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << std::endl;
+        std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << "ReceiveFileName: " << receiveFileNames << std::endl;
     }
     lmdbNumOfRecords = 0;
    // std::cout << "INFO:ReceiveFileNames: " << receiveFileNames << std::endl;
     if (receiveFileNames > 1) {
-        if (!args->getlocalShadowLmdbPath().empty()){
-            useLMDB = true;
-            std::cout << "INFO::inferenceserver is running with LocalShadowFolder with LMDB and infcom command receiving only tags" << std::endl;
+        if (args->getlocalLmdbName().empty()){
+            useLMDB = false;
+            std::cout << "INFO::invalid lmdb name" << args->getlocalLmdbName() << std::endl;
         }else
         {
-            std::cout << "INFO::invalid lmdb path" << args->getlocalShadowLmdbPath() << std::endl;
-        }
-        // hack:: create a mmap, decode and copy all the files into memmap
-        #if (LMDB_RECORD_TYPE_BITMAPS)
-            lmdbImageSize = (dimInput[0] * dimInput[1] * dimInput[2] + 1024)*4 & ~4095;     // align to 4k
-        #else
-            lmdbImageSize = 256*1024;       //256k
-        #endif
-
-        // calculate size of map (~10000*imgSize)
-        lmdbNumOfRecords = 5000;
-        shadowMap = (char *)mmap(NULL, lmdbImageSize*lmdbNumOfRecords, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-        if ((void *)shadowMap != MAP_FAILED) {
-            std::cout << "INFO::Created Shadow Map" << std::endl;
-            std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
-            int endOfSequence = 0;
-            unsigned char *byteBuff = new unsigned char[1024*1024];    // maximum size is assumed iMB
-            for (int i=0; !endOfSequence; i++)
-            {
-                char fileName[256];
-                sprintf(fileName, "%s%04d%s", "/image_", i, ".JPEG");
-                std::string fullFileName = fileNameDir;
-                fullFileName.append(fileName);
-                FILE * fp = fopen(fullFileName.c_str(), "rb");
-                if(!fp || i >= lmdbNumOfRecords) {
-                    if (fp) fclose(fp);
-                    std::cout << "INFO::Couldn't open File" << fullFileName.c_str() << std::endl;
-                    endOfSequence = 1;
-                    continue;
-                }
-                else
-                {
-                    //std::cout << "INFO::Opened file" << fullFileName.c_str() << std::endl;
-                }
-
-                fseek(fp,0,SEEK_END);
-                int fsize = ftell(fp);
-                fseek(fp,0,SEEK_SET);
-                int size = fread(&byteBuff[0], 1, fsize, fp);
-                fclose(fp);
-                #if (LMDB_RECORD_TYPE_BITMAPS)
-                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteBuff, (float *)(shadowMap+i*lmdbImageSize));
-                #else
-                    *((int*)(shadowMap+i*lmdbImageSize)) = size;
-                    memcpy((char*)(shadowMap+i*lmdbImageSize+4), byteBuff, size);
-                #endif
-                std::cout << "INFO::Decoded file " << i << std::endl;
+            std::cout << "INFO::inferenceserver is running with LocalShadowFolder with LMDB and infcom command receiving only tags" << std::endl;
+#if (LMDB_DATABASE_MODE == 1)
+            useLMDB = 1;
+            // Open LMDB
+            lmdbEnv = 0; lmDbi = 0;lmdbTxn = 0;
+            int status;
+            std::string lmdbName = args->getlocalShadowRootDir() + "/" + args->getlocalLmdbName();
+            status = mdb_env_open(lmdbEnv, lmdbName.c_str(), 0, 0664);
+            if (status){
+                std::cout << "INFO::mdb_env_open failed: Not using LMDB" << std::endl;
+                useLMDB = false;
             }
-            std::cout << "INFO::Decoded files to LMDB" << std::endl;
-            delete [] byteBuff;
-        }else {
-            std::cout << "INFO::mmap failed" << std::endl;
-            useLMDB = false;
+            if (mdb_txn_begin(lmdbEnv, NULL, 0, &lmdbTxn) || mdb_open(lmdbTxn, NULL, 0, &lmDbi)){
+                std::cout << "INFO::mdb_env_open failed: Not using LMDB" << std::endl;
+                useLMDB = false;
+            }
+#else
+            #if (LMDB_RECORD_TYPE_BITMAPS)
+                lmdbImageSize = (dimInput[0] * dimInput[1] * dimInput[2] + 1024)*4 & ~4095;     // align to 4k
+            #else
+                lmdbImageSize = 256*1024;       //256k
+            #endif
+            // calculate size of map (~10000*imgSize)
+            lmdbNumOfRecords = 5000;
+            shadowMap = (char *)mmap(NULL, lmdbImageSize*lmdbNumOfRecords, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+            if ((void *)shadowMap != MAP_FAILED) {
+                std::cout << "INFO::Created Shadow Map" << std::endl;
+                std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
+                int endOfSequence = 0;
+                unsigned char *byteBuff = new unsigned char[1024*1024];    // maximum size is assumed iMB
+                for (int i=0; !endOfSequence; i++)
+                {
+                    char fileName[256];
+                    sprintf(fileName, "%s%04d%s", "/image_", i, ".JPEG");
+                    std::string fullFileName = fileNameDir;
+                    fullFileName.append(fileName);
+                    FILE * fp = fopen(fullFileName.c_str(), "rb");
+                    if(!fp || i >= lmdbNumOfRecords) {
+                        if (fp) fclose(fp);
+                        std::cout << "INFO::Couldn't open File" << fullFileName.c_str() << std::endl;
+                        endOfSequence = 1;
+                        continue;
+                    }
+                    else
+                    {
+                        //std::cout << "INFO::Opened file" << fullFileName.c_str() << std::endl;
+                    }
+
+                    fseek(fp,0,SEEK_END);
+                    int fsize = ftell(fp);
+                    fseek(fp,0,SEEK_SET);
+                    int size = fread(&byteBuff[0], 1, fsize, fp);
+                    fclose(fp);
+                    #if (LMDB_RECORD_TYPE_BITMAPS)
+                        DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteBuff, (float *)(shadowMap+i*lmdbImageSize));
+                    #else
+                        *((int*)(shadowMap+i*lmdbImageSize)) = size;
+                        memcpy((char*)(shadowMap+i*lmdbImageSize+4), byteBuff, size);
+                    #endif
+                    std::cout << "INFO::Decoded file " << i << std::endl;
+                }
+                useLMDB = 2;
+                std::cout << "INFO::Decoded files to LMDB" << std::endl;
+                delete [] byteBuff;
+            }else {
+                std::cout << "INFO::mmap failed" << std::endl;
+                useLMDB = false;
+            }
+#endif
         }
     }
 
@@ -233,7 +249,13 @@ InferenceEngine::~InferenceEngine()
     }
     if (region) delete region;
     if (shadowMap)
-        munmap((void *)shadowMap, lmdbImageSize*lmdbNumOfRecords)
+        munmap((void *)shadowMap, lmdbImageSize*lmdbNumOfRecords);
+    // close lmdb
+    if (lmdbEnv) {
+        if (lmdbTxn) mdb_txn_abort(lmdbTxn);
+        mdb_close(lmdbEnv, lmDbi);
+    }
+
     PROFILER_SHUTDOWN();
 }
 
@@ -317,6 +339,66 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     matOrig.release();
     return VX_SUCCESS;
 }
+
+vx_status InferenceEngine::ConvertDatumToTensor(const caffe::Datum& datum, vx_size width, vx_size height, float *buf)
+{
+    int length = width*height;
+    //int datum_channels = datum.channels();
+    int datum_height = datum.height();
+    int datum_width = datum.width();
+    std::string Data = datum.data();
+
+    if (Data.size() != 0)
+    {
+        float * B_buf = buf;
+        float * G_buf = B_buf + length;
+        float * R_buf = G_buf + length;
+        char *img_B   = (char *)Data.c_str();
+        char *img_G   = img_B + length;
+        char *img_R   = img_B + length;
+        if ((width == datum_width) && (height == datum_height))
+        {
+         // no resize required
+         // copy datum to tensor
+            int alignedLength = (length-2)& ~3;
+            int i = 0;
+            __m128 fR, fG, fB;
+            for (; i < alignedLength; i += 4)
+            {
+                __m128i pixR = _mm_loadl_epi64((__m128i *) &img_B[i]);
+                __m128i pixG = _mm_loadl_epi64((__m128i *) &img_G[i]);
+                __m128i pixB = _mm_loadl_epi64((__m128i *) &img_R[i]);
+                fB = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixR));
+                fG = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixG));
+                fR = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixB));
+                fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+                fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+                fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+                fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+                fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+                fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+                _mm_storeu_ps(B_buf, fB);
+                _mm_storeu_ps(G_buf, fG);
+                _mm_storeu_ps(R_buf, fR);
+                B_buf += 4; G_buf += 4; R_buf += 4;
+            }
+            for (; i < length; i++) {
+                *B_buf++ = (img_B[i] * preprocessMpy[0]) + preprocessAdd[0];
+                *G_buf++ = (img_G[i] * preprocessMpy[1]) + preprocessAdd[1];
+                *R_buf++ = (img_R[i] * preprocessMpy[2]) + preprocessAdd[2];
+            }
+        }else
+        {
+            return VX_FAILURE;
+        }
+    }
+    else
+    {
+        return VX_FAILURE;
+    }
+    return VX_SUCCESS;
+}
+
 
 #define FP_BITS     16
 #define FP_MUL      (1<<FP_BITS)
@@ -1221,12 +1303,30 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             } else {
                 // copy decoded image from shadowMap
                 int tag = *((int*)byteStream);
+                if (useLMDB == 1){
+                    char key_val[8];
+                    sprintf(key_val, "%08d", tag);
+                    MDB_val key;
+                    MDB_val value;
+                    key.mv_data = key_val;
+                    key.mv_size = 8;
+                    int status = mdb_get(lmdbTxn, lmDbi, &key, &value);
+                    if (!status){
+                        // copy datum to buf
+                        // convert to tensor
+                        caffe::Datum datum;
+                        std::string data((char*)value.mv_data, value.mv_size);
+                        datum.ParseFromString(data);
+                    }
+                } else
+                {
                 #if (LMDB_RECORD_TYPE_BITMAPS)
                     memcpy(buf, (float *) (shadowMap + tag*lmdbImageSize), (dimInput[0] * dimInput[1] * dimInput[2]));
                 #else
                     size = ((int *)(shadowMap + tag*lmdbImageSize))[0];
                     DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)(shadowMap + tag*lmdbImageSize+4), buf);
                 #endif
+                }
 
             }
 

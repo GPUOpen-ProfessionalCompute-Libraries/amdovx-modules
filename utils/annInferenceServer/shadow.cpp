@@ -46,7 +46,7 @@ int runShadow(int sock, Arguments * args, std::string& clientName, InfComCommand
 {
     MDB_env *lmdbEnv[8] = { 0 };        // to store upto 8 LMDBs
     std::string shadowFolder = args->getlocalShadowRootDir();
-    int folderMode = args->getlocalShadowLmdbPath().empty()? 0: 1;
+    int folderMode = args->getlocalLmdbName().empty()? 0: 1;
     if (shadowFolder.empty())
     {
         return error_close(sock, "runShadow: Server is not running in shadow mode");

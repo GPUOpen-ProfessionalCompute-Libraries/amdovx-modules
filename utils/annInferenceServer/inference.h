@@ -14,6 +14,8 @@
 #include <condition_variable>
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
+#include "caffe.pb.h"
+#include "lmdb.h"
 
 // inference scheduler modes
 //   NO_INFERENCE_SCHEDULER    - no scheduler (i.e., network connection with respond back immediately)
@@ -46,6 +48,7 @@
 #define BOUNDING_BOX_NMS_THRESHHOLD         0.4
 #define BOUNDING_BOX_NUMBER_OF_CLASSES      20
 
+#define LMDB_DATABASE_MODE                  1      // 0: no lmdb 1:LMDB 2: MMAP
 #define LMDB_RECORD_TYPE_BITMAPS            0
 
 
@@ -241,6 +244,7 @@ private:
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int sstride, unsigned int dwidth, unsigned int dheight);
+    vx_status ConvertDatumToTensor(const caffe::Datum& datum, vx_size width, vx_size height, float *buf);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     // OpenVX resources
@@ -278,6 +282,9 @@ private:
     vx_graph openvx_graph[MAX_NUM_GPU];
     vx_tensor openvx_input[MAX_NUM_GPU];
     vx_tensor openvx_output[MAX_NUM_GPU];
+    MDB_env *lmdbEnv;
+    MDB_dbi lmDbi;
+    MDB_txn *lmdbTxn;
 #endif
 };
 

@@ -808,6 +808,8 @@ void inference_control::runConnection()
             connection->sendCmd(cmd);
             pendingModelCount = cmd.data[0];
             maxGPUs = cmd.data[1];
+            sendFileNames = cmd.data[2];
+            useShadowLMDB = cmd.data[3];
             QString text;
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));
@@ -962,7 +964,7 @@ void inference_control::runInference()
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
                 dataLabels, editImageListFile->text(), editImageFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages);
+                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, sendFileNames|(useShadowLMDB<<1));
     viewer->show();
     close();
 }

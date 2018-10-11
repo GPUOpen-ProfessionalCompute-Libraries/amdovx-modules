@@ -13,7 +13,7 @@ int runConfigure(int sock, Arguments * args, std::string& clientName, InfComComm
     int modelCount = args->getNumConfigureddModels();
     InfComCommand config_info = {
         INFCOM_MAGIC, INFCOM_CMD_CONFIG_INFO,
-        { modelCount, args->getNumGPUs(), !args->getlocalShadowRootDir().empty() },
+        { modelCount, args->getNumGPUs(), !args->getlocalShadowRootDir().empty(), !args->getlocalLmdbName().empty() },
         { 0 }
     };
     ERRCHK(sendCommand(sock, config_info, clientName));

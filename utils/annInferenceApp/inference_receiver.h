@@ -33,7 +33,7 @@ public:
             QString serverHost, int serverPort, QString modelName,
             int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
             QVector<QByteArray> * imageBuffer, QVector<QString> * shadowFileBuffer,
-            runtime_receiver_status * progress,
+            runtime_receiver_status * progress, int shadowMode_,
             QObject *parent = nullptr);
     ~inference_receiver();
 
@@ -75,7 +75,7 @@ private:
     int * outputDim;
     const char * runtimeOptions;
     runtime_receiver_status * progress;
-    int sendFileNames;
+    int shadowMode;
 };
 
 #endif // INFERENCE_RECEIVER_H
