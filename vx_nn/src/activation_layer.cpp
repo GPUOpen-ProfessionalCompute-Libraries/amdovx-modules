@@ -135,10 +135,10 @@ static vx_status VX_CALLBACK initializeActivationLayer(vx_node node, const vx_re
         data->mode = miopenActivationSOFTRELU;
     }
     else if (activationMode == VX_NN_ACTIVATION_LEAKY_RELU) {
-        data->mode = miopenActivationRELU;
+        data->mode = miopenActivationLEAKYRELU;
         ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &neg_slope, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        data->activAlpha = neg_slope;
     }
-    data->activBeta = neg_slope;
 
     //activation Descriptor.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateActivationDescriptor(&data->activationDesc)));

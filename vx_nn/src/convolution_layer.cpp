@@ -65,7 +65,6 @@ struct ConvolutionLayerLocalData {
     miopenOperatorArgs_t fusionArgs;
 };
 
-
 static vx_status VX_CALLBACK validateConvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
