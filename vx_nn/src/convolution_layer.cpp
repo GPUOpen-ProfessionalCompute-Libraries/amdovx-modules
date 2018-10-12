@@ -136,12 +136,6 @@ static vx_status VX_CALLBACK processConvolutionLayer(vx_node node, const vx_refe
     if (data->fusion_possible == true)
     {
         // Set the Args
-        miopenSetOpArgsConvForward(data->fusionArgs, data->convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
-        if (data->biasOp)
-            miopenSetOpArgsBiasForward(data->fusionArgs, data->biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
-        if (data->activOp) {
-            miopenSetOpArgsActivForward(data->fusionArgs, data->activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
-        }
         ERROR_CHECK_MIOPEN_STATUS(miopenExecuteFusionPlan(data->handle->miopen_handle, data->fusePlanDesc, data->input_desc, data->input_mem, data->output_desc, data->output_mem, data->fusionArgs));
         //ERROR_CHECK_STATUS(clFinish(data->handle->cmdq));       // this is required to fix the sync issue in fusion
 
@@ -221,7 +215,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
 
     data->bias_activ_mode = NONE;
     data->fusion_possible = nn_cbr_mode && (stride_w == 1) && (stride_h == 1) && (dilation_w == 1) && (dilation_h == 1) && (pad_w <=1) && (pad_h <=1);   // MIOpen only support stride 1 for fusion
-    //data->fusion_possible &= (kernel_h <= 1) && (kernel_w <= 1);
+    data->fusion_possible &= (kernel_h > 1) && (kernel_w > 1);
     if (parameters[2]) {
         data->bias_activ_mode = data->fusion_possible? BIAS_ONLY_FUSED : BIAS_ONLY_SEPERATE;
     }
@@ -265,13 +259,15 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
     }
 
-    if ((data->bias_activ_mode == BIAS_ONLY_FUSED) || (data->bias_activ_mode == ACTIVATION_ONLY_FUSED) || (data->bias_activ_mode == BIAS_ACTIVATION_FUSED)) {
+    if (/*(data->bias_activ_mode == BIAS_ONLY_FUSED) || (data->bias_activ_mode == ACTIVATION_ONLY_FUSED) ||*/ (data->bias_activ_mode == BIAS_ACTIVATION_FUSED)) {
         ERROR_CHECK_MIOPEN_STATUS(miopenCreateFusionPlan(&data->fusePlanDesc, miopenVerticalFusion, data->input_desc));
         ERROR_CHECK_MIOPEN_STATUS(miopenCreateOperatorArgs(&data->fusionArgs));
         ERROR_CHECK_MIOPEN_STATUS(miopenCreateOpConvForward(data->fusePlanDesc, &data->convoOp, data->conv_desc, data->weight_desc));
+        miopenSetOpArgsConvForward(data->fusionArgs, data->convoOp, &data->conv_alpha, &data->conv_beta, data->weight_mem);
         if (data->bias_activ_mode == BIAS_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED)
         {
             ERROR_CHECK_MIOPEN_STATUS(miopenCreateOpBiasForward(data->fusePlanDesc, &data->biasOp, data->bias_desc));        // add bias to fusion plan
+            miopenSetOpArgsBiasForward(data->fusionArgs, data->biasOp, &data->bias_alpha, &data->bias_beta, data->bias_mem);
         }
         if (data->bias_activ_mode == ACTIVATION_ONLY_FUSED || data->bias_activ_mode == BIAS_ACTIVATION_FUSED) {
             if (data->leaky_alpha == 0.0) {
@@ -283,7 +279,9 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
             data->activation_alpha = 1.0;
             data->activation_beta = data->leaky_alpha;
             data->activation_power = 1.0;
+            miopenSetOpArgsActivForward(data->fusionArgs, data->activOp, &data->conv_alpha, &data->conv_beta, data->activation_alpha, data->activation_beta, data->activation_power);
         }
+
         // compile fusion plan
         auto status = miopenCompileFusionPlan(data->handle->miopen_handle, data->fusePlanDesc);
         if (status != miopenStatusSuccess){
@@ -292,6 +290,9 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
           std::cout << "miopenCompileFusionPlan returned failure running without fused kernels: " << data->bias_activ_mode << std::endl;
 #endif
         }
+    }else
+    {
+        data->fusion_possible = false;
     }
 
     if (data->fusion_possible != true)
