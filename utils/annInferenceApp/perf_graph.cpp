@@ -42,7 +42,7 @@ void perf_graph::resetPerformanceView()
 }
 void perf_graph::updateFPSValue(float fps)
 {
-    fps = ceil(fps);
+    fps = int(fps);
     ui->fps_lcdNumber->display(fps);
 
     if(maxFPS < fps){

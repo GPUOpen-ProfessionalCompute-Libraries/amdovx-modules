@@ -7,8 +7,6 @@
 #include <QFont>
 #include <QThread>
 #include <QVector>
-#include <sys/stat.h>
-#include <experimental/filesystem>
 
 namespace Ui {
 class inference_viewer;
@@ -116,10 +114,7 @@ private:
     void startReceiver();
     void saveResults();
     void showPerfResults();
-    void saveSummary(QString fileName);
-    void saveHTML(QString fileName, bool exportTool);
     void terminate();
-    float calculateHierarchyPenalty(int truth, int result);
 
 private:
     // ui
