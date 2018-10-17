@@ -18,7 +18,7 @@
 #include <sstream>
 #include <QElapsedTimer>
 
-#define WINDOW_TITLE             "Inference Viewer"
+#define WINDOW_TITLE             "MIVision Viewer"
 #define ICON_SIZE                64
 #define ICON_STRIDE              (ICON_SIZE + 8)
 #define INFCOM_RUNTIME_OPTIONS   ""
