@@ -70,7 +70,6 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
         std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << "ReceiveFileName: " << receiveFileNames << std::endl;
     }
     lmdbNumOfRecords = 0;
-   // std::cout << "INFO:ReceiveFileNames: " << receiveFileNames << std::endl;
     if (receiveFileNames > 1) {
         if (args->getlocalLmdbName().empty()){
             useLMDB = false;
@@ -83,16 +82,18 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
             // Open LMDB
             lmdbEnv = 0; lmDbi = 0;lmdbTxn = 0;
             int status;
-            std::string lmdbName = args->getlocalShadowRootDir() + "/" + args->getlocalLmdbName();
-            status = mdb_env_open(lmdbEnv, lmdbName.c_str(), 0, 0664);
+            std::string lmdbName = args->getlocalShadowRootDir() + args->getlocalLmdbName();
+            MDB_CHECK(mdb_env_create(&lmdbEnv));
+            status = mdb_env_open(lmdbEnv, lmdbName.c_str(), (MDB_RDONLY | MDB_NOTLS), 0664);
             if (status){
-                std::cout << "INFO::mdb_env_open failed: Not using LMDB" << std::endl;
+                std::cout << "INFO::mdb_env_open failed with status: Not using LMDB" << status << std::endl;
                 useLMDB = false;
             }
-            if (mdb_txn_begin(lmdbEnv, NULL, 0, &lmdbTxn) || mdb_open(lmdbTxn, NULL, 0, &lmDbi)){
-                std::cout << "INFO::mdb_env_open failed: Not using LMDB" << std::endl;
+            else if (mdb_txn_begin(lmdbEnv, NULL, MDB_RDONLY, &lmdbTxn)){
+                std::cout << "INFO::mdb_txn_begin failed: Not using LMDB" << std::endl;
                 useLMDB = false;
             }
+            MDB_CHECK(mdb_dbi_open(lmdbTxn, NULL, 0, &lmDbi));
 #else
             #if (LMDB_RECORD_TYPE_BITMAPS)
                 lmdbImageSize = (dimInput[0] * dimInput[1] * dimInput[2] + 1024)*4 & ~4095;     // align to 4k
@@ -340,57 +341,67 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     return VX_SUCCESS;
 }
 
-vx_status InferenceEngine::ConvertDatumToTensor(const caffe::Datum& datum, vx_size width, vx_size height, float *buf)
+vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *data, vx_size size, vx_size width, vx_size height, float *buf)
 {
     int length = width*height;
-    //int datum_channels = datum.channels();
-    int datum_height = datum.height();
-    int datum_width = datum.width();
-    std::string Data = datum.data();
-
-    if (Data.size() != 0)
+    if (size)
     {
+#if 0
+        // C code
+        float *ptr = buf;
+        for (int c = 0; c < 3; c++, ptr += length) {
+            float a = preprocessMpy[c], b = preprocessAdd[c];
+            unsigned char * img = data + (reverseInputChannelOrder ? c : (2 - c));
+            for (int i = 0; i < length; i++, img += 3) {
+                ptr[i] = *img * a + b;
+            }
+        }
+#else
+        __m128i mask_B, mask_G, mask_R;
+        if (reverseInputChannelOrder)
+        {
+            mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+            mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+            mask_R = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+        }
+        else
+        {
+            mask_R = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
+            mask_G = _mm_setr_epi8((char)0x1, (char)0x80, (char)0x80, (char)0x80, (char)0x4, (char)0x80, (char)0x80, (char)0x80, (char)0x7, (char)0x80, (char)0x80, (char)0x80, (char)0xA, (char)0x80, (char)0x80, (char)0x80);
+            mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
+        }
+        int alignedLength = (length-2)& ~3;
         float * B_buf = buf;
         float * G_buf = B_buf + length;
         float * R_buf = G_buf + length;
-        char *img_B   = (char *)Data.c_str();
-        char *img_G   = img_B + length;
-        char *img_R   = img_B + length;
-        if ((width == datum_width) && (height == datum_height))
+        int i = 0;
+
+        __m128 fR, fG, fB;
+        unsigned char * img = data;
+        for (; i < alignedLength; i += 4)
         {
-         // no resize required
-         // copy datum to tensor
-            int alignedLength = (length-2)& ~3;
-            int i = 0;
-            __m128 fR, fG, fB;
-            for (; i < alignedLength; i += 4)
-            {
-                __m128i pixR = _mm_loadl_epi64((__m128i *) &img_B[i]);
-                __m128i pixG = _mm_loadl_epi64((__m128i *) &img_G[i]);
-                __m128i pixB = _mm_loadl_epi64((__m128i *) &img_R[i]);
-                fB = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixR));
-                fG = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixG));
-                fR = _mm_cvtepi32_ps(_mm_cvtepi8_epi32(pixB));
-                fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-                fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-                fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-                fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-                fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-                fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-                _mm_storeu_ps(B_buf, fB);
-                _mm_storeu_ps(G_buf, fG);
-                _mm_storeu_ps(R_buf, fR);
-                B_buf += 4; G_buf += 4; R_buf += 4;
-            }
-            for (; i < length; i++) {
-                *B_buf++ = (img_B[i] * preprocessMpy[0]) + preprocessAdd[0];
-                *G_buf++ = (img_G[i] * preprocessMpy[1]) + preprocessAdd[1];
-                *R_buf++ = (img_R[i] * preprocessMpy[2]) + preprocessAdd[2];
-            }
-        }else
-        {
-            return VX_FAILURE;
+            __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+            fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+            fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+            fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+            fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+            fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+            fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+            fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+            fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+            fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+            _mm_storeu_ps(B_buf, fB);
+            _mm_storeu_ps(G_buf, fG);
+            _mm_storeu_ps(R_buf, fR);
+            B_buf += 4; G_buf += 4; R_buf += 4;
+            img += 12;
         }
+        for (; i < length; i++, img += 3) {
+            *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+            *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+            *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+        }
+#endif
     }
     else
     {
@@ -872,6 +883,7 @@ int InferenceEngine::run()
                             }
                             cmd.data[2 + i * 2 + 0] = tag; // tag
                             cmd.data[2 + i * 2 + 1] = label; // label
+                            //std::cout << "tag: " << tag << " label: " << label << std::endl;
                         }
                         if(resultCount > 0) {
                             cmd.data[0] = resultCount;
@@ -1026,6 +1038,7 @@ int InferenceEngine::run()
                         return error_close(sock, "invalid (tag:%d,size:%d) from %s", tag, size, clientName.c_str());
                     }
                     char * byteStream = 0;
+                    //std::cout << "Received file with tag: "<<tag<<std::endl;
                     if (receiveFileNames == 1)
                     {
                         std::string fileNameDir = args->getlocalShadowRootDir() + "/";
@@ -1048,10 +1061,10 @@ int InferenceEngine::run()
                         }
                     }else if(useLMDB) {
                         // read input file from LMDB
-                        //std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
                         if (size){
                             char * buff = new char [size];
                             ERRCHK(recvBuffer(sock, buff, size, clientName));
+                            //std::string fname = std::string(buff, size);
                             //lmdbName.append(std::string(buff, size));
                             delete[] buff;
                         }
@@ -1312,11 +1325,13 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     key.mv_size = 8;
                     int status = mdb_get(lmdbTxn, lmDbi, &key, &value);
                     if (!status){
-                        // copy datum to buf
                         // convert to tensor
                         caffe::Datum datum;
+                        //printf("Got record:%d from lmdb (%p,%d) \n", tag, value.mv_data, (int)value.mv_size);
                         std::string data((char*)value.mv_data, value.mv_size);
                         datum.ParseFromString(data);
+                        std::string img = datum.data();
+                        ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
                     }
                 } else
                 {

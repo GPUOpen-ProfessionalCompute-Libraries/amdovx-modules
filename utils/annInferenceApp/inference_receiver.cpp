@@ -34,7 +34,7 @@ inference_receiver::inference_receiver(
     outputDim = outputDim_;
     runtimeOptions = runtimeOptions_;
     progress = progress_;
-    shadowMode = shadowMode;
+    shadowMode = shadowMode_;
 }
 
 inference_receiver::~inference_receiver()
@@ -81,7 +81,7 @@ void inference_receiver::run()
     if(connection->connected()) {
         int nextImageToSend = 0;
         InfComCommand cmd;
-        int sendFileNames = shadowMode&1+(shadowMode&2>>1);
+        int sendFileNames = (shadowMode&1)+((shadowMode&2)>>1);
         while(!abortRequsted && connection->recvCmd(cmd)) {
         {
             if(abortRequsted)

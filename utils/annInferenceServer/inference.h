@@ -51,6 +51,11 @@
 #define LMDB_DATABASE_MODE                  1      // 0: no lmdb 1:LMDB 2: MMAP
 #define LMDB_RECORD_TYPE_BITMAPS            0
 
+inline void MDB_CHECK(int mdb_status) {
+  if (mdb_status != MDB_SUCCESS)
+      mdb_strerror(mdb_status);
+}
+
 
 extern "C" {
     typedef VX_API_ENTRY vx_graph VX_API_CALL type_annCreateGraph(
@@ -244,7 +249,7 @@ private:
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int sstride, unsigned int dwidth, unsigned int dheight);
-    vx_status ConvertDatumToTensor(const caffe::Datum& datum, vx_size width, vx_size height, float *buf);
+    vx_status ConvertDatumToTensor(unsigned char *data, vx_size size, vx_size width, vx_size height, float *buf);
 
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     // OpenVX resources
@@ -285,6 +290,7 @@ private:
     MDB_env *lmdbEnv;
     MDB_dbi lmDbi;
     MDB_txn *lmdbTxn;
+    MDB_cursor* lmdbCursor;
 #endif
 };
 
