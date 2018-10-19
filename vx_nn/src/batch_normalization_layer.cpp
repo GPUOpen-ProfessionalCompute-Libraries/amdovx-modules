@@ -61,7 +61,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #1 num_dims=%ld (must be 1 or 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #1 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32)&& (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #1 type=%d (must be float)\n", type);
     vx_size mean_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, mean_dims, num_dims * sizeof(vx_size)));
     if (mean_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: mean[0](%ld) != input[2](%ld)\n", mean_dims[0], input_dims[2]);
@@ -69,7 +69,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #2 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32)&& (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #2 type=%d (must be float)\n", type);
     vx_size variance_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, variance_dims, num_dims * sizeof(vx_size)));
     if (variance_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: variance[0](%ld) != input[2](%ld)\n", variance_dims[0], input_dims[2]);
@@ -77,7 +77,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #3 num_dims=%ld (must be 1 or 2)\n", num_dims);
-    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #3 type=%d (must be float)\n", type);
+    if ((type != VX_TYPE_FLOAT32)&& (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #3 type=%d (must be float)\n", type);
     vx_size scale_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[3], VX_TENSOR_DIMS, scale_dims, num_dims * sizeof(vx_size)));
     if (scale_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: scale[0](%ld) != input[2](%ld)\n", scale_dims[0], input_dims[2]);
@@ -86,7 +86,7 @@ static vx_status VX_CALLBACK validateBatchNormalizationLayer(vx_node node, const
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         if (num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: #4 num_dims=%ld (must be 1 or 2)\n", num_dims);
-        if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #4 type=%d (must be float)\n", type);
+        if ((type != VX_TYPE_FLOAT32)&& (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: batch_norm: #4 type=%d (must be float)\n", type);
         vx_size bias_dims[2] = { 0, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
         if (bias_dims[0] != input_dims[2]) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: batch_norm: bias[0](%ld) != input[2](%ld)\n", bias_dims[0], input_dims[2]);
