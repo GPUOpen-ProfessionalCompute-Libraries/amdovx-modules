@@ -209,8 +209,10 @@ static vx_status VX_CALLBACK opencl_codegen(
     //get tensor dimensions
     vx_size input_dims[4];
     vx_size op_size_per_batch[8], batch_size = 0, ip_batch_stride = 0;
+    vx_enum type;
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     batch_size = input_dims[3];
     ip_batch_stride = input_dims[2] * input_dims[1] * input_dims[0];
 #if ENABLE_DEBUG_PRINT_DIMS
@@ -241,17 +243,34 @@ static vx_status VX_CALLBACK opencl_codegen(
     opencl_local_buffer_size_in_bytes = 0;
 
     char item[8192];
-    sprintf(item,
-        "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
-        "void %s(__global float * in, uint in_offset, uint4 in_stride" // opencl_kernel_function_name
-        , (int)opencl_local_work[0], opencl_kernel_function_name);
+    if (type == VX_TYPE_FLOAT32){
+        sprintf(item,
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global float * in, uint in_offset, uint4 in_stride" // opencl_kernel_function_name
+            , (int)opencl_local_work[0], opencl_kernel_function_name);
+    }else
+    {
+        sprintf(item,
+            "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+            "__kernel __attribute__((reqd_work_group_size(%d, 1, 1)))\n"    // opencl_local_work[0]
+            "void %s(__global half * in, uint in_offset, uint4 in_stride" // opencl_kernel_function_name
+            , (int)opencl_local_work[0], opencl_kernel_function_name);
+    }
     opencl_kernel_code = item;
 
     for(int i = 0; i < num_outputs; i++) {
+        if (type == VX_TYPE_FLOAT32){
         sprintf(item,
             ",\n"
             "                  __global float * out%d, uint out%d_offset, uint4 out%d_stride"  // i, i, i
             , i, i, i);
+        }else
+        {
+            sprintf(item,
+                ",\n"
+                "                  __global half * out%d, uint out%d_offset, uint4 out%d_stride"  // i, i, i
+                , i, i, i);
+        }
         opencl_kernel_code += item;
     }
     opencl_kernel_code += ")\n";

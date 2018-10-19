@@ -33,6 +33,7 @@ struct DeconvolutionLayerLocalData {
     NeuralNetworkCommonHandle * handle;
     float alpha;
     float beta;
+    miopenDataType_t data_type;          // data_type for the kernel
     miopenTensorDescriptor_t input_desc;
     cl_mem input_mem;
     miopenTensorDescriptor_t weight_desc;
@@ -50,7 +51,7 @@ struct DeconvolutionLayerLocalData {
 static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
     if(type != VX_TYPE_NN_DECONVOLUTION_PARAMS) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #3 type=%d (must be DECONV_PARAMS)\n", type);
 
@@ -60,37 +61,37 @@ static vx_status VX_CALLBACK validateDeconvolutionLayer(vx_node node, const vx_r
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: #0 num_dims=%ld (must be 4)\n", num_dims);
-    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #0 type=%d (must be float)\n", type);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: #1 num_dims=%ld (must be 4)\n", num_dims);
-    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #1 type=%d (must be float)\n", type);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #1 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
         if(num_dims != 1 && num_dims != 2) return VX_ERROR_INVALID_DIMENSION;
-        if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #2 type=%d (must be float)\n", type);
+        if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #2 type=%d (must be float)\n", type);
         vx_size bias_dims[2] = { 0, 1 };
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims*sizeof(bias_dims[0])));
         if(bias_dims[0] != weights_dims[3] || bias_dims[1] != 1) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: bias[%ldx%ld] weights[%ldx%ldx%ldx%ld]\n", bias_dims[1], bias_dims[0], weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]);
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: #4 num_dims=%ld (must be 4)\n", num_dims);
-    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #4 type=%d (must be float)\n", type);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: deconv: #4 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[3] != input_dims[3] || input_dims[2] != weights_dims[2] || output_dims[2] != weights_dims[3])
-        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: input[%ldx%ldx%ldx%ld] weights[%ldx%ldx%ldx%ld] output[%ldx%ldx%ldx%ld]\n",
-            input_dims[3], input_dims[2], input_dims[1], input_dims[0],
+    if(output_dims[3] != input_dims[3] || input_dims[2] != weights_dims[2] || output_dims[2] != weights_dims[3] || type != out_type)
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: deconv: input[%ldx%ldx%ldx%ld]type[%d] weights[%ldx%ldx%ldx%ld] output[%ldx%ldx%ldx%ld]type[%d]\n",
+            input_dims[3], input_dims[2], input_dims[1], input_dims[0], type,
             weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0],
-            output_dims[3], output_dims[2], output_dims[1], output_dims[0]);
+            output_dims[3], output_dims[2], output_dims[1], output_dims[0], out_type);
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
+    //type = VX_TYPE_FLOAT32;
     num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     return VX_SUCCESS;
@@ -138,9 +139,12 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     miopenConvolutionMode_t mode = miopenTranspose;
 
     vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[2] = { 0, 1 };
+    vx_enum out_type;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[4], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    data->data_type = (out_type == VX_TYPE_FLOAT32)? miopenFloat:miopenHalf;
     if(parameters[2]) {
         vx_size num_dims;
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
@@ -161,10 +165,10 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[2], weights_dims[3], weights_dims[1], weights_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat, 1, bias_dims[0], 1, 1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, data->data_type, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, data->data_type, weights_dims[2], weights_dims[3], weights_dims[1], weights_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, data->data_type, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, data->data_type, 1, bias_dims[0], 1, 1));
 
     //Convolution Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->deconv_desc));
@@ -191,7 +195,10 @@ static vx_status VX_CALLBACK initializeDeconvolutionLayer(vx_node node, const vx
         if (!data->workspace) return VX_FAILURE;
 
         cl_float pattern = 0;
-        err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL,NULL);
+        if (data->data_type == miopenFloat)
+            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
+        else
+            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
         if(err!=0) return VX_FAILURE;
     }
 

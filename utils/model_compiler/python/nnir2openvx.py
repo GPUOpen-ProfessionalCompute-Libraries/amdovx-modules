@@ -108,7 +108,7 @@ include_directories (/opt/rocm/include)
 link_directories    (/opt/rocm/lib)
 list(APPEND SOURCES annmodule.cpp)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -mf16c -std=c++11")
 target_link_libraries(${PROJECT_NAME} openvx vx_nn pthread)
 
 add_executable(anntest anntest.cpp)
@@ -122,7 +122,7 @@ endif(OpenCV_FOUND)
 target_link_libraries(anntest openvx vx_nn pthread ${PROJECT_NAME})
 
 add_library(annpython SHARED annpython.cpp)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4.2 -mf16c -std=c++11")
 target_link_libraries(annpython ${PROJECT_NAME} openvx vx_nn pthread)
 """)
     if not os.path.isdir(outputFolder + '/cmake'):
@@ -254,7 +254,7 @@ static vx_status initializeTensor(vx_context context, vx_tensor tensor, FILE * f
     }
 
     vx_map_id map_id;
-    float * ptr;
+    void * ptr;
     ERROR_CHECK_STATUS(vxMapTensorPatch(tensor, num_of_dims, nullptr, nullptr, &map_id, stride, (void **)&ptr, VX_WRITE_ONLY, VX_MEMORY_TYPE_HOST, 0));
     vx_size n = fread(ptr, itemsize, count, fp);
     if(n != count) {
@@ -977,6 +977,7 @@ def generateTestCPP(graph,argmaxOutput,fileName):
 #include <chrono>
 #include <unistd.h>
 #include <math.h>
+#include <immintrin.h>
 
 #if ENABLE_OPENCV
 #include <opencv2/opencv.hpp>
@@ -1049,13 +1050,13 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
     vxQueryTensor(tensor, VX_TENSOR_DATA_TYPE, &data_type, sizeof(data_type));
     vxQueryTensor(tensor, VX_TENSOR_NUMBER_OF_DIMS, &num_of_dims, sizeof(num_of_dims));
     vxQueryTensor(tensor, VX_TENSOR_DIMS, &dims, sizeof(dims[0])*num_of_dims);
-    if(data_type != VX_TYPE_FLOAT32) {
-        std::cerr << "ERROR: copyTensor() supports only VX_TYPE_FLOAT32: invalid for " << fileName << std::endl;
+    if((data_type != VX_TYPE_FLOAT32) && (data_type != VX_TYPE_FLOAT16)) {
+        std::cerr << "ERROR: copyTensor() supports only VX_TYPE_FLOAT32 or VX_TYPE_FLOAT16: invalid for " << fileName << std::endl;
         return -1;
     }
     vx_size count = dims[0] * dims[1] * dims[2] * dims[3];
     vx_map_id map_id;
-    float * ptr;
+    void * ptr;
     vx_status status = vxMapTensorPatch(tensor, num_of_dims, nullptr, nullptr, &map_id, stride, (void **)&ptr, usage, VX_MEMORY_TYPE_HOST, 0);
     if(status) {
         std::cerr << "ERROR: vxMapTensorPatch() failed for " << fileName << std::endl;
@@ -1075,13 +1076,25 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
                 }
                 for(vx_size y = 0; y < dims[1]; y++) {
                     unsigned char * src = img.data + y*dims[0]*3;
-                    float * dstR = ptr + ((n * stride[3] + y * stride[1]) >> 2);
-                    float * dstG = dstR + (stride[2] >> 2);
-                    float * dstB = dstG + (stride[2] >> 2);
-                    for(vx_size x = 0; x < dims[0]; x++, src += 3) {
-                        *dstR++ = src[2];
-                        *dstG++ = src[1];
-                        *dstB++ = src[0];
+                    if(data_type == VX_TYPE_FLOAT32) {
+                        float * dstR = (float *)ptr + ((n * stride[3] + y * stride[1]) >> 2);
+                        float * dstG = dstR + (stride[2] >> 2);
+                        float * dstB = dstG + (stride[2] >> 2);
+                        for(vx_size x = 0; x < dims[0]; x++, src += 3) {
+                            *dstR++ = src[2];
+                            *dstG++ = src[1];
+                            *dstB++ = src[0];
+                        }
+                    } else
+                    {
+                        short * dstR = (short *)ptr + ((n * stride[3] + y * stride[1]) >> 2);
+                        short * dstG = dstR + (stride[2] >> 2);
+                        short * dstB = dstG + (stride[2] >> 2);                    
+                        for(vx_size x = 0; x < dims[0]; x++, src += 3) {
+                            *dstR++ = src[2];
+                            *dstG++ = src[1];
+                            *dstB++ = src[0];
+                        }
                     }
                 }
             }
@@ -1097,11 +1110,20 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
             for(size_t n = 0; n < dims[3]; n++) {
                 for(size_t c = 0; c < dims[2]; c++) {
                     for(size_t y = 0; y < dims[1]; y++) {
-                        float * ptrY = ptr + ((n * stride[3] + c * stride[2] + y * stride[1]) >> 2);
-                        vx_size n = fread(ptrY, sizeof(float), dims[0], fp);
-                        if(n != dims[0]) {
-                            std::cerr << "ERROR: expected char[" << count*sizeof(float) << "], but got less in " << fileName << std::endl;
-                            return -1;
+                        if(data_type == VX_TYPE_FLOAT32) {
+                            float * ptrY = (float *)ptr + ((n * stride[3] + c * stride[2] + y * stride[1]) >> 2);
+                            vx_size n = fread(ptrY, sizeof(float), dims[0], fp);
+                            if(n != dims[0]) {
+                                std::cerr << "ERROR: expected char[" << count*sizeof(float) << "], but got less in " << fileName << std::endl;
+                                return -1;
+                            }
+                        } else {
+                            short * ptrY = (short *)ptr + ((n * stride[3] + c * stride[2] + y * stride[1]) >> 2);
+                            vx_size n = fread(ptrY, sizeof(short), dims[0], fp);
+                            if(n != dims[0]) {
+                                std::cerr << "ERROR: expected char[" << count*sizeof(short) << "], but got less in " << fileName << std::endl;
+                                return -1;
+                            }
                         }
                     }
                 }
@@ -1131,7 +1153,10 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
         for(vx_size n = 0; n < N; n++) {
             for(vx_size y = 0; y < H; y++) {
                 for(vx_size x = 0; x < W; x++) {
-                    float * pc = ptr + n * CHW + y * W + x;
+                    if (data_type == VX_TYPE_FLOAT32)
+                        float * pc = (float *)ptr + n * CHW + y * W + x;
+                    else
+                        float * pc = (flaot *)((short *)ptr + n * CHW + y * W + x);
                     vx_size best_c = 0;
                     float best_v = *pc;
                     for(vx_size c = 1; c < C; c++, pc += HW) {
@@ -1314,7 +1339,10 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
                 std::cerr << "ERROR: unable to open: " << fileName << std::endl;
                 return -1;
             }
-            fwrite(ptr, sizeof(float), count, fp);
+            if (data_type == VX_TYPE_FLOAT32)
+                fwrite(ptr, sizeof(float), count, fp);
+            else
+                fwrite(ptr, sizeof(short), count, fp);                
             fclose(fp);
         }
         if(argList.size() >= 2) {
@@ -1338,11 +1366,23 @@ static vx_status copyTensor(std::string tensorName, vx_tensor tensor, std::strin
             fclose(fp);
             double sqrError = 0;
             float maxError = 0;
-            for(size_t i = 0; i < count; i++) {
-                float err = ptr[i] - gold[i];
-                if(err < 0) err = -err;
-                sqrError += err * err;
-                if(!(err < maxError)) maxError = err;
+            if(data_type == VX_TYPE_FLOAT32) {
+                for(size_t i = 0; i < count; i++) {
+                    float err = ((float *)ptr)[i] - gold[i];
+                    if(err < 0) err = -err;
+                    sqrError += err * err;
+                    if(!(err < maxError)) maxError = err;
+                }
+            }
+            else
+            {
+                for(size_t i = 0; i < count; i++) {
+                    float src = _cvtsh_ss(((unsigned short*)ptr)[i]);
+                    float err = src - gold[i];
+                    if(err < 0) err = -err;
+                    sqrError += err * err;
+                    if(!(err < maxError)) maxError = err;
+                }
             }
             delete[] gold;
             float rmsError = (float)sqrt(sqrError/count);
