@@ -31,13 +31,15 @@ public:
             QString serverHost, int serverPort, QString modelName,
             int GPUs, int * inputDim, int * outputDim, const char * runtimeOptions,
             QVector<QByteArray> * imageBuffer,
-            runtime_receiver_status * progress,
+            runtime_receiver_status * progress, int sendFileName, int topKValue,
+            QVector<QString> * shadowFileBuffer,
             QObject *parent = nullptr);
     ~inference_receiver();
 
     static void abort();
     void setImageCount(int imageCount, int labelCount, QVector<QString> * dataLabels);
-    void getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ);
+    void getReceivedList(QVector<int>& indexQ, QVector<int>& labelQ, QVector<QString>& summaryQ,
+                         QVector<QVector<int> >& labelTopK, QVector<QVector<float> >& probTopK);
     float getPerfImagesPerSecond();
 
 signals:
@@ -56,14 +58,15 @@ private:
     int labelCount;
     QQueue<int> imageIndex;
     QQueue<int> imageLabel;
-    QQueue<std::vector<int>> imageTopkLabels;
-    QQueue<std::vector<float>> imageTopkConfidence;
     QQueue<QString> imageSummary;
+    QQueue<QVector<int>> imageTopkLabels;
+    QQueue<QVector<float>> imageTopkConfidence;
     QElapsedTimer perfTimer;
     int perfImageCount;
     float perfRate;
     QVector<QByteArray> * imageBuffer;
     QVector<QString> * dataLabels;
+    QVector<QString> * shadowFileBuffer;
     QString serverHost;
     int serverPort;
     QString modelName;
@@ -72,6 +75,8 @@ private:
     int * outputDim;
     const char * runtimeOptions;
     runtime_receiver_status * progress;
+    int sendFileName;
+    int topKValue;
 };
 
 #endif // INFERENCE_RECEIVER_H

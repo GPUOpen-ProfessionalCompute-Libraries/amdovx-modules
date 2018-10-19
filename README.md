@@ -1,3 +1,5 @@
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
 # AMD OpenVX modules (amdovx-modules)
 The OpenVX framework provides a mechanism to add new vision functions to OpenVX by 3rd party vendors. This project has below OpenVX modules and utilities to extend [amdovx-core](https://github.com/GPUOpen-ProfessionalCompute-Libraries/amdovx-core) project, which contains the AMD OpenVX Core Engine.
 * [vx_nn](vx_nn/README.md): OpenVX neural network module

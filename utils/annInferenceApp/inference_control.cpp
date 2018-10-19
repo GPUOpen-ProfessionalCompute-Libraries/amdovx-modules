@@ -1,4 +1,5 @@
 #include "inference_control.h"
+#include "inference_panel.h"
 #include "inference_compiler.h"
 #include "tcpconnection.h"
 #include "assets.h"
@@ -24,13 +25,17 @@
 #define BUILD_VERSION "alpha2"
 
 inference_control::inference_control(int operationMode_, QWidget *parent)
-    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr },
+    : QWidget(parent), connectionSuccessful{ false }, modelType{ 0 }, numModelTypes{ 0 }, dataLabels{ nullptr }, dataHierarchy{ nullptr },
       lastPreprocessMpy{ "1", "1", "1" }, lastPreprocessAdd{ "0", "0", "0" }
 {
-    setWindowTitle("annInferenceApp");
+    setWindowTitle("MIVision Client Application");
     setMinimumWidth(800);
 
     maxGPUs = 1;
+    enableSF = 0;
+    sendFileName = 0;
+    enableTopK = 0;
+    topKValue = 0;
     compiler_status.completed = false;
     compiler_status.dimOutput[0] = 0;
     compiler_status.dimOutput[1] = 0;
@@ -38,6 +43,7 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     compiler_status.errorCode = 0;
     operationMode = operationMode_;
     dataLabels = new QVector<QString>();
+    dataHierarchy = new QVector<QString>();
 
     // default configuration
     QGridLayout * controlLayout = new QGridLayout;
@@ -235,6 +241,21 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(editModelName, row, 3, 1, 1);
     controlLayout->addWidget(editServerPassword, row, 4, 1, 1);
     row++;
+    checkShadowFolder = new QCheckBox("Send FileName");
+    checkShadowFolder->setChecked(false);
+    checkShadowFolder->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    editShadowFolderAddr = new QLineEdit("");
+    editShadowFolderAddr->setVisible(false);
+    buttonShadowFolder = new QPushButton(tr("Browse..."), this);
+    buttonShadowFolder->setVisible(false);
+    controlLayout->addWidget(checkShadowFolder, row, 0, 1, 1);
+    controlLayout->addWidget(editShadowFolderAddr, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonShadowFolder, row, 1 + editSpan, 1, 1);
+    connect(checkShadowFolder, SIGNAL(clicked(bool)), this, SLOT(shadowFolderEnable(bool)));   
+    connect(buttonShadowFolder, &QAbstractButton::clicked, this, &inference_control::browseShadowFolder);
+
+
+    row++;
     connect(editDimH, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimH(const QString &)));
     connect(editDimW, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeDimW(const QString &)));
     connect(editModelFile1, SIGNAL(textChanged(const QString &)), this, SLOT(onChangeModelFile1(const QString &)));
@@ -267,6 +288,16 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     labelRuntime->setStyleSheet("font-weight: bold; color: red; font-size: 18pt;");
     controlLayout->addWidget(labelRuntime, row, 0, 1, 5);
     row++;
+    checkTopKResult = new QCheckBox("Top K Results");
+    checkTopKResult->setChecked(false);
+    checkTopKResult->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    controlLayout->addWidget(checkTopKResult, row, 0, 1, 1);
+    comboTopKResult = new QComboBox();
+    comboTopKResult->addItems({ "1", "2", "3", "4", "5" });
+    comboTopKResult->setEnabled(false);
+    controlLayout->addWidget(comboTopKResult, row, 1, 1, 1);
+    connect(checkTopKResult, SIGNAL(clicked(bool)), this, SLOT(topKResultsEnable(bool)));
+    row++;
     QLabel * labelGPUs = new QLabel("GPUs:");
     editGPUs = new QLineEdit("1");
     labelMaxGPUs = new QLabel("");
@@ -290,6 +321,16 @@ inference_control::inference_control(int operationMode_, QWidget *parent)
     controlLayout->addWidget(labelImageLabelsFile, row, 0, 1, 1);
     controlLayout->addWidget(editImageLabelsFile, row, 1, 1, editSpan);
     controlLayout->addWidget(buttonDataLabels, row, 1 + editSpan, 1, 1);
+    row++;
+    QLabel * labelImagehierarchyFile = new QLabel("Label Hierarchy:");
+    labelImagehierarchyFile->setStyleSheet("font-weight: bold; font-style: italic; font-size: 15pt;");
+    labelImagehierarchyFile->setAlignment(Qt::AlignLeft);
+    editImageHierarchyFile = new QLineEdit("");
+    QPushButton * buttonDataHierarchy = new QPushButton(tr("Browse..."), this);
+    connect(buttonDataHierarchy, &QAbstractButton::clicked, this, &inference_control::browseDataHierarchy);
+    controlLayout->addWidget(labelImagehierarchyFile, row, 0, 1, 1);
+    controlLayout->addWidget(editImageHierarchyFile, row, 1, 1, editSpan);
+    controlLayout->addWidget(buttonDataHierarchy, row, 1 + editSpan, 1, 1);
     row++;
     QLabel * labelImageFolder = new QLabel("Image Folder:");
     editImageFolder = new QLineEdit("");
@@ -371,6 +412,7 @@ void inference_control::saveConfig()
         fileOutput << lastModelName << endl;
         fileOutput << editGPUs->text() << endl;
         fileOutput << editImageLabelsFile->text() << endl;
+        fileOutput << editImageHierarchyFile->text() << endl;
         fileOutput << editImageFolder->text() << endl;
         fileOutput << editImageListFile->text() << endl;
         QString text;
@@ -401,6 +443,7 @@ void inference_control::loadConfig()
             editModelName->setText(fileInput.readLine());
             editGPUs->setText(fileInput.readLine());
             editImageLabelsFile->setText(fileInput.readLine());
+            editImageHierarchyFile->setText(fileInput.readLine());
             editImageFolder->setText(fileInput.readLine());
             editImageListFile->setText(fileInput.readLine());
             editMaxDataSize->setText(fileInput.readLine());
@@ -741,11 +784,27 @@ void inference_control::browseModelFile2()
     }
 }
 
+void inference_control::browseShadowFolder()
+{
+
+    QString dir = QFileDialog::getExistingDirectory(this, tr("Select Shadow Folder Root on Client"), nullptr,
+                        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if(dir.size() > 0)
+        editShadowFolderAddr->setText(dir);
+}
+
 void inference_control::browseDataLabels()
 {
     QString fileName = QFileDialog::getOpenFileName(this, tr("Open Labels File"), nullptr, tr("Labels Text (*.txt)"));
     if(fileName.size() > 0)
         editImageLabelsFile->setText(fileName);
+}
+
+void inference_control::browseDataHierarchy()
+{
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Label Hierarchy File"), nullptr, tr("Label Hierarchy Text (*.csv)"));
+    if(fileName.size() > 0)
+        editImageHierarchyFile->setText(fileName);
 }
 
 void inference_control::browseDataFolder()
@@ -808,10 +867,12 @@ void inference_control::runConnection()
             connection->sendCmd(cmd);
             pendingModelCount = cmd.data[0];
             maxGPUs = cmd.data[1];
+            enableSF = cmd.data[2];
             QString text;
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));
             labelMaxGPUs->setText(text.sprintf("(upto %d)", maxGPUs));
+            if(!enableSF) {checkShadowFolder->setEnabled(false); editShadowFolderAddr->setEnabled(false); buttonShadowFolder->setEnabled(false);}
             while(comboModelSelect->count() > 1)
                 comboModelSelect->removeItem(1);
             modelList.clear();
@@ -929,6 +990,26 @@ void inference_control::runInference()
                 err = "Labels: unable to open: " + editImageLabelsFile->text();
             }
         }
+        if(!editImageHierarchyFile->text().isEmpty()){
+            QFile fileObj(editImageHierarchyFile->text());
+            if(fileObj.open(QIODevice::ReadOnly)) {
+                QTextStream fileInput(&fileObj);
+                dataHierarchy->clear();
+                while (!fileInput.atEnd()) {
+                    QString line = fileInput.readLine();
+                    line = line.trimmed();
+                    if(line.size() > 0)
+                        dataHierarchy->push_back(line);
+                }
+                if(dataHierarchy->size() != editOutDimC->text().toInt()) {
+                    err.sprintf("Labels Hierarchy: need %d label Hierarchy in %s: found %d", editOutDimC->text().toInt(),
+                                editImageHierarchyFile->text().toStdString().c_str(), dataHierarchy->size());
+                }
+            }
+            else {
+                err = "Label Hierarchy: unable to open: " + editImageHierarchyFile->text();
+            }
+        }
     }
     if(err.length() > 0) {
         QMessageBox::critical(this, windowTitle(), err, QMessageBox::Ok);
@@ -959,20 +1040,58 @@ void inference_control::runInference()
     bool sendScaledImages = false;
     if(checkScaledImages && checkScaledImages->checkState())
         sendScaledImages = true;
+    if(enableTopK)
+        topKValue = ( comboTopKResult->currentIndex() + 1 );
+
+    inference_panel *display_panel = new inference_panel;
+    display_panel->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
+    //display_panel->show();
+
     inference_viewer * viewer = new inference_viewer(
                 editServerHost->text(), editServerPort->text().toInt(), modelName,
-                dataLabels, editImageListFile->text(), editImageFolder->text(),
-                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages);
+                dataLabels, dataHierarchy, editImageListFile->text(), editImageFolder->text(),
+                dimInput, editGPUs->text().toInt(), dimOutput, maxDataSize, repeat_images, sendScaledImages, sendFileName, topKValue);
+    viewer->setWindowIcon(QIcon(":/images/vega_icon_150.png"));
     viewer->show();
     close();
 }
 
 void inference_control::onLogo1Click()
 {
-    QDesktopServices::openUrl(QUrl("https://amd.com/"));
+    QDesktopServices::openUrl(QUrl("http://www.amd.com/en"));
 }
 
 void inference_control::onLogo2Click()
 {
     QDesktopServices::openUrl(QUrl("https://instinct.radeon.com/en/"));
+}
+
+void inference_control::topKResultsEnable(bool topKEnable)
+{
+    if(topKEnable){
+        comboTopKResult->setEnabled(true);
+        comboTopKResult->setCurrentIndex(0);
+        enableTopK = 1;
+    }
+    else
+    {
+        comboTopKResult->setEnabled(false);
+        comboTopKResult->setCurrentIndex(0);
+        enableTopK = 0;
+    }
+}
+
+void inference_control::shadowFolderEnable(bool shadowEnable)
+{
+    if(shadowEnable){
+        editShadowFolderAddr->setVisible(false);
+        buttonShadowFolder->setVisible(false);
+        sendFileName = 1;
+    }
+    else
+    {
+        editShadowFolderAddr->setVisible(false);
+        buttonShadowFolder->setVisible(false);
+        sendFileName = 0;
+    }
 }
