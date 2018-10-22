@@ -19,9 +19,8 @@ INFCOM_CMD_TOPK_INFERENCE_RESULT     = 304
 INFCOM_CMD_BB_INFERENCE_RESULT       = 305
 INFCOM_CMD_SHADOW_SEND_FOLDERNAMES   = 401
 INFCOM_CMD_SHADOW_CREATE_FOLDER      = 402
-INFCOM_CMD_SHADOW_CREATE_LMDB        = 403
-INFCOM_CMD_SHADOW_SEND_FILES         = 404
-INFCOM_CMD_SHADOW_RESULT             = 405
+INFCOM_CMD_SHADOW_SEND_FILES         = 403
+INFCOM_CMD_SHADOW_RESULT             = 404
 INFCOM_MODE_CONFIGURE                = 1
 INFCOM_MODE_COMPILER                 = 2
 INFCOM_MODE_INFERENCE                = 3
@@ -32,8 +31,7 @@ INFCOM_MAX_PACKET_SIZE               = 8192
 
 # process command-lines
 if len(sys.argv) < 2:
-    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] \
-        [-synset:<synset.txt>] [-output:<output.csv>] [-shadow:<0/1(LMDB)>] [-detect] [-topK:top_k] [-shadowSetup:<checkFolderList>,<CreateFolderList>,<files>]<folder>|<file(s)>')
+    print('Usage: python annInferenceApp.py [-v] [-host:<hostname>] [-port:<port>] -model:<modelName> [-upload:deploy.prototxt,weights.caffemodel,iw,ih,ic,mode,order,m0,m1,m2,a0,a1,a2[,save=modelName[,override][,passwd=...]]] [-synset:<synset.txt>] [-output:<output.csv>] [-shadow] [-detect] [-topK:top_k] [-shadowSetup:<checkFolderList>,<CreateFolderList>,<files>]<folder>|<file(s)>')
     sys.exit(1)
 host = 'localhost'
 port = 28282
@@ -48,7 +46,6 @@ verbose = False
 sendFileName = 0
 topkValue = 0
 detectBB = 0
-useLMDB  = 0
 arg = 1
 while arg < len(sys.argv):
     if sys.argv[arg][:6] == '-host:':
@@ -69,9 +66,8 @@ while arg < len(sys.argv):
     elif sys.argv[arg][:8] == '-upload:':
         uploadParams = sys.argv[arg][8:]
         arg = arg + 1
-    elif sys.argv[arg] == '-shadow:':
-        sendFileName = 1
-        useLMDB = int(sys.argv[arg][8:])  
+    elif sys.argv[arg] == '-shadow':
+        sendFileName = 1    
         arg = arg + 1
     elif sys.argv[arg] == '-v':
         verbose = True
@@ -149,10 +145,6 @@ def sendImageFile(sock,tag,fileName):
 def sendImageFileName(sock,tag,fileName):
     buf = bytearray(fileName)
     sock.send(struct.pack('ii',tag,len(buf)) + buf + struct.pack('i',INFCOM_EOF_MARKER))
-
-def sendLMDBName(sock,tag,fileName):
-    #buf = bytearray(fileName)
-    sock.send(struct.pack('ii',tag,0) + struct.pack('i',INFCOM_EOF_MARKER))
 
 def sendFileNameAndFile(sock,tag,imageDirPath,fileName):
     fp = open(imageDirPath+fileName,'r')
@@ -307,8 +299,6 @@ def runInference(host,port,GPUs,model,imageDirPath,imageFileList,synsetFileName,
                     tag = sendCount
                     if sendFileName == 0:
                         sendImageFile(sock,tag,imageDirPath + imageFileList[tag])
-                    elif useLMDB == 1:
-                        sendLMDBName(sock,tag,imageDirPath + imageFileList[tag])
                     else:
                         sendImageFileName(sock,tag,imageDirPath + imageFileList[tag])
                     sendCount = sendCount + 1
@@ -476,16 +466,6 @@ def RunShadow(host,port,imageDirPath,shadowParams):
                 for i in range(count):
                     tag = createFolderCount
                     sendImageFileName(sock,tag,CreateFolderList[tag][:-1])
-                    createFolderCount = createFolderCount + 1
-        elif info[1] == INFCOM_CMD_SHADOW_CREATE_LMDB:
-            count = min(info[2][0], len(CreateFolderList)-createFolderCount)
-            if count < 1:
-                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_CREATE_LMDB,(-1,),''))
-            else:
-                sendpkt(sock,(INFCOM_MAGIC,INFCOM_CMD_SHADOW_CREATE_LMDB,(count,),''))
-                for i in range(count):
-                    tag = createFolderCount
-                    sendLMDBName(sock,tag,CreateFolderList[tag][:-1])
                     createFolderCount = createFolderCount + 1
         elif info[1] == INFCOM_CMD_SHADOW_SEND_FILES:
             count = min(info[2][0], len(SendfilesList)-sendFilesCount)
