@@ -20,10 +20,12 @@
 #define PROFILER_DEFINE_EVENT_NAME_ENUM(g,e) #g "-" #e,
 const char * ProfilerEventName[] = {
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workMasterInputQ)
-    PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputCopyBatch)
+    PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputCopyBatchToTensor)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputCopyJpegDecode)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceProcess)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceOutputCopy)
+    PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputLmdbConvertToTensor)
+   // PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, ReceiveImage)
     ""
 };
 

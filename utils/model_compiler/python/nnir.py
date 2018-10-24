@@ -185,6 +185,7 @@ class IrGraph:
         self.tensor_types = {}
         self.tensor_shapes = {}
         self.all_F032 = True
+        self.all_F016 = False
 
     def addInput(self,tensor):
         self.inputs.append(tensor)
@@ -193,14 +194,18 @@ class IrGraph:
         self.tensor_shapes[tensor.name] = tensor.shape
         if tensor.type != 'F032':
             self.all_F032 = False
-
+            if tensor.type == 'F016':
+                self.all_F016 = True
+                self.all_F032 = False
     def addOutput(self,tensor):
         self.outputs.append(tensor)
         self.tensor_dict[tensor.name] = tensor
         self.tensor_types[tensor.name] = tensor.type
         self.tensor_shapes[tensor.name] = tensor.shape
-        if tensor.type != 'F032':
+        if self.all_F032 == True and tensor.type != 'F032':
             self.all_F032 = False
+        if self.all_F016 == True and tensor.type != 'F016':
+            self.all_F016 = False
         self.output_names.append(tensor.name)
 
     def addVariable(self,tensor):
@@ -210,15 +215,19 @@ class IrGraph:
         self.tensor_dict[tensor.name] = tensor
         self.tensor_types[tensor.name] = tensor.type
         self.tensor_shapes[tensor.name] = tensor.shape
-        if tensor.type != 'F032':
+        if self.all_F032 == True and tensor.type != 'F032':
             self.all_F032 = False
+        if self.all_F016 == True and tensor.type != 'F016':
+            self.all_F016 = False
 
     def addLocal(self,tensor):
         self.tensor_dict[tensor.name] = tensor
         self.tensor_types[tensor.name] = tensor.type
         self.tensor_shapes[tensor.name] = tensor.shape
-        if tensor.type != 'F032':
+        if self.all_F032 == True and tensor.type != 'F032':
             self.all_F032 = False
+        if self.all_F016 == True and tensor.type != 'F016':
+            self.all_F016 = False
         if not tensor.name in self.output_names:
             self.locals.append(tensor)
 
@@ -418,6 +427,33 @@ class IrGraph:
             self.tensor_shapes[tensor.name] = tensor.shape
             self.tensor_dict[tensor.name] = tensor
 
+    def convertFp16(self):
+        if self.all_F032:
+            for tensor in self.inputs:
+                tensor.type = 'F016'
+                self.tensor_types[tensor.name] = tensor.type
+                self.tensor_dict[tensor.name] = tensor
+            for tensor in self.outputs:
+                tensor.type = 'F016'
+                self.tensor_types[tensor.name] = tensor.type
+                self.tensor_dict[tensor.name] = tensor
+            for tensor in self.locals:
+                tensor.type = 'F016'
+                self.tensor_types[tensor.name] = tensor.type
+                self.tensor_dict[tensor.name] = tensor
+            for tensor in self.initializers:
+                tensor.type = 'F016'
+                self.tensor_types[tensor.name] = tensor.type
+                self.tensor_dict[tensor.name] = tensor
+            for binary in self.binaries:
+                weight = np.frombuffer(self.binaries[binary], dtype=np.float32)
+                del self.binaries[binary]
+                self.addBinary(binary, np.getbuffer(weight.astype(np.float16)))
+            self.all_F032 = False
+            self.all_F016 = True    
+        else:
+            raise ValueError("The type is alreary Fp16")
+
     def fuseOps(self):
         tensorReadCount = {}
         for node in self.nodes:
@@ -427,7 +463,11 @@ class IrGraph:
                 else:
                     tensorReadCount[name] = 1
         fusedAnOp = True
-        while self.all_F032 and fusedAnOp:
+        while (self.all_F032 or self.all_F016) and fusedAnOp:
+            if self.all_F032:
+                npType = np.float32
+            else:
+                npType = np.float16               
             fusedAnOp = False
             prevSkipNode = None
             prevNode = None
@@ -436,10 +476,10 @@ class IrGraph:
             for node in self.nodes:
                 # first change batch_norm into muladd
                 if node.type == 'batch_norm':
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=np.float32)
-                    mean = np.frombuffer(self.binaries[node.inputs[3]], dtype=np.float32)
-                    variance = np.frombuffer(self.binaries[node.inputs[4]], dtype=np.float32)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
+                    mean = np.frombuffer(self.binaries[node.inputs[3]], dtype=npType)
+                    variance = np.frombuffer(self.binaries[node.inputs[4]], dtype=npType)
                     epsilon = node.attr.get('epsilon')
                     scale = scale / np.sqrt(variance + epsilon)
                     offset = offset - mean * scale
@@ -476,25 +516,28 @@ class IrGraph:
                     K = weight_shape[0]
                     N = weight_shape[3] if len(weight_shape) == 2 else np.prod(weight_shape[1:3])
                     if prevNode.type == 'muladd':
-                        scale = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                        offset = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=np.float32)
+                        scale = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                        offset = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=npType)
                     elif prevNode.type == 'mul':
-                        scale = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                        offset = np.repeat(np.array([0], dtype=np.float32), K)
+                        scale = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                        offset = np.repeat(np.array([0], dtype=npType), K)
                     elif prevNode.type == 'add':
-                        scale = np.repeat(np.array([1], dtype=np.float32), K)
-                        offset = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    weight = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                        scale = np.repeat(np.array([1], dtype=npType), K)
+                        offset = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    weight = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     if len(node.inputs) == 2:
-                        bias = np.repeat(np.array([0], dtype=np.float32), K)
+                        bias = np.repeat(np.array([0], dtype=npType), K)
                         tensor = IrTensor()
                         tensor.setName(node.inputs[1] + '__bias')
-                        tensor.setInfo('F032', [1, K])
+                        if self.all_F032:
+                            tensor.setInfo('F032', [1, K])
+                        else:
+                            tensor.setInfo('F016', [1, K])
                         self.addVariable(tensor)
                         self.addBinary(tensor.name, np.getbuffer(bias))
                         node.inputs.append(tensor.name)
                     else:
-                        bias = np.frombuffer(self.binaries[node.inputs[2]], dtype=np.float32)
+                        bias = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
                     bias = bias + offset * np.sum(np.split(weight, K),axis=1)
                     weight = weight * np.repeat(scale, N)
                     self.addBinary(node.inputs[1], np.getbuffer(weight))
@@ -512,25 +555,28 @@ class IrGraph:
                     K = weight_shape[0]
                     N = weight_shape[3] if len(weight_shape) == 2 else np.prod(weight_shape[1:4])
                     if node.type == 'muladd':
-                        scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                        offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=np.float32)
+                        scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                        offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
                     elif node.type == 'mul':
-                        scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                        offset = np.repeat(np.array([0], dtype=np.float32), K)
+                        scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                        offset = np.repeat(np.array([0], dtype=npType), K)
                     elif node.type == 'add':
-                        scale = np.repeat(np.array([1], dtype=np.float32), K)
-                        offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                    weight = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
+                        scale = np.repeat(np.array([1], dtype=npType), K)
+                        offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                    weight = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
                     if len(prevNode.inputs) == 2:
-                        bias = np.repeat(np.array([0], dtype=np.float32), K)
+                        bias = np.repeat(np.array([0], dtype=npType), K)
                         tensor = IrTensor()
                         tensor.setName(prevNode.inputs[1] + '__bias')
-                        tensor.setInfo('F032', [1, K])
+                        if self.all_F032:
+                            tensor.setInfo('F032', [1, K])
+                        else:
+                            tensor.setInfo('F016', [1, K])
                         self.addVariable(tensor)
                         self.addBinary(tensor.name, np.getbuffer(bias))
                         prevNode.inputs.append(tensor.name)
                     else:
-                        bias = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=np.float32)
+                        bias = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=npType)
                     bias = bias * scale + offset
                     weight = weight * np.repeat(scale, N)
                     self.addBinary(prevNode.inputs[1], np.getbuffer(weight))
@@ -549,16 +595,19 @@ class IrGraph:
                     prevOutput = node.outputs[0]
                 elif node.type == 'relu' and \
                      (prevNode.type == 'conv' or prevNode.type == 'max_pool' or \
-                      prevNode.type == 'avg_pool' or prevNode.type == 'global_avg_pool'):
+                     prevNode.type == 'avg_pool' or prevNode.type == 'global_avg_pool'):
                     prevNode.attr.set('mode', 1)
-                    prevNode.outputs[0] = node.outputs[0]
+                    if prevSkipNode != None:
+                        prevSkipNode.outputs[0] = node.outputs[0]
+                    else:
+                        prevNode.outputs[0] = node.outputs[0]
                     prevOutput = node.outputs[0]
                     nodesToRemove.append(node)
                     fusedAnOp = True
                 elif prevNode.type == 'add' and node.type == 'add' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    ck = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    ck = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     offset = offset + ck
                     self.addBinary(node.inputs[1], np.getbuffer(offset))
                     node.inputs[0] = prevNode.inputs[0]
@@ -569,8 +618,8 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'add' and node.type == 'mul' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    offset = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    offset = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     offset = scale * offset
                     self.addBinary(prevNode.inputs[1], np.getbuffer(offset))
                     node.type = 'muladd'
@@ -593,8 +642,8 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'mul' and node.type == 'mul' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     scale = scale * mk
                     self.addBinary(node.inputs[1], np.getbuffer(scale))
                     node.inputs[0] = prevNode.inputs[0]
@@ -605,9 +654,9 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'add' and node.type == 'muladd' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    ck = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=np.float32)
+                    ck = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
                     offset = offset + scale * ck
                     self.addBinary(node.inputs[2], np.getbuffer(offset))
                     node.inputs[0] = prevNode.inputs[0]
@@ -618,8 +667,8 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'mul' and node.type == 'muladd' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     scale = scale * mk
                     self.addBinary(node.inputs[1], np.getbuffer(scale))
                     node.inputs[0] = prevNode.inputs[0]
@@ -630,8 +679,8 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'muladd' and node.type == 'add' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=np.float32)
-                    offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=npType)
+                    offset = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     offset = offset + ck
                     self.addBinary(prevNode.inputs[2], np.getbuffer(offset))
                     prevNode.outputs[0] = node.outputs[0]
@@ -640,9 +689,9 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'muladd' and node.type == 'mul' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
+                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
                     offset = scale * ck
                     scale = scale * mk
                     self.addBinary(prevNode.inputs[1], np.getbuffer(scale))
@@ -653,10 +702,10 @@ class IrGraph:
                     fusedAnOp = True
                 elif prevNode.type == 'muladd' and node.type == 'muladd' and \
                         prevOutput == node.inputs[0] and tensorReadCount[prevOutput] == 1:
-                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=np.float32)
-                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=np.float32)
-                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=np.float32)
-                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=np.float32)
+                    mk = np.frombuffer(self.binaries[prevNode.inputs[1]], dtype=npType)
+                    ck = np.frombuffer(self.binaries[prevNode.inputs[2]], dtype=npType)
+                    scale = np.frombuffer(self.binaries[node.inputs[1]], dtype=npType)
+                    offset = np.frombuffer(self.binaries[node.inputs[2]], dtype=npType)
                     offset = offset + scale * ck
                     scale = scale * mk
                     self.addBinary(node.inputs[1], np.getbuffer(scale))
@@ -676,6 +725,10 @@ class IrGraph:
         self.removeUnusedTensors()
 
     def sliceGroups(self):
+        if self.all_F032:
+            npType = np.float32
+        else:
+            npType = np.float16                       
         for idx, node in enumerate(self.nodes):
             if node.type == 'conv' and node.attr.get('group') > 1:
                 input = self.tensor_dict[node.inputs[0]]
@@ -687,7 +740,7 @@ class IrGraph:
                 outputShape = [int(v) for v in output.shape]
                 inputShape = [int(v) for v in input.shape]
                 weightShape = [int(v) for v in weight.shape]
-                weightBinary = np.frombuffer(self.binaries[weight.name], dtype=np.float32).copy().reshape((weightShape[0],weightShape[1],weightShape[2],weightShape[3]))
+                weightBinary = np.frombuffer(self.binaries[weight.name], dtype=npType).copy().reshape((weightShape[0],weightShape[1],weightShape[2],weightShape[3]))
                 outputShape[1] = K
                 inputShape[1] = C
                 weightShape[0] = K
@@ -695,7 +748,7 @@ class IrGraph:
                 if len(node.inputs) > 2:
                     bias = self.tensor_dict[node.inputs[2]]
                     biasShape = [v for v in bias.shape]
-                    biasBinary = np.frombuffer(self.binaries[bias.name], dtype=np.float32).copy().reshape(biasShape[0],biasShape[1])
+                    biasBinary = np.frombuffer(self.binaries[bias.name], dtype=npType).copy().reshape(biasShape[0],biasShape[1])
                     biasShape[1] = K
                 joutputs = []
                 jinputs = []

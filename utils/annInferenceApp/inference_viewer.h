@@ -2,6 +2,7 @@
 #define INFERENCE_VIEWER_H
 
 #include "inference_receiver.h"
+#include "perf_graph.h"
 #include <QWidget>
 #include <QFont>
 #include <QThread>
@@ -37,6 +38,8 @@ public:
     QVector<int> resultImageIndex;
     QVector<int> resultImageLabel;
     QVector<QString> resultImageSummary;
+    QVector<QVector<int>> resultImageLabelTopK;
+    QVector<QVector<float>> resultImageProbTopK;
     // mouse events
     bool abortLoadingRequested;
     bool exitButtonPressed;
@@ -50,6 +53,7 @@ public:
     int mouseSelectedImage;
     bool viewRecentResults;
     QVector<QString> * dataLabels;
+    QVector<QString> * dataHierarchy;
     int dataLabelCount;
     QString dataFilename;
     QString dataFolder;
@@ -65,6 +69,23 @@ public:
     int maxImageDataSize;
     bool sendScaledImages;
     int shadowMode;
+    int topKValue;
+    //test summary
+    int top1Count,top2Count,top3Count,top4Count,top5Count;
+    int topKPassFail[100][2];
+    int top5PassFail[100][10];
+    int topKHierarchyPassFail[100][12];
+    int topLabelMatch[1000][7];
+    float top1TotProb,top2TotProb, top3TotProb, top4TotProb, top5TotProb;
+    int totalMismatch, totalNoGroundTruth;
+    float totalPassProb, totalFailProb;
+    // performance results
+    QRect perfButtonRect;
+    bool perfButtonPressed;
+    perf_graph performance;
+    QString startTime;
+    QElapsedTimer timerElapsed;
+    QString elapsedTime;
 };
 
 class inference_viewer : public QWidget
@@ -73,9 +94,10 @@ class inference_viewer : public QWidget
 
 public:
     explicit inference_viewer(QString serverHost, int serverPort, QString modelName,
-            QVector<QString> * dataLabels, QString dataFilename, QString dataFolder,
+            QVector<QString> * dataLabels, QVector<QString> * dataHierarchy,
+            QString dataFilename, QString dataFolder,
             int dimInput[3], int GPUs, int dimOutput[3], int maxImageDataSize,
-            bool repeat_images, bool sendScaledImages, int shadowMode,
+            bool repeat_images, bool sendScaledImages, int shadowMode, int topKValue,
             QWidget *parent = 0);
     ~inference_viewer();
 
@@ -91,6 +113,7 @@ protected:
 private:
     void startReceiver();
     void saveResults();
+    void showPerfResults();
     void terminate();
 
 private:
@@ -103,5 +126,13 @@ private:
     QString fatalError;
     runtime_receiver_status progress;
 };
+
+/* Model Info Structure */
+struct ModelMaster {
+    QString name;
+    int matched;
+    int mismatched;
+};
+typedef struct ModelMaster ModelMasterInfo;
 
 #endif // INFERENCE_VIEWER_H

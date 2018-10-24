@@ -43,9 +43,13 @@ public slots:
     void onChangeModelName(const QString &);
     void onLogo1Click();
     void onLogo2Click();
+    void topKResultsEnable(bool topKEnable);
+    void shadowFolderEnable(bool shadowEnable);
 
 protected:
+    void browseShadowFolder();
     void browseDataLabels();
+    void browseDataHierarchy();
     void browseDataFilename();
     void browseDataFolder();
     bool isConfigValid(QPushButton * button, QString& err);
@@ -80,6 +84,7 @@ private:
     QLineEdit * editModelFile2;
     QComboBox * comboInvertInputChannels;
     QComboBox * comboPublishOptions;
+    QComboBox * comboTopKResult;
     QLineEdit * editModelName;
     QPushButton * buttonModelFile1;
     QPushButton * buttonModelFile2;
@@ -96,18 +101,28 @@ private:
     QLabel * labelMaxGPUs;
     QPushButton * buttonInference;
     QLineEdit * editImageLabelsFile;
+    QLineEdit * editImageHierarchyFile;
     QLineEdit * editImageFolder;
     QLineEdit * editImageListFile;
     QLineEdit * editMaxDataSize;
     QCheckBox * checkRepeatImages;
     QCheckBox * checkScaledImages;
+    QCheckBox * checkTopKResult;
+    QCheckBox * checkShadowFolder;
+    QLineEdit * editShadowFolderAddr;
+    QPushButton * buttonShadowFolder;
     inference_compiler_status compiler_status;
     bool operationMode;
     bool connectionSuccessful;
     int modelType;
     int numModelTypes;
     int maxGPUs;
+    int enableSF;
+    int sendFileName;
+    int enableTopK;
+    int topKValue;
     QVector<QString> * dataLabels;
+    QVector<QString> * dataHierarchy;
     QVector<QString> typeModelFile1Label;
     QVector<QString> typeModelFile1Desc;
     QVector<QString> typeModelFile2Label;

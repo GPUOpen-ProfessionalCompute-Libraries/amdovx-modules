@@ -1241,7 +1241,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
 #endif
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
-        PROFILER_START(AnnInferenceServer, workDeviceInputCopyBatch);
+        PROFILER_START(AnnInferenceServer, workDeviceInputCopyBatchToTensor);
         // get an empty OpenCL buffer and lock the buffer for writing
         cl_mem mem = nullptr;
         queueDeviceInputMemIdle[gpu]->dequeue(mem);
@@ -1298,8 +1298,8 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
         }
 #else
-        PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
         for(; inputCount < batchSize; inputCount++) {
+            PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             // get next item from the input queue and check for end of input
             std::tuple<char*,int> image;
             queueDeviceImageQ[gpu]->dequeue(image);
@@ -1317,6 +1317,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 // copy decoded image from shadowMap
                 int tag = *((int*)byteStream);
                 if (useLMDB == 1){
+                    PROFILER_START(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
                     char key_val[8];
                     sprintf(key_val, "%08d", tag);
                     MDB_val key;
@@ -1333,6 +1334,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                         std::string img = datum.data();
                         ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
                     }
+                    PROFILER_STOP(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
                 } else
                 {
                 #if (LMDB_RECORD_TYPE_BITMAPS)
@@ -1344,11 +1346,10 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 }
 
             }
-
+            PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             // release byteStream
             delete[] byteStream;
         }
-        PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
 #endif
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
@@ -1371,7 +1372,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             // add the input back to idle queue
             queueDeviceInputMemIdle[gpu]->enqueue(mem);
         }
-        PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyBatch);
+        PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyBatchToTensor);
     }
     // release OpenCL command queue
     clReleaseCommandQueue(cmdq);
@@ -1424,8 +1425,8 @@ void InferenceEngine::workDeviceProcess(int gpu)
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
 #else
-        info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
-        std::this_thread::sleep_for(std::chrono::milliseconds(4));  // simulate some work
+        //info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));  // simulate some work
 #endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);

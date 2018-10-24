@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui network
+QT     += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -32,7 +32,9 @@ SOURCES += \
     inference_control.cpp \
     inference_compiler.cpp \
     assets.cpp \
-    tcpconnection.cpp
+    tcpconnection.cpp \
+    inference_panel.cpp \
+    perf_graph.cpp
 
 HEADERS += \
     inference_viewer.h \
@@ -41,7 +43,14 @@ HEADERS += \
     inference_compiler.h \
     assets.h \
     tcpconnection.h \
-    ../annInferenceServer/infcom.h
+    ../annInferenceServer/infcom.h \
+    inference_panel.h \
+    perf_graph.h
 
 FORMS += \
-        inference_viewer.ui
+    inference_viewer.ui \
+    inference_panel.ui \
+    perf_graph.ui
+
+RESOURCES += \
+    resources.qrc
