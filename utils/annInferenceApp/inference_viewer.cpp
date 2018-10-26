@@ -863,7 +863,7 @@ void inference_viewer::paintEvent(QPaintEvent *)
                 progress.completed_load = true;
                 break;
             }
-            if (state->shadowMode) {
+            if (state->shadowMode == 1) {
                 // extract only the last folder and filename for shadow
                 QStringList fileNameList = fileName.split("/");
                 QString subFileName = fileNameList.at(fileNameList.size()- 2) + "/" + fileNameList.last();

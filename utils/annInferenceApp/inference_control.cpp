@@ -869,7 +869,6 @@ void inference_control::runConnection()
             maxGPUs = cmd.data[1];
             sendFileNames = cmd.data[2];
             useShadowLMDB = cmd.data[3];
-            printf("Infocm_cmd_config_info: sendFileNames:%d\n", sendFileNames);
             QString text;
             editGPUs->setText(text.sprintf("%d", maxGPUs));
             editGPUs->setValidator(new QIntValidator(1,maxGPUs));

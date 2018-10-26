@@ -1068,6 +1068,7 @@ int InferenceEngine::run()
                             //lmdbName.append(std::string(buff, size));
                             delete[] buff;
                         }
+                        size = 4;
                         byteStream = new char [4];   // for sanity
                         *((int *)byteStream) = tag;     // needed later
                     }
@@ -1180,7 +1181,7 @@ void InferenceEngine::workMasterInputQ()
         int size = std::get<2>(input);
 
         // check for end of input
-        if(tag < 0 || byteStream == nullptr || size == 0)
+        if(tag < 0 || byteStream == nullptr || size <= 0)
             break;
         totalInputCount++;
 

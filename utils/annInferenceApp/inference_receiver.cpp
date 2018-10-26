@@ -129,9 +129,17 @@ void inference_receiver::run()
                 bool failed = false;
                 for(int i = 0; i < count; i++) {
                     // send the image at nextImageToSend
-                    if (sendFileNames) {
+                    if (sendFileNames == 1) {
                         QByteArray fileNameBuffer;
                         fileNameBuffer.append((*shadowFileBuffer)[nextImageToSend]);
+                        if(!connection->sendImage(nextImageToSend, fileNameBuffer, progress->errorCode, progress->message, abortRequsted)) {
+                            failed = true;
+                            break;
+                        }
+                    }
+                    else if (sendFileNames == 2)        // lmdb mode: no filenames to send
+                    {
+                        QByteArray fileNameBuffer;
                         if(!connection->sendImage(nextImageToSend, fileNameBuffer, progress->errorCode, progress->message, abortRequsted)) {
                             failed = true;
                             break;
