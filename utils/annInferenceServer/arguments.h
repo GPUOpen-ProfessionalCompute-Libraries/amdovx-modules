@@ -110,6 +110,10 @@ public:
     {
         return useFp16Inference;
     }
+    int decThreads()
+    {
+        return numDecThreads;
+    }
 
     // device resources
     int lockGpuDevices(int GPUs, cl_device_id * device_id_);
@@ -130,6 +134,7 @@ private:
     int maxPendingBatches;
     int numGPUs;
     int useFp16Inference;
+    int numDecThreads;
     int gpuIdList[MAX_NUM_GPU];
     std::string password;
     // derived configuration

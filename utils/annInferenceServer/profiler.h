@@ -21,6 +21,7 @@ enum ProfilerEventEnum {
     PROFILER_DEFINE_EVENT_ENUM(AnnInferenceServer, workDeviceInputCopyJpegDecode)
     PROFILER_DEFINE_EVENT_ENUM(AnnInferenceServer, workDeviceProcess)
     PROFILER_DEFINE_EVENT_ENUM(AnnInferenceServer, workDeviceOutputCopy)
+    PROFILER_DEFINE_EVENT_ENUM(AnnInferenceServer, workRGBtoTensor)
 	PROFILER_NUM_EVENTS
 };
 void __stdcall PROFILER_INITIALIZE();

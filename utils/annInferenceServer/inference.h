@@ -36,7 +36,6 @@
 #define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define USE_SSE_OPTIMIZATION           1  // enable/disable SSE intrinsics for resize and format conversion
-#define NUM_DECODER_THREADS            0  // number of threads for jpeg decode, scale, and format conversion job
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
@@ -231,7 +230,7 @@ private:
     int outputSizeInBytes;
     bool deviceLockSuccess;
     int detectBoundingBoxes;
-    int useFp16;
+    int useFp16, numDecThreads;
     CYoloRegion *region;
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>

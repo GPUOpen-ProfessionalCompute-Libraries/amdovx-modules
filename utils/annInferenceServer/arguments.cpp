@@ -77,6 +77,7 @@ Arguments::Arguments()
     loadConfig();
     setConfigurationDir();
     useFp16Inference = 0;
+    numDecThreads = 0;
 }
 
 Arguments::~Arguments()
@@ -239,7 +240,7 @@ int Arguments::initializeConfig(int argc, char * argv[])
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
                                      " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>] [-fp16 <0/1>]"
-                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>] [-n <model-compiler-path>]";
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>] [-n <model-compiler-path>] [-t num_cpu_dec_threads<2-64>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -313,6 +314,12 @@ int Arguments::initializeConfig(int argc, char * argv[])
                 setModelCompilerPath(argv[2]);
                 printf("Set shadow folder to %s\n", modelCompilerPath.c_str());
             }
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "-t")) {
+            numDecThreads = atoi(argv[2]);
+            if (numDecThreads < 2) numDecThreads=0;
             argc -= 2;
             argv += 2;
         }
