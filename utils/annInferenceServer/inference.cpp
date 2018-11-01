@@ -13,8 +13,20 @@
 #include <intrin.h>
 #else
 #include <x86intrin.h>
+#include <immintrin.h>
 #endif
 #endif
+
+static void VX_CALLBACK log_callback(vx_context context, vx_reference ref, vx_status status, const vx_char string[])
+{
+    size_t len = strlen(string);
+    if (len > 0) {
+        printf("%s", string);
+        if (string[len - 1] != '\n')
+            printf("\n");
+        fflush(stdout);
+    }
+}
 
 const float BB_biases[10]             = {1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52};     // bounding box biases
 
@@ -32,7 +44,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
       receiveFileNames { (bool)cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
-      moduleHandle{ nullptr }, annCreateGraph{ nullptr },
+      moduleHandle{ nullptr }, annCreateGraph{ nullptr }, annAddtoGraph { nullptr},
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
@@ -44,7 +56,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr },
-      region { nullptr }
+      region { nullptr }, useFp16 { 0 }
 #if  USE_ADVANCED_MESSAGE_Q
     , inputQ(MAX_INPUT_QUEUE_DEPTH)
 #endif
@@ -57,8 +69,16 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     options = options_;
     // configuration
     batchSize = args->getBatchSize();
-    inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
-    outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    if (!args->fp16Inference()) {
+        inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
+        outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    }else
+    {
+        useFp16 = 1;
+        inputSizeInBytes = 2 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
+        outputSizeInBytes = 2 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    }
+
     if (detectBoundingBoxes)
         region = new CYoloRegion();
     // lock devices
@@ -171,7 +191,7 @@ InferenceEngine::~InferenceEngine()
     PROFILER_SHUTDOWN();
 }
 
-vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
+vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf, int use_fp16)
 {
     int length = width*height;
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_COLOR);
@@ -205,34 +225,74 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
     }
     int alignedLength = (length-2)& ~3;
-    float * B_buf = buf;
-    float * G_buf = B_buf + length;
-    float * R_buf = G_buf + length;
-    int i = 0;
+    if (!use_fp16) {
+        float * B_buf = buf;
+        float * G_buf = B_buf + length;
+        float * R_buf = G_buf + length;
+        int i = 0;
 
-    __m128 fR, fG, fB;
-    for (; i < alignedLength; i += 4)
+        __m128 fR, fG, fB;
+        for (; i < alignedLength; i += 4)
+        {
+            __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+            fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+            fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+            fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+            fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+            fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+            fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+            fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+            fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+            fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+            _mm_storeu_ps(B_buf, fB);
+            _mm_storeu_ps(G_buf, fG);
+            _mm_storeu_ps(R_buf, fR);
+            B_buf += 4; G_buf += 4; R_buf += 4;
+            img += 12;
+        }
+        for (; i < length; i++, img += 3) {
+            *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+            *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+            *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+        }
+    } else
     {
-        __m128i pix0 = _mm_loadu_si128((__m128i *) img);
-        fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
-        fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
-        fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
-        fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-        fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-        fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-        fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-        fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-        fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-        _mm_storeu_ps(B_buf, fB);
-        _mm_storeu_ps(G_buf, fG);
-        _mm_storeu_ps(R_buf, fR);
-        B_buf += 4; G_buf += 4; R_buf += 4;
-        img += 12;
-    }
-    for (; i < length; i++, img += 3) {
-        *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-        *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-        *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+//        printf("InferenceEngine::DecodeScaleAndConvertToTensor for fp16\n ");
+        unsigned short * B_buf = (unsigned short *)buf;
+        unsigned short * G_buf = B_buf + length;
+        unsigned short * R_buf = G_buf + length;
+        int i = 0;
+
+        __m128 fR, fG, fB;
+        __m128i hR, hG, hB;
+        for (; i < alignedLength; i += 4)
+        {
+            __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+            fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+            fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+            fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+            fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+            fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+            fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+            fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+            fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+            fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+            // convert to half
+            hB = _mm_cvtps_ph(fB, 0xF);
+            hG = _mm_cvtps_ph(fG, 0xF);
+            hR = _mm_cvtps_ph(fR, 0xF);
+            _mm_storel_epi64((__m128i*)B_buf, hB);
+            _mm_storel_epi64((__m128i*)G_buf, hG);
+            _mm_storel_epi64((__m128i*)R_buf, hR);
+            B_buf += 4; G_buf += 4; R_buf += 4;
+            img += 12;
+        }
+        for (; i < length; i++, img += 3) {
+            *B_buf++ = _cvtss_sh((float)((img[0] * preprocessMpy[0]) + preprocessAdd[0]), 1);
+            *G_buf++ = _cvtss_sh((float)((img[1] * preprocessMpy[1]) + preprocessAdd[1]), 1);
+            *R_buf++ = _cvtss_sh((float)((img[2] * preprocessMpy[2]) + preprocessAdd[2]), 1);
+        }
+
     }
     if (data_resize != nullptr) delete[] data_resize;
 #else
@@ -432,7 +492,7 @@ void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<
         }
         // decode, scale, and format convert into the OpenCL buffer
         float * buf = tens_buf + dim[0] * dim[1] * dim[2] * i;
-        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf);
+        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf, useFp16);
         delete[] byteStream;
     }
 }
@@ -520,9 +580,15 @@ int InferenceEngine::run()
             found = false;
             error("could not locate module %s for %s", modulePath.c_str(), clientName.c_str());
         }
-        else if(!(annCreateGraph = (type_annCreateGraph *) dlsym(moduleHandle, "annCreateGraph"))) {
+        if (args->getModelCompilerPath().empty()) {
+            if(!(annCreateGraph = (type_annCreateGraph *) dlsym(moduleHandle, "annCreateGraph"))) {
+                found = false;
+                error("could not find function annCreateGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
+            }
+        }
+        else if(!(annAddtoGraph = (type_annAddToGraph *) dlsym(moduleHandle, "annAddToGraph"))) {
             found = false;
-            error("could not find function annCreateGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
+            error("could not find function annAddToGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
         }
     }
     else {
@@ -649,10 +715,19 @@ int InferenceEngine::run()
             fatal("InferenceEngine: vxSetContextAttribute(#%d,VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT) failed (%d)", gpu, status);
         vx_size idim[4] = { (vx_size)dimInput[0], (vx_size)dimInput[1], (vx_size)dimInput[2], (vx_size)batchSize };
         vx_size odim[4] = { (vx_size)dimOutput[0], (vx_size)dimOutput[1], (vx_size)dimOutput[2], (vx_size)batchSize };
-        vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
-        vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
-        openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
-        openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+        if (useFp16) {
+            vx_size istride[4] = { 2, (vx_size)2 * dimInput[0], (vx_size)2 * dimInput[0] * dimInput[1], (vx_size)2 * dimInput[0] * dimInput[1] * dimInput[2] };
+            vx_size ostride[4] = { 2, (vx_size)2 * dimOutput[0], (vx_size)2 * dimOutput[0] * dimOutput[1], (vx_size)2 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
+            openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT16, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
+            openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT16, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+            if (openvx_output[gpu] == nullptr)
+                printf(" vxCreateTensorFromHandle(output) failed for gpu#%d\n", gpu);
+        } else {
+            vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
+            vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
+            openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
+            openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+        }
         if((status = vxGetStatus((vx_reference)openvx_input[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: vxCreateTensorFromHandle(input#%d) failed (%d)", gpu, status);
         if((status = vxGetStatus((vx_reference)openvx_output[gpu])) != VX_SUCCESS)
@@ -660,9 +735,26 @@ int InferenceEngine::run()
 
         //////
         // load the model
-        openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
-        if((status = vxGetStatus((vx_reference)openvx_graph[gpu])) != VX_SUCCESS)
-            fatal("InferenceEngine: annCreateGraph(#%d) failed (%d)", gpu, status);
+        if (annCreateGraph != nullptr) {
+            openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
+            if((status = vxGetStatus((vx_reference)openvx_graph[gpu])) != VX_SUCCESS)
+                fatal("InferenceEngine: annCreateGraph(#%d) failed (%d)", gpu, status);
+        }
+        else if (annAddtoGraph != nullptr) {
+            std::string weightsFile = modelPath + "/weights.bin";
+            vxRegisterLogCallback(openvx_context[gpu], log_callback, vx_false_e);
+            openvx_graph[gpu] = vxCreateGraph(openvx_context[gpu]);
+            status = vxGetStatus((vx_reference)openvx_graph[gpu]);
+            if(status) {
+                fatal("InferenceEngine: vxCreateGraph(#%d) failed (%d)", gpu, status);
+                return -1;
+            }
+            status = annAddtoGraph(openvx_graph[gpu], openvx_input[gpu], openvx_output[gpu], weightsFile.c_str());
+            if(status) {
+                fatal("InferenceEngine: annAddToGraph(#%d) failed (%d)", gpu, status);
+                return -1;
+            }
+        }
 
         // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
         updateCmd.data[0] = 80 * (gpu + 1) / GPUs;
@@ -931,7 +1023,7 @@ int InferenceEngine::run()
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
                     }
-                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr);
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr, useFp16);
                     status = vxUnmapTensorPatch(openvx_input, map_id);
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
@@ -1077,7 +1169,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             fatal("workDeviceInputCopy: unexpected nullptr in queueDeviceInputMemIdle[%d]", gpu);
         }
         cl_int err;
-        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, inputSizeInBytes, 0, NULL, NULL, &err);
+        void * mapped_ptr = (void *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, inputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceInputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
@@ -1109,7 +1201,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             int start = 0; int end = sub_batch_size-1;
             for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
             {
-                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr);
+                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr, useFp16);
                 start += sub_batch_size;
                 end += sub_batch_size;
             }
@@ -1138,8 +1230,13 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 break;
             }
             // decode, scale, and format convert into the OpenCL buffer
-            float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
+            float *buf;
+            if (useFp16)
+                buf = (float *) ((unsigned short *)mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount);
+            else
+                buf = (float *) mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
+
+            DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf, useFp16);
             // release byteStream
             delete[] byteStream;
         }
@@ -1267,13 +1364,14 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             break;
         }
         cl_int err;
-        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
+        void * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceOutputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
 
         // get next batch of inputs
         int outputCount = 0;
+        int useFp16 = args->fp16Inference();
         for(; outputCount < batchSize; outputCount++) {
             // get next item from the tag queue and check for end of input
             int tag;
@@ -1284,22 +1382,41 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             }
 
             // decode, scale, and format convert into the OpenCL buffer
-            float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+            void *buf;
+            if (!useFp16)
+                buf = (float *)mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+            else
+                buf = (unsigned short *)mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+
             if (!detectBoundingBoxes)
             {
                 if (topK < 1){
                     int label = 0;
-                    float max_prob = buf[0];
-                    for(int c = 1; c < dimOutput[2]; c++) {
-                        float prob = buf[c];
-                        if(prob > max_prob) {
-                            label = c;
-                            max_prob = prob;
+                    if (!useFp16) {
+                        float *out = (float *)buf;
+                        float max_prob = out[0];
+                        for(int c = 1; c < dimOutput[2]; c++) {
+                            float prob = out[c];
+                            if(prob > max_prob) {
+                                label = c;
+                                max_prob = prob;
+                            }
+                        }
+                    } else {
+                        unsigned short *out = (unsigned short *)buf;
+                        float max_prob = _cvtsh_ss(out[0]);
+                        for(int c = 1; c < dimOutput[2]; c++) {
+                            float prob = _cvtsh_ss(out[c]);
+                            if(prob > max_prob) {
+                                label = c;
+                                max_prob = prob;
+                            }
                         }
                     }
                     outputQ.enqueue(std::tuple<int,int>(tag,label));
                 }else {
-                    std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                    // todo:: add support for fp16
+                    std::vector<float>  prob_vec((float*)buf, (float*)buf + dimOutput[2]);
                     std::vector<size_t> idx(prob_vec.size());
                     std::iota(idx.begin(), idx.end(), 0);
                     sort_indexes(prob_vec, idx);            // sort indeces based on prob
@@ -1317,7 +1434,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             }else
             {
                 std::vector<ObjectBB> detected_objects;
-                region->GetObjectDetections(buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
+                region->GetObjectDetections((float *)buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
                 if (detected_objects.size() > 0) {
                     // add it to outputQ
                     outputQ.enqueue(std::tuple<int,int>(tag,detected_objects[0].label));
