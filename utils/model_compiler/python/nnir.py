@@ -445,10 +445,10 @@ class IrGraph:
                 tensor.type = 'F016'
                 self.tensor_types[tensor.name] = tensor.type
                 self.tensor_dict[tensor.name] = tensor
-            for binary in self.binaries:
+            for idx, binary in enumerate(self.binaries):
                 weight = np.frombuffer(self.binaries[binary], dtype=np.float32)
-                del self.binaries[binary]
                 self.addBinary(binary, np.getbuffer(weight.astype(np.float16)))
+                #print("Add binary %s of size %d at Idx: %d len: %d" %(binary, len(self.binaries[binary]), idx, len(self.binaries)))
             self.all_F032 = False
             self.all_F016 = True    
         else:

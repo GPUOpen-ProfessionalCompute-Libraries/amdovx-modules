@@ -235,8 +235,7 @@ int runCompiler(int sock, Arguments * args, std::string& clientName, InfComComma
         }
         // steo-1.2: todo:: nnir-update
         command = "python ";
-        //command += args->getModelCompilerPath() + "/" + "nnir-update.py --fuse-ops 1";
-        command += args->getModelCompilerPath() + "/" + "nnir-update.py";
+        command += args->getModelCompilerPath() + "/" + "nnir-update.py --fuse-ops 1";  // --fuse-ops is required to fuse batch-norm at NNIR. Workaround for FP16 MIOPen bug with batchnorm
         if (args->fp16Inference())
         {
             command += " --convert-fp16 1";

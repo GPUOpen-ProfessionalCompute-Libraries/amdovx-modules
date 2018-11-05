@@ -175,12 +175,15 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
         if (!data->workspace) {
             return VX_FAILURE;
         }
-        cl_float pattern= 0;
         cl_int err;
-        if (data->data_type == miopenFloat)
+        if (data->data_type == miopenFloat){
+            cl_float pattern= 0;
             err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
-        else
+        }
+        else {
+            cl_half pattern= 0;
             err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
+        }
         if(err) return VX_FAILURE;
     }
 
