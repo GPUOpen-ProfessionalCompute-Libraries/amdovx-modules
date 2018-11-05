@@ -82,6 +82,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     numDecThreads = args->decThreads();
     if (numDecThreads){
         numDecThreads = (numDecThreads + 1) & ~1;    // make it multiple of 2
+        numDecThreads = std::min(numDecThreads, batchSize); // can't be more than batch_size
     }
 
     if (detectBoundingBoxes)
