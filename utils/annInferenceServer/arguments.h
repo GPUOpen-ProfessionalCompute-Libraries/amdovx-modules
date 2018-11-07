@@ -39,6 +39,10 @@ public:
         return localShadowRootDir;
     }
 
+    const std::string& getModelCompilerPath() {
+        return modelCompilerPath;
+    }
+
     // global mutex
     void lock() {
         mutex.lock();
@@ -96,6 +100,20 @@ public:
     {
         localShadowRootDir = localShadowDir;
     }
+    // set modelCompiler(nnir) path
+    void setModelCompilerPath(const std::string& modelCompDir)
+    {
+        modelCompilerPath = modelCompDir;
+    }
+    
+    bool fp16Inference()
+    {
+        return useFp16Inference;
+    }
+    int decThreads()
+    {
+        return numDecThreads;
+    }
 
     // device resources
     int lockGpuDevices(int GPUs, cl_device_id * device_id_);
@@ -115,6 +133,8 @@ private:
     int batchSize;
     int maxPendingBatches;
     int numGPUs;
+    int useFp16Inference;
+    int numDecThreads;
     int gpuIdList[MAX_NUM_GPU];
     std::string password;
     // derived configuration
@@ -126,6 +146,7 @@ private:
     std::string configurationFile;
     std::string configurationDir;
     std::string localShadowRootDir;
+    std::string modelCompilerPath;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float,std::string>> configuredModels;
     std::vector<std::tuple<std::string,int,int,int,int,int,int,int,float,float,float,float,float,float>> uploadedModels;
     // misc

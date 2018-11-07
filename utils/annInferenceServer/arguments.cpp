@@ -9,7 +9,7 @@
 Arguments::Arguments()
         : workFolder{ "~" }, modelFileDownloadCounter{ 0 },
           password{ "radeon" },
-          port{ 28282 }, batchSize{ 32 }, maxPendingBatches{ 4 }, numGPUs{ 1 }, gpuIdList{ 0 },
+          port{ 28282 }, batchSize{ 64 }, maxPendingBatches{ 4 }, numGPUs{ 1 }, gpuIdList{ 0 },
           maxGpuId{ 0 }, platform_id{ NULL }, num_devices{ 0 }, device_id{ NULL }, deviceUseCount{ 0 }
 {
     ////////
@@ -76,6 +76,8 @@ Arguments::Arguments()
     ///
     loadConfig();
     setConfigurationDir();
+    useFp16Inference = 0;
+    numDecThreads = 0;
 }
 
 Arguments::~Arguments()
@@ -237,8 +239,8 @@ int Arguments::initializeConfig(int argc, char * argv[])
     ///
     const char * usage =
             "Usage: annInferenceServer [-p port] [-b default-batch-size]"
-                                     " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>]"
-                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>]";
+                                     " [-gpu <comma-separated-list-of-GPUs>] [-q <max-pending-batches>] [-fp16 <0/1>]"
+                                     " [-w <server-work-folder>] [-s <local-shadow-folder-full-path>] [-n <model-compiler-path>] [-t num_cpu_dec_threads<2-64>]";
     while(argc > 2) {
         if(!strcmp(argv[1], "-p")) {
             port = atoi(argv[2]);
@@ -281,6 +283,11 @@ int Arguments::initializeConfig(int argc, char * argv[])
             argc -= 2;
             argv += 2;
         }
+        else if(!strcmp(argv[1], "-fp16")) {
+            useFp16Inference = atoi(argv[2]);
+            argc -= 2;
+            argv += 2;
+        }
         else if(!strcmp(argv[1], "-w")) {
             workFolder = argv[2];
             argc -= 2;
@@ -296,6 +303,23 @@ int Arguments::initializeConfig(int argc, char * argv[])
                 setLocalShadowRootDir(argv[2]);
                 printf("Set shadow folder to %s\n", localShadowRootDir.c_str());
             }
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "-n")) {
+            if (!strcmp(argv[2],"")) {
+                error("invalid model_compiler folder name %s", argv[2]);
+                return -1;
+            }else {
+                setModelCompilerPath(argv[2]);
+                printf("Set shadow folder to %s\n", modelCompilerPath.c_str());
+            }
+            argc -= 2;
+            argv += 2;
+        }
+        else if(!strcmp(argv[1], "-t")) {
+            numDecThreads = atoi(argv[2]);
+            if (numDecThreads < 2) numDecThreads=0;
             argc -= 2;
             argv += 2;
         }

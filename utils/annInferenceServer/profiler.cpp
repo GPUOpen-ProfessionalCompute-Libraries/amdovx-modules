@@ -24,6 +24,7 @@ const char * ProfilerEventName[] = {
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputCopyJpegDecode)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceProcess)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceOutputCopy)
+    PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workRGBtoTensor)
     ""
 };
 
