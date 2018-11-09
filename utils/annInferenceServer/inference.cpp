@@ -14,8 +14,20 @@
 #include <intrin.h>
 #else
 #include <x86intrin.h>
+#include <immintrin.h>
 #endif
 #endif
+
+static void VX_CALLBACK log_callback(vx_context context, vx_reference ref, vx_status status, const vx_char string[])
+{
+    size_t len = strlen(string);
+    if (len > 0) {
+        printf("%s", string);
+        if (string[len - 1] != '\n')
+            printf("\n");
+        fflush(stdout);
+    }
+}
 
 const float BB_biases[10]             = {1.08,1.19,  3.42,4.41,  6.63,11.38,  9.42,5.11,  16.62,10.52};     // bounding box biases
 
@@ -33,7 +45,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       dimOutput{ cmd->data[5], cmd->data[6], cmd->data[7] },
       receiveFileNames { cmd->data[8] }, topK { cmd->data[9] }, detectBoundingBoxes { cmd->data[10] },
       reverseInputChannelOrder{ 0 }, preprocessMpy{ 1, 1, 1 }, preprocessAdd{ 0, 0, 0 },
-      moduleHandle{ nullptr }, annCreateGraph{ nullptr },
+      moduleHandle{ nullptr }, annCreateGraph{ nullptr }, annAddtoGraph { nullptr},
       device_id{ nullptr }, deviceLockSuccess{ false }, useShadowFilenames{ false }
 #if INFERENCE_SCHEDULER_MODE == NO_INFERENCE_SCHEDULER && !DONOT_RUN_INFERENCE
     , openvx_context{ nullptr }, openvx_graph{ nullptr }, openvx_input{ nullptr }, openvx_output{ nullptr }
@@ -45,7 +57,7 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
       queueDeviceTagQ{ nullptr }, queueDeviceImageQ{ nullptr },
       queueDeviceInputMemIdle{ nullptr }, queueDeviceInputMemBusy{ nullptr },
       queueDeviceOutputMemIdle{ nullptr }, queueDeviceOutputMemBusy{ nullptr },
-      region { nullptr }
+      region { nullptr }, useFp16 { 0 }
 #if  USE_ADVANCED_MESSAGE_Q
     , inputQ(MAX_INPUT_QUEUE_DEPTH)
 #endif
@@ -58,8 +70,22 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
     options = options_;
     // configuration
     batchSize = args->getBatchSize();
-    inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
-    outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    if (!args->fp16Inference()) {
+        inputSizeInBytes = 4 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
+        outputSizeInBytes = 4 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+    }else
+    {
+        useFp16 = 1;
+        inputSizeInBytes = 2 * dimInput[0] * dimInput[1] * dimInput[2] * batchSize;
+        outputSizeInBytes = 2 * dimOutput[0] * dimOutput[1] * dimOutput[2] * batchSize;
+        std::cout << "INFO::inferenceserver is running with FP16 inference" << std::endl;
+    }
+    numDecThreads = args->decThreads();
+    if (numDecThreads){
+        numDecThreads = (numDecThreads + 1) & ~1;    // make it multiple of 2
+        numDecThreads = std::min(numDecThreads, batchSize); // can't be more than batch_size
+    }
+
     if (detectBoundingBoxes)
         region = new CYoloRegion();
     // lock devices
@@ -69,16 +95,15 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
         useShadowFilenames = true;
         std::cout << "INFO::inferenceserver is running with LocalShadowFolder and infcom command receiving only filenames" << "ReceiveFileName: " << receiveFileNames << std::endl;
     }
-    lmdbNumOfRecords = 0;
-    if (receiveFileNames > 1) {
+
+    if (receiveFileNames > 1) {             // lmdb mode
         if (args->getlocalLmdbName().empty()){
             useLMDB = false;
             std::cout << "INFO::invalid lmdb name" << args->getlocalLmdbName() << std::endl;
         }else
         {
             std::cout << "INFO::inferenceserver is running with LocalShadowFolder with LMDB and infcom command receiving only tags" << std::endl;
-#if (LMDB_DATABASE_MODE == 1)
-            useLMDB = 1;
+            useLMDB = true;
             // Open LMDB
             lmdbEnv = 0; lmDbi = 0;lmdbTxn = 0;
             int status;
@@ -94,59 +119,6 @@ InferenceEngine::InferenceEngine(int sock_, Arguments * args_, std::string clien
                 useLMDB = false;
             }
             MDB_CHECK(mdb_dbi_open(lmdbTxn, NULL, 0, &lmDbi));
-#else
-            #if (LMDB_RECORD_TYPE_BITMAPS)
-                lmdbImageSize = (dimInput[0] * dimInput[1] * dimInput[2] + 1024)*4 & ~4095;     // align to 4k
-            #else
-                lmdbImageSize = 256*1024;       //256k
-            #endif
-            // calculate size of map (~10000*imgSize)
-            lmdbNumOfRecords = 5000;
-            shadowMap = (char *)mmap(NULL, lmdbImageSize*lmdbNumOfRecords, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
-            if ((void *)shadowMap != MAP_FAILED) {
-                std::cout << "INFO::Created Shadow Map" << std::endl;
-                std::string fileNameDir = args->getlocalShadowRootDir() + "/" + args->getlocalShadowLmdbPath();
-                int endOfSequence = 0;
-                unsigned char *byteBuff = new unsigned char[1024*1024];    // maximum size is assumed iMB
-                for (int i=0; !endOfSequence; i++)
-                {
-                    char fileName[256];
-                    sprintf(fileName, "%s%04d%s", "/image_", i, ".JPEG");
-                    std::string fullFileName = fileNameDir;
-                    fullFileName.append(fileName);
-                    FILE * fp = fopen(fullFileName.c_str(), "rb");
-                    if(!fp || i >= lmdbNumOfRecords) {
-                        if (fp) fclose(fp);
-                        std::cout << "INFO::Couldn't open File" << fullFileName.c_str() << std::endl;
-                        endOfSequence = 1;
-                        continue;
-                    }
-                    else
-                    {
-                        //std::cout << "INFO::Opened file" << fullFileName.c_str() << std::endl;
-                    }
-
-                    fseek(fp,0,SEEK_END);
-                    int fsize = ftell(fp);
-                    fseek(fp,0,SEEK_SET);
-                    int size = fread(&byteBuff[0], 1, fsize, fp);
-                    fclose(fp);
-                    #if (LMDB_RECORD_TYPE_BITMAPS)
-                        DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteBuff, (float *)(shadowMap+i*lmdbImageSize));
-                    #else
-                        *((int*)(shadowMap+i*lmdbImageSize)) = size;
-                        memcpy((char*)(shadowMap+i*lmdbImageSize+4), byteBuff, size);
-                    #endif
-                    std::cout << "INFO::Decoded file " << i << std::endl;
-                }
-                useLMDB = 2;
-                std::cout << "INFO::Decoded files to LMDB" << std::endl;
-                delete [] byteBuff;
-            }else {
-                std::cout << "INFO::mmap failed" << std::endl;
-                useLMDB = false;
-            }
-#endif
         }
     }
 
@@ -249,8 +221,6 @@ InferenceEngine::~InferenceEngine()
         dlclose(moduleHandle);
     }
     if (region) delete region;
-    if (shadowMap)
-        munmap((void *)shadowMap, lmdbImageSize*lmdbNumOfRecords);
     // close lmdb
     if (lmdbEnv) {
         if (lmdbTxn) mdb_txn_abort(lmdbTxn);
@@ -260,7 +230,7 @@ InferenceEngine::~InferenceEngine()
     PROFILER_SHUTDOWN();
 }
 
-vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf)
+vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *buf, int use_fp16)
 {
     int length = width*height;
     cv::Mat matOrig = cv::imdecode(cv::Mat(1, size, CV_8UC1, inp), CV_LOAD_IMAGE_COLOR);
@@ -279,6 +249,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         RGB_resize(matOrig.data, data_resize, matOrig.cols, matOrig.rows, matOrig.step, width, height);
         img = data_resize;
     }
+    PROFILER_START(AnnInferenceServer, workRGBtoTensor);
 
     __m128i mask_B, mask_G, mask_R;
     if (reverseInputChannelOrder)
@@ -294,35 +265,121 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
         mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
     }
     int alignedLength = (length-2)& ~3;
-    float * B_buf = buf;
-    float * G_buf = B_buf + length;
-    float * R_buf = G_buf + length;
-    int i = 0;
+    bool bPreprocess = (preprocessMpy[0] != 1) & (preprocessAdd[0] != 0) ;
+    if (!use_fp16) {
+        float * B_buf = buf;
+        float * G_buf = B_buf + length;
+        float * R_buf = G_buf + length;
+        int i = 0;
 
-    __m128 fR, fG, fB;
-    for (; i < alignedLength; i += 4)
+        __m128 fR, fG, fB;
+        if (bPreprocess) {
+            for (; i < alignedLength; i += 4)
+            {
+                __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+                fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+                fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+                fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+                fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+                fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+                _mm_storeu_ps(B_buf, fB);
+                _mm_storeu_ps(G_buf, fG);
+                _mm_storeu_ps(R_buf, fR);
+                B_buf += 4; G_buf += 4; R_buf += 4;
+                img += 12;
+            }
+            for (; i < length; i++, img += 3) {
+                *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+                *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+                *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+            }
+        }else
+        {
+            for (; i < alignedLength; i += 4)
+            {
+                __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                _mm_storeu_ps(B_buf, fB);
+                _mm_storeu_ps(G_buf, fG);
+                _mm_storeu_ps(R_buf, fR);
+                B_buf += 4; G_buf += 4; R_buf += 4;
+                img += 12;
+            }
+            for (; i < length; i++, img += 3) {
+                *B_buf++ = img[0];
+                *G_buf++ = img[1];
+                *R_buf++ = img[2];
+            }
+        }
+    } else
     {
-        __m128i pix0 = _mm_loadu_si128((__m128i *) img);
-        fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
-        fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
-        fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
-        fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-        fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-        fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-        fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-        fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-        fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-        _mm_storeu_ps(B_buf, fB);
-        _mm_storeu_ps(G_buf, fG);
-        _mm_storeu_ps(R_buf, fR);
-        B_buf += 4; G_buf += 4; R_buf += 4;
-        img += 12;
+        unsigned short * B_buf = (unsigned short *)buf;
+        unsigned short * G_buf = B_buf + length;
+        unsigned short * R_buf = G_buf + length;
+        int i = 0;
+
+        __m128 fR, fG, fB;
+        __m128i hR, hG, hB;
+        if (bPreprocess) {
+            for (; i < alignedLength; i += 4)
+            {
+                __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+                fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+                fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+                fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+                fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+                fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+                // convert to half
+                hB = _mm_cvtps_ph(fB, 0xF);
+                hG = _mm_cvtps_ph(fG, 0xF);
+                hR = _mm_cvtps_ph(fR, 0xF);
+                _mm_storel_epi64((__m128i*)B_buf, hB);
+                _mm_storel_epi64((__m128i*)G_buf, hG);
+                _mm_storel_epi64((__m128i*)R_buf, hR);
+                B_buf += 4; G_buf += 4; R_buf += 4;
+                img += 12;
+            }
+            for (; i < length; i++, img += 3) {
+                *B_buf++ = _cvtss_sh((float)((img[0] * preprocessMpy[0]) + preprocessAdd[0]), 1);
+                *G_buf++ = _cvtss_sh((float)((img[1] * preprocessMpy[1]) + preprocessAdd[1]), 1);
+                *R_buf++ = _cvtss_sh((float)((img[2] * preprocessMpy[2]) + preprocessAdd[2]), 1);
+            }
+        } else
+        {
+            for (; i < alignedLength; i += 4)
+            {
+                __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                // convert to half
+                hB = _mm_cvtps_ph(fB, 0xF);
+                hG = _mm_cvtps_ph(fG, 0xF);
+                hR = _mm_cvtps_ph(fR, 0xF);
+                _mm_storel_epi64((__m128i*)B_buf, hB);
+                _mm_storel_epi64((__m128i*)G_buf, hG);
+                _mm_storel_epi64((__m128i*)R_buf, hR);
+                B_buf += 4; G_buf += 4; R_buf += 4;
+                img += 12;
+            }
+            for (; i < length; i++, img += 3) {
+                *B_buf++ = _cvtss_sh((float)img[0], 1);
+                *G_buf++ = _cvtss_sh((float)img[1], 1);
+                *R_buf++ = _cvtss_sh((float)img[2], 1);
+            }
+        }
     }
-    for (; i < length; i++, img += 3) {
-        *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-        *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-        *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
-    }
+    PROFILER_STOP(AnnInferenceServer, workRGBtoTensor);
     if (data_resize != nullptr) delete[] data_resize;
 #else
     cv::Mat matScaled;
@@ -341,7 +398,7 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
     return VX_SUCCESS;
 }
 
-vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *data, vx_size size, vx_size width, vx_size height, float *buf)
+vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size, vx_size width, vx_size height, float *buf)
 {
     int length = width*height;
     if (size)
@@ -371,35 +428,119 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *data, vx_size siz
             mask_B = _mm_setr_epi8((char)0x2, (char)0x80, (char)0x80, (char)0x80, (char)0x5, (char)0x80, (char)0x80, (char)0x80, (char)0x8, (char)0x80, (char)0x80, (char)0x80, (char)0xB, (char)0x80, (char)0x80, (char)0x80);
         }
         int alignedLength = (length-2)& ~3;
-        float * B_buf = buf;
-        float * G_buf = B_buf + length;
-        float * R_buf = G_buf + length;
-        int i = 0;
+        bool bPreprocess = (preprocessMpy[0] != 1) & (preprocessAdd[0] != 0) ;
+        if (useFp16) {
+            float * B_buf = buf;
+            float * G_buf = B_buf + length;
+            float * R_buf = G_buf + length;
+            int i = 0;
 
-        __m128 fR, fG, fB;
-        unsigned char * img = data;
-        for (; i < alignedLength; i += 4)
+            __m128 fR, fG, fB;
+            if (bPreprocess) {
+                for (; i < alignedLength; i += 4)
+                {
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                    fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                    fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                    fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+                    fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+                    fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+                    fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+                    fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+                    fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+                    _mm_storeu_ps(B_buf, fB);
+                    _mm_storeu_ps(G_buf, fG);
+                    _mm_storeu_ps(R_buf, fR);
+                    B_buf += 4; G_buf += 4; R_buf += 4;
+                    img += 12;
+                }
+                for (; i < length; i++, img += 3) {
+                    *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
+                    *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
+                    *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+                }
+            }else
+            {
+                for (; i < alignedLength; i += 4)
+                {
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                    fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                    fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                    _mm_storeu_ps(B_buf, fB);
+                    _mm_storeu_ps(G_buf, fG);
+                    _mm_storeu_ps(R_buf, fR);
+                    B_buf += 4; G_buf += 4; R_buf += 4;
+                    img += 12;
+                }
+                for (; i < length; i++, img += 3) {
+                    *B_buf++ = img[0];
+                    *G_buf++ = img[1];
+                    *R_buf++ = img[2];
+                }
+            }
+        }else
         {
-            __m128i pix0 = _mm_loadu_si128((__m128i *) img);
-            fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
-            fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
-            fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
-            fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
-            fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
-            fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
-            fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
-            fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
-            fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
-            _mm_storeu_ps(B_buf, fB);
-            _mm_storeu_ps(G_buf, fG);
-            _mm_storeu_ps(R_buf, fR);
-            B_buf += 4; G_buf += 4; R_buf += 4;
-            img += 12;
-        }
-        for (; i < length; i++, img += 3) {
-            *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-            *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-            *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+            unsigned short * B_buf = (unsigned short *)buf;
+            unsigned short * G_buf = B_buf + length;
+            unsigned short * R_buf = G_buf + length;
+            int i = 0;
+
+            __m128 fR, fG, fB;
+            __m128i hR, hG, hB;
+            if (bPreprocess) {
+                for (; i < alignedLength; i += 4)
+                {
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                    fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                    fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                    fB = _mm_mul_ps(fB, _mm_set1_ps(preprocessMpy[0]));
+                    fG = _mm_mul_ps(fG, _mm_set1_ps(preprocessMpy[1]));
+                    fR = _mm_mul_ps(fR, _mm_set1_ps(preprocessMpy[2]));
+                    fB = _mm_add_ps(fB, _mm_set1_ps(preprocessAdd[0]));
+                    fG = _mm_add_ps(fG, _mm_set1_ps(preprocessAdd[1]));
+                    fR = _mm_add_ps(fR, _mm_set1_ps(preprocessAdd[2]));
+                    // convert to half
+                    hB = _mm_cvtps_ph(fB, 0xF);
+                    hG = _mm_cvtps_ph(fG, 0xF);
+                    hR = _mm_cvtps_ph(fR, 0xF);
+                    _mm_storel_epi64((__m128i*)B_buf, hB);
+                    _mm_storel_epi64((__m128i*)G_buf, hG);
+                    _mm_storel_epi64((__m128i*)R_buf, hR);
+                    B_buf += 4; G_buf += 4; R_buf += 4;
+                    img += 12;
+                }
+                for (; i < length; i++, img += 3) {
+                    *B_buf++ = _cvtss_sh((float)((img[0] * preprocessMpy[0]) + preprocessAdd[0]), 1);
+                    *G_buf++ = _cvtss_sh((float)((img[1] * preprocessMpy[1]) + preprocessAdd[1]), 1);
+                    *R_buf++ = _cvtss_sh((float)((img[2] * preprocessMpy[2]) + preprocessAdd[2]), 1);
+                }
+            } else
+            {
+                for (; i < alignedLength; i += 4)
+                {
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
+                    fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
+                    fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
+                    // convert to half
+                    hB = _mm_cvtps_ph(fB, 0xF);
+                    hG = _mm_cvtps_ph(fG, 0xF);
+                    hR = _mm_cvtps_ph(fR, 0xF);
+                    _mm_storel_epi64((__m128i*)B_buf, hB);
+                    _mm_storel_epi64((__m128i*)G_buf, hG);
+                    _mm_storel_epi64((__m128i*)R_buf, hR);
+                    B_buf += 4; G_buf += 4; R_buf += 4;
+                    img += 12;
+                }
+                for (; i < length; i++, img += 3) {
+                    *B_buf++ = _cvtss_sh((float)img[0], 1);
+                    *G_buf++ = _cvtss_sh((float)img[1], 1);
+                    *R_buf++ = _cvtss_sh((float)img[2], 1);
+                }
+            }
         }
 #endif
     }
@@ -590,8 +731,12 @@ void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<
             break;
         }
         // decode, scale, and format convert into the OpenCL buffer
-        float * buf = tens_buf + dim[0] * dim[1] * dim[2] * i;
-        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf);
+        float *buf;
+        if (useFp16)
+            buf = (float *) ((unsigned short *)tens_buf + dim[0] * dim[1] * dim[2] * i);
+        else
+            buf = (float *) tens_buf + dim[0] * dim[1] * dim[2] * i;
+        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf, useFp16);
         delete[] byteStream;
     }
 }
@@ -679,9 +824,15 @@ int InferenceEngine::run()
             found = false;
             error("could not locate module %s for %s", modulePath.c_str(), clientName.c_str());
         }
-        else if(!(annCreateGraph = (type_annCreateGraph *) dlsym(moduleHandle, "annCreateGraph"))) {
+        if (args->getModelCompilerPath().empty()) {
+            if(!(annCreateGraph = (type_annCreateGraph *) dlsym(moduleHandle, "annCreateGraph"))) {
+                found = false;
+                error("could not find function annCreateGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
+            }
+        }
+        else if(!(annAddtoGraph = (type_annAddToGraph *) dlsym(moduleHandle, "annAddToGraph"))) {
             found = false;
-            error("could not find function annCreateGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
+            error("could not find function annAddToGraph() in module %s for %s", modulePath.c_str(), clientName.c_str());
         }
     }
     else {
@@ -808,10 +959,19 @@ int InferenceEngine::run()
             fatal("InferenceEngine: vxSetContextAttribute(#%d,VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT) failed (%d)", gpu, status);
         vx_size idim[4] = { (vx_size)dimInput[0], (vx_size)dimInput[1], (vx_size)dimInput[2], (vx_size)batchSize };
         vx_size odim[4] = { (vx_size)dimOutput[0], (vx_size)dimOutput[1], (vx_size)dimOutput[2], (vx_size)batchSize };
-        vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
-        vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
-        openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
-        openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+        if (useFp16) {
+            vx_size istride[4] = { 2, (vx_size)2 * dimInput[0], (vx_size)2 * dimInput[0] * dimInput[1], (vx_size)2 * dimInput[0] * dimInput[1] * dimInput[2] };
+            vx_size ostride[4] = { 2, (vx_size)2 * dimOutput[0], (vx_size)2 * dimOutput[0] * dimOutput[1], (vx_size)2 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
+            openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT16, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
+            openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT16, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+            if (openvx_output[gpu] == nullptr)
+                printf(" vxCreateTensorFromHandle(output) failed for gpu#%d\n", gpu);
+        } else {
+            vx_size istride[4] = { 4, (vx_size)4 * dimInput[0], (vx_size)4 * dimInput[0] * dimInput[1], (vx_size)4 * dimInput[0] * dimInput[1] * dimInput[2] };
+            vx_size ostride[4] = { 4, (vx_size)4 * dimOutput[0], (vx_size)4 * dimOutput[0] * dimOutput[1], (vx_size)4 * dimOutput[0] * dimOutput[1] * dimOutput[2] };
+            openvx_input[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, idim, VX_TYPE_FLOAT32, 0, istride, memInput, VX_MEMORY_TYPE_OPENCL);
+            openvx_output[gpu] = vxCreateTensorFromHandle(openvx_context[gpu], 4, odim, VX_TYPE_FLOAT32, 0, ostride, memOutput, VX_MEMORY_TYPE_OPENCL);
+        }
         if((status = vxGetStatus((vx_reference)openvx_input[gpu])) != VX_SUCCESS)
             fatal("InferenceEngine: vxCreateTensorFromHandle(input#%d) failed (%d)", gpu, status);
         if((status = vxGetStatus((vx_reference)openvx_output[gpu])) != VX_SUCCESS)
@@ -819,9 +979,26 @@ int InferenceEngine::run()
 
         //////
         // load the model
-        openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
-        if((status = vxGetStatus((vx_reference)openvx_graph[gpu])) != VX_SUCCESS)
-            fatal("InferenceEngine: annCreateGraph(#%d) failed (%d)", gpu, status);
+        if (annCreateGraph != nullptr) {
+            openvx_graph[gpu] = annCreateGraph(openvx_context[gpu], openvx_input[gpu], openvx_output[gpu], modelPath.c_str());
+            if((status = vxGetStatus((vx_reference)openvx_graph[gpu])) != VX_SUCCESS)
+                fatal("InferenceEngine: annCreateGraph(#%d) failed (%d)", gpu, status);
+        }
+        else if (annAddtoGraph != nullptr) {
+            std::string weightsFile = modelPath + "/weights.bin";
+            vxRegisterLogCallback(openvx_context[gpu], log_callback, vx_false_e);
+            openvx_graph[gpu] = vxCreateGraph(openvx_context[gpu]);
+            status = vxGetStatus((vx_reference)openvx_graph[gpu]);
+            if(status) {
+                fatal("InferenceEngine: vxCreateGraph(#%d) failed (%d)", gpu, status);
+                return -1;
+            }
+            status = annAddtoGraph(openvx_graph[gpu], openvx_input[gpu], openvx_output[gpu], weightsFile.c_str());
+            if(status) {
+                fatal("InferenceEngine: annAddToGraph(#%d) failed (%d)", gpu, status);
+                return -1;
+            }
+        }
 
         // send and wait for INFCOM_CMD_INFERENCE_INITIALIZATION message
         updateCmd.data[0] = 80 * (gpu + 1) / GPUs;
@@ -1064,8 +1241,6 @@ int InferenceEngine::run()
                         if (size){
                             char * buff = new char [size];
                             ERRCHK(recvBuffer(sock, buff, size, clientName));
-                            //std::string fname = std::string(buff, size);
-                            //lmdbName.append(std::string(buff, size));
                             delete[] buff;
                         }
                         size = 4;
@@ -1104,7 +1279,7 @@ int InferenceEngine::run()
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxMapTensorPatch(input)) failed(%d)", status);
                     }
-                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr);
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, ptr, useFp16);
                     status = vxUnmapTensorPatch(openvx_input, map_id);
                     if(status != VX_SUCCESS) {
                         fatal("workDeviceProcess: vxUnmapTensorPatch(input)) failed(%d)", status);
@@ -1234,12 +1409,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
     if(err) {
         fatal("workDeviceInputCopy: clCreateCommandQueue(device_id[%d]) failed (%d)", gpu, err);
     }
-#if (NUM_DECODER_THREADS > 1)
-    int num_dec_threads = NUM_DECODER_THREADS;
-    std::vector<std::tuple<char*, int>> batch_q;
-    int sub_batch_size = batchSize/num_dec_threads;
-    std::vector<std::thread> dec_threads(num_dec_threads);
-#endif
+
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
         PROFILER_START(AnnInferenceServer, workDeviceInputCopyBatchToTensor);
@@ -1250,7 +1420,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
             fatal("workDeviceInputCopy: unexpected nullptr in queueDeviceInputMemIdle[%d]", gpu);
         }
         cl_int err;
-        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, inputSizeInBytes, 0, NULL, NULL, &err);
+        void * mapped_ptr = (void *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, inputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceInputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
@@ -1258,66 +1428,73 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         // get next batch of inputs and convert them into tensor and release input byteStream
         // TODO: replace with an efficient implementation
         int inputCount = 0;
-#if (NUM_DECODER_THREADS > 1)
-        //queueDeviceImageQ[gpu]->dequeueBatch(batchSize, batch_q);
-        // dequeue batch
-        for (; inputCount<batchSize; inputCount++)
-        {
-            std::tuple<char*, int> image;
-            queueDeviceImageQ[gpu]->dequeue(image);
-            char * byteStream = std::get<0>(image);
-            int size = std::get<1>(image);
-            if(byteStream == nullptr || size == 0) {
-                endOfSequenceReached = true;
-                break;
-            }
-            batch_q.push_back(image);
-        }
-        if (inputCount){
-            PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-            if (inputCount < batchSize)
+        if (numDecThreads > 0) {
+            int numT = numDecThreads;
+            std::vector<std::tuple<char*, int>> batch_q;
+            int sub_batch_size = batchSize/numT;
+            std::thread dec_threads[numT+1];
+            // dequeue batch
+            for (; inputCount<batchSize; inputCount++)
             {
-                sub_batch_size = (inputCount+num_dec_threads-1)/num_dec_threads;
+                std::tuple<char*, int> image;
+                queueDeviceImageQ[gpu]->dequeue(image);
+                char * byteStream = std::get<0>(image);
+                int size = std::get<1>(image);
+                if(byteStream == nullptr || size == 0) {
+                    printf("workDeviceInputCopy:: Eos reached inputCount: %d\n", inputCount);
+                    endOfSequenceReached = true;
+                    break;
+                }
+                batch_q.push_back(image);
             }
-            int start = 0; int end = sub_batch_size-1;
-            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
-            {
-                dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, mapped_ptr);
-                start += sub_batch_size;
-                end += sub_batch_size;
+            if (inputCount){
+                PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
+                if (inputCount < batchSize)
+                {
+                    sub_batch_size = (inputCount+numT-1)/numT;
+                    numT = (inputCount+(sub_batch_size-1))/sub_batch_size;
+                }
+                int start = 0; int end = sub_batch_size-1;
+                for (unsigned int t = 0; t < (numT - 1); t++)
+                {
+                    dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, (float *)mapped_ptr);
+                    start += sub_batch_size;
+                    end += sub_batch_size;
+                }
+                start = std::min(start, (inputCount - 1));
+                end = std::min(end, (inputCount-1));
+                // do some work in this thread
+                DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, (float *)mapped_ptr);
+                for (unsigned int t = 0; t < (numT - 1); t++)
+                {
+                    dec_threads[t].join();
+                }
+                PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             }
-            start = std::min(start, (inputCount - 1));
-            end = std::min(end, (inputCount-1));
-            // do some work in this thread
-            DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, mapped_ptr);
-            for (unsigned int t = 0; t < (num_dec_threads - 1); t++)
-            {
-                dec_threads[t].join();
-            }
-            dec_threads.clear();
-            batch_q.clear();
-            PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-        }
-#else
-        for(; inputCount < batchSize; inputCount++) {
-            PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-            // get next item from the input queue and check for end of input
-            std::tuple<char*,int> image;
-            queueDeviceImageQ[gpu]->dequeue(image);
-            char * byteStream = std::get<0>(image);
-            int size = std::get<1>(image);
-            if(byteStream == nullptr || size == 0) {
-                endOfSequenceReached = true;
-                break;
-            }
-            // decode, scale, and format convert into the OpenCL buffer
-            float * buf = mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
-            if (!useLMDB) {
-                DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf);
-            } else {
-                // copy decoded image from shadowMap
-                int tag = *((int*)byteStream);
-                if (useLMDB == 1){
+        } else {
+            for(; inputCount < batchSize; inputCount++) {
+                // get next item from the input queue and check for end of input
+                std::tuple<char*,int> image;
+                queueDeviceImageQ[gpu]->dequeue(image);
+                char * byteStream = std::get<0>(image);
+                int size = std::get<1>(image);
+                if(byteStream == nullptr || size == 0) {
+                    endOfSequenceReached = true;
+                    break;
+                }
+                // decode, scale, and format convert into the OpenCL buffer
+                float *buf;
+                if (useFp16)
+                    buf = (float *) ((unsigned short *)mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount);
+                else
+                    buf = (float *) mapped_ptr + dimInput[0] * dimInput[1] * dimInput[2] * inputCount;
+
+                PROFILER_START(AnnInferenceServer, workDeviceInputCopyJpegDecode);
+                if (!useLMDB) {
+                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)byteStream, buf, useFp16);
+                } else {
+                    // copy decoded image from LMDB
+                    int tag = *((int*)byteStream);
                     PROFILER_START(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
                     char key_val[8];
                     sprintf(key_val, "%08d", tag);
@@ -1336,22 +1513,12 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                         ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
                     }
                     PROFILER_STOP(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
-                } else
-                {
-                #if (LMDB_RECORD_TYPE_BITMAPS)
-                    memcpy(buf, (float *) (shadowMap + tag*lmdbImageSize), (dimInput[0] * dimInput[1] * dimInput[2]));
-                #else
-                    size = ((int *)(shadowMap + tag*lmdbImageSize))[0];
-                    DecodeScaleAndConvertToTensor(dimInput[0], dimInput[1], size, (unsigned char *)(shadowMap + tag*lmdbImageSize+4), buf);
-                #endif
                 }
-
+                PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
+                // release byteStream
+                delete[] byteStream;
             }
-            PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
-            // release byteStream
-            delete[] byteStream;
         }
-#endif
         // unlock the OpenCL buffer to perform the writing
         err = clEnqueueUnmapMemObject(cmdq, mem, mapped_ptr, 0, NULL, NULL);
         if(err) {
@@ -1395,7 +1562,6 @@ void InferenceEngine::workDeviceProcess(int gpu)
 
     int processCounter = 0;
     for(;;) {
-        PROFILER_START(AnnInferenceServer, workDeviceProcess);
         // get a busy OpenCL buffer for input and check for end of sequence marker
         cl_mem input = nullptr;
         queueDeviceInputMemBusy[gpu]->dequeue(input);
@@ -1421,19 +1587,19 @@ void InferenceEngine::workDeviceProcess(int gpu)
             fatal("workDeviceProcess: vxSwapTensorHandle(output#%d) failed(%d)", gpu, status);
         }
 #if !DONOT_RUN_INFERENCE
+        PROFILER_START(AnnInferenceServer, workDeviceProcess);
         status = vxProcessGraph(openvx_graph[gpu]);
+        PROFILER_STOP(AnnInferenceServer, workDeviceProcess);
         if(status != VX_SUCCESS) {
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
 #else
-        //info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
         std::this_thread::sleep_for(std::chrono::milliseconds(1));  // simulate some work
 #endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);
         queueDeviceOutputMemBusy[gpu]->enqueue(output);
         processCounter++;
-        PROFILER_STOP(AnnInferenceServer, workDeviceProcess);
     }
 
     // add the endOfSequenceMarker to next stage
@@ -1466,21 +1632,22 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
 
     int totalBatchCounter = 0, totalImageCounter = 0;
     for(bool endOfSequenceReached = false; !endOfSequenceReached; ) {
-        PROFILER_START(AnnInferenceServer, workDeviceOutputCopy);
         // get an output OpenCL buffer and lock the buffer for reading
         cl_mem mem = nullptr;
         queueDeviceOutputMemBusy[gpu]->dequeue(mem);
         if(mem == nullptr) {
             break;
         }
+        PROFILER_START(AnnInferenceServer, workDeviceOutputCopy);
         cl_int err;
-        float * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
+        void * mapped_ptr = (float *)clEnqueueMapBuffer(cmdq, mem, CL_TRUE, CL_MAP_READ, 0, outputSizeInBytes, 0, NULL, NULL, &err);
         if(err) {
             fatal("workDeviceOutputCopy: clEnqueueMapBuffer(#%d) failed (%d)", gpu, err);
         }
 
         // get next batch of inputs
         int outputCount = 0;
+        int useFp16 = args->fp16Inference();
         for(; outputCount < batchSize; outputCount++) {
             // get next item from the tag queue and check for end of input
             int tag;
@@ -1491,22 +1658,41 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             }
 
             // decode, scale, and format convert into the OpenCL buffer
-            float * buf = mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+            void *buf;
+            if (!useFp16)
+                buf = (float *)mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+            else
+                buf = (unsigned short *)mapped_ptr + dimOutput[0] * dimOutput[1] * dimOutput[2] * outputCount;
+
             if (!detectBoundingBoxes)
             {
                 if (topK < 1){
                     int label = 0;
-                    float max_prob = buf[0];
-                    for(int c = 1; c < dimOutput[2]; c++) {
-                        float prob = buf[c];
-                        if(prob > max_prob) {
-                            label = c;
-                            max_prob = prob;
+                    if (!useFp16) {
+                        float *out = (float *)buf;
+                        float max_prob = out[0];
+                        for(int c = 1; c < dimOutput[2]; c++) {
+                            float prob = out[c];
+                            if(prob > max_prob) {
+                                label = c;
+                                max_prob = prob;
+                            }
+                        }
+                    } else {
+                        unsigned short *out = (unsigned short *)buf;
+                        float max_prob = _cvtsh_ss(out[0]);
+                        for(int c = 1; c < dimOutput[2]; c++) {
+                            float prob = _cvtsh_ss(out[c]);
+                            if(prob > max_prob) {
+                                label = c;
+                                max_prob = prob;
+                            }
                         }
                     }
                     outputQ.enqueue(std::tuple<int,int>(tag,label));
                 }else {
-                    std::vector<float>  prob_vec(buf, buf + dimOutput[2]);
+                    // todo:: add support for fp16
+                    std::vector<float>  prob_vec((float*)buf, (float*)buf + dimOutput[2]);
                     std::vector<size_t> idx(prob_vec.size());
                     std::iota(idx.begin(), idx.end(), 0);
                     sort_indexes(prob_vec, idx);            // sort indeces based on prob
@@ -1524,7 +1710,7 @@ void InferenceEngine::workDeviceOutputCopy(int gpu)
             }else
             {
                 std::vector<ObjectBB> detected_objects;
-                region->GetObjectDetections(buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
+                region->GetObjectDetections((float *)buf, BB_biases, dimOutput[2], dimOutput[1], dimOutput[0], BOUNDING_BOX_NUMBER_OF_CLASSES, dimInput[0], dimInput[1], BOUNDING_BOX_CONFIDENCE_THRESHHOLD, BOUNDING_BOX_NMS_THRESHHOLD, 13, detected_objects);
                 if (detected_objects.size() > 0) {
                     // add it to outputQ
                     outputQ.enqueue(std::tuple<int,int>(tag,detected_objects[0].label));

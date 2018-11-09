@@ -38,7 +38,6 @@
 #define MAX_INPUT_QUEUE_DEPTH       1024  // max number of images in input Q
 #define MAX_DEVICE_QUEUE_DEPTH      1024  // max number of images in device Q
 #define USE_SSE_OPTIMIZATION           1  // enable/disable SSE intrinsics for resize and format conversion
-#define NUM_DECODER_THREADS            0  // number of threads for jpeg decode, scale, and format conversion job
 #define DONOT_RUN_INFERENCE            0  // for debugging
 #define USE_ADVANCED_MESSAGE_Q         0  // experimental code
 #endif
@@ -47,9 +46,6 @@
 #define BOUNDING_BOX_CONFIDENCE_THRESHHOLD  0.2
 #define BOUNDING_BOX_NMS_THRESHHOLD         0.4
 #define BOUNDING_BOX_NUMBER_OF_CLASSES      20
-
-#define LMDB_DATABASE_MODE                  1      // 0: no lmdb 1:LMDB 2: MMAP
-#define LMDB_RECORD_TYPE_BITMAPS            0
 
 inline void MDB_CHECK(int mdb_status) {
   if (mdb_status != MDB_SUCCESS)
@@ -64,6 +60,10 @@ extern "C" {
             vx_tensor output,
             const char * options
         );
+};
+
+extern "C" {
+    typedef VX_API_ENTRY vx_status VX_API_CALL type_annAddToGraph(vx_graph graph, vx_tensor input, vx_tensor output, const char * binaryFilename);
 };
 
 template<typename T>
@@ -222,7 +222,6 @@ private:
     int receiveFileNames;
     bool useShadowFilenames;
     bool useLMDB;
-    char *shadowMap;
     int  lmdbImageSize, lmdbNumOfRecords;
     int topK;
     int reverseInputChannelOrder;
@@ -233,12 +232,14 @@ private:
     std::string modulePath;
     void * moduleHandle;
     type_annCreateGraph * annCreateGraph;
+    type_annAddToGraph  * annAddtoGraph;
     cl_device_id device_id[MAX_NUM_GPU];
     int batchSize;
     int inputSizeInBytes;
     int outputSizeInBytes;
     bool deviceLockSuccess;
     int detectBoundingBoxes;
+    int useFp16, numDecThreads;
     CYoloRegion *region;
     // scheduler output queue
     //   outputQ: output from the scheduler <tag,label>
@@ -246,7 +247,7 @@ private:
     MessageQueue<std::vector<unsigned int>>        outputQTopk;      // outputQ for topK vec<tag, top_k labels>
     MessageQueue<std::vector<ObjectBB>> OutputQBB;
 
-    vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out);
+    vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out, int use_fp16=0);
     void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int sstride, unsigned int dwidth, unsigned int dheight);
     vx_status ConvertDatumToTensor(unsigned char *data, vx_size size, vx_size width, vx_size height, float *buf);

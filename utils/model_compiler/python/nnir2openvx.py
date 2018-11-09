@@ -580,7 +580,6 @@ VX_API_ENTRY vx_status VX_API_CALL annAddToGraph(vx_graph graph, %s, %s, const c
             elif node.type == 'copy'or node.type == 'transpose':
                 f.write( \
 """
-    { vx_node node = vxCopyNode(graph, %s, %s);
       ERROR_CHECK_OBJECT(node);
       ERROR_CHECK_STATUS(vxReleaseNode(&node));
     }
@@ -1663,6 +1662,8 @@ Usage: python nnir2openvx.py [OPTIONS] <nnirInputFolder> <outputFolder>
     print('reading IR model from ' + inputFolder + ' ...')
     graph = IrGraph()
     graph.fromFile(inputFolder)
+    for tensor in graph.outputs:
+        print('#OUTPUT-TENSOR: %s %d %d %d %d ' %(tensor.name, tensor.shape[0], tensor.shape[1], tensor.shape[2], tensor.shape[3]));
     print('creating C code in ' + outputFolder + ' ...')
     generateCode(graph,argmaxOutput,outputFolder)
 

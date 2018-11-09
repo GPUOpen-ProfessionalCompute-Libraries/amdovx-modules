@@ -25,7 +25,7 @@ const char * ProfilerEventName[] = {
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceProcess)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceOutputCopy)
     PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workDeviceInputLmdbConvertToTensor)
-   // PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, ReceiveImage)
+    PROFILER_DEFINE_EVENT_NAME_ENUM(AnnInferenceServer, workRGBtoTensor)
     ""
 };
 
