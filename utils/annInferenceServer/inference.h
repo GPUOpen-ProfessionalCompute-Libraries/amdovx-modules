@@ -222,7 +222,6 @@ private:
     int receiveFileNames;
     bool useShadowFilenames;
     bool useLMDB;
-    int  lmdbImageSize, lmdbNumOfRecords;
     int topK;
     int reverseInputChannelOrder;
     float preprocessMpy[3];

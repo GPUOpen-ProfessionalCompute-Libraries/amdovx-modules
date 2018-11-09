@@ -7,7 +7,6 @@
 #include <opencv2/opencv.hpp>
 #include <highgui.h>
 #include <numeric>
-#include <sys/mman.h>
 
 #if USE_SSE_OPTIMIZATION
 #if _WIN32
@@ -1594,7 +1593,8 @@ void InferenceEngine::workDeviceProcess(int gpu)
             fatal("workDeviceProcess: vxProcessGraph(#%d) failed(%d)", gpu, status);
         }
 #else
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));  // simulate some work
+         info("InferenceEngine:workDeviceProcess DONOT_RUN_INFERENCE mode");
+         std::this_thread::sleep_for(std::chrono::milliseconds(1));  // simulate some work
 #endif
         // add the input for idle queue and output to busy queue
         queueDeviceInputMemIdle[gpu]->enqueue(input);
