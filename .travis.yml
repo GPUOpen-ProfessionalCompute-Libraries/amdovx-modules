@@ -22,13 +22,13 @@ install:
   - sudo apt install rocm-dkms
 
 before_script:
-  - docker pull kiritigowda/amdovx-test-docker
-  - docker run -it -d --name amdovx --network host kiritigowda/amdovx-test-docker bash
-  - docker cp ../amdovx-modules amdovx:/amdovx-modules
+  - docker pull kiritigowda/mivision-test-docker
+  - docker run -it -d --name mivision --network host kiritigowda/mivision-test-docker bash
+  - docker cp ../amdovx-modules mivision:/amdovx-modules
 
 script:
-  - docker exec amdovx cmake -H/amdovx-modules -B/_build -DCMAKE_BUILD_TYPE=Release
-  - docker exec amdovx cmake --build /_build
+  - docker exec mivision cmake -H/amdovx-modules -B/_build -DCMAKE_BUILD_TYPE=Release
+  - docker exec mivision cmake --build /_build
 
 after_success:
 
