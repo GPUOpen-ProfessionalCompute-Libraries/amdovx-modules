@@ -35,7 +35,7 @@ THE SOFTWARE.
 #include <climits>
 
 // Version
-#define LS_VERSION             "0.9.7"
+#define LS_VERSION             "0.9.8"
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The magic number for validation

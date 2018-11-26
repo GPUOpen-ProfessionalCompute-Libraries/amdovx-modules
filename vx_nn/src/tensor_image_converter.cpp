@@ -29,27 +29,22 @@ static vx_status VX_CALLBACK validateTensorToImageKernel(vx_node node, const vx_
     vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    if (num_dims < 2)
-        return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: tensor2img: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
-    if (input_dims[3] != 1 || (input_dims[2] != 3 && input_dims[2] != 1))
-        return VX_ERROR_INVALID_DIMENSION;
+    if ((input_dims[2] != 3 && input_dims[2] != 1) || ((input_dims[0] & 3) != 0))
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: tensor2img: input_dims[%ldx%ldx%ldx%ld]\n", input_dims[3], input_dims[2], input_dims[1], input_dims[0]);
     vx_enum scalar_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #2 type=%d (must be float)\n", scalar_type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_FLOAT32)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #3 type=%d (must be float)\n", scalar_type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &scalar_type, sizeof(scalar_type)));
-    if(scalar_type != VX_TYPE_BOOL)
-        return VX_ERROR_INVALID_TYPE;
+    if(scalar_type != VX_TYPE_BOOL) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: tensor2img: #4 type=%d (must be bool)\n", scalar_type);
 
     // set output image configuration
     vx_uint32 width = (vx_uint32)input_dims[0];
-    vx_uint32 height = (vx_uint32)input_dims[1];
+    vx_uint32 height = (vx_uint32)(input_dims[1]*input_dims[3]);
     vx_df_image format = (input_dims[2] == 3) ? VX_DF_IMAGE_RGB : VX_DF_IMAGE_U8;
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
@@ -85,11 +80,16 @@ static vx_status VX_CALLBACK opencl_codegen(
     )
 {
     // get configuration
-    vx_uint32 width, height;
     vx_df_image format;
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_WIDTH, &width, sizeof(width)));
-    ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_HEIGHT, &height, sizeof(height)));
+    vx_size num_dims, input_dims[4] = { 1, 1, 1, 1 };
+    vx_enum type;
     ERROR_CHECK_STATUS(vxQueryImage((vx_image)parameters[1], VX_IMAGE_FORMAT, &format, sizeof(format)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims[0])*num_dims));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    vx_uint32 width = (vx_uint32)input_dims[0];
+    vx_uint32 height = (vx_uint32)input_dims[1];
+    vx_uint32 N = (vx_uint32)input_dims[3];
 
     // compute global work
     vx_uint32 width_div_4 = (width + 3) / 4;
@@ -99,12 +99,13 @@ static vx_status VX_CALLBACK opencl_codegen(
     opencl_local_work[2] = 1;
     opencl_global_work[0] = (width_div_4  + opencl_local_work[0] - 1) & ~(opencl_local_work[0] - 1);
     opencl_global_work[1] = (height + opencl_local_work[1] - 1) & ~(opencl_local_work[1] - 1);
-    opencl_global_work[2] = 1;
+    opencl_global_work[2] = N;
 
     // generate OpenCL C code
     strcpy(opencl_kernel_function_name, "tensor_to_image");
     if(format == VX_DF_IMAGE_RGB) {
         char item[8192];
+        if (type == VX_TYPE_FLOAT32){
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
@@ -112,8 +113,9 @@ static vx_status VX_CALLBACK opencl_codegen(
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
+            "    uint n = get_global_id(2);\n"
             "    if(x < %d && y < %d) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
             "        float4 r = *(__global float4 *)&i0_buf[reverse_channel_order ? 2 * i0_stride.s2 : 0];\n"
             "        float4 g = *(__global float4 *)&i0_buf[                              i0_stride.s2  ];\n"
             "        float4 b = *(__global float4 *)&i0_buf[reverse_channel_order ? 0 : 2 * i0_stride.s2];\n"
@@ -124,14 +126,43 @@ static vx_status VX_CALLBACK opencl_codegen(
             "        u3.s0 = amd_pack((float4)(r.s0, g.s0, b.s0, r.s1));\n"
             "        u3.s1 = amd_pack((float4)(g.s1, b.s1, r.s2, g.s2));\n"
             "        u3.s2 = amd_pack((float4)(b.s2, r.s3, g.s3, b.s3));\n"
-            "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + y * o0_stride + x * 3]);\n"
+            "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x * 3]);\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        }else
+        {
+            sprintf(item,
+            "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+            "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+            "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+            "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, float ka, float kb, uint reverse_channel_order)\n"
+            "{\n"
+            "    uint x = get_global_id(0) * 4;\n"
+            "    uint y = get_global_id(1);\n"
+            "    uint n = get_global_id(2);\n"
+            "    if(x < %d && y < %d) {\n"
+            "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        half4 r = *(__global half4 *)&i0_buf[reverse_channel_order ? 2 * i0_stride.s2 : 0];\n"
+            "        half4 g = *(__global half4 *)&i0_buf[                              i0_stride.s2  ];\n"
+            "        half4 b = *(__global half4 *)&i0_buf[reverse_channel_order ? 0 : 2 * i0_stride.s2];\n"
+            "        r = r * (half4)ka + (half4)kb;\n"
+            "        g = g * (half4)ka + (half4)kb;\n"
+            "        b = b * (half4)ka + (half4)kb;\n"
+            "        uint3 u3;\n"
+            "        u3.s0 = amd_pack(convert_float4(r.s0, g.s0, b.s0, r.s1));\n"
+            "        u3.s1 = amd_pack(convert_float4(g.s1, b.s1, r.s2, g.s2));\n"
+            "        u3.s2 = amd_pack(convert_float4(b.s2, r.s3, g.s3, b.s3));\n"
+            "        vstore3(u3, 0, (__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x * 3]);\n"
+            "    }\n"
+            "}\n"
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        }
         opencl_kernel_code = item;
     }
     else {
         char item[8192];
+        if (type == VX_TYPE_FLOAT32){
         sprintf(item,
             "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
             "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
@@ -139,19 +170,40 @@ static vx_status VX_CALLBACK opencl_codegen(
             "{\n"
             "    uint x = get_global_id(0) * 4;\n"
             "    uint y = get_global_id(1);\n"
+            "    uint n = get_global_id(2);\n"
             "    if(x < %d && y < %d) {\n"
-            "        i0_buf += i0_offset + y * i0_stride.s1 + x * i0_stride.s0;\n"
+            "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
             "        float4 i = *(__global float4 *)i0_buf;\n"
             "        i = i * (float4)ka + (float4)kb;\n"
-            "        *(__global uint *)&o0_buf[o0_offset + y * o0_stride + x] = amd_pack((float4)(i.s0, i.s1, i.s2, i.s3));\n"
+            "        *(__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x] = amd_pack((float4)(i.s0, i.s1, i.s2, i.s3));\n"
             "    }\n"
             "}\n"
-            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height);
+            , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        }else
+        {
+            sprintf(item,
+                "#pragma OPENCL EXTENSION cl_amd_media_ops : enable\n"
+                "#pragma OPENCL EXTENSION cl_khr_fp16 : enable\n"
+                "__kernel __attribute__((reqd_work_group_size(%ld, %ld, 1)))\n" // opencl_local_work[0] opencl_local_work[1]
+                "void %s(__global uchar * i0_buf, uint i0_offset, uint4 i0_stride, uint o0_width, uint o0_height, __global uchar * o0_buf, uint o0_stride, uint o0_offset, float ka, float kb, uint reverse_channel_order)\n"
+                "{\n"
+                "    uint x = get_global_id(0) * 4;\n"
+                "    uint y = get_global_id(1);\n"
+                "    uint n = get_global_id(2);\n"
+                "    if(x < %d && y < %d) {\n"
+                "        i0_buf += i0_offset + n * i0_stride.s3 + y * i0_stride.s1 + x * i0_stride.s0;\n"
+                "        half4 i = *(__global half4 *)i0_buf;\n"
+                "        float4 o = convert_float4(i) * (float4)ka + (float4)kb;\n"
+                "        *(__global uint *)&o0_buf[o0_offset + (y + n * %d) * o0_stride + x] = amd_pack((float4)(o.s0, o.s1, o.s2, o.s3));\n"
+                "    }\n"
+                "}\n"
+                , opencl_local_work[0], opencl_local_work[1], opencl_kernel_function_name, width, height, height);
+        }
         opencl_kernel_code = item;
     }
 
 #if ENABLE_DEBUG_PRINT_DIMS
-    std::cout << "KERNEL tensor_to_image output " << width << "x" << height << " " << std::endl;
+    std::cout << "KERNEL tensor_to_image output " << width << "x" << height << " " << N << std::endl;
 #endif
 
     return VX_SUCCESS;
@@ -193,21 +245,21 @@ VX_API_ENTRY vx_node VX_API_CALL vxConvertTensorToImageNode(vx_graph graph, vx_t
     vx_node node = NULL;
     vx_context context = vxGetContext((vx_reference)graph);
     if (vxGetStatus((vx_reference)context) == VX_SUCCESS) {
-        vx_scalar a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
-        vx_scalar b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
-        vx_scalar s = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
-        if(vxGetStatus((vx_reference)s) == VX_SUCCESS) {
+        vx_scalar s_a = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &a, sizeof(a));
+        vx_scalar s_b = vxCreateScalarWithSize(context, VX_TYPE_FLOAT32, &b, sizeof(b));
+        vx_scalar s_order = vxCreateScalarWithSize(context, VX_TYPE_BOOL, &reverse_channel_order, sizeof(reverse_channel_order));
+        if(vxGetStatus((vx_reference)s_order) == VX_SUCCESS) {
             vx_reference params[] = {
                 (vx_reference)input,
                 (vx_reference)output,
-                (vx_reference)a,
-                (vx_reference)b,
-                (vx_reference)s
+                (vx_reference)s_a,
+                (vx_reference)s_b,
+                (vx_reference)s_order
             };
             node = createNode(graph, VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD, params, sizeof(params) / sizeof(params[0]));
-            vxReleaseScalar(&a);
-            vxReleaseScalar(&b);
-            vxReleaseScalar(&s);
+            vxReleaseScalar(&s_a);
+            vxReleaseScalar(&s_b);
+            vxReleaseScalar(&s_order);
         }
     }
     return node;

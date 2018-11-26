@@ -51,6 +51,8 @@ THE SOFTWARE.
 #define ERROR_CHECK_STATUS(call) { vx_status status = (call); if(status != VX_SUCCESS){ vxAddLogEntry(NULL, status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
 //! \brief The macro for error checking from OpenVX object.
 #define ERROR_CHECK_OBJECT(obj)  { vx_status status = vxGetStatus((vx_reference)(obj)); if(status != VX_SUCCESS){ vxAddLogEntry((vx_reference)(obj), status, "ERROR: failed with status = (%d) at " __FILE__ "#%d\n", status, __LINE__); return status; }}
+//! \brief The macro for error message and return error code
+#define ERRMSG(status, format, ...) printf("ERROR: " format, __VA_ARGS__), status
 
 #ifndef ERROR_CHECK_MIOPEN_STATUS
 #define ERROR_CHECK_MIOPEN_STATUS(call) if(call) { \
@@ -76,9 +78,11 @@ enum user_kernel_e
     VX_KERNEL_ARGMAX_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x002,
     VX_KERNEL_CONVERT_IMAGE_TO_TENSOR_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x003,
     VX_KERNEL_CONVERT_TENSOR_TO_IMAGE_AMD    = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x004,
-    VX_KERNEL_ELEMENTWISE_LAYER_AMD          = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x005,
     VX_KERNEL_CONCAT_LAYER_AMD               = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x006,
     VX_KERNEL_SLICE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x007,
+    VX_KERNEL_SCALE_LAYER_AMD                = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x008,
+    VX_KERNEL_UPSAMPLE_NEAREST_LAYER_AMD     = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x009,
+    VX_KERNEL_RESHAPE_LAYER                  = VX_KERNEL_BASE(VX_ID_AMD, NN_EXTENSION_LIBRARY) + 0x00a,
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -96,6 +100,7 @@ vx_node createNode(vx_graph graph, vx_enum kernelEnum, vx_reference params[], vx
 vx_reference getNodeParameterByIndex(vx_node node, vx_uint32 index);
 vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle);
 vx_status releaseGraphHandle(vx_node node, NeuralNetworkCommonHandle * handle);
+int getEnvironmentVariable(const char* name);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The kernel publish functions
@@ -107,7 +112,6 @@ vx_status publishNormalizationLayer(vx_context context);
 vx_status publishActivationLayer(vx_context context);
 vx_status publishROIPoolingLayer(vx_context context);
 vx_status publishDeconvolutionLayer(vx_context context);
-vx_status publishElementwiseLayer(vx_context context);
 vx_status publishBatchNormalizationLayer(vx_context context);
 vx_status publishArgmaxLayer(vx_context context);
 vx_status publishConcatLayer(vx_context context);
@@ -117,8 +121,11 @@ vx_status publishTensorToImageConvert(vx_context context);
 vx_status publishTensorAdd(vx_context context);
 vx_status publishTensorSubtraction(vx_context context);
 vx_status publishTensorMultiply(vx_context context);
-vx_status publishTensorConvertDepth(vx_context context);
-
+vx_status publishScaleLayer(vx_context context);
+vx_status publishUpsampleNearest(vx_context context);
+vx_status publishTensorTableLookup(vx_context context);
+vx_status publishTensorMatrixMultiply(vx_context context);
+vx_status publishReshapeLayer(vx_context context);
 
 //////////////////////////////////////////////////////////////////////
 //! \brief The module entry point for publishing/unpublishing kernels

@@ -825,6 +825,13 @@ VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcCamWarpMaps(vx_graph graph, void 
 		AMDOVX_KERNEL_STITCHING_INIT_CALC_CAMERA_VALID_MAP,
 		params,
 		dimof(params));
+
+	vxReleaseScalar(&scCamId);
+	vxReleaseScalar(&scLensType);
+	vxReleaseScalar(&scCamW);
+	vxReleaseScalar(&scCamH);
+	vxReleaseScalar(&scPadCnt);
+
 	return node;
 }
 
@@ -844,6 +851,11 @@ VX_API_ENTRY vx_node VX_API_CALL stitchInitCalcDefCamIdxNode(vx_graph graph, vx_
 		AMDOVX_KERNEL_STITCHING_INIT_COMPUTE_DEFAULT_CAMERA_IDX,
 		params,
 		dimof(params));
+
+	vxReleaseScalar(&scNumCam);
+	vxReleaseScalar(&scOutW);
+	vxReleaseScalar(&scOutH);
+
 	return node;
 }
 
@@ -859,6 +871,7 @@ VX_API_ENTRY vx_node VX_API_CALL stitchInitExtendPadDilateNode(vx_graph graph, v
 		AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_DILATE,
 		params,
 		dimof(params));
+	vxReleaseScalar(&scNum);
 	return node;
 }
 
@@ -878,6 +891,9 @@ VX_API_ENTRY vx_node VX_API_CALL stitchInitPadVertNode(vx_graph graph, vx_uint32
 		AMDOVX_KERNEL_STITCHING_INIT_EXTEND_PAD_VERT,
 		params,
 		dimof(params));
+	vxReleaseScalar(&scNum);
+	vxReleaseScalar(&scWidth);
+	vxReleaseScalar(&scWidth);
 	return node;
 
 }

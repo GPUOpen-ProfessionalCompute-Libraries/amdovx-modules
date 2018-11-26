@@ -75,6 +75,22 @@ vx_reference getNodeParameterByIndex(vx_node node, vx_uint32 index)
     return ref;
 }
 
+int getEnvironmentVariable(const char * name)
+{
+#if _WIN32
+    char text[64] = { 0 };
+    if (GetEnvironmentVariableA(name, text, (DWORD)sizeof(text)) > 0) {
+        return atoi(text);
+    }
+#else
+    const char * text = getenv(name);
+    if (text) {
+        return atoi(text);
+    }
+#endif
+    return -1;
+}
+
 vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
 {
     NeuralNetworkCommonHandle * handle = NULL;
@@ -86,17 +102,10 @@ vx_status createGraphHandle(vx_node node, NeuralNetworkCommonHandle ** pHandle)
         handle = new NeuralNetworkCommonHandle;
         memset(handle, 0, sizeof(*handle));
         const char * searchEnvName = "NN_MIOPEN_SEARCH";
-#if _WIN32
-        char text[64] = { 0 };
-        if (GetEnvironmentVariableA(searchEnvName, text, (DWORD)sizeof(text)) > 0) {
-            handle->exhaustiveSearch = atoi(text) ? true : false;
-        }
-#else
-        const char * text = getenv(searchEnvName);
-        if (text) {
-            handle->exhaustiveSearch = atoi(text) ? true : false;
-        }
-#endif
+        int isEnvSet = getEnvironmentVariable(searchEnvName);
+        if (isEnvSet > 0)
+            handle->exhaustiveSearch = true;
+
         handle->count = 1;
         ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_ATTRIBUTE_AMD_OPENCL_COMMAND_QUEUE, &handle->cmdq, sizeof(handle->cmdq)));
         
@@ -148,7 +157,6 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishActivationLayer(context));
     ERROR_CHECK_STATUS(publishROIPoolingLayer(context));
     ERROR_CHECK_STATUS(publishDeconvolutionLayer(context));
-    ERROR_CHECK_STATUS(publishElementwiseLayer(context));
     ERROR_CHECK_STATUS(publishBatchNormalizationLayer(context));
     ERROR_CHECK_STATUS(publishArgmaxLayer(context));
     ERROR_CHECK_STATUS(publishConcatLayer(context));
@@ -158,7 +166,11 @@ SHARED_PUBLIC vx_status VX_API_CALL vxPublishKernels(vx_context context)
     ERROR_CHECK_STATUS(publishTensorAdd(context));
     ERROR_CHECK_STATUS(publishTensorSubtraction(context));
     ERROR_CHECK_STATUS(publishTensorMultiply(context));
-    ERROR_CHECK_STATUS(publishTensorConvertDepth(context));
+    ERROR_CHECK_STATUS(publishScaleLayer(context));
+    ERROR_CHECK_STATUS(publishUpsampleNearest(context));
+    ERROR_CHECK_STATUS(publishTensorTableLookup(context));
+    ERROR_CHECK_STATUS(publishTensorMatrixMultiply(context));
+    ERROR_CHECK_STATUS(publishReshapeLayer(context));
 
     // register drama rules
     AgoNodeMergeRule softmax_rule = {

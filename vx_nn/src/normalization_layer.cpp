@@ -41,18 +41,18 @@ struct NormalizationLayerLocalData {
 static vx_status VX_CALLBACK validateNormalizationLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[1], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #1 type=%d (must be enum)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_SIZE) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_SIZE) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #2 type=%d (must be size)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #3 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #4 type=%d (must be float)\n", type);
     if(parameters[6]) {
         ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[6], VX_SCALAR_TYPE, &type, sizeof(type)));
-        if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+        if(type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #6 type=%d (must be float)\n", type);
     }
 
     // check tensor dimensions
@@ -60,21 +60,23 @@ static vx_status VX_CALLBACK validateNormalizationLayer(vx_node node, const vx_r
     vx_size input_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: LRN: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: LRN: #5 num_dims=%ld (must be 4)\n", num_dims);
+    if((out_type != VX_TYPE_FLOAT32) && (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: LRN: #5 type=%d (must be float/float16)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[0] != input_dims[0]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[1] != input_dims[1]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input_dims[3] || output_dims[2] != input_dims[2])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: LRN: dims input[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
+    out_type = type;        // should be same as input
     num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     return VX_SUCCESS;
@@ -86,9 +88,12 @@ static vx_status VX_CALLBACK processNormalizationLayer(vx_node node, const vx_re
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
     float alpha = 1.0f, beta = 0.0f;
     //Apply Normalization forward.
-    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, data->workspace));
+    ERROR_CHECK_MIOPEN_STATUS(miopenLRNForward(miopenHandle, data->lrnDesc, &alpha, data->input_desc, data->input_mem, &beta, data->output_desc, data->output_mem, false, nullptr));
     return VX_SUCCESS;
 }
 
@@ -97,10 +102,14 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     NormalizationLayerLocalData * data = new NormalizationLayerLocalData;
     memset(data, 0, sizeof(*data));
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
+    miopenDataType_t data_type;          // data_type for the kernel
 
     vx_size input_dims[4], output_dims[4];
+    vx_enum out_type;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    data_type = (out_type == VX_TYPE_FLOAT32)? miopenFloat:miopenHalf;
 
     vx_nn_norm_type_e type;
     vx_float32 alpha = 0, beta = 0, bias = 1;
@@ -126,8 +135,8 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     //Input and Output descriptors.
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->output_desc)));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, data_type, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, data_type, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
 
     //LRN Descriptor.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateLRNDescriptor(&data->lrnDesc));
@@ -136,23 +145,6 @@ static vx_status VX_CALLBACK initializeNormalizationLayer(vx_node node, const vx
     //Input and output memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
-
-    //Workspace size.
-    ERROR_CHECK_MIOPEN_STATUS(miopenLRNGetWorkSpaceSize(data->output_desc, &data->workspace_size));
-    if (data->workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->workspace_size = (data->workspace_size + 3) & ~3;
-        data->workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->workspace_size, NULL, NULL);
-        if (!data->workspace) {
-            return VX_FAILURE;
-        }
-        cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->workspace,&pattern,sizeof(cl_float),0,data->workspace_size,
-                                         0,NULL, NULL);
-        if(err) return VX_FAILURE;
-    }
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "lrn input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
@@ -170,7 +162,6 @@ static vx_status VX_CALLBACK uninitializeNormalizationLayer(vx_node node, const 
 {
     NormalizationLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(data->workspace && clReleaseMemObject(data->workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyLRNDescriptor(data->lrnDesc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
@@ -234,6 +225,10 @@ VX_API_ENTRY vx_node VX_API_CALL vxNormalizationLayer(vx_graph graph, vx_tensor 
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_NORMALIZATION_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_type);
+            vxReleaseScalar(&s_normalization_size);
+            vxReleaseScalar(&s_alpha);
+            vxReleaseScalar(&s_beta);
         }
     }
     return node;

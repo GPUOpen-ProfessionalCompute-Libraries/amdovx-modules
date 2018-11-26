@@ -24,17 +24,18 @@ project(inference_generator)
 set (CMAKE_CXX_STANDARD 11)
 
 find_package(Protobuf REQUIRED)
-file(DOWNLOAD "https://raw.githubusercontent.com/BVLC/caffe/master/src/caffe/proto/caffe.proto" "${CMAKE_CURRENT_BINARY_DIR}/caffe.proto")
-PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${CMAKE_CURRENT_BINARY_DIR}/caffe.proto)
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS proto/caffe.proto)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+list(APPEND CAFFE_SOURCES src/caffe2openvx.cpp ${PROTO_SRCS} ${PROTO_HDRS})
+add_executable(caffe2openvx ${CAFFE_SOURCES})
+target_link_libraries(caffe2openvx ${PROTOBUF_LIBRARIES})
+install (TARGETS caffe2openvx DESTINATION bin)
 
-list(APPEND SOURCES
-	src/inference_generator.cpp
-        ${PROTO_SRCS} ${PROTO_HDRS}
-    )
-
-add_executable(inference_generator ${SOURCES})
-target_link_libraries(inference_generator ${PROTOBUF_LIBRARIES})
+include_directories(deps/NNEF-Tools/parser/cpp)
+list(APPEND NNEF_SOURCES src/nnef2openvx.cpp)
+add_executable(nnef2openvx ${NNEF_SOURCES})
+target_link_libraries(nnef2openvx)
+install (TARGETS nnef2openvx DESTINATION bin)
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")

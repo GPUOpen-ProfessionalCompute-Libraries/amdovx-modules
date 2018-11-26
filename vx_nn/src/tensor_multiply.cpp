@@ -25,9 +25,9 @@ THE SOFTWARE.
 struct TensorMultiplyLocalData {
     NeuralNetworkCommonHandle * handle;
     miopenTensorOp_t operation;
-    double alpha1;
-    double alpha2;
-    double beta;
+    float alpha1;
+    float alpha2;
+    float beta;
     miopenTensorDescriptor_t input1;
     cl_mem input1_mem;
     miopenTensorDescriptor_t input2;
@@ -39,42 +39,49 @@ struct TensorMultiplyLocalData {
 static vx_status VX_CALLBACK validateTensorMultiply(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #3 type=%d (must be enum)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #4 type=%d (must be enum)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (type != VX_TYPE_FLOAT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #2 tensor type=%d (not float)\n", type);
 
     // check tensor dimensions
     vx_size num_dims;
-    vx_size input1_dims[4], input2_dims[4], output_dims[4];
+    vx_size input1_dims[4], input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #0 tensor type=%d (not float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, sizeof(input2_dims)));
+    if (num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: #1 num_dims=%ld (must be 2 or 4)\n", num_dims);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #1 tensor type=%d (not float)\n", type);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &input2_dims[4-num_dims], num_dims * sizeof(vx_size)));
 
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if (num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if (type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: #5 num_dims=%ld (must be 4)\n", num_dims);
+    if ((out_type != VX_TYPE_FLOAT32) && (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: mul: #5 tensor type=%d (not float/float16)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
 
-    if (output_dims[3] != input1_dims[3] && output_dims[3] != input2_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[2] != input1_dims[2] && output_dims[2] != input2_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[1] != input1_dims[1] && output_dims[1] != input2_dims[1]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[0] != input1_dims[0] && output_dims[0] != input2_dims[0]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input1_dims[3] || output_dims[2] != input1_dims[2] ||
+        output_dims[1] != input1_dims[1] || output_dims[0] != input1_dims[0] ||
+        output_dims[2] != input2_dims[2] || out_type != type ||
+        !((             1 == input2_dims[3] &&              1 == input2_dims[1] &&              1 == input2_dims[0]) ||
+          (output_dims[3] == input2_dims[3] && output_dims[1] == input2_dims[1] && output_dims[0] == input2_dims[0])))
+    {
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: mul: dims input1[%ld,%ld,%ld,%ld] input2[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
+                    input1_dims[0], input1_dims[1], input1_dims[2], input1_dims[3],
+                    input2_dims[0], input2_dims[1], input2_dims[2], input2_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
+    }
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
+    out_type = type;
     num_dims = 4;
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
@@ -87,6 +94,10 @@ static vx_status VX_CALLBACK processTensorMultiply(vx_node node, const vx_refere
     TensorMultiplyLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
+
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input1_mem, sizeof(data->input1_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->input2_mem, sizeof(data->input2_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
     //miopen multiply call.
     ERROR_CHECK_MIOPEN_STATUS(miopenOpTensor(miopenHandle, data->operation, &data->alpha1, data->input1, data->input1_mem, &data->alpha2, data->input2, data->input2_mem, &data->beta, data->output, data->output_mem));
@@ -101,17 +112,22 @@ static vx_status VX_CALLBACK initializeTensorMultiply(vx_node node, const vx_ref
     ERROR_CHECK_STATUS(createGraphHandle(node, &data->handle));
 
     //initialize input and output tensor descriptors.
-    vx_size input1_dims[4], input2_dims[4], output_dims[4];
+    vx_enum type;
+    vx_size input1_dims[4], num_dims, input2_dims[4] = { 1, 1, 0, 0 }, output_dims[4];
     vx_enum input1_type, input2_type, output_type;
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input1_dims, sizeof(input1_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, input2_dims, sizeof(input2_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &input2_dims[4-num_dims], num_dims * sizeof(vx_size)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input1));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input2));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, miopenFloat, input1_dims[3], input1_dims[2], input1_dims[1], input1_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, miopenFloat, input2_dims[3], input2_dims[2], input2_dims[1], input2_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output));    
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    miopenDataType_t data_type = (type == VX_TYPE_FLOAT32)? miopenFloat:miopenHalf;
+
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input1, data_type, input1_dims[3], input1_dims[2], input1_dims[1], input1_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input2, data_type, input2_dims[3], input2_dims[2], input2_dims[1], input2_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output, data_type, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
 
     //scaling parameters.
     data->alpha1 = 1;
@@ -191,6 +207,8 @@ VX_API_ENTRY vx_node VX_API_CALL vxTensorMultiplyNode(vx_graph graph, vx_tensor 
                 (vx_reference)output
             };
             node = createNode(graph, VX_KERNEL_TENSOR_MULTIPLY, params, sizeof(params) / sizeof(params[0]));
+            vxReleaseScalar(&s_overflowpolicy);
+            vxReleaseScalar(&s_roundingpolicy);
         }
     }
     return node;

@@ -29,50 +29,76 @@ struct PoolingLayerLocalData {
     float beta;
     miopenTensorDescriptor_t input_desc;
     miopenTensorDescriptor_t output_desc;
+    miopenDataType_t data_type;          // data_type for the kernel
     cl_mem input_mem;
     cl_mem output_mem;
     cl_mem pooling_workspace;
     size_t pooling_workspace_size;
     miopenPoolingMode_t mode;
+    vx_enum pad_border_mode;
+    miopenActivationMode_t activation_mode;
+    double activation_alpha;
+    double activation_beta;
+    double activation_power;
+    miopenActivationDescriptor_t activation_desc;
 };
 
 static vx_status VX_CALLBACK validatePoolingLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[1], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #1 type=%d (must be enum)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[2], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_SIZE) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_SIZE) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #2 type=%d (must be size)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_SIZE) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_SIZE) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #3 type=%d (must be size)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_SIZE) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_SIZE) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #4 type=%d (must be size)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[5], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_SIZE) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_SIZE) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #5 type=%d (must be size)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[6], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #6 type=%d (must be enum)\n", type);
 
     // check tensor dimensions
     vx_size num_dims;
     vx_size input_dims[4], output_dims[4];
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: POOL: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    if (num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: POOL: #7 num_dims=%ld (must be 4)\n", num_dims);
+    if ((out_type != VX_TYPE_FLOAT32) && (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #7 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if (output_dims[2] != input_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if (output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    if (output_dims[3] != input_dims[3] || output_dims[2] != input_dims[2])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: POOL: dims input[%ld,%ld,%ld,%ld] output[%ld,%ld,%ld,%ld]\n",
+                    input_dims[0], input_dims[1], input_dims[2], input_dims[3],
+                    output_dims[0], output_dims[1], output_dims[2], output_dims[3]);
+    out_type = type;        // has to be same as input
+
+    vx_enum pad_border_mode = 0;
+    if(parameters[8]) {
+        ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[8], VX_SCALAR_TYPE, &type, sizeof(type)));
+        if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #8 type=%d (must be enum)\n", type);
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[8], &pad_border_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(pad_border_mode != 0 && pad_border_mode != 1) {
+            return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #8 pad_border_mode=%d (must be 0 or 1)\n", pad_border_mode);
+        }
+    }
+    if(parameters[9]) {
+        ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[9], VX_SCALAR_TYPE, &type, sizeof(type)));
+        if(type != VX_TYPE_INT32) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #8 type=%d (must be VX_TYPE_INT32)\n", type);
+        vx_int32 activation_mode = 0;
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[9], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+        if(activation_mode != 0 && activation_mode != 1) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: POOL: #5 activation_mode=%d (must be 0 or 1)\n", activation_mode);
+    }
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
     num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[7], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[7], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[7], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[7], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
     return VX_SUCCESS;
@@ -84,7 +110,16 @@ static vx_status VX_CALLBACK processPoolingLayer(vx_node node, const vx_referenc
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopenHandle = data->handle->miopen_handle;
 
-    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, data->pooling_workspace, data->pooling_workspace_size));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
+
+    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingForward(miopenHandle, data->pool_desc, &data->alpha, data->input_desc, data->input_mem, &data->beta, data->output_desc, data->output_mem, false, nullptr, 0));
+
+    // activation (in-place in output_mem)
+    if(parameters[9]) {
+        float alpha = 1.0f, beta = 0.0f;
+        ERROR_CHECK_MIOPEN_STATUS(miopenActivationForward(data->handle->miopen_handle, data->activation_desc, &alpha, data->output_desc, data->output_mem, &beta, data->output_desc, data->output_mem));
+    }
 
     return VX_SUCCESS;
 }
@@ -104,27 +139,11 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     else if (modeType == VX_NN_POOLING_AVG) {
         data->mode = miopenPoolingAverage;
     }
-
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
-
-    //workspace memory.
-    ERROR_CHECK_MIOPEN_STATUS(miopenPoolingGetWorkSpaceSize(data->output_desc, &data->pooling_workspace_size));
-    if (data->pooling_workspace_size > 0) {
-        vx_context   vxContext = vxGetContext((vx_reference)node);
-        cl_context context;
-        ERROR_CHECK_STATUS(vxQueryContext(vxContext, VX_CONTEXT_ATTRIBUTE_AMD_OPENCL_CONTEXT, &context, sizeof(context)));
-        data->pooling_workspace_size = (data->pooling_workspace_size + 3) & ~3;
-        data->pooling_workspace = clCreateBuffer(context, CL_MEM_READ_WRITE, data->pooling_workspace_size, NULL, NULL);
-        if (!data->pooling_workspace) {
-            return VX_FAILURE;
-        }
-        cl_float pattern = 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq,data->pooling_workspace,&pattern,sizeof(cl_float),0,data->pooling_workspace_size,
-                                         0,NULL, NULL);
-        if(err) return VX_FAILURE;
+    vx_enum pad_border_mode = 0;
+    if(parameters[8]) {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[8], &pad_border_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     }
+    data->pad_border_mode = pad_border_mode;
 
     //Set Descriptors.
     vx_size kernel_w;
@@ -134,9 +153,11 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
     vx_size stride_w;
     vx_size stride_h;
     vx_size input_dims[4], output_dims[4];
-    
+    vx_enum out_type;
+
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[2], &kernel_w, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[3], &kernel_h, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
     ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[4], &pad_w, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
@@ -144,18 +165,37 @@ static vx_status VX_CALLBACK initializePoolingLayer(vx_node node, const vx_refer
 
     stride_w = (output_dims[0] > 1) ? ((input_dims[0] + 2 * pad_w - kernel_w + ((output_dims[0] - 1) / 2)) / (output_dims[0] - 1)) : 1;
     stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
+    data->data_type = (out_type == VX_TYPE_FLOAT32)? miopenFloat:miopenHalf;
 
+    ERROR_CHECK_MIOPEN_STATUS(miopenCreatePoolingDescriptor(&data->pool_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenSet2dPoolingDescriptor(data->pool_desc, data->mode, kernel_h, kernel_w, pad_h, pad_w, stride_h , stride_w));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->input_desc)));
     ERROR_CHECK_MIOPEN_STATUS((miopenCreateTensorDescriptor(&data->output_desc)));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
-    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
-    
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->input_desc, data->data_type, input_dims[3], input_dims[2], input_dims[1], input_dims[0])));
+    ERROR_CHECK_MIOPEN_STATUS((miopenSet4dTensorDescriptor(data->output_desc, data->data_type, output_dims[3], output_dims[2], output_dims[1], output_dims[0])));
+
     //Declare Memory.
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[7], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     data->alpha = 1;
     data->beta = 0;
+
+    // activation descriptor
+    vx_int32 activation_mode = 0;
+    if(parameters[9]) {
+        ERROR_CHECK_STATUS(vxCopyScalar((vx_scalar)parameters[9], &activation_mode, VX_READ_ONLY, VX_MEMORY_TYPE_HOST));
+    }
+    data->activation_mode = miopenActivationPASTHRU;
+    if(activation_mode == 1) {
+        data->activation_mode = miopenActivationRELU;
+        data->activation_alpha = 1.0;
+        data->activation_beta = 0.0;
+        data->activation_power = 1.0;
+    }
+    if(data->activation_mode == miopenActivationRELU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenCreateActivationDescriptor(&data->activation_desc));
+        ERROR_CHECK_MIOPEN_STATUS(miopenSetActivationDescriptor(data->activation_desc, data->activation_mode, data->activation_alpha, data->activation_beta, data->activation_power));
+    }
 
 #if ENABLE_DEBUG_PRINT_DIMS
     std::cout << "pooling input " << input_dims[3] << " " << input_dims[2] << " " << input_dims[1] << " " << input_dims[0] << " ";
@@ -172,8 +212,10 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 {
     PoolingLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
-    if(data->pooling_workspace && clReleaseMemObject(data->pooling_workspace) != 0) return VX_FAILURE;
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyPoolingDescriptor(data->pool_desc));
+    if(data->activation_mode != miopenActivationPASTHRU) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenDestroyActivationDescriptor(data->activation_desc));
+    }
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenDestroyTensorDescriptor(data->output_desc));
     if (data) {
@@ -186,7 +228,7 @@ static vx_status VX_CALLBACK uninitializePoolingLayer(vx_node node, const vx_ref
 vx_status publishPoolingLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.pooling_layer", VX_KERNEL_POOLING_LAYER, processPoolingLayer, 8, validatePoolingLayer, initializePoolingLayer, uninitializePoolingLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.pooling_layer", VX_KERNEL_POOLING_LAYER, processPoolingLayer, 10, validatePoolingLayer, initializePoolingLayer, uninitializePoolingLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -202,6 +244,8 @@ vx_status publishPoolingLayer(vx_context context)
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 5, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 6, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_REQUIRED));
     ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 7, VX_OUTPUT, VX_TYPE_TENSOR, VX_PARAMETER_STATE_REQUIRED));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 8, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
+    ERROR_CHECK_STATUS(vxAddParameterToKernel(kernel, 9, VX_INPUT, VX_TYPE_SCALAR, VX_PARAMETER_STATE_OPTIONAL));
 
     // finalize and release kernel object
     ERROR_CHECK_STATUS(vxFinalizeKernel(kernel));
@@ -245,6 +289,12 @@ VX_API_ENTRY vx_node VX_API_CALL vxPoolingLayer(vx_graph graph, vx_tensor inputs
                 (vx_reference)outputs
             };
             node = createNode(graph, VX_KERNEL_POOLING_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&s_pooling_type);
+            vxReleaseScalar(&s_pooling_size_x);
+            vxReleaseScalar(&s_pooling_size_y);
+            vxReleaseScalar(&s_pooling_padding_x);
+            vxReleaseScalar(&s_pooling_padding_y);
+            vxReleaseScalar(&s_rounding);
         }
     }
     return node;

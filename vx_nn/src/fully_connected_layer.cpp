@@ -29,6 +29,7 @@ struct FullyConnectedLayerLocalData {
     miopenTensorDescriptor_t output_desc;
     miopenTensorDescriptor_t weight_desc;
     miopenTensorDescriptor_t bias_desc;
+    miopenDataType_t data_type;          // data_type for the kernel
     cl_mem input_mem;
     cl_mem output_mem;
     cl_mem weight_mem;
@@ -43,49 +44,50 @@ struct FullyConnectedLayerLocalData {
 static vx_status VX_CALLBACK validateFullyConnectedLayer(vx_node node, const vx_reference parameters[], vx_uint32 num, vx_meta_format metas[])
 {
     // check scalar type
-    vx_enum type;
+    vx_enum type, out_type;
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[3], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #3 type=%d (must be ENUM)\n", type);
     ERROR_CHECK_STATUS(vxQueryScalar((vx_scalar)parameters[4], VX_SCALAR_TYPE, &type, sizeof(type)));
-    if(type != VX_TYPE_ENUM) return VX_ERROR_INVALID_TYPE;
+    if(type != VX_TYPE_ENUM) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #4 type=%d (must be ENUM)\n", type);
 
     // check tensor dimensions
     vx_size num_dims;
-    vx_size input_dims[4], weights_dims[4], output_dims[4];
+    vx_size input_dims[4] = { 1, 1, 1, 1 }, weights_dims[4] = { 1, 1, 0, 0 }, output_dims[4] = { 1, 1, 1, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
+    if(num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #0 num_dims=%ld (must be 4)\n", num_dims);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #0 type=%d (must be float)\n", type);
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
+    if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #1 num_dims=%ld (must be 2 or 4)\n", num_dims);
+    if((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #1 type=%d (must be float)\n", type);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &weights_dims[4 - num_dims], num_dims * sizeof(vx_size)));
     if(parameters[2]) {
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
         ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-        if(num_dims != 1) return VX_ERROR_INVALID_DIMENSION;
-        if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-        vx_size bias_dims[1];
-        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
-        if(bias_dims[0] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+        if(num_dims != 1 && num_dims != 2) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #2 num_dims=%ld (must be 1 or 2)\n", num_dims);
+        if ((type != VX_TYPE_FLOAT32) && (type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #2 type=%d (must be float)\n", type);
+        vx_size bias_dims[2] = { 0, 1 };
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
+        if(bias_dims[0] != weights_dims[3] || bias_dims[1] != 1) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: bias[%ldx%ld] weights[%ldx%ldx%ldx%ld]\n", bias_dims[1], bias_dims[0], weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]);
     }
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
-    if(num_dims != 4) return VX_ERROR_INVALID_DIMENSION;
-    if(type != VX_TYPE_FLOAT32) return VX_ERROR_INVALID_TYPE;
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    if(output_dims[3] != input_dims[3]) return VX_ERROR_INVALID_DIMENSION;
-    if(input_dims[2] != weights_dims[2]) return VX_ERROR_INVALID_DIMENSION;
-    if(output_dims[2] != weights_dims[3]) return VX_ERROR_INVALID_DIMENSION;
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+    if(num_dims != 2 && num_dims != 4) return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: #5 num_dims=%ld (must be 2 or 4)\n", num_dims);
+    if((out_type != VX_TYPE_FLOAT32) && (out_type != VX_TYPE_FLOAT16)) return ERRMSG(VX_ERROR_INVALID_TYPE, "validate: FC: #5 type=%d (must be float)\n", type);
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
+    if(output_dims[3] != input_dims[3] || input_dims[2]*input_dims[1]*input_dims[0] != weights_dims[2]*weights_dims[1]*weights_dims[0] || output_dims[2] != weights_dims[3])
+        return ERRMSG(VX_ERROR_INVALID_DIMENSION, "validate: FC: input[%ldx%ldx%ldx%ld] weights[%ldx%ldx%ldx%ld] output[%ldx%ldx%ldx%ld]\n",
+            input_dims[3], input_dims[2], input_dims[1], input_dims[0],
+            weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0],
+            output_dims[3], output_dims[2], output_dims[1], output_dims[0]);
 
     // output tensor configuration
-    type = VX_TYPE_FLOAT32;
-    num_dims = 4;
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &type, sizeof(type)));
+    out_type = type;        // has to be same as input
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
     ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(num_dims)));
-    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
+    ERROR_CHECK_STATUS(vxSetMetaFormatAttribute(metas[5], VX_TENSOR_DIMS, &output_dims[4-num_dims], num_dims * sizeof(vx_size)));
     return VX_SUCCESS;
 }
 
@@ -94,6 +96,9 @@ static vx_status VX_CALLBACK processFullyConnectedLayer(vx_node node, const vx_r
     FullyConnectedLayerLocalData * data = NULL;
     ERROR_CHECK_STATUS(vxQueryNode(node, VX_NODE_LOCAL_DATA_PTR, &data, sizeof(data)));
     miopenHandle_t miopen_handle = data->handle->miopen_handle;
+
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
 
     //ConvolutionForward.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForward(data->handle->miopen_handle, &data->alpha, data->input_desc, data->input_mem,
@@ -116,20 +121,36 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
 
     //input,weight,bias,output descriptors.
     miopenConvolutionMode_t mode = miopenConvolution;
-    vx_size input_dims[4], weights_dims[4], output_dims[4], bias_dims[1];;
+    vx_size num_dims;
+    vx_enum out_type;
+    vx_size input_dims[4], weights_dims[4] = { 1, 1, 0, 0 }, output_dims[4], bias_dims[2] = { 0, 1 };
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_DIMS, input_dims, sizeof(input_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, weights_dims, sizeof(weights_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_DIMS, &weights_dims[4 - num_dims], num_dims * sizeof(vx_size)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DIMS, output_dims, sizeof(output_dims)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, sizeof(bias_dims)));
+    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_DATA_TYPE, &out_type, sizeof(out_type)));
+
+    if(parameters[2]) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_NUMBER_OF_DIMS, &num_dims, sizeof(vx_size)));
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_DIMS, bias_dims, num_dims * sizeof(vx_size)));
+    }
+    data->data_type = (out_type == VX_TYPE_FLOAT32)? miopenFloat:miopenHalf;
+
+    // adjust weights to match input
+    input_dims[2] = weights_dims[2];
+    input_dims[1] = weights_dims[1];
+    input_dims[0] = weights_dims[0];
 
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->input_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->weight_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->output_desc));
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateTensorDescriptor(&data->bias_desc));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, miopenFloat, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, miopenFloat, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, miopenFloat, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
-    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, miopenFloat,1, bias_dims[0], 1, 1));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->input_desc, data->data_type, input_dims[3], input_dims[2], input_dims[1], input_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->output_desc, data->data_type, output_dims[3], output_dims[2], output_dims[1], output_dims[0]));
+    ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->weight_desc, data->data_type, weights_dims[3], weights_dims[2], weights_dims[1], weights_dims[0]));
+    if(parameters[2]) {
+        ERROR_CHECK_MIOPEN_STATUS(miopenSet4dTensorDescriptor(data->bias_desc, data->data_type,1, bias_dims[0], 1, 1));
+    }
 
     //fully connected to convolution conversion.
     ERROR_CHECK_MIOPEN_STATUS(miopenCreateConvolutionDescriptor(&data->convdesc));
@@ -139,7 +160,9 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[0], VX_TENSOR_BUFFER_OPENCL, &data->input_mem, sizeof(data->input_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[5], VX_TENSOR_BUFFER_OPENCL, &data->output_mem, sizeof(data->output_mem)));
     ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[1], VX_TENSOR_BUFFER_OPENCL, &data->weight_mem, sizeof(data->weight_mem)));
-    ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+    if(parameters[2]) {
+        ERROR_CHECK_STATUS(vxQueryTensor((vx_tensor)parameters[2], VX_TENSOR_BUFFER_OPENCL, &data->bias_mem, sizeof(data->bias_mem)));
+    }
 
     //Workspace Size.
     ERROR_CHECK_MIOPEN_STATUS(miopenConvolutionForwardGetWorkSpaceSize(data->handle->miopen_handle, data->weight_desc, data->input_desc, data->convdesc, data->output_desc, &data->workspace_size));
@@ -152,8 +175,15 @@ static vx_status VX_CALLBACK initializeFullyConnectedLayer(vx_node node, const v
         if (!data->workspace) {
             return VX_FAILURE;
         }
-        cl_float pattern= 0;
-        cl_int err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
+        cl_int err;
+        if (data->data_type == miopenFloat){
+            cl_float pattern= 0;
+            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_float), 0, data->workspace_size, 0, NULL, NULL);
+        }
+        else {
+            cl_half pattern= 0;
+            err = clEnqueueFillBuffer(data->handle->cmdq, data->workspace, &pattern, sizeof(cl_half), 0, data->workspace_size, 0, NULL, NULL);
+        }
         if(err) return VX_FAILURE;
     }
 
@@ -198,7 +228,7 @@ static vx_status VX_CALLBACK uninitializeFullyConnectedLayer(vx_node node, const
 vx_status publishFullyConnectedLayer(vx_context context)
 {
     // add kernel to the context with callbacks
-    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.fully_connected_layer", VX_KERNEL_FULLYCONNECTED_LAYER, processFullyConnectedLayer, 6, validateFullyConnectedLayer, initializeFullyConnectedLayer, uninitializeFullyConnectedLayer);
+    vx_kernel kernel = vxAddUserKernel(context, "org.khronos.nn_extension.fully_connected_layer", VX_KERNEL_FULLY_CONNECTED_LAYER, processFullyConnectedLayer, 6, validateFullyConnectedLayer, initializeFullyConnectedLayer, uninitializeFullyConnectedLayer);
     ERROR_CHECK_OBJECT(kernel);
 
     // enable OpenCL buffer access since the kernel_f callback uses OpenCL buffers instead of host accessible buffers
@@ -237,7 +267,9 @@ VX_API_ENTRY vx_node VX_API_CALL vxFullyConnectedLayer(vx_graph graph, vx_tensor
                 (vx_reference)rounding,
                 (vx_reference)outputs
             };
-            node = createNode(graph, VX_KERNEL_FULLYCONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
+            node = createNode(graph, VX_KERNEL_FULLY_CONNECTED_LAYER, params, sizeof(params)/sizeof(params[0]));
+            vxReleaseScalar(&overflow);
+            vxReleaseScalar(&rounding);
         }
     }
     return node;

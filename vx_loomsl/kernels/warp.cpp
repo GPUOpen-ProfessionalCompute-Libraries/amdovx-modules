@@ -391,7 +391,7 @@ static vx_status VX_CALLBACK warp_opencl_codegen(
 		opencl_global_work[0] = 2*opencl_global_work[0];
 	}
 	
-	vx_uint32 ip_image_height_offs = (vx_uint32)(input_height / num_cameras);
+	vx_uint32 ip_image_height_offs = (vx_uint32)(input_height / (num_cameras / num_camera_columns));
 	vx_uint32 op_image_height_offs = (vx_uint32)(output_height / num_cameras);
 	// Setting variables required by the interface
 	opencl_local_buffer_usage_mask = 0;
