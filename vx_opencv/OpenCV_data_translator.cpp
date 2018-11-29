@@ -185,7 +185,7 @@ int CV_to_VX_keypoints(vector<KeyPoint> key_points, vx_array array)
 	STATUS_ERROR_CHECK(vxQueryArray(array, VX_ARRAY_ATTRIBUTE_CAPACITY, &size, sizeof(size)));
 
 	size_t 	S = key_points.size(); Keypoint_VX.resize(S);
-	//sort(key_points.begin(), key_points.end(), sortbysize_CV);
+	sort(key_points.begin(), key_points.end(), sortbysize_CV);
 	vx_size stride = 0; void *base = NULL; vx_size L = 0;
 
 	for (vector<KeyPoint>::const_iterator i = key_points.begin(); i != key_points.end(); ++i)
@@ -198,6 +198,7 @@ int CV_to_VX_keypoints(vector<KeyPoint> key_points, vx_array array)
 
 		Keypoint_VX[j].x = x; Keypoint_VX[j].y = y;
 		Keypoint_VX[j].strength = K_Size; Keypoint_VX[j].orientation = K_Angle; Keypoint_VX[j].scale = K_Response;
+		Keypoint_VX[j].tracking_status = 1; Keypoint_VX[j].error = 0;
 		j++;
 	}
 
@@ -224,8 +225,6 @@ int CVPoints2f_to_VX_keypoints(vector<Point2f> key_points, vx_array array)
 	STATUS_ERROR_CHECK(vxQueryArray(array, VX_ARRAY_ATTRIBUTE_CAPACITY, &size, sizeof(size)));
 
 	size_t 	S = key_points.size(); Keypoint_VX.resize(S);
-	//sort(key_points.begin(), key_points.end(), sortbysize_CV);
-	vx_size stride = 0;	void *base = NULL; vx_size L = 0;
 
 	for (int i = 0; i < (int)key_points.size(); ++i)
 	{
@@ -235,7 +234,8 @@ int CVPoints2f_to_VX_keypoints(vector<Point2f> key_points, vx_array array)
 		if (fmod(Y, 1) >= 0.5)y = (int)ceil(Y); else y = (int)floor(Y);
 
 		Keypoint_VX[j].x = x; Keypoint_VX[j].y = y;
-		Keypoint_VX[j].strength = 0; Keypoint_VX[j].orientation = 0;	Keypoint_VX[j].scale = 0;
+		Keypoint_VX[j].strength = 0; Keypoint_VX[j].orientation = 0; Keypoint_VX[j].scale = 0;
+		Keypoint_VX[j].tracking_status = 0; Keypoint_VX[j].error = 0;
 
 		j++;
 	}
