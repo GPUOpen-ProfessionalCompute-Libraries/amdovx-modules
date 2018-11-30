@@ -1464,13 +1464,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     key.mv_size = 8;
                     int status = mdb_get(lmdbTxn, lmDbi, &key, &value);
                     if (!status){
-                        // convert to tensor
-                        caffe::Datum datum;
-                        std::string data((char*)value.mv_data, value.mv_size);
-                        datum.ParseFromString(data);
-                        std::string img_data = datum.data();
-                        batch_q_lmdb.push_back(std::make_pair((char *)img_data.c_str(), (int)value.mv_size));
-                        //ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
+                        batch_q_lmdb.push_back(std::make_pair((char *)value.mv_data, (int)value.mv_size));
                     }
                     PROFILER_STOP(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
                 }
@@ -1536,11 +1530,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     int status = mdb_get(lmdbTxn, lmDbi, &key, &value);
                     if (!status){
                         // convert to tensor
-                        caffe::Datum datum;
-                        std::string data((char*)value.mv_data, value.mv_size);
-                        datum.ParseFromString(data);
-                        std::string img = datum.data();
-                        ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
+                        ConvertDatumToTensor((unsigned char *)value.mv_data, (int)value.mv_size, dimInput[0], dimInput[1], buf);
                     }
                     PROFILER_STOP(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
                 }

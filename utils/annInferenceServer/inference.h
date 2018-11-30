@@ -14,7 +14,6 @@
 #include <condition_variable>
 #include <VX/vx.h>
 #include <vx_ext_amd.h>
-#include "caffe.pb.h"
 #include "lmdb.h"
 
 // inference scheduler modes

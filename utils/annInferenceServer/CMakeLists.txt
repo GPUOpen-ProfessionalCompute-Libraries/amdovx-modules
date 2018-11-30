@@ -26,10 +26,8 @@ set (CMAKE_CXX_STANDARD 11)
 
 find_package(OpenCL REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(Protobuf REQUIRED)
-PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ../inference_generator/proto/caffe.proto)
 
-include_directories(../../deps/amdovx-core/openvx/include ../../vx_nn ${PROTOBUF_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(../../deps/amdovx-core/openvx/include ../../vx_nn ${CMAKE_CURRENT_BINARY_DIR})
 
 list(APPEND SOURCES
 	common.cpp
@@ -43,11 +41,10 @@ list(APPEND SOURCES
         profiler.cpp
         region.cpp
         shadow.cpp
-        ${PROTO_SRCS} ${PROTO_HDRS}
 )
 
 add_executable(annInferenceServer ${SOURCES})
-target_link_libraries(annInferenceServer vx_nn openvx pthread lmdb ${PROTOBUF_LIBRARIES})
+target_link_libraries(annInferenceServer vx_nn openvx pthread lmdb)
 install (TARGETS annInferenceServer DESTINATION bin)
 
 if (OpenCL_FOUND)
