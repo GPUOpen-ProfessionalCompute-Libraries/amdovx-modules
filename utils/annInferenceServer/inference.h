@@ -247,7 +247,7 @@ private:
     MessageQueue<std::vector<ObjectBB>> OutputQBB;
 
     vx_status DecodeScaleAndConvertToTensor(vx_size width, vx_size height, int size, unsigned char *inp, float *out, int use_fp16=0);
-    void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf);
+    void DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf, std::vector<std::tuple<char *, int>>& batch_lmdb_Q);
     void RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, unsigned int swidth, unsigned int sheight, unsigned int sstride, unsigned int dwidth, unsigned int dheight);
     vx_status ConvertDatumToTensor(unsigned char *data, vx_size size, vx_size width, vx_size height, float *buf);
 

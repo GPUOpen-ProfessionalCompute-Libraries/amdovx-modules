@@ -400,20 +400,21 @@ vx_status InferenceEngine::DecodeScaleAndConvertToTensor(vx_size width, vx_size 
 vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size, vx_size width, vx_size height, float *buf)
 {
     int length = width*height;
-    if (size)
+    if (size && img)
     {
 #if 0
         // C code
         float *ptr = buf;
         for (int c = 0; c < 3; c++, ptr += length) {
             float a = preprocessMpy[c], b = preprocessAdd[c];
-            unsigned char * img = data + (reverseInputChannelOrder ? c : (2 - c));
-            for (int i = 0; i < length; i++, img += 3) {
-                ptr[i] = *img * a + b;
+            unsigned char * img_data = img + (reverseInputChannelOrder ? c : (2 - c));
+            for (int i = 0; i < length; i++, img_data += 3) {
+                ptr[i] = *img_data * a + b;
             }
         }
 #else
         __m128i mask_B, mask_G, mask_R;
+        unsigned char * img_data = img;
         if (reverseInputChannelOrder)
         {
             mask_B = _mm_setr_epi8((char)0x0, (char)0x80, (char)0x80, (char)0x80, (char)0x3, (char)0x80, (char)0x80, (char)0x80, (char)0x6, (char)0x80, (char)0x80, (char)0x80, (char)0x9, (char)0x80, (char)0x80, (char)0x80);
@@ -428,7 +429,7 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
         }
         int alignedLength = (length-2)& ~3;
         bool bPreprocess = (preprocessMpy[0] != 1) & (preprocessAdd[0] != 0) ;
-        if (useFp16) {
+        if (!useFp16) {
             float * B_buf = buf;
             float * G_buf = B_buf + length;
             float * R_buf = G_buf + length;
@@ -438,7 +439,7 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
             if (bPreprocess) {
                 for (; i < alignedLength; i += 4)
                 {
-                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img_data);
                     fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
                     fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
                     fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
@@ -452,18 +453,18 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
                     _mm_storeu_ps(G_buf, fG);
                     _mm_storeu_ps(R_buf, fR);
                     B_buf += 4; G_buf += 4; R_buf += 4;
-                    img += 12;
+                    img_data += 12;
                 }
-                for (; i < length; i++, img += 3) {
-                    *B_buf++ = (img[0] * preprocessMpy[0]) + preprocessAdd[0];
-                    *G_buf++ = (img[1] * preprocessMpy[1]) + preprocessAdd[1];
-                    *R_buf++ = (img[2] * preprocessMpy[2]) + preprocessAdd[2];
+                for (; i < length; i++, img_data += 3) {
+                    *B_buf++ = (img_data[0] * preprocessMpy[0]) + preprocessAdd[0];
+                    *G_buf++ = (img_data[1] * preprocessMpy[1]) + preprocessAdd[1];
+                    *R_buf++ = (img_data[2] * preprocessMpy[2]) + preprocessAdd[2];
                 }
             }else
             {
                 for (; i < alignedLength; i += 4)
                 {
-                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img_data);
                     fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
                     fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
                     fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
@@ -471,12 +472,12 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
                     _mm_storeu_ps(G_buf, fG);
                     _mm_storeu_ps(R_buf, fR);
                     B_buf += 4; G_buf += 4; R_buf += 4;
-                    img += 12;
+                    img_data += 12;
                 }
-                for (; i < length; i++, img += 3) {
-                    *B_buf++ = img[0];
-                    *G_buf++ = img[1];
-                    *R_buf++ = img[2];
+                for (; i < length; i++, img_data += 3) {
+                    *B_buf++ = img_data[0];
+                    *G_buf++ = img_data[1];
+                    *R_buf++ = img_data[2];
                 }
             }
         }else
@@ -491,7 +492,7 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
             if (bPreprocess) {
                 for (; i < alignedLength; i += 4)
                 {
-                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img_data);
                     fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
                     fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
                     fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
@@ -509,18 +510,18 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
                     _mm_storel_epi64((__m128i*)G_buf, hG);
                     _mm_storel_epi64((__m128i*)R_buf, hR);
                     B_buf += 4; G_buf += 4; R_buf += 4;
-                    img += 12;
+                    img_data += 12;
                 }
-                for (; i < length; i++, img += 3) {
-                    *B_buf++ = _cvtss_sh((float)((img[0] * preprocessMpy[0]) + preprocessAdd[0]), 1);
-                    *G_buf++ = _cvtss_sh((float)((img[1] * preprocessMpy[1]) + preprocessAdd[1]), 1);
-                    *R_buf++ = _cvtss_sh((float)((img[2] * preprocessMpy[2]) + preprocessAdd[2]), 1);
+                for (; i < length; i++, img_data += 3) {
+                    *B_buf++ = _cvtss_sh((float)((img_data[0] * preprocessMpy[0]) + preprocessAdd[0]), 1);
+                    *G_buf++ = _cvtss_sh((float)((img_data[1] * preprocessMpy[1]) + preprocessAdd[1]), 1);
+                    *R_buf++ = _cvtss_sh((float)((img_data[2] * preprocessMpy[2]) + preprocessAdd[2]), 1);
                 }
             } else
             {
                 for (; i < alignedLength; i += 4)
                 {
-                    __m128i pix0 = _mm_loadu_si128((__m128i *) img);
+                    __m128i pix0 = _mm_loadu_si128((__m128i *) img_data);
                     fB = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_B));
                     fG = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_G));
                     fR = _mm_cvtepi32_ps(_mm_shuffle_epi8(pix0, mask_R));
@@ -532,12 +533,12 @@ vx_status InferenceEngine::ConvertDatumToTensor(unsigned char *img, vx_size size
                     _mm_storel_epi64((__m128i*)G_buf, hG);
                     _mm_storel_epi64((__m128i*)R_buf, hR);
                     B_buf += 4; G_buf += 4; R_buf += 4;
-                    img += 12;
+                    img_data += 12;
                 }
-                for (; i < length; i++, img += 3) {
-                    *B_buf++ = _cvtss_sh((float)img[0], 1);
-                    *G_buf++ = _cvtss_sh((float)img[1], 1);
-                    *R_buf++ = _cvtss_sh((float)img[2], 1);
+                for (; i < length; i++, img_data += 3) {
+                    *B_buf++ = _cvtss_sh((float)img_data[0], 1);
+                    *G_buf++ = _cvtss_sh((float)img_data[1], 1);
+                    *R_buf++ = _cvtss_sh((float)img_data[2], 1);
                 }
             }
         }
@@ -719,7 +720,7 @@ void InferenceEngine::RGB_resize(unsigned char *Rgb_in, unsigned char *Rgb_out, 
 }
 
 
-void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf)
+void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<char*, int>>& batch_Q, int start, int end, int dim[3], float *tens_buf, std::vector<std::tuple<char *, int>>& batch_lmdb_Q)
 {
     for (int i = start; i <= end; i++)
     {
@@ -735,7 +736,13 @@ void InferenceEngine::DecodeScaleAndConvertToTensorBatch(std::vector<std::tuple<
             buf = (float *) ((unsigned short *)tens_buf + dim[0] * dim[1] * dim[2] * i);
         else
             buf = (float *) tens_buf + dim[0] * dim[1] * dim[2] * i;
-        DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf, useFp16);
+        if (!useLMDB) {
+            DecodeScaleAndConvertToTensor(dim[0], dim[1], size, (unsigned char *)byteStream, buf, useFp16);
+        }
+        else {
+            image = batch_lmdb_Q[i];
+            ConvertDatumToTensor((unsigned char *)std::get<0>(image), std::get<1>(image), dim[0], dim[1], buf);
+        }
         delete[] byteStream;
     }
 }
@@ -1430,6 +1437,7 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
         if (numDecThreads > 0) {
             int numT = numDecThreads;
             std::vector<std::tuple<char*, int>> batch_q;
+            std::vector<std::tuple<char *, int>> batch_q_lmdb;
             int sub_batch_size = batchSize/numT;
             std::thread dec_threads[numT+1];
             // dequeue batch
@@ -1444,6 +1452,28 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     endOfSequenceReached = true;
                     break;
                 }
+                if (useLMDB){
+                    // copy decoded image from LMDB
+                    int tag = *((int*)byteStream);
+                    PROFILER_START(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
+                    char key_val[8];
+                    sprintf(key_val, "%08d", tag);
+                    MDB_val key;
+                    MDB_val value;
+                    key.mv_data = key_val;
+                    key.mv_size = 8;
+                    int status = mdb_get(lmdbTxn, lmDbi, &key, &value);
+                    if (!status){
+                        // convert to tensor
+                        caffe::Datum datum;
+                        std::string data((char*)value.mv_data, value.mv_size);
+                        datum.ParseFromString(data);
+                        std::string img_data = datum.data();
+                        batch_q_lmdb.push_back(std::make_pair((char *)img_data.c_str(), (int)value.mv_size));
+                        //ConvertDatumToTensor((unsigned char *)img.c_str(), img.size(), dimInput[0], dimInput[1], buf);
+                    }
+                    PROFILER_STOP(AnnInferenceServer, workDeviceInputLmdbConvertToTensor);
+                }
                 batch_q.push_back(image);
             }
             if (inputCount){
@@ -1456,18 +1486,20 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                 int start = 0; int end = sub_batch_size-1;
                 for (unsigned int t = 0; t < (numT - 1); t++)
                 {
-                    dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, (float *)mapped_ptr);
+                    dec_threads[t]  = std::thread(&InferenceEngine::DecodeScaleAndConvertToTensorBatch, this, std::ref(batch_q), start, end, dimInput, (float *)mapped_ptr, std::ref(batch_q_lmdb));
                     start += sub_batch_size;
                     end += sub_batch_size;
                 }
                 start = std::min(start, (inputCount - 1));
                 end = std::min(end, (inputCount-1));
                 // do some work in this thread
-                DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, (float *)mapped_ptr);
+                DecodeScaleAndConvertToTensorBatch(batch_q, start, end, dimInput, (float *)mapped_ptr, batch_q_lmdb);
                 for (unsigned int t = 0; t < (numT - 1); t++)
                 {
                     dec_threads[t].join();
                 }
+                batch_q.clear();
+                batch_q_lmdb.clear();
                 PROFILER_STOP(AnnInferenceServer, workDeviceInputCopyJpegDecode);
             }
         } else {
@@ -1505,7 +1537,6 @@ void InferenceEngine::workDeviceInputCopy(int gpu)
                     if (!status){
                         // convert to tensor
                         caffe::Datum datum;
-                        //printf("Got record:%d from lmdb (%p,%d) \n", tag, value.mv_data, (int)value.mv_size);
                         std::string data((char*)value.mv_data, value.mv_size);
                         datum.ParseFromString(data);
                         std::string img = datum.data();
