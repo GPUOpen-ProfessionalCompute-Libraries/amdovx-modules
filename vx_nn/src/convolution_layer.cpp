@@ -214,7 +214,7 @@ static vx_status VX_CALLBACK initializeConvolutionLayer(vx_node node, const vx_r
     stride_h = (output_dims[1] > 1) ? ((input_dims[1] + 2 * pad_h - kernel_h - (kernel_h - 1) * (dilation_h - 1) + ((output_dims[1] - 1) / 2)) / (output_dims[1] - 1)) : 1;
 
     data->bias_activ_mode = NONE;
-    data->fusion_possible = nn_cbr_mode && (stride_w == 1) && (stride_h == 1) && (dilation_w == 1) && (dilation_h == 1) && (pad_w <=1) && (pad_h <=1);   // MIOpen only support stride 1 for fusion
+    data->fusion_possible = nn_cbr_mode && (stride_w <= 2) && (stride_h <= 2) && (pad_w <= 2) && (pad_h <= 2);   // stride and padding has to be 1/2 for fusion
     data->fusion_possible &= (kernel_h > 1) && (kernel_w > 1);
     if (parameters[2]) {
         data->bias_activ_mode = data->fusion_possible? BIAS_ONLY_FUSED : BIAS_ONLY_SEPERATE;
